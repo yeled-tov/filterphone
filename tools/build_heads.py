@@ -365,6 +365,9 @@ def main() -> None:
         "female_check": round(threshold_for_recall(pf, yf, 0.97), 4),
         "female": round(threshold_for_recall(pf, yf, 0.90), 4),
         "immodest": round(threshold_for_recall(pi, yi, 0.85), 4),
+        # רמה 2: שער לסגמנטציה — רחב בכוונה; ההחלטה עצמה לפי כמות העור הגלוי במסכה
+        "immodest_check": round(min(threshold_for_recall(pi, yi, 0.98),
+                                    threshold_for_recall(pi, yi, 0.85) / 3), 4),
         "immodest_high": round(threshold_for_precision(pi, yi, 0.75), 4),
         "nsfw_check": 0.15,
         "nsfw_block": round(float(min(0.995, max(p_all.max() * 1.02, 0.97))), 4),
@@ -374,6 +377,7 @@ def main() -> None:
     report["female (recall 90%)"] = metrics(pf, yf, thresholds["female"])
     report["female_strict (precision 90%)"] = metrics(pf, yf, thresholds["female_strict"])
     report["immodest (recall 85%)"] = metrics(pi, yi, thresholds["immodest"])
+    report["immodest_check (level-2 gate)"] = metrics(pi, yi, thresholds["immodest_check"])
     report["immodest_high (precision 80%)"] = metrics(pi, yi, thresholds["immodest_high"])
     report["nsfw gate on COCO (clean images)"] = {
         "sent_to_detector": round(float((p_all >= 0.15).mean()), 4),

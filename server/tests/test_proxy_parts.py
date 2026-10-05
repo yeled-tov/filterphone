@@ -28,17 +28,27 @@ def test_missing_sni_passes_through(policy):
 
 
 def test_learning_is_per_device_and_expires(policy):
-    assert policy.learn("10.8.0.11", "api.someapp.com", level=2)
+    assert policy.learn("10.8.0.11", "api.someapp.com", strict_images=True)
     assert policy.should_passthrough("10.8.0.11", "api.someapp.com")
     assert not policy.should_passthrough("10.8.0.12", "api.someapp.com")
-    policy.learn("10.8.0.11", "old.someapp.com", level=2, expires_at=time.time() - 1)
+    policy.learn("10.8.0.11", "old.someapp.com", strict_images=False, expires_at=time.time() - 1)
     assert not policy.should_passthrough("10.8.0.11", "old.someapp.com")
 
 
-def test_strict_level_never_learns_social_image_cdns(policy):
-    assert not policy.learn("10.8.0.13", "scontent.cdninstagram.com", level=1)
-    assert not policy.should_passthrough("10.8.0.13", "scontent.cdninstagram.com")
-    assert policy.learn("10.8.0.13", "scontent.cdninstagram.com", level=2)
+def test_strict_devices_never_learn_image_servers(policy):
+    for host in ("scontent.cdninstagram.com", "ae01.alicdn.com", "ae-pic-a1.aliexpress-media.com",
+                 "encrypted-tbn0.gstatic.com", "img.kwcdn.com", "images-na.example.com", "media.licdn.com"):
+        assert not policy.learn("10.8.0.13", host, strict_images=True), host
+        assert not policy.should_passthrough("10.8.0.13", host)
+    # מכשיר לא מחמיר (רמה 3) — כן לומד, כדי שהאפליקציה תעבוד
+    assert policy.learn("10.8.0.13", "scontent.cdninstagram.com", strict_images=False)
+
+
+def test_image_host_heuristic_does_not_catch_regular_apis():
+    for host in ("api.someapp.com", "graph.facebook.com", "imaging-api.bank.co.il", "mediation.ads.com"):
+        assert not HostPolicy.looks_like_image_host(host), host
+    for host in ("img.kwcdn.com", "ae-pic-a1.aliexpress-media.com", "thumbs2.example.org", "images.x.com"):
+        assert HostPolicy.looks_like_image_host(host), host
 
 
 def test_distrust_error_detection():

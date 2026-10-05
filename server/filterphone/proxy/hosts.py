@@ -6,8 +6,10 @@
   2. למידה: אפליקציה שדחתה את התעודה שלנו (באנדרואיד רוב האפליקציות לא סומכות
      על תעודה שהמשתמש התקין) — החיבורים הבאים מאותו מכשיר לאותו שרת עוברים
      ישירות, כדי שהאפליקציה תעבוד.
-  3. "תמיד לבדוק" (פרק [inspect] בקובץ): שרתי תמונות של רשתות חברתיות. ברמה 1
-     לא לומדים עליהם — עדיף שהאפליקציה לא תציג תמונות מאשר שתציג בלי סינון.
+  3. "תמיד לבדוק" (פרק [inspect] בקובץ): שרתי תמונות של רשתות חברתיות, חנויות וגוגל.
+     במכשיר במצב "תמונות באפליקציות: חסום" (ברירת המחדל ברמות 1–2) לא לומדים עליהם —
+     עדיף שהאפליקציה לא תציג תמונות מאשר שתציג בלי סינון. באותו מצב גם שרת ששמו
+     מעיד על תמונות (img., images-, ‎-pic-, media, thumbs...) לא נלמד.
 """
 from __future__ import annotations
 
@@ -17,6 +19,9 @@ from pathlib import Path
 
 _DISTRUST_MARKERS = ("does not trust", "certificate unknown", "unknown ca", "bad certificate",
                      "certificate_unknown", "unknown_ca", "bad_certificate")
+# שם שרת שמעיד שהוא מגיש תמונות: img.kwcdn.com, ae-pic-a1.aliexpress-media.com, images-na...
+_IMAGE_HOST = re.compile(r"(?:^|[.-])(?:img|imgs|image|images|pic|pics|photo|photos|thumb|thumbs|"
+                         r"thumbnail|thumbnails|avatar|avatars|media)\d*(?:[.-]|$)")
 
 
 def _glob(p: str) -> str:
@@ -62,6 +67,10 @@ class HostPolicy:
     def is_inspect_only(self, host: str) -> bool:
         return bool(self._inspect and self._inspect.match(host))
 
+    @staticmethod
+    def looks_like_image_host(host: str) -> bool:
+        return bool(_IMAGE_HOST.search(host))
+
     def should_passthrough(self, client_ip: str, host: str | None) -> bool:
         if not host:
             return True                     # בלי SNI אין לנו איך להנפיק תעודה מתאימה
@@ -81,10 +90,14 @@ class HostPolicy:
         e = (error or "").lower()
         return any(m in e for m in _DISTRUST_MARKERS)
 
-    def learn(self, client_ip: str, host: str, level: int, expires_at: float | None = None) -> bool:
-        """מסמן ש-(מכשיר, שרת) לא סומך עלינו. מחזיר False אם בכוונה לא לומדים."""
+    def learn(self, client_ip: str, host: str, strict_images: bool,
+              expires_at: float | None = None) -> bool:
+        """מסמן ש-(מכשיר, שרת) לא סומך עלינו. מחזיר False אם בכוונה לא לומדים.
+
+        strict_images: המכשיר במצב "תמונות באפליקציות: חסום" — שרתי תמונות לא נלמדים.
+        """
         host = host.lower().rstrip(".")
-        if level == 1 and self.is_inspect_only(host):
+        if strict_images and (self.is_inspect_only(host) or self.looks_like_image_host(host)):
             return False
         self._learned[(client_ip, host)] = expires_at or (time.time() + self._ttl)
         return True

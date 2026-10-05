@@ -4,8 +4,10 @@
 # [passthrough] — עוברים בלי פתיחת HTTPS. אפליקציות שבודקות תעודה בעצמן
 #   (certificate pinning): יירוט ישבור אותן, ואין בהן תמונות לסנן.
 #   סינון ה-DNS (AdGuard) ממשיך לחול גם עליהן.
-# [inspect] — שרתי תמונות של רשתות חברתיות. ברמה 1 לא לומדים עליהם
+# [inspect] — שרתי תמונות (רשתות חברתיות, חנויות, גוגל). במכשיר במצב
+#   "תמונות באפליקציות: חסום" (ברירת המחדל ברמות 1–2) לא לומדים עליהם
 #   "passthrough" אוטומטי: עדיף שהאפליקציה לא תציג תמונות מאשר בלי סינון.
+#   בדפדפן הם נבדקים כרגיל, תמונה-תמונה.
 #
 # '*.example.com' תופס גם את example.com וגם כל תת-דומיין שלו.
 # ======================================================================
@@ -100,3 +102,30 @@ api.termius.com
 *.sc-cdn.net
 *.giphy.com
 *.tenor.com
+
+# --- גוגל: תמונות ממוזערות של חיפוש / Discover / חדשות ---
+encrypted-tbn0.gstatic.com
+encrypted-tbn1.gstatic.com
+encrypted-tbn2.gstatic.com
+encrypted-tbn3.gstatic.com
+t0.gstatic.com
+t1.gstatic.com
+t2.gstatic.com
+t3.gstatic.com
+
+# --- חנויות (האפליקציות לא סומכות על התעודה — התמונות שם לא נבדקות) ---
+*.alicdn.com
+*.aliexpress-media.com
+*.kwcdn.com
+*.ltwebstatic.com
+*.media-amazon.com
+*.ssl-images-amazon.com
+*.ebayimg.com
+*.shopeemobile.com
+
+# --- עוד רשתות ותוכן ---
+*.licdn.com
+*.vk.me
+*.userapi.com
+*.pximg.net
+*.discordapp.net

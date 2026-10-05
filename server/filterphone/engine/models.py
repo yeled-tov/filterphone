@@ -5,6 +5,10 @@ import numpy as np
 import onnxruntime as ort
 
 from .imaging import NudenetInput, nudenet_decode
+from .segment import softmax
+
+# אזהרות טעינה (למשל attribute ישן במודל הסגמנטציה) נכתבות ללוגר הגלובלי — לא רלוונטיות
+ort.set_default_logger_severity(3)
 
 
 def _session(path: str, threads: int) -> ort.InferenceSession:
@@ -45,3 +49,17 @@ class NudeDetector:
     def __call__(self, inp: NudenetInput):
         out = self.session.run(None, {self.input_name: inp.tensor[None]})[0]
         return nudenet_decode(out, inp)
+
+
+class Segmenter:
+    """MediaPipe selfie-multiclass — סגמנטציה לשישה סוגים (ראו segment.py). רץ רק ברמה 2."""
+
+    def __init__(self, path: str, threads: int):
+        self.session = _session(path, threads)
+        inp = self.session.get_inputs()[0]
+        self.input_name = inp.name
+        self.size = int(inp.shape[1]) if isinstance(inp.shape[1], int) else 256
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        """x: (S, S, 3) בטווח [0, 1] → הסתברויות (S, S, 6). המודל מחזיר logits."""
+        return softmax(self.session.run(None, {self.input_name: x[None]})[0][0])

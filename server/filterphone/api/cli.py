@@ -12,7 +12,7 @@ import getpass
 import re
 import sys
 
-from ..proxy.levels import _LEGACY_PATTERN
+from ..proxy.policy import _LEGACY_PATTERN
 from . import db
 from .app import build_services
 from .security import is_wg_key

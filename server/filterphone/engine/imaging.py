@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
@@ -189,11 +190,31 @@ def paint_boxes(im: Image.Image, boxes: list[tuple[int, int, int, int]],
     return buf.getvalue()
 
 
-def _placeholder() -> bytes:
-    """תמונה חלופית לתמונה חסומה: ריבוע אפור בהיר. נמתח לגודל המקום בדף."""
+PLACEHOLDER_COLOR = (226, 228, 232)
+PLACEHOLDER_MAX_SIDE = 1600
+
+
+@lru_cache(maxsize=512)
+def placeholder(width: int = 8, height: int = 8) -> bytes:
+    """תמונה חלופית לתמונה חסומה: מלבן אפור בהיר, באותן מידות כמו המקור (עד 1600) —
+    כך שהעמוד לא "קופץ" ותמונה בלי width/height לא מתכווצת לנקודה. PNG של צבע אחד
+    שוקל כמה מאות בייטים בלבד."""
+    if width <= 0 or height <= 0:
+        width = height = 8
+    scale = min(1.0, PLACEHOLDER_MAX_SIDE / max(width, height))
+    im = Image.new("P", (max(1, round(width * scale)), max(1, round(height * scale))), 0)
+    im.putpalette(PLACEHOLDER_COLOR)
     buf = io.BytesIO()
-    Image.new("RGB", (8, 8), (226, 228, 232)).save(buf, format="PNG", optimize=True)
+    im.save(buf, format="PNG", compress_level=9)
     return buf.getvalue()
 
 
-PLACEHOLDER_PNG = _placeholder()
+def image_size(data: bytes) -> tuple[int, int] | None:
+    """מידות התמונה מהכותרת בלבד (בלי פענוח מלא)."""
+    try:
+        return Image.open(io.BytesIO(data)).size
+    except _DECODE_ERRORS:
+        return None
+
+
+PLACEHOLDER_PNG = placeholder()

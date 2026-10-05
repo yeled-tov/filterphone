@@ -22,6 +22,15 @@ MODELS = {
                f"{SIGLIP_REVISION}/onnx/vision_model.onnx",
         "sha256": "0ddb7507cfcb54c2cd503029949add9dc6586de67164bb69c2c09588cdcc9719",
     },
+    # MediaPipe selfie-multiclass 256×256 — Google, רישיון Apache-2.0. הסגמנטציה של רמה 2.
+    # המרה ל-ONNX של הקובץ הרשמי (selfie_multiclass_256x256.tflite, גרסה 1,
+    # sha256 c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0).
+    # נבדק מול ה-TFLite המקורי: הפרש מרבי 6e-5, התאמה מלאה בתווית של כל פיקסל.
+    "selfie-multiclass-256.onnx": {
+        "url": "https://huggingface.co/senty-au/selfie_multiclass_256x256-ONNX/resolve/"
+               "6db8421a7150ac20558f2c24675078eb3a1a04d0/onnx/model.onnx",
+        "sha256": "35ec1ecd9ee7f85073c99c00020b7f6751b69506eeacf683bc8665f6117f85b0",
+    },
     # NudeNet 320n — מתוך החבילה הרשמית ב-PyPI (nudenet 3.4.2)
     "nudenet-320n.onnx": {
         "url": "https://files.pythonhosted.org/packages/1c/ee/1aa02d44ba958cc77e16ff1e41a0aac5e721037db7bf62b9c9d124917f87/nudenet-3.4.2-py3-none-any.whl",

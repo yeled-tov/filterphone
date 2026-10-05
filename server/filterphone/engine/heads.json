@@ -31,6 +31,7 @@
   "female_check": 0.1721,
   "female": 0.4446,
   "immodest": 0.3823,
+  "immodest_check": 0.12,
   "immodest_high": 0.9982,
   "nsfw_check": 0.15,
   "nsfw_block": 0.97

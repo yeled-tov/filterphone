@@ -53,13 +53,36 @@ async def run(models: str) -> int:
         v = await engine.classify(data, 1)
         hits += v.cached
         warm.append(v.ms)
+
+    # סגמנטציה (רמה 2): המודל נטען ומחזיר מסכה הגיונית לתמונה עם אדם
+    fail = 0
+    if engine.segmenter is None:
+        print("FAIL: segmentation model not loaded")
+        fail = 1
+    else:
+        from filterphone.engine import segment
+        from filterphone.engine.heads import SCORE_NAMES
+        from filterphone.engine.imaging import decode
+        person = SCORE_NAMES.index("person")
+        scored = [((await engine._analyze(data))[0].scores or [0] * 4)[person] for _, data in images]
+        sid, data = images[max(range(len(images)), key=scored.__getitem__)]
+        dec = decode(data, 1024)
+        print(f"segmentation sample: {sid} (person score {max(scored):.2f})")
+        labels, st = segment.analyze(engine.segmenter, dec.primary)
+        print(f"segmentation: person={st.person:.3f} skin={st.skin:.3f} crops={st.crops} "
+              f"png={len(segment.encode_labels(labels))}B")
+        if not 0 < st.person < 1:
+            print("FAIL: segmentation found no person in a people photo")
+            fail = 1
+    info, v = await engine.explain(images[0][1], 2)
+    print("explain:", {k: info[k] for k in ("decisions", "steps", "ms")})
     await engine.close()
-    print(f"cold: median {statistics.median(cold):.0f}ms | cached: median {statistics.median(warm):.1f}ms "
-          f"| cache hits on repeat: {hits}/{len(images)}")
+    med = (lambda xs: f"{statistics.median(xs):.1f}ms" if xs else "n/a")
+    print(f"cold: median {med(cold)} | cached: median {med(warm)} | cache hits on repeat: {hits}/{len(images)}")
     if hits != len(images):
         print("FAIL: cache did not return repeated images")
         return 1
-    return 0
+    return fail
 
 
 def main() -> None:

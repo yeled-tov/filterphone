@@ -14,7 +14,7 @@ from pathlib import Path
 
 import redis
 
-from ..proxy.levels import LEVELS_KEY
+from ..proxy.policy import LEVELS_KEY
 from ..settings import Settings
 from . import db, security
 from .wg import WireGuard, WireGuardError

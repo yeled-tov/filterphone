@@ -27,6 +27,7 @@ class Settings:
     # --- מנוע ---
     embedder_model: str = "siglip2-b32-256.onnx"
     nudenet_model: str = "nudenet-320n.onnx"
+    segment_model: str = "selfie-multiclass-256.onnx"   # רמה 2: מסכת עור/בגד/פנים
     ort_threads: int = 3                # ליבה אחת נשארת פנויה לפרוקסי
     batch_max: int = 8
     batch_wait_ms: float = 6.0

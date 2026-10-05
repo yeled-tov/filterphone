@@ -1,4 +1,7 @@
-from filterphone.engine.policy import Action, Thresholds, decide, on_failure
+import dataclasses
+
+from filterphone.engine.policy import Action, PaintMode, Thresholds, decide, on_failure
+from filterphone.engine.segment import SegStats
 
 T = Thresholds(person=0.5, female_strict=0.6, female_check=0.2, female=0.5,
                immodest=0.5, immodest_high=0.85, nsfw_check=0.15, nsfw_block=0.95)
@@ -55,27 +58,72 @@ def test_level2_modest_woman_passes():
     assert decide(2, s(person=0.9, female=0.9, immodest=0.1), T).action is Action.PASS
 
 
-def test_level2_immodest_woman_is_painted():
+def test_level2_men_pass_without_any_model_run():
+    assert decide(2, s(person=0.9, female=0.05, immodest=0.95), T).action is Action.PASS
+
+
+FACE = ("FACE_FEMALE", 0.9, 0, 0, 5, 5)
+
+
+def test_level2_flow_detector_then_segmentation_then_paint_skin():
     sc = s(person=0.9, female=0.9, immodest=0.7)
     assert decide(2, sc, T).action is Action.NEED_DETECTOR
-    dets = [("BELLY_EXPOSED", 0.6, 10, 20, 30, 40), ("FACE_FEMALE", 0.9, 0, 0, 5, 5)]
-    d = decide(2, sc, T, dets)
-    assert d.action is Action.PAINT
-    assert d.boxes == ((10, 20, 30, 40),)
+    dets = [("BELLY_EXPOSED", 0.6, 10, 20, 30, 40), FACE]
+    assert decide(2, sc, T, dets).action is Action.NEED_SEGMENT
+    d = decide(2, sc, T, dets, SegStats(skin=0.2, person=0.3))
+    assert d.action is Action.PAINT and d.mode is PaintMode.SKIN
+    assert d.boxes == ((10, 20, 30, 40),)          # משלים את המסכה (בתוך שטח האדם)
+    assert d.keep == ((0, 0, 5, 5),)               # הפנים לא נצבעות
 
 
-def test_level2_covered_chest_painted_only_when_clearly_swimwear():
-    covered = [("FEMALE_BREAST_COVERED", 0.8, 5, 5, 20, 20)]
-    # לבוש "קצת" חשוף: חזה מכוסה (חולצה רגילה) לא נצבע
-    d = decide(2, s(person=0.9, female=0.9, immodest=0.6), T, covered)
+def test_level2_little_exposed_skin_passes():
+    sc = s(person=0.9, female=0.9, immodest=0.45)
+    d = decide(2, sc, T, [FACE], SegStats(skin=0.05, person=0.3))     # ידיים וצוואר בלבד
     assert d.action is Action.PASS
-    # בגד ים ברור: נצבע
-    d = decide(2, s(person=0.9, female=0.9, immodest=0.9), T, covered)
-    assert d.action is Action.PAINT and d.boxes == ((5, 5, 20, 20),)
 
 
-def test_level2_very_immodest_without_parts_blocks():
-    assert decide(2, s(person=0.9, female=0.9, immodest=0.9), T, []).action is Action.BLOCK
+def test_level2_low_immodest_score_still_checked_when_skin_is_visible():
+    # מתחת לסף "לבוש לא צנוע" אבל מעל שער הבדיקה — הסגמנטציה מכריעה
+    sc = s(person=0.9, female=0.9, immodest=0.3)
+    assert decide(2, sc, T).action is Action.NEED_DETECTOR
+    d = decide(2, sc, T, [], SegStats(skin=0.15, person=0.2))
+    assert d.action is Action.PAINT and d.mode is PaintMode.SKIN
+
+
+def test_level2_very_exposed_paints_whole_body():
+    covered = [("FEMALE_BREAST_COVERED", 0.8, 5, 5, 20, 20)]
+    # הרבה עור גלוי לפי הסגמנטציה → כל הגוף (גם אם הציון לא "גבוה")
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.6), T, covered, SegStats(skin=0.5, person=0.3))
+    assert d.action is Action.PAINT and d.mode is PaintMode.BODY
+    assert d.boxes == ()                            # "מכוסה" נחשב רק כשהציון גבוה
+    # ציון גבוה מאוד → כל הגוף, כולל האזורים ה"מכוסים" מהגלאי
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.9), T, covered, SegStats(skin=0.2, person=0.3))
+    assert d.action is Action.PAINT and d.mode is PaintMode.BODY and d.boxes == ((5, 5, 20, 20),)
+
+
+def test_level2_swimwear_signal_paints_whole_body():
+    t = dataclasses.replace(T, immodest_high=0.998)          # כמו בראשים האמיתיים
+    covered = [("BUTTOCKS_COVERED", 0.7, 5, 5, 20, 20)]
+    # ציון גבוה (לא "גבוה מאוד") + אזור מכוסה מהגלאי → בגד ים → כל הגוף, גם כשהעור מעט
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.95), t, covered, SegStats(skin=0.2, person=0.3))
+    assert d.action is Action.PAINT and d.mode is PaintMode.BODY and d.boxes == ((5, 5, 20, 20),)
+    # אותו ציון בלי אזור מכוסה → רק העור
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.95), t, [], SegStats(skin=0.2, person=0.3))
+    assert d.mode is PaintMode.SKIN
+
+
+def test_level2_without_person_mask_falls_back_to_detector():
+    none = SegStats(0.0, 0.0)
+    assert decide(2, s(person=0.9, female=0.9, immodest=0.9), T, [], none).action is Action.BLOCK
+    dets = [("BELLY_EXPOSED", 0.6, 10, 20, 30, 40)]
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.7), T, dets, none)
+    assert d.action is Action.PAINT and d.mode is PaintMode.BOXES and d.boxes == ((10, 20, 30, 40),)
+    assert decide(2, s(person=0.9, female=0.9, immodest=0.7), T, [], none).action is Action.PASS
+
+
+def test_level2_explicit_blocks_before_segmentation():
+    dets = [("FEMALE_GENITALIA_EXPOSED", 0.7, 0, 0, 5, 5)]
+    assert decide(2, s(person=0.9, female=0.9, immodest=0.9), T, dets).action is Action.BLOCK
 
 
 def test_level3_swimwear_is_verified_for_nudity():
@@ -86,10 +134,15 @@ def test_level3_swimwear_is_verified_for_nudity():
 
 def test_failure_policy():
     assert on_failure(1).action is Action.BLOCK
-    assert on_failure(2).action is Action.PASS
+    assert on_failure(2).action is Action.BLOCK        # רמה 2: "בלי לפספס"
     assert on_failure(3).action is Action.PASS
 
 
 def test_thresholds_from_dict_ignores_unknown_keys():
     t = Thresholds.from_dict({"female": 0.42, "something_else": 1})
     assert t.female == 0.42
+
+
+def test_thresholds_gate_derived_for_old_heads():
+    assert Thresholds.from_dict({"immodest": 0.38}).immodest_check == 0.19
+    assert Thresholds.from_dict({"immodest": 0.38, "immodest_check": 0.1}).immodest_check == 0.1
