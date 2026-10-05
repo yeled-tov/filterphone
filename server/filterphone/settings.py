@@ -54,6 +54,13 @@ class Settings:
     vpn_server_ip: str = "10.8.0.1"
     vpn_first_client: int = 10          # 10.8.0.2-9 שמורים ללקוחות הישנים
     mitm_ca_cert: str = "/var/lib/filterphone/mitmproxy/mitmproxy-ca-cert.pem"
+    register_enabled: bool = True       # הרשמה עצמית מהאפליקציה (בקשת הצטרפות)
+    max_pending: int = 300              # תקרת בקשות ממתינות — הגנה מהצפה
+
+    # --- AdGuard (שכבת ה-DNS של החסימות לפי מכשיר). בלי משתמש/סיסמה — רק הפרוקסי אוכף ---
+    adguard_url: str = "http://127.0.0.1:3002"
+    adguard_user: str = ""
+    adguard_password: str = ""
 
     @property
     def engine_socket(self) -> str:

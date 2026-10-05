@@ -182,7 +182,7 @@ class FilterPhone:
         ip = _client_ip(flow)
         pol = self.policies.get(ip)
         host = req.pretty_host
-        if pol.blocks(host):
+        if pol.blocks(host) or (pol.paths and pol.blocks_path(host, req.path)):
             flow.response = self._blocked_host_response(req, host)
             flow.metadata["fp_handled"] = True
             self._record_host_block(ip, host, req)

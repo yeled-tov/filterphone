@@ -25,7 +25,7 @@ ProtectHome=yes
 PrivateTmp=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
-ReadWritePaths=/var/lib/filterphone
+ReadWritePaths=/var/lib/filterphone -/run/filterphone
 
 [Install]
 WantedBy=multi-user.target

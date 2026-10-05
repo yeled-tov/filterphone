@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import struct
 
 _PREFIX = struct.Struct(">II")
@@ -35,3 +36,26 @@ async def read_message(reader: asyncio.StreamReader) -> tuple[dict, bytes]:
     header = json.loads(await reader.readexactly(hlen)) if hlen else {}
     body = await reader.readexactly(blen) if blen else b""
     return header, body
+
+
+def _recv_exact(sock: socket.socket, n: int) -> bytes:
+    buf = bytearray()
+    while len(buf) < n:
+        chunk = sock.recv(min(n - len(buf), 1 << 20))
+        if not chunk:
+            raise ConnectionError("engine closed the connection")
+        buf += chunk
+    return bytes(buf)
+
+
+def call_sync(path: str, header: dict, body: bytes, timeout: float = 30.0) -> tuple[dict, bytes]:
+    """בקשה אחת למנוע, בלי asyncio (ל-API — שרץ בחוטים רגילים)."""
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+        s.settimeout(timeout)
+        s.connect(path)
+        s.sendall(encode(header, body))
+        hlen, blen = _PREFIX.unpack(_recv_exact(s, _PREFIX.size))
+        if hlen > MAX_HEADER or blen > MAX_BODY:
+            raise ProtocolError(f"message too large: header={hlen} body={blen}")
+        resp = json.loads(_recv_exact(s, hlen)) if hlen else {}
+        return resp, _recv_exact(s, blen) if blen else b""

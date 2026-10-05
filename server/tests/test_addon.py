@@ -110,6 +110,18 @@ async def test_blocked_or_image_hosts_are_not_learned(fp):
     assert list(await fp.redis.hkeys(A.PASSTHROUGH_KEY)) == [f"{IP}|api.bank.example"]
 
 
+async def test_path_rules_block_google_images_tab_only(fp):
+    pol = DevicePolicy.from_json(
+        '{"level":2,"paths":[{"host":"google.*","re":"[?&](?:tbm=isch|udm=2)(?:&|$)"}]}', 1)
+    fp.policies.set(IP, pol)
+    tab = mkflow("https://www.google.co.il/search?q=x&udm=2", {"sec-fetch-dest": "document"})
+    fp.requestheaders(tab)
+    assert tab.response.status_code == 403
+    web = mkflow("https://www.google.co.il/search?q=x", {"sec-fetch-dest": "document"})
+    fp.requestheaders(web)
+    assert web.response is None
+
+
 # ------------------------------------------------------------------ תמונות
 
 async def test_image_request_is_normalized(fp):

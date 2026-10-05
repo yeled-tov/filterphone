@@ -45,6 +45,7 @@ class DevicePolicy:
     images: str = "filter"                  # filter = לפי הרמה; block = כל התמונות נחסמות
     video: bool = False                     # חסימת וידאו (לפי סוג התוכן)
     app_images: str = "block"               # block = שרתי תמונות של אפליקציות לא עוברים בלי סינון
+    paths: tuple[tuple[re.Pattern, re.Pattern], ...] = ()   # (אתר, נתיב) — למשל לשונית התמונות בגוגל
     host_list: tuple[str, ...] = field(default=(), compare=False)
 
     @property
@@ -55,14 +56,24 @@ class DevicePolicy:
     def blocks(self, host: str | None) -> bool:
         return bool(host and self.hosts and self.hosts.match(host.lower().rstrip(".")))
 
+    def blocks_path(self, host: str, path: str) -> bool:
+        host = host.lower().rstrip(".")
+        return any(h.match(host) and p.search(path) for h, p in self.paths)
+
     @classmethod
     def from_json(cls, raw: str, default_level: int) -> DevicePolicy:
         d = json.loads(raw)
         hosts = [str(h) for h in d.get("hosts", [])][:5000]
         level = int(d.get("level", default_level))
+        paths = []
+        for rule in d.get("paths", [])[:50]:
+            h = compile_hosts([str(rule["host"])])
+            if h is not None:
+                paths.append((h, re.compile(str(rule["re"]))))
         return cls(
             level=level,
             hosts=compile_hosts(hosts),
+            paths=tuple(paths),
             images="block" if d.get("images") == "block" else "filter",
             video=bool(d.get("video", False)),
             app_images=str(d.get("app_images") or default_app_images(level)),
