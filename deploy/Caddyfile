@@ -1,0 +1,13 @@
+# FilterPhone — שרת HTTPS. התעודה (Let's Encrypt) מונפקת ומתחדשת אוטומטית.
+{
+    admin off
+}
+
+__PUBLIC_HOST__ {
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        -Server
+    }
+    reverse_proxy 127.0.0.1:8090
+}

@@ -89,6 +89,10 @@ class HostPolicy:
         self._learned[(client_ip, host)] = expires_at or (time.time() + self._ttl)
         return True
 
+    def replace_learned(self, learned: dict[tuple[str, str], float]) -> None:
+        """מחליף את כל הרשימה הנלמדת (טעינה מחדש מ-Redis — Redis הוא מקור האמת)."""
+        self._learned = dict(learned)
+
     def forget_device(self, client_ip: str) -> None:
         for k in [k for k in self._learned if k[0] == client_ip]:
             del self._learned[k]

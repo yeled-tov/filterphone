@@ -73,6 +73,7 @@ class FilterPhone:
     async def running(self) -> None:
         await self._load_learned()
         self._spawn(self.levels.run())
+        self._spawn(self._reload_learned_forever())
         log.info("FilterPhone proxy ready (%d learned passthrough hosts)", self.hosts.learned_count())
 
     async def done(self) -> None:
@@ -86,14 +87,27 @@ class FilterPhone:
         task.add_done_callback(self._background.discard)
 
     async def _load_learned(self) -> None:
+        """טוען מ-Redis את רשימת (מכשיר, שרת) שעוברים בלי בדיקה. Redis הוא מקור האמת:
+        איפוס מממשק הניהול מוחק משם, והטעינה הבאה מעדכנת את הזיכרון."""
         try:
             now = time.time()
+            learned, expired = {}, []
             for field, exp in (await self.redis.hgetall(PASSTHROUGH_KEY)).items():
                 ip, _, host = field.partition("|")
                 if float(exp) > now:
-                    self.hosts.learn(ip, host, level=0, expires_at=float(exp))
+                    learned[(ip, host)] = float(exp)
+                else:
+                    expired.append(field)
+            self.hosts.replace_learned(learned)
+            if expired:
+                await self.redis.hdel(PASSTHROUGH_KEY, *expired)
         except Exception as e:
             log.warning("could not load learned passthrough list: %s", e)
+
+    async def _reload_learned_forever(self) -> None:
+        while True:
+            await asyncio.sleep(60)
+            await self._load_learned()
 
     # ------------------------------------------------------------ TLS
 

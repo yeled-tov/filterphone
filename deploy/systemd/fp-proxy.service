@@ -1,0 +1,39 @@
+[Unit]
+Description=FilterPhone — פרוקסי סינון (mitmproxy שקוף)
+After=network.target fp-engine.service redis-server.service
+Wants=fp-engine.service
+
+[Service]
+Type=simple
+User=filterphone
+Group=filterphone
+EnvironmentFile=-/etc/filterphone/filterphone.env
+ExecStart=/opt/filterphone/venv/bin/mitmdump \
+    --mode transparent \
+    --listen-port 8080 \
+    --set confdir=/var/lib/filterphone/mitmproxy \
+    --set block_global=false \
+    --set stream_large_bodies=12m \
+    --set termlog_verbosity=warn \
+    --set flow_detail=0 \
+    -s /opt/filterphone/mitm_addon.py
+RuntimeDirectory=filterphone
+RuntimeDirectoryPreserve=yes
+Restart=always
+RestartSec=2
+CPUWeight=120
+LimitNOFILE=65536
+MemoryMax=2G
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadWritePaths=/var/lib/filterphone /run/filterphone
+
+[Install]
+WantedBy=multi-user.target

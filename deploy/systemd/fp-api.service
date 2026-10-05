@@ -1,0 +1,31 @@
+[Unit]
+Description=FilterPhone — API למכשירים ולניהול
+After=network-online.target wg-quick@wg0.service redis-server.service
+Wants=network-online.target wg-quick@wg0.service redis-server.service
+
+[Service]
+Type=simple
+User=filterphone
+Group=filterphone
+EnvironmentFile=-/etc/filterphone/filterphone.env
+ExecStart=/opt/filterphone/venv/bin/uvicorn --factory filterphone.api.app:create_app \
+    --host 127.0.0.1 --port 8090 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 \
+    --no-server-header --log-level warning
+Restart=always
+RestartSec=2
+MemoryMax=512M
+
+# הרשאה יחידה מעבר למשתמש רגיל: ניהול רשת (wg set) — בלי root
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadWritePaths=/var/lib/filterphone
+
+[Install]
+WantedBy=multi-user.target
