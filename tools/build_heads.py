@@ -22,6 +22,7 @@ import datetime as dt
 import functools
 import gc
 import json
+import os
 import random
 import re
 import sys
@@ -189,19 +190,17 @@ def embed_split(split: str, ids: list[int], imgs: dict[int, dict], enc: VisionEn
             return iid, None
         return iid, siglip_views(dec.primary, SIZE)[0]
 
-    done_ids, embs, pending_ids, pending = [], [], [], []
-    with cf.ThreadPoolExecutor(24) as pool:
-        for i, (iid, x) in enumerate(pool.map(load, ids), 1):
-            if x is not None:
-                pending_ids.append(iid)
-                pending.append(x)
-            if len(pending) >= batch:
-                embs.append(enc(np.stack(pending))); done_ids += pending_ids
-                pending, pending_ids = [], []
-            if i % 2000 == 0:
-                print(f"  {split}: {i}/{len(ids)}", flush=True)
-    if pending:
-        embs.append(enc(np.stack(pending))); done_ids += pending_ids
+    # בחלקים: pool.map שולח הכול מראש, ותוצאות שלא נצרכו מצטברות בזיכרון (~0.8MB לתמונה)
+    done_ids, embs = [], []
+    chunk = 512
+    with cf.ThreadPoolExecutor(16) as pool:
+        for start in range(0, len(ids), chunk):
+            loaded = [(iid, x) for iid, x in pool.map(load, ids[start:start + chunk]) if x is not None]
+            for b0 in range(0, len(loaded), batch):
+                part = loaded[b0:b0 + batch]
+                embs.append(enc(np.stack([x for _, x in part])))
+                done_ids += [iid for iid, _ in part]
+            print(f"  {split}: {min(start + chunk, len(ids))}/{len(ids)}", flush=True)
     ids_arr, emb = np.asarray(done_ids), np.concatenate(embs).astype(np.float32)
     np.savez_compressed(cache, ids=ids_arr, emb=emb)
     return ids_arr, emb
@@ -307,7 +306,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--work", type=Path, default=Path("/tmp/fp-heads"))
     ap.add_argument("--train-images", type=int, default=24000)
-    ap.add_argument("--threads", type=int, default=4)
+    ap.add_argument("--threads", type=int, default=os.cpu_count() or 2)
     ap.add_argument("--out", type=Path, default=ROOT / "server/filterphone/engine/heads.json")
     ap.add_argument("--report", type=Path, default=ROOT / "docs/HEADS_REPORT.md")
     args = ap.parse_args()
