@@ -77,7 +77,9 @@ async def run(models: str) -> int:
     info, v = await engine.explain(images[0][1], 2)
     print("explain:", {k: info[k] for k in ("decisions", "steps", "ms")})
     await engine.close()
-    med = (lambda xs: f"{statistics.median(xs):.1f}ms" if xs else "n/a")
+    def med(xs: list[float]) -> str:
+        return f"{statistics.median(xs):.1f}ms" if xs else "n/a"
+
     print(f"cold: median {med(cold)} | cached: median {med(warm)} | cache hits on repeat: {hits}/{len(images)}")
     if hits != len(images):
         print("FAIL: cache did not return repeated images")

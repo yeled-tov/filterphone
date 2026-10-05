@@ -229,7 +229,7 @@ def test_adguard_sync_writes_only_on_change(env, monkeypatch):
     reg = register(client, 10)
     rid = client.get("/v1/admin/requests", headers=h).json()[0]["id"]
     client.post(f"/v1/admin/requests/{rid}/approve", headers=h, json={"options": ["tiktok"]})
-    assert svc.sync_adguard() is True
+    svc.sync_adguard()          # ייתכן שהלולאה ברקע כבר סנכרנה (האישור מסמן "dirty") — בודקים את התוצאה
     assert state["user_rules"][0] == "||manual.example^"
     assert "||tiktok.com^$client=10.8.0.10" in state["user_rules"]
     n = len(calls)

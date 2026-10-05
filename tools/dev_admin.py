@@ -22,7 +22,6 @@ sys.path.insert(0, str(ROOT / "server"))
 
 import fakeredis  # noqa: E402
 import uvicorn  # noqa: E402
-
 from filterphone.api import db  # noqa: E402
 from filterphone.api.app import create_app  # noqa: E402
 from filterphone.api.service import Services  # noqa: E402
