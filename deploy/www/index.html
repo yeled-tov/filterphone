@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FilterPhone — הורדת האפליקציה</title>
+  <style>
+    :root { --bg:#f4f6f8; --card:#fff; --text:#18212b; --muted:#66727f; --line:#e2e7ec; --accent:#1f6feb; --accent-text:#fff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0f1419; --card:#182029; --text:#e6edf3; --muted:#93a1ae; --line:#2a3541; --accent:#4c8dff; --accent-text:#0b1016; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,"Segoe UI","Noto Sans Hebrew",Arial,sans-serif; }
+    main { max-width:520px; margin:0 auto; padding:32px 16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; margin-bottom:16px; }
+    h1 { margin:0 0 4px; font-size:28px; }
+    .muted { color:var(--muted); margin:0; }
+    .btn { display:block; text-align:center; background:var(--accent); color:var(--accent-text); text-decoration:none;
+           font-weight:600; padding:14px; border-radius:12px; margin-top:20px; }
+    ol { padding-inline-start:20px; margin:0; }
+    li { margin:6px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h1>FilterPhone</h1>
+      <p class="muted">סינון אינטרנט ותמונות לכל הטלפון</p>
+      <a class="btn" href="FilterPhone.apk" download>הורדת האפליקציה לאנדרואיד</a>
+    </div>
+    <div class="card">
+      <ol>
+        <li>הורידו את הקובץ ופתחו אותו.</li>
+        <li>אם הטלפון מבקש — אשרו "התקנה ממקור לא ידוע" לדפדפן.</li>
+        <li>פתחו את FilterPhone והזינו את קוד ההפעלה שקיבלתם.</li>
+        <li>אשרו את חיבור ה-VPN והתקינו את תעודת הסינון לפי ההוראות באפליקציה.</li>
+      </ol>
+    </div>
+    <p class="muted">גרסה לאייפון — בקרוב.</p>
+  </main>
+</body>
+</html>

@@ -137,7 +137,9 @@ for _ in $(seq 1 60); do [ -S /run/filterphone/engine.sock ] && break; sleep 1; 
 systemctl restart fp-proxy.service fp-api.service
 
 # ------------------------------------------------------------ 13. Caddy
-log "Caddy (HTTPS ל-${FP_PUBLIC_HOST:-api.filterphone.com})"
+log "Caddy (HTTPS ל-${FP_PUBLIC_HOST:-api.filterphone.com}) ודף הורדת האפליקציה"
+install -d -m 755 /var/www/filterphone
+install -m 644 "$SRC/deploy/www/index.html" /var/www/filterphone/index.html
 sed "s/__PUBLIC_HOST__/${FP_PUBLIC_HOST:-api.filterphone.com}/" "$SRC/deploy/Caddyfile" > /etc/caddy/Caddyfile
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 systemctl enable caddy >/dev/null
