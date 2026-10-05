@@ -257,9 +257,10 @@ def check_alignment(enc: VisionEncoder, t: np.ndarray, scale: float, bias: float
 
 # ------------------------------------------------------------------ אימון
 
-def train_head(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float, float]:
+def train_head(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float, float, np.ndarray]:
+    """מחזיר משקלים, הטיה, C, ותחזיות out-of-fold על קבוצת האימון (לכיול ספים)."""
     from sklearn.linear_model import LogisticRegression
-    from sklearn.model_selection import train_test_split
+    from sklearn.model_selection import cross_val_predict, train_test_split
     Xa, Xb, ya, yb = train_test_split(X, y, test_size=0.15, random_state=1, stratify=y)
     best = None
     for C in (0.3, 1.0, 3.0, 10.0):
@@ -268,7 +269,9 @@ def train_head(X: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, float, float]:
         if best is None or ll < best[0]:
             best = (ll, C)
     m = LogisticRegression(C=best[1], max_iter=3000, class_weight="balanced").fit(X, y)
-    return m.coef_[0].astype(np.float32), float(m.intercept_[0]), best[1]
+    oof = cross_val_predict(LogisticRegression(C=best[1], max_iter=3000, class_weight="balanced"),
+                            X, y, cv=5, method="predict_proba")[:, 1]
+    return m.coef_[0].astype(np.float32), float(m.intercept_[0]), best[1], oof
 
 
 def sigmoid(z):
@@ -328,16 +331,19 @@ def main() -> None:
 
     heads: dict[str, dict] = {}
     report: dict[str, dict] = {}
-    val_probs: dict[str, np.ndarray] = {}
+    val_probs: dict[str, tuple] = {}
+    calib_probs: dict[str, tuple] = {}
     for name in ("person", "female", "immodest"):
         mtr = np.array([l[name] is not None for l in tr_lab])
         ytr = np.array([l[name] or 0 for l in tr_lab])[mtr]
-        w, b, C = train_head(tr_emb[mtr], ytr)
+        w, b, C, oof = train_head(tr_emb[mtr], ytr)
         heads[name] = {"w": encode_weights(w), "b": round(b, 6), "source": f"logreg-coco C={C}"}
         mva = np.array([l[name] is not None for l in va_lab])
         yva = np.array([l[name] or 0 for l in va_lab])[mva]
         pva = sigmoid(va_emb[mva] @ w + b)
         val_probs[name] = (pva, yva)
+        # ספים על OOF של האימון + קבוצת הבדיקה: ב-val יש מעט מדי דוגמאות חיוביות ל"לבוש חשוף"
+        calib_probs[name] = (np.concatenate([oof, pva]), np.concatenate([ytr, yva]))
         print(f"{name}: train n={mtr.sum()} pos={ytr.sum()} | val n={mva.sum()} pos={yva.sum()}")
 
     # --- nsfw: zero-shot ---
@@ -352,14 +358,14 @@ def main() -> None:
     heads["nsfw"] = {"w": encode_weights(w_nsfw), "b": round(b_nsfw, 6), "source": "zero-shot"}
 
     # --- ספים ---
-    pf, yf = val_probs["female"]; pi, yi = val_probs["immodest"]; pp, yp = val_probs["person"]
+    pf, yf = calib_probs["female"]; pi, yi = calib_probs["immodest"]; pp, yp = calib_probs["person"]
     thresholds = {
         "person": round(threshold_for_recall(pp, yp, 0.95), 4),
         "female_strict": round(threshold_for_precision(pf, yf, 0.90), 4),
         "female_check": round(threshold_for_recall(pf, yf, 0.97), 4),
         "female": round(threshold_for_recall(pf, yf, 0.90), 4),
         "immodest": round(threshold_for_recall(pi, yi, 0.85), 4),
-        "immodest_high": round(threshold_for_precision(pi, yi, 0.80), 4),
+        "immodest_high": round(threshold_for_precision(pi, yi, 0.75), 4),
         "nsfw_check": 0.15,
         "nsfw_block": round(float(min(0.995, max(p_all.max() * 1.02, 0.97))), 4),
     }
@@ -380,7 +386,8 @@ def main() -> None:
     args.out.write_text(json.dumps(doc, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     lines = [f"# דוח ראשי סיווג — {doc['version']}", "",
              f"embedder: `{EMBEDDER_NAME}`, אימון: {len(tr_ids)} תמונות COCO train2017, "
-             f"בדיקה: {len(va_ids)} תמונות val2017.", "",
+             f"בדיקה: {len(va_ids)} תמונות val2017. הספים והמדדים מחושבים על תחזיות out-of-fold "
+             "של האימון יחד עם val (ב-val לבד יש מעט מדי דוגמאות ללבוש חשוף).", "",
              "| בדיקה | AUC | סף | דיוק | כיסוי | n | חיוביות |", "|---|---|---|---|---|---|---|"]
     for k, m in report.items():
         if "auc" in m:

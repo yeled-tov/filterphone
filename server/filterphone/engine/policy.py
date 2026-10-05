@@ -24,11 +24,11 @@ FEMALE_MARKERS = frozenset({
     "FACE_FEMALE", "FEMALE_BREAST_COVERED", "FEMALE_GENITALIA_COVERED",
     "FEMALE_BREAST_EXPOSED", "FEMALE_GENITALIA_EXPOSED",
 })
-# אזורים שנצבעים בשחור ברמה 2 כשהלבוש לא צנוע (בגד ים, בטן חשופה וכו')
-PAINT_PARTS = frozenset({
-    "FEMALE_BREAST_COVERED", "FEMALE_GENITALIA_COVERED", "BUTTOCKS_COVERED",
-    "BELLY_EXPOSED", "ARMPITS_EXPOSED",
-})
+# רמה 2 — מה נצבע בשחור:
+#   עור חשוף — כשהלבוש לא צנוע;
+#   אזורים "מכוסים" (NudeNet מזהה כך גם חולצה רגילה!) — רק כשברור שזה בגד ים/הלבשה תחתונה.
+PAINT_EXPOSED = frozenset({"BELLY_EXPOSED", "ARMPITS_EXPOSED"})
+PAINT_COVERED = frozenset({"FEMALE_BREAST_COVERED", "FEMALE_GENITALIA_COVERED", "BUTTOCKS_COVERED"})
 
 DETECTOR_MIN_SCORE = 0.35
 EXPLICIT_MIN_SCORE = 0.45
@@ -93,7 +93,8 @@ def decide(level: int, s: dict[str, float], t: Thresholds,
         if s["female"] >= t.female and s["immodest"] >= t.immodest:
             if dets is None:
                 return Decision(Action.NEED_DETECTOR, "immodest check")
-            parts = _parts(dets, PAINT_PARTS, DETECTOR_MIN_SCORE)
+            labels = PAINT_EXPOSED | PAINT_COVERED if s["immodest"] >= t.immodest_high else PAINT_EXPOSED
+            parts = _parts(dets, labels, DETECTOR_MIN_SCORE)
             if parts:
                 return Decision(Action.PAINT, f"immodest {s['immodest']:.2f}",
                                 tuple((x, y, w, h) for _, _, x, y, w, h in parts))

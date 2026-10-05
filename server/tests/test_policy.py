@@ -64,6 +64,16 @@ def test_level2_immodest_woman_is_painted():
     assert d.boxes == ((10, 20, 30, 40),)
 
 
+def test_level2_covered_chest_painted_only_when_clearly_swimwear():
+    covered = [("FEMALE_BREAST_COVERED", 0.8, 5, 5, 20, 20)]
+    # לבוש "קצת" חשוף: חזה מכוסה (חולצה רגילה) לא נצבע
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.6), T, covered)
+    assert d.action is Action.PASS
+    # בגד ים ברור: נצבע
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.9), T, covered)
+    assert d.action is Action.PAINT and d.boxes == ((5, 5, 20, 20),)
+
+
 def test_level2_very_immodest_without_parts_blocks():
     assert decide(2, s(person=0.9, female=0.9, immodest=0.9), T, []).action is Action.BLOCK
 
