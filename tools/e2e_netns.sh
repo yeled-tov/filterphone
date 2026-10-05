@@ -144,6 +144,17 @@ else
     bad "ה-passthrough האוטומטי לא עבד"
 fi
 
+echo "== ה-API הציבורי מתוך המנהרה (כמו האפליקציה בטלפון)"
+API="https://${FP_PUBLIC_HOST:-api.filterphone.com}"
+TOKEN=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["token"])' "$tmp/enroll.json")
+# shellcheck disable=SC2046
+r=$(in_ns curl -s -m 15 $(resolve_args "$API/") -H "Authorization: Bearer $TOKEN" "$API/v1/device")
+if echo "$r" | grep -q '"via_vpn":true'; then
+    ok "השרת מזהה שהבקשה הגיעה דרך המנהרה (via_vpn)"
+else
+    bad "השרת לא מזהה את המנהרה: ${r:0:200}"
+fi
+
 echo "== QUIC (UDP 443) חסום — הדפדפן נאלץ לעבור ל-TCP שעובר בסינון"
 if iptables -C FORWARD -i wg0 -p udp -m udp --dport 443 -j REJECT --reject-with icmp-port-unreachable 2>/dev/null; then
     ok "כלל חסימת QUIC פעיל"
