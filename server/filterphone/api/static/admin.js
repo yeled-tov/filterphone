@@ -4,6 +4,7 @@
 const LEVELS = { 0: "כבוי", 1: "מחמיר", 2: "בינוני", 3: "בסיסי" };
 const ACTIONS = { block: "נחסם", replace: "נצבע" };
 let token = sessionStorage.getItem("fp_token") || "";
+let latestRequestCode = "";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -141,6 +142,49 @@ async function loadDevices() {
   }));
 }
 
+async function loadRequests() {
+  const list = await api("/v1/admin/requests");
+  $("#requests-empty").hidden = list.length > 0;
+  $("#requests").replaceChildren(...list.map((r) => {
+    const status = { pending: "ממתינה לטיפול", approved: "אושרה", rejected: "נדחתה" }[r.status] || r.status;
+    const actions = r.status === "pending" ? el("div", { class: "actions" },
+      el("button", { onclick: async () => {
+        if (!confirm(`לאשר את בקשת ${r.name} וליצור קוד הפעלה לרמה ${r.level_name}?`)) return;
+        try {
+          const result = await api(`/v1/admin/requests/${r.id}/decision`, { method: "POST", body: { approved: true } });
+          latestRequestCode = result.code;
+          $("#request-code-value").textContent = result.code;
+          $("#request-code-details").textContent = `${result.label} · ${result.level_name} · תוקף עד ${date(result.expires_at)}`;
+          $("#request-code").hidden = false;
+          refresh();
+        } catch (err) { alert(err.message); }
+      } }, "אשר וצור קוד"),
+      el("button", { class: "danger", onclick: async () => {
+        if (!confirm(`לדחות את בקשת ${r.name}?`)) return;
+        try { await api(`/v1/admin/requests/${r.id}/decision`, { method: "POST", body: { approved: false } }); refresh(); }
+        catch (err) { alert(err.message); }
+      } }, "דחה"),
+      el("button", { class: "danger", onclick: async () => {
+        if (!confirm(`למחוק את פרטי בקשת ${r.name}?`)) return;
+        try { await api(`/v1/admin/requests/${r.id}`, { method: "DELETE" }); refresh(); }
+        catch (err) { alert(err.message); }
+      } }, "מחק פרטים")) : el("div", {}, status,
+      el("button", { class: "danger", onclick: async () => {
+        if (!confirm(`למחוק את פרטי בקשת ${r.name}? קוד ההפעלה שכבר נוצר לא יימחק.`)) return;
+        try { await api(`/v1/admin/requests/${r.id}`, { method: "DELETE" }); refresh(); }
+        catch (err) { alert(err.message); }
+      } }, "מחק פרטים"));
+    return el("tr", {},
+      el("td", { class: "ltr" }, r.reference),
+      el("td", {}, r.name),
+      el("td", {}, r.email, el("small", { class: "ltr" }, r.phone)),
+      el("td", {}, `${r.level} — ${r.level_name}`),
+      el("td", {}, new Date(r.created_at * 1000).toLocaleString("he-IL")),
+      el("td", {}, actions),
+    );
+  }));
+}
+
 async function loadCodes() {
   const list = await api("/v1/admin/codes");
   $("#codes").replaceChildren(...list.map((c) => el("tr", {},
@@ -187,11 +231,13 @@ $("#code-form").addEventListener("submit", async (e) => {
 });
 
 $("#copy-code").addEventListener("click", () => navigator.clipboard.writeText($("#new-code-value").textContent));
+$("#copy-request-code").addEventListener("click", () => navigator.clipboard.writeText(latestRequestCode));
 
 async function refresh() {
   try {
     await loadStats();
     const tab = currentTab();
+    if (tab === "requests") await loadRequests();
     if (tab === "devices") await loadDevices();
     if (tab === "codes") await loadCodes();
     if (tab === "events") await loadEvents();
@@ -209,4 +255,4 @@ function start() {
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden && token) refresh(); });
 if (token) start(); else showLogin();
-setInterval(() => { if (token && !document.hidden && currentTab() !== "codes") refresh(); }, 15000);
+setInterval(() => { if (token && !document.hidden) refresh(); }, 15000);

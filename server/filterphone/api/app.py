@@ -34,6 +34,7 @@ STATIC = Path(__file__).parent / "static"
 
 enroll_limiter = RateLimiter(limit=10, window_s=600)
 login_limiter = RateLimiter(limit=8, window_s=600)
+request_limiter = RateLimiter(limit=4, window_s=3600)
 
 
 def build_services() -> Services:
@@ -150,6 +151,17 @@ class EnrollIn(BaseModel):
     app_version: str = Field(default="", max_length=20)
 
 
+class AccessRequestIn(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    email: str = Field(min_length=3, max_length=254)
+    phone: str = Field(min_length=7, max_length=30)
+    level: int = Field(ge=1, le=3)
+
+
+class AccessRequestDecision(BaseModel):
+    approved: bool
+
+
 class LoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=1, max_length=200)
@@ -181,6 +193,14 @@ def _routes(app: FastAPI) -> None:
         return RedirectResponse("/admin")
 
     # --- אפליקציה ---
+
+    @app.post("/v1/requests", status_code=201)
+    def create_request(body: AccessRequestIn, request: Request, svc: SvcDep):
+        if not request_limiter.allow(client_ip(request)):
+            raise ApiError(429, "נשלחו יותר מדי בקשות. נסו שוב מאוחר יותר")
+        email = body.email.strip()
+        phone = body.phone.strip()
+        return svc.create_access_request(body.name, email, phone, body.level)
 
     @app.post("/v1/enroll", status_code=201)
     def enroll(body: EnrollIn, request: Request, svc: SvcDep):
@@ -250,6 +270,18 @@ def _routes(app: FastAPI) -> None:
     def codes(svc: SvcDep, _: AdminRow):
         return svc.list_codes()
 
+    @app.get("/v1/admin/requests")
+    def access_requests(svc: SvcDep, _: AdminRow):
+        return svc.list_access_requests()
+
+    @app.post("/v1/admin/requests/{request_id}/decision")
+    def decide_request(request_id: int, body: AccessRequestDecision, svc: SvcDep, _: AdminRow):
+        return svc.decide_access_request(request_id, body.approved)
+
+    @app.delete("/v1/admin/requests/{request_id}", status_code=204)
+    def delete_request(request_id: int, svc: SvcDep, _: AdminRow):
+        svc.delete_access_request(request_id)
+
     @app.post("/v1/admin/codes", status_code=201)
     def create_code(body: CodeIn, svc: SvcDep, _: AdminRow):
         return svc.create_code(body.label, body.level, body.uses, body.expires_days)
@@ -267,4 +299,3 @@ def _routes(app: FastAPI) -> None:
     @app.get("/admin")
     def admin_page():
         return FileResponse(STATIC / "admin.html", headers={"Cache-Control": "no-cache"})
-

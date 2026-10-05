@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import ipaddress
 import logging
+import re
 import sqlite3
 import time
 from dataclasses import dataclass
@@ -95,6 +96,78 @@ class Services:
             raise RuntimeError("; ".join(errors))
 
     # ------------------------------------------------------------ הרשמה
+
+    def create_access_request(self, name: str, email: str, phone: str, level: int) -> dict:
+        if level not in (1, 2, 3):
+            raise ApiError(400, "רמת סינון לא חוקית")
+        name = " ".join(name.split())
+        email = email.strip().lower()
+        phone = phone.strip()
+        if not name or len(name) > 100:
+            raise ApiError(400, "יש להזין שם תקין")
+        if len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+            raise ApiError(400, "יש להזין כתובת דוא״ל תקינה")
+        digits = re.sub(r"\D", "", phone)
+        if len(phone) > 30 or not 7 <= len(digits) <= 15:
+            raise ApiError(400, "יש להזין מספר טלפון תקין")
+        reference = "FP-" + security.new_token()[:8].upper()
+        timestamp = db.now()
+        with db.closing(self.conn()) as c, db.transaction(c):
+            duplicate = c.execute(
+                "SELECT 1 FROM access_requests WHERE status = 'pending' AND email = ? AND phone = ?",
+                (email, phone),
+            ).fetchone()
+            if duplicate:
+                raise ApiError(409, "כבר קיימת בקשה ממתינה עם פרטים אלה")
+            cur = c.execute(
+                "INSERT INTO access_requests (reference, name, email, phone, level, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (reference, name, email, phone, level, timestamp, timestamp),
+            )
+        log.info("access request %s created for level %s", cur.lastrowid, level)
+        return {"reference": reference, "status": "pending", "level": level,
+                "level_name": LEVEL_NAMES[level], "created_at": timestamp}
+
+    def list_access_requests(self) -> list[dict]:
+        with db.closing(self.conn()) as c:
+            rows = c.execute(
+                "SELECT * FROM access_requests"
+                " ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, id DESC"
+            ).fetchall()
+        return [{**dict(r), "level_name": LEVEL_NAMES.get(r["level"], "לא ידוע")} for r in rows]
+
+    def delete_access_request(self, request_id: int) -> None:
+        with db.closing(self.conn()) as c:
+            if c.execute("DELETE FROM access_requests WHERE id = ?", (request_id,)).rowcount == 0:
+                raise ApiError(404, "בקשת ההצטרפות לא נמצאה")
+
+    def decide_access_request(self, request_id: int, approved: bool) -> dict:
+        """אישור יוצר קוד חד-פעמי באותה טרנזקציה; הקוד המלא מוחזר פעם אחת בלבד."""
+        with db.closing(self.conn()) as c, db.transaction(c):
+            row = c.execute("SELECT * FROM access_requests WHERE id = ?", (request_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "בקשת ההצטרפות לא נמצאה")
+            if row["status"] != "pending":
+                raise ApiError(409, "הבקשה כבר טופלה")
+            timestamp = db.now()
+            if not approved:
+                c.execute("UPDATE access_requests SET status='rejected', updated_at=? WHERE id=?",
+                          (timestamp, request_id))
+                return {"id": request_id, "status": "rejected"}
+
+            code = security.new_code()
+            expires = timestamp + 30 * 86400
+            label = row["name"][:80]
+            cur = c.execute(
+                "INSERT INTO codes (code_hash, hint, label, level, uses_left, expires_at, created_at)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (security.code_hash(code), code[-3:], label, row["level"], 1, expires, timestamp),
+            )
+            c.execute("UPDATE access_requests SET status='approved', updated_at=?, code_id=? WHERE id=?",
+                      (timestamp, cur.lastrowid, request_id))
+        return {"id": request_id, "status": "approved", "code": code, "label": label,
+                "level": row["level"], "level_name": LEVEL_NAMES[row["level"]],
+                "uses_left": 1, "expires_at": expires}
 
     def _allocate_ip(self, c: sqlite3.Connection) -> str:
         net = ipaddress.ip_network(self.cfg.vpn_network)

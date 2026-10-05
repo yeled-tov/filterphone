@@ -23,7 +23,8 @@
     <header class="top">
       <h1>FilterPhone</h1>
       <nav>
-        <button data-tab="devices" class="tab active">מכשירים</button>
+        <button data-tab="requests" class="tab active">בקשות הצטרפות</button>
+        <button data-tab="devices" class="tab">מכשירים</button>
         <button data-tab="codes" class="tab">קודי הפעלה</button>
         <button data-tab="events" class="tab">חסימות אחרונות</button>
       </nav>
@@ -32,7 +33,23 @@
 
     <section class="stats" id="stats"></section>
 
-    <section data-panel="devices" class="panel">
+    <section data-panel="requests" class="panel">
+      <div class="card new-code" id="request-code" hidden>
+        <p>הבקשה אושרה. קוד זה מוצג כעת בלבד — העתק ושלח ללקוח:</p>
+        <p class="code" id="request-code-value"></p>
+        <p id="request-code-details"></p>
+        <button id="copy-request-code" class="ghost">העתק קוד</button>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>מספר בקשה</th><th>לקוח</th><th>פרטי קשר</th><th>רמה מבוקשת</th><th>נשלחה</th><th>סטטוס / פעולה</th></tr></thead>
+          <tbody id="requests"></tbody>
+        </table>
+        <p class="empty" id="requests-empty" hidden>אין עדיין בקשות הצטרפות.</p>
+      </div>
+    </section>
+
+    <section data-panel="devices" class="panel" hidden>
       <div class="card">
         <table>
           <thead><tr><th>מכשיר</th><th>מצב</th><th>רמת סינון</th><th>היום</th><th>נראה לאחרונה</th><th></th></tr></thead>

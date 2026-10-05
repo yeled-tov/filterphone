@@ -29,6 +29,18 @@ CREATE TABLE IF NOT EXISTS codes (
     expires_at INTEGER,
     created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS access_requests (
+    id            INTEGER PRIMARY KEY,
+    reference     TEXT UNIQUE NOT NULL,
+    name          TEXT NOT NULL,
+    email         TEXT NOT NULL,
+    phone         TEXT NOT NULL,
+    level         INTEGER NOT NULL CHECK (level BETWEEN 1 AND 3),
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    code_id       INTEGER REFERENCES codes(id) ON DELETE SET NULL
+);
 CREATE TABLE IF NOT EXISTS devices (
     id            INTEGER PRIMARY KEY,
     name          TEXT NOT NULL,
@@ -64,11 +76,13 @@ def connect(path: str) -> sqlite3.Connection:
 
 def init(path: str) -> None:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    fresh = not os.path.exists(path)
     with closing(connect(path)) as c:
         c.executescript(SCHEMA)
-    if fresh:
-        os.chmod(path, 0o600)
+    # The DB now contains customer contact details; clamp existing files too,
+    # not only a newly created database.
+    for filename in (path, path + "-wal", path + "-shm"):
+        if os.path.exists(filename):
+            os.chmod(filename, 0o600)
 
 
 @contextmanager

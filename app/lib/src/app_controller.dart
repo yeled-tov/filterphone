@@ -79,17 +79,18 @@ class AppController extends ChangeNotifier {
   // ------------------------------------------------------------------ הפעלה
 
   Future<void> start() async {
+    _token = await store.read(_kToken);
+    _caPem = await store.read(_kCa);
+    if (_token == null) {
+      // גם מי שעדיין אין לו VPN יכול לשלוח בקשת הצטרפות, כולל באייפון.
+      phase = Phase.activation;
+      notifyListeners();
+      return;
+    }
     try {
       await native.deviceInfo();
     } on MissingPluginException {
       phase = Phase.unsupported; // אייפון — עד שה-Network Extension יתווסף
-      notifyListeners();
-      return;
-    }
-    _token = await store.read(_kToken);
-    _caPem = await store.read(_kCa);
-    if (_token == null) {
-      phase = Phase.activation;
       notifyListeners();
       return;
     }
@@ -132,6 +133,24 @@ class AppController extends ChangeNotifier {
       }
     });
   }
+
+  /// בקשת הצטרפות. ההפעלה עצמה מתבצעת אחרי אישור מנהל.
+  Future<bool> requestAccess({
+    required String name,
+    required String email,
+    required String phone,
+    required int level,
+  }) =>
+      _guard(() async {
+        final receipt = await api.requestAccess(
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim(),
+          level: level,
+        );
+        notice = 'הבקשה התקבלה. מספר הבקשה ${receipt.reference}. '
+            'נחזור אליכם לאחר בדיקתה.';
+      });
 
   // ------------------------------------------------------------------ פעולות
 
@@ -235,12 +254,15 @@ class AppController extends ChangeNotifier {
     if (busy) return false;
     busy = true;
     error = null;
+    notice = null;
     notifyListeners();
     try {
       await action();
       return true;
     } on ApiException catch (e) {
       error = e.message;
+    } on MissingPluginException {
+      error = 'הפעלה דרך VPN עדיין אינה זמינה בגרסה הזו של האייפון.';
     } on _UserMessage catch (e) {
       error = e.message;
     } on PlatformException catch (e) {
