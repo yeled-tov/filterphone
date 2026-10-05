@@ -34,6 +34,8 @@ jobs:
           key: heads-work-v1-${{ inputs.train_images }}-${{ hashFiles('tools/build_heads.py', 'tools/fetch_models.py', 'server/filterphone/engine/imaging.py') }}
           restore-keys: heads-work-v1-
       - name: אימון
+        env:
+          PYTHONUNBUFFERED: "1"
         run: python tools/build_heads.py --work ~/heads-work --train-images "${{ inputs.train_images }}"
       - uses: actions/upload-artifact@v4
         with:

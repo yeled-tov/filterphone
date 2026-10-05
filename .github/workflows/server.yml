@@ -31,7 +31,7 @@ jobs:
       - name: ruff
         run: |
           ruff check server/filterphone server/tests
-          ruff check tools --ignore E702,E741
+          ruff check tools --config server/pyproject.toml --ignore E702,E741
       - name: pytest
         run: pytest -q server/tests
       - name: בדיקת תחביר לסקריפטי ההתקנה

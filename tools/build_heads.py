@@ -20,6 +20,7 @@ import argparse
 import concurrent.futures as cf
 import datetime as dt
 import functools
+import gc
 import json
 import random
 import re
@@ -87,7 +88,8 @@ def coco_annotations(work: Path) -> dict:
     with zipfile.ZipFile(z) as zf:
         for split in ("train2017", "val2017"):
             caps = json.loads(zf.read(f"annotations/captions_{split}.json"))
-            inst = json.loads(zf.read(f"annotations/instances_{split}.json"))
+            # קובץ האנשים בלבד (חצי מגודל קובץ כל האובייקטים) — חשוב במכונות עם 7GB זיכרון
+            inst = json.loads(zf.read(f"annotations/person_keypoints_{split}.json"))
             imgs = {im["id"]: {"file": im["file_name"], "w": im["width"], "h": im["height"],
                                "captions": [], "person_area": 0.0} for im in caps["images"]}
             for a in caps["annotations"]:
@@ -98,6 +100,7 @@ def coco_annotations(work: Path) -> dict:
                     im["person_area"] = max(im["person_area"], a["area"] / (im["w"] * im["h"]))
             out[split] = imgs
             del caps, inst
+            gc.collect()
     return out
 
 
@@ -226,12 +229,22 @@ def text_space(prompts: list[str]) -> tuple[np.ndarray, float, float]:
         return e, float(model.logit_scale.exp()), float(model.logit_bias)
 
 
-def check_alignment(enc: VisionEncoder) -> None:
-    """וידוא שה-ONNX של הראייה וה-PyTorch של הטקסט באותו מרחב: כלב/חתול על תמונות ידועות."""
-    probes = [("000000000139.jpg", "a living room"), ("000000000285.jpg", "a bear"),
-              ("000000000632.jpg", "a bedroom"), ("000000000724.jpg", "a stop sign")]
-    labels = [p for _, p in probes]
-    t, scale, bias = text_space([f"a photo of {p}" for p in labels])
+ALIGNMENT_PROBES = [("000000000139.jpg", "a living room"), ("000000000285.jpg", "a bear"),
+                    ("000000000632.jpg", "a bedroom"), ("000000000724.jpg", "a stop sign")]
+
+
+def all_text_embeddings() -> tuple[np.ndarray, np.ndarray, float, float]:
+    """כל הטקסט בבת אחת, ואז משחררים את מודל הטקסט מהזיכרון (~1.5GB)."""
+    probes = [f"a photo of {label}" for _, label in ALIGNMENT_PROBES]
+    t, scale, bias = text_space(probes + NSFW_POSITIVE + NSFW_NEGATIVE)
+    _text_model.cache_clear()
+    gc.collect()
+    return t[:len(probes)], t[len(probes):], scale, bias
+
+
+def check_alignment(enc: VisionEncoder, t: np.ndarray, scale: float, bias: float) -> None:
+    """וידוא שה-ONNX של הראייה וה-PyTorch של הטקסט באותו מרחב, על תמונות ידועות."""
+    probes = ALIGNMENT_PROBES
     xs = []
     for fname, _ in probes:
         with urllib.request.urlopen(f"{COCO}/val2017/{fname}", timeout=60) as r:
@@ -303,7 +316,8 @@ def main() -> None:
 
     model_path = fetch_models.fetch("siglip2-b32-256.onnx", work / "models")
     enc = VisionEncoder(model_path, args.threads)
-    check_alignment(enc)
+    probe_t, nsfw_t, scale, bias = all_text_embeddings()
+    check_alignment(enc, probe_t, scale, bias)
 
     ann = coco_annotations(work)
     train_ids = pick_train(ann["train2017"], args.train_images)
@@ -328,7 +342,7 @@ def main() -> None:
         print(f"{name}: train n={mtr.sum()} pos={ytr.sum()} | val n={mva.sum()} pos={yva.sum()}")
 
     # --- nsfw: zero-shot ---
-    t, scale, _ = text_space(NSFW_POSITIVE + NSFW_NEGATIVE)
+    t = nsfw_t
     pos = t[:len(NSFW_POSITIVE)].mean(0); pos /= np.linalg.norm(pos)
     neg = t[len(NSFW_POSITIVE):].mean(0); neg /= np.linalg.norm(neg)
     w_nsfw = (scale * (pos - neg)).astype(np.float32)

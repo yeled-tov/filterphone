@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FilterPhone — ניהול</title>
+  <link rel="stylesheet" href="/admin/static/admin.css">
+  <script src="/admin/static/admin.js" defer></script>
+</head>
+<body>
+  <section id="login" class="login" hidden>
+    <form id="login-form" class="card narrow">
+      <h1>FilterPhone</h1>
+      <p class="muted">כניסת מנהל</p>
+      <label>שם משתמש<input name="username" autocomplete="username" required></label>
+      <label>סיסמה<input name="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">כניסה</button>
+      <p class="error" id="login-error"></p>
+    </form>
+  </section>
+
+  <main id="app" hidden>
+    <header class="top">
+      <h1>FilterPhone</h1>
+      <nav>
+        <button data-tab="devices" class="tab active">מכשירים</button>
+        <button data-tab="codes" class="tab">קודי הפעלה</button>
+        <button data-tab="events" class="tab">חסימות אחרונות</button>
+      </nav>
+      <button id="logout" class="ghost">יציאה</button>
+    </header>
+
+    <section class="stats" id="stats"></section>
+
+    <section data-panel="devices" class="panel">
+      <div class="card">
+        <table>
+          <thead><tr><th>מכשיר</th><th>מצב</th><th>רמת סינון</th><th>היום</th><th>נראה לאחרונה</th><th></th></tr></thead>
+          <tbody id="devices"></tbody>
+        </table>
+        <p class="empty" id="devices-empty" hidden>אין עדיין מכשירים. צרו קוד הפעלה בלשונית "קודי הפעלה".</p>
+      </div>
+    </section>
+
+    <section data-panel="codes" class="panel" hidden>
+      <form id="code-form" class="card row">
+        <label>שם הלקוח<input name="label" placeholder="למשל: משפחת כהן"></label>
+        <label>רמה<select name="level" id="level-select"></select></label>
+        <label>מספר מכשירים<input name="uses" type="number" min="1" max="100" value="1"></label>
+        <label>תוקף (ימים)<input name="expires_days" type="number" min="1" max="365" value="30"></label>
+        <button type="submit">צור קוד</button>
+      </form>
+      <div class="card new-code" id="new-code" hidden>
+        <p>קוד ההפעלה (מוצג פעם אחת בלבד):</p>
+        <p class="code" id="new-code-value"></p>
+        <button id="copy-code" class="ghost">העתק</button>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>לקוח</th><th>מסתיים ב-</th><th>רמה</th><th>שימושים שנותרו</th><th>תוקף</th><th></th></tr></thead>
+          <tbody id="codes"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section data-panel="events" class="panel" hidden>
+      <div class="card">
+        <table>
+          <thead><tr><th>זמן</th><th>מכשיר</th><th>אתר</th><th>פעולה</th><th>סיבה</th></tr></thead>
+          <tbody id="events"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
