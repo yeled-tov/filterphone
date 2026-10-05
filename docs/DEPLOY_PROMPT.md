@@ -54,7 +54,7 @@ f. ssh ubuntu@151.145.88.42 'dig +short @127.0.0.1 example.com'    ← מחזי�
 
 חזרה לאחור — רק אם בדיקה נכשלה ואין תיקון בטוח ומהיר:
   ssh ubuntu@151.145.88.42 'sudo bash /opt/filterphone/src/deploy/rollback_version.sh /root/fp-backups/<התאריך משלב 2>'
-  אחרי זה חזור על בדיקות a, c, f, ודווח לי מה נכשל ולמה. אל תמשיך לשלבים 4–5.
+  אחרי זה חזור על בדיקות a, c, f, ודווח לי מה נכשל ולמה. אל תמשיך לשלבים 4–6.
 
 שלב 4 — מיזוג ל-main (רק אחרי שכל בדיקות שלב 3 עברו)
 - git checkout main && git pull --ff-only origin main
@@ -75,9 +75,9 @@ f. ssh ubuntu@151.145.88.42 'dig +short @127.0.0.1 example.com'    ← מחזי�
 בלי shell ובלי גישה לשום דבר אחר. עשה את זה בתיקייה זמנית מחוץ למאגר:
 - ssh-keygen -t ed25519 -N "" -C fp-ci-deploy -f fp_ci_key
 - הוספת המפתח לשרת (עם גיבוי של הקובץ, בלי לגעת במפתח שלי):
-  printf 'restrict,command="/usr/local/sbin/fp-ci-deploy" %s\n' "$(cat fp_ci_key.pub)" | ssh ubuntu@151.145.88.42 'f=~/.ssh/authorized_keys; cp "$f" "$f.bak-fpci"; grep -v " fp-ci-deploy$" "$f.bak-fpci" > "$f.new"; cat >> "$f.new"; chmod 600 "$f.new"; mv "$f.new" "$f"'
+  printf 'restrict,command="/usr/local/sbin/fp-ci-deploy" %s\n' "$(cat fp_ci_key.pub)" | ssh ubuntu@151.145.88.42 'f=~/.ssh/authorized_keys; cp "$f" "$f.bak-fpci"; grep -v " fp-ci-deploy$" "$f.bak-fpci" > "$f.new"; cat >> "$f.new"; chmod 600 "$f.new"; mv "$f.new" "$f"; [ "$(grep -vc " fp-ci-deploy$" "$f.bak-fpci")" = "$(grep -vc " fp-ci-deploy$" "$f")" ] && echo OK || { cp "$f.bak-fpci" "$f"; echo RESTORED; }'
+  חייב להדפיס OK (המפתחות הקיימים נשארו כמו שהם). אם הודפס RESTORED — הקובץ הוחזר למצבו הקודם; עצור ודווח לי.
 - ודא שהחיבור הרגיל שלי עדיין עובד: ssh -o BatchMode=yes ubuntu@151.145.88.42 true
-  (אם לא — מיד: ssh ... 'cp ~/.ssh/authorized_keys.bak-fpci ~/.ssh/authorized_keys' מחלון שעוד מחובר, ודווח לי.)
 - בדיקה: ssh -i fp_ci_key -o IdentitiesOnly=yes ubuntu@151.145.88.42 status   ← מדפיס גרסה ושירותים
   ו-ssh -i fp_ci_key -o IdentitiesOnly=yes ubuntu@151.145.88.42 id         ← חייב להיענות "פקודה לא מוכרת"
 - gh secret set FP_DEPLOY_KEY -R yeled-tov/filterphone < fp_ci_key
