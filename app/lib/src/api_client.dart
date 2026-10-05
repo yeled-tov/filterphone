@@ -40,6 +40,18 @@ class Enrollment {
       );
 }
 
+class AccessRequestReceipt {
+  const AccessRequestReceipt({required this.reference, required this.levelName});
+  final String reference;
+  final String levelName;
+
+  factory AccessRequestReceipt.fromJson(Map<String, Object?> json) =>
+      AccessRequestReceipt(
+        reference: json['reference'] as String,
+        levelName: json['level_name'] as String? ?? '',
+      );
+}
+
 class DeviceStatus {
   DeviceStatus({
     required this.name,
@@ -83,6 +95,21 @@ class ApiClient {
   final http.Client _http;
   final String _base;
   static const _timeout = Duration(seconds: 15);
+
+  Future<AccessRequestReceipt> requestAccess({
+    required String name,
+    required String email,
+    required String phone,
+    required int level,
+  }) async {
+    final json = await _send('POST', '/v1/requests', body: {
+      'name': name,
+      'email': email,
+      'phone': phone,
+      'level': level,
+    });
+    return AccessRequestReceipt.fromJson(json);
+  }
 
   Future<Enrollment> enroll({
     required String code,
