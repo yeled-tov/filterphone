@@ -1,11 +1,13 @@
 package com.filterphone.app
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import com.wireguard.android.backend.Tunnel
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -80,6 +82,25 @@ class MainActivity : FlutterActivity() {
             "privateDnsMode" -> result.success(Settings.Global.getString(contentResolver, "private_dns_mode") ?: "off")
             "isDeviceOwner" -> result.success(DeviceAdmin.isDeviceOwner(this))
             "reset" -> background(result) { TunnelManager.reset(); true }
+            // מגן FilterPhone — חסימת אפליקציות ומסכים בטלפון
+            "installedApps" -> background(result) { GuardPolicy.installedApps(this) }
+            "isGuardEnabled" -> result.success(GuardPolicy.isServiceEnabled(this))
+            "openGuardSettings" -> {
+                try {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                } catch (e: ActivityNotFoundException) {
+                    startActivity(Intent(Settings.ACTION_SETTINGS))
+                }
+                result.success(true)
+            }
+            "setGuardPolicy" -> background(result) {
+                GuardPolicy.save(this, call.argument<String>("policy") ?: "{}")
+                // בלי האסימון המגן עדיין אוכף — רק לא מתעדכן לבד כשהאפליקציה סגורה
+                runCatching {
+                    GuardPolicy.setCredentials(this, call.argument<String>("api"), call.argument<String>("token"))
+                }.onFailure { Log.w("FilterPhone", "guard credentials not saved", it) }
+                true
+            }
             else -> result.notImplemented()
         }
     }

@@ -63,6 +63,21 @@ abstract class NativeBridge {
   Future<String> privateDnsMode();
   Future<bool> isDeviceOwner();
   Future<void> reset();
+
+  // --- מגן FilterPhone: חסימת אפליקציות ומסכים בטלפון עצמו ---
+
+  /// האפליקציות שאפשר לפתוח מהמסך הראשי: [{package, label, system}].
+  Future<List<Map<String, Object?>>> installedApps();
+
+  /// האם שירות הנגישות של FilterPhone מופעל (בלעדיו — אין חסימת אפליקציות, אלא אם מנהל מכשיר).
+  Future<bool> isGuardEnabled();
+
+  /// פותח את הגדרות הנגישות, כדי להפעיל את המגן.
+  Future<void> openGuardSettings();
+
+  /// שומר את רשימת החסימות מהשרת; במנהל מכשיר — גם מסתיר את האפליקציות.
+  /// [api] ו-[token] מאפשרים למגן לרענן את הרשימה לבד, גם כשהאפליקציה סגורה (null = מחיקה).
+  Future<void> setGuardPolicy(Map<String, Object?> policy, {String? api, String? token});
 }
 
 /// מימוש דרך MethodChannel (אנדרואיד היום; אייפון — כשנוסיף את ה-Network Extension).
@@ -120,4 +135,20 @@ class ChannelNativeBridge implements NativeBridge {
 
   @override
   Future<void> reset() => _call<bool>('reset');
+
+  @override
+  Future<List<Map<String, Object?>>> installedApps() async {
+    final list = await _call<List<Object?>>('installedApps');
+    return list.map((e) => Map<String, Object?>.from(e as Map)).toList();
+  }
+
+  @override
+  Future<bool> isGuardEnabled() => _call<bool>('isGuardEnabled');
+
+  @override
+  Future<void> openGuardSettings() => _call<bool>('openGuardSettings');
+
+  @override
+  Future<void> setGuardPolicy(Map<String, Object?> policy, {String? api, String? token}) =>
+      _call<bool>('setGuardPolicy', {'policy': jsonEncode(policy), 'api': api, 'token': token});
 }

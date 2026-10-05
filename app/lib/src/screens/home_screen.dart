@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app_controller.dart';
 import '../theme.dart';
+import 'change_request_screen.dart';
 
 /// המסך הראשי: האם הטלפון מוגן, ומה עוד צריך לעשות.
 class HomeScreen extends StatelessWidget {
@@ -25,11 +26,15 @@ class HomeScreen extends StatelessWidget {
                 text: 'המכשיר הושבת על ידי המנהל. פנו ל-FilterPhone.',
               ),
               _StatusHero(controller: c),
-              const SizedBox(height: 16),
-              _Checklist(controller: c),
               if (c.notice != null || c.error != null) ...[
                 const SizedBox(height: 16),
                 _Message(controller: c),
+              ],
+              const SizedBox(height: 16),
+              _Checklist(controller: c),
+              if (c.device?.isActive ?? false) ...[
+                const SizedBox(height: 16),
+                _BlocksCard(controller: c),
               ],
               const SizedBox(height: 16),
               _ServerProof(controller: c),
@@ -142,6 +147,19 @@ class _Checklist extends StatelessWidget {
             actionLabel: 'הגדרות',
             onAction: c.openVpnSettings,
           ),
+          if (c.guardNeeded) ...[
+            const Divider(height: 1),
+            _CheckTile(
+              ok: checks[Check.guard]!,
+              title: 'מגן FilterPhone',
+              okText: c.deviceOwner ? 'פעיל (מנהל מכשיר)' : 'פעיל — אפליקציות ומסכים חסומים לא נפתחים',
+              todo: 'המנהל חסם אפליקציות או מסכים בטלפון הזה. כדי שזה יעבוד: '
+                  'בהגדרות הנגישות מפעילים את "מגן FilterPhone". '
+                  'המגן רואה רק איזו אפליקציה נפתחה — לא הודעות, לא תוכן ולא הקלדות.',
+              actionLabel: 'הפעלה',
+              onAction: c.openGuardSettings,
+            ),
+          ],
           if (!checks[Check.privateDns]!) ...[
             const Divider(height: 1),
             const _CheckTile(
@@ -153,6 +171,58 @@ class _Checklist extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// מה חסום בטלפון הזה (מעבר לסינון התמונות), ובקשת שינוי למנהל.
+class _BlocksCard extends StatelessWidget {
+  const _BlocksCard({required this.controller});
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final d = controller.device!;
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Icon(Icons.block, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(child: Text('חסימות פעילות', style: theme.textTheme.titleMedium)),
+              if (d.sitesToday > 0) Text('${d.sitesToday} היום', style: theme.textTheme.bodySmall),
+            ]),
+            const SizedBox(height: 10),
+            if (d.blocks.isEmpty)
+              Text('רק סינון תמונות ואתרים לפי הרמה.', style: theme.textTheme.bodyMedium)
+            else
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                for (final b in d.blocks) Chip(label: Text(b.title), visualDensity: VisualDensity.compact),
+              ]),
+            const SizedBox(height: 12),
+            if (d.hasPendingChange)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Icon(Icons.schedule, size: 18, color: StatusColors.warn(context)),
+                  const SizedBox(width: 6),
+                  const Expanded(child: Text('בקשת שינוי נשלחה ומחכה למנהל.')),
+                ]),
+              ),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => ChangeRequestScreen(controller: controller)),
+              ),
+              icon: const Icon(Icons.edit_note),
+              label: const Text('בקשת שינוי (רמה / חסימות)'),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -35,6 +35,9 @@ class _ActivationScreenState extends State<ActivationScreen> {
     final c = widget.controller;
     final theme = Theme.of(context);
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: c.backToWelcome, tooltip: 'חזרה'),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

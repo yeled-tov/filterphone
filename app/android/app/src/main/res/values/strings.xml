@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="guard_label">מגן FilterPhone</string>
+    <string name="guard_description">חוסם את האפליקציות והמסכים שמנהל הסינון חסם בטלפון הזה (למשל חנות האפליקציות או צפייה בסטטוסים). המגן רואה רק איזו אפליקציה נפתחה — הוא לא קורא הודעות, תוכן או הקלדות.</string>
+    <string name="guard_app_blocked">האפליקציה חסומה בטלפון הזה (FilterPhone)</string>
+    <string name="guard_screen_blocked">המסך הזה חסום בטלפון הזה (FilterPhone)</string>
+</resources>

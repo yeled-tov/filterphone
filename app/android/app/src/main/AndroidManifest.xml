@@ -55,6 +55,20 @@
             </intent-filter>
         </receiver>
 
+        <!-- מגן FilterPhone: חסימת אפליקציות ומסכים שהמנהל בחר (שירות נגישות, מופעל ע"י המשתמש) -->
+        <service
+            android:name=".GuardService"
+            android:exported="true"
+            android:label="@string/guard_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/guard_service" />
+        </service>
+
         <!-- שירות ה-VPN של WireGuard (com.wireguard.android.backend.GoBackend$VpnService)
              מוגדר במניפסט של הספרייה ומתמזג אוטומטית -->
 
@@ -67,6 +81,15 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
+        </intent>
+        <!-- רשימת האפליקציות שהמנהל יכול לחסום, ומסך הבית (שלעולם לא נחסם) -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
         </intent>
     </queries>
 </manifest>
