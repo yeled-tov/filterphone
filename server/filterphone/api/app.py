@@ -10,7 +10,9 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any
@@ -41,17 +43,41 @@ def build_services() -> Services:
                     redis.Redis.from_url(cfg.redis_url, decode_responses=True, socket_timeout=2))
 
 
+RECONCILE_EVERY_S = 60
+
+
+async def _keep_in_sync(svc: Services) -> None:
+    """בעלייה: סנכרון עם ניסיונות חוזרים (בזמן אתחול השרת שירותים עוד עולים).
+    אחר כך: יישור WireGuard כל דקה — אם מכשירים נעלמו מהממשק מכל סיבה, הם חוזרים."""
+    for attempt in range(1, 11):
+        try:
+            await asyncio.to_thread(svc.sync_all)
+            log.info("initial sync ok: %d active devices", len(await asyncio.to_thread(svc._active_devices)))
+            break
+        except Exception as e:
+            log.warning("initial sync attempt %d failed: %s", attempt, e)
+            await asyncio.sleep(3)
+    while True:
+        await asyncio.sleep(RECONCILE_EVERY_S)
+        try:
+            added, removed = await asyncio.to_thread(svc.sync_wireguard)
+            if added or removed:
+                log.warning("wireguard drift repaired: +%d -%d", added, removed)
+        except Exception as e:
+            log.error("wireguard reconcile failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    svc: Services = app.state.svc
-    try:
-        svc.sync_all()
-    except (WireGuardError, redis.RedisError) as e:
-        log.error("initial sync failed: %s", e)
+    task = asyncio.create_task(_keep_in_sync(app.state.svc))
     yield
+    task.cancel()
 
 
 def create_app(svc: Services | None = None) -> FastAPI:
+    if not logging.getLogger().handlers:      # uvicorn מגדיר רק את הלוגרים שלו
+        logging.basicConfig(level=os.environ.get("FP_LOG_LEVEL", "INFO"),
+                            format="%(levelname)s %(name)s: %(message)s")
     app = FastAPI(title="FilterPhone API", version="2.0", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.svc = svc or build_services()

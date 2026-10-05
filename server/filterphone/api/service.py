@@ -64,17 +64,35 @@ class Services:
         except redis.RedisError as e:
             log.error("redis level sync failed for %s: %s", ip, e)
 
-    def sync_all(self) -> None:
-        """מיישר את Redis ואת WireGuard לפי מסד הנתונים (בעליית השירות)."""
+    def _active_devices(self) -> list[sqlite3.Row]:
         with db.closing(self.conn()) as c:
-            rows = c.execute("SELECT public_key, preshared_key, vpn_ip, level, status FROM devices").fetchall()
-        active = [r for r in rows if r["status"] == "active"]
+            return c.execute("SELECT public_key, preshared_key, vpn_ip, level FROM devices"
+                             " WHERE status = 'active'").fetchall()
+
+    def sync_wireguard(self) -> tuple[int, int]:
+        """מיישר את ממשק WireGuard לפי מסד הנתונים. מחזיר (נוספו, הוסרו)."""
+        active = self._active_devices()
+        return self.wg.reconcile({r["public_key"]: (r["preshared_key"], r["vpn_ip"]) for r in active})
+
+    def sync_redis(self) -> None:
+        """כותב מחדש את טבלת הרמות שהפרוקסי קורא."""
+        active = self._active_devices()
         pipe = self.redis.pipeline()
         pipe.delete(LEVELS_KEY)
         if active:
             pipe.hset(LEVELS_KEY, mapping={r["vpn_ip"]: r["level"] for r in active})
         pipe.execute()
-        self.wg.reconcile({r["public_key"]: (r["preshared_key"], r["vpn_ip"]) for r in active})
+
+    def sync_all(self) -> None:
+        """מיישר את WireGuard ואת Redis לפי מסד הנתונים. כל אחד בנפרד — כשל באחד לא עוצר את השני."""
+        errors = []
+        for step in (self.sync_wireguard, self.sync_redis):
+            try:
+                step()
+            except (WireGuardError, redis.RedisError) as e:
+                errors.append(f"{step.__name__}: {e}")
+        if errors:
+            raise RuntimeError("; ".join(errors))
 
     # ------------------------------------------------------------ הרשמה
 

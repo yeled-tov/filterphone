@@ -1,4 +1,4 @@
-"""משאיר ב-wg0.conf רק את [Interface] — בלי לקוחות ובלי PostUp/PostDown.
+"""משאיר ב-wg0.conf רק את [Interface] — בלי לקוחות ובלי PostUp/PostDown, עם MTU קבוע.
 
 הלקוחות נשמרים במסד הנתונים וה-API מוסיף אותם בעלייה; חומת האש מנוהלת ב-firewall.sh.
 כך יש מקור אמת אחד לכל דבר, ואין כללי iptables כפולים.
@@ -20,6 +20,10 @@ def main(path: str) -> None:
         if s.split("=", 1)[0].strip() in ("PostUp", "PostDown"):
             continue
         out.append(line)
+    # MTU קבוע: אחרת wg-quick גוזר אותו מהרשת הפנימית של Oracle (9000) ויוצאות חבילות מפוצלות
+    if not any(line.strip().split("=", 1)[0].strip() == "MTU" for line in out):
+        idx = next(i for i, line in enumerate(out) if line.strip() == "[Interface]")
+        out.insert(idx + 1, "MTU = 1420")
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write("\n".join(out).rstrip() + "\n")

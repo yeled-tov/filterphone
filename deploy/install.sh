@@ -98,13 +98,17 @@ if [ ! -f "$DATA/.legacy-migrated" ]; then
     # ייבוא הלקוחות הישנים למסד הנתונים החדש
     "$VENV/bin/python" -m filterphone.api.cli import-legacy - < /etc/wireguard/wg0.conf
     chown "$USER_NAME:$USER_NAME" "$DATA"/filterphone.db*
-    # wg0.conf נשאר רק עם [Interface]; את הלקוחות ה-API מוסיף בעלייה (מקור אמת אחד)
-    python3 "$SRC/deploy/wg_strip_peers.py" /etc/wireguard/wg0.conf
+    # wg0.conf נשאר רק עם [Interface] (שלב 9); את הלקוחות ה-API מוסיף בעלייה (מקור אמת אחד)
     # PM2: ה-API והממשק הישנים מוחלפים — עוצרים (filtertube-api נשאר)
     sudo -u ubuntu pm2 stop filterphone-server filterphone-ui >/dev/null 2>&1 || true
     sudo -u ubuntu pm2 save >/dev/null 2>&1 || true
     touch "$DATA/.legacy-migrated"
 fi
+
+# wg0.conf: רק [Interface] + MTU קבוע (בטוח להרצה חוזרת)
+cp -a /etc/wireguard/wg0.conf "$BACKUP/wg0.conf.pre-strip"
+python3 "$SRC/deploy/wg_strip_peers.py" /etc/wireguard/wg0.conf
+ip link set wg0 mtu 1420 2>/dev/null || true
 
 # ------------------------------------------------------------ 9. Docker (לא בשימוש)
 if systemctl is-enabled docker.service &>/dev/null; then
