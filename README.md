@@ -24,7 +24,7 @@
 | [`app/`](app/) | האפליקציה (Flutter). אנדרואיד מלא (כולל "מגן FilterPhone"); אייפון — המבנה מוכן, חסר Network Extension |
 | [`deploy/`](deploy/) | התקנה לשרת: `install.sh`, חומת אש, systemd, Caddy, AdGuard, חזרה לאחור |
 | [`tools/`](tools/) | אימון ראשי הסיווג (רץ ב-GitHub), הורדת מודלים עם אימות חתימה, בדיקת עשן, ממשק ניהול מקומי |
-| [`docs/`](docs/) | [סקירה ושדרוג 10/2026](docs/REVIEW.md), [ניתוח השרת הישן](docs/ANALYSIS.md), [דוח דיוק הראשים](docs/HEADS_REPORT.md) |
+| [`docs/`](docs/) | [העלאה לשרת — פרומפט מוכן](docs/DEPLOY_PROMPT.md), [סקירה ושדרוג 10/2026](docs/REVIEW.md), [מחקר הסגמנטציה](docs/SEGMENTATION_RESEARCH.md), [ניתוח השרת הישן](docs/ANALYSIS.md), [דוח דיוק הראשים](docs/HEADS_REPORT.md) |
 | [`legacy/`](legacy/) | העתק של המערכת הישנה (לפני 5.10.2026), בלי סודות — לעיון בלבד |
 | [`ops/`](ops/) | שומר דיסק ותקרת לוגים (מותקנים בשרת) |
 

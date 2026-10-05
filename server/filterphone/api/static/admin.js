@@ -300,7 +300,7 @@ async function render() {
   try {
     const node = await fn(arg, query);
     if (seq !== renderSeq) return;          // בינתיים עברו לעמוד אחר
-    view.replaceChildren(...[node].flat());
+    view.replaceChildren(...[node].flat().filter((n) => n !== null && n !== undefined && n !== false));
   } catch (e) {
     if (seq === renderSeq) view.replaceChildren(card("שגיאה", null, el("p", { class: "error" }, e.message)));
   }

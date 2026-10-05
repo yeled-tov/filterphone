@@ -75,7 +75,7 @@ class _StatusHero extends StatelessWidget {
                 children: [
                   Expanded(child: _Stat(value: d.blockedToday, label: 'תמונות נחסמו היום')),
                   const SizedBox(width: 12),
-                  Expanded(child: _Stat(value: d.paintedToday, label: 'תמונות טושטשו היום')),
+                  Expanded(child: _Stat(value: d.paintedToday, label: 'תמונות נצבעו היום')),
                 ],
               ),
             ],
