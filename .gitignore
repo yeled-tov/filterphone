@@ -52,3 +52,6 @@ Thumbs.db
 # מפתח החתימה של האפליקציה — רק מקומית ובסודות של GitHub
 app/android/keystore/
 app/android/upload.jks
+
+# סיסמאות מקומיות (לא נכנסות ל-git)
+secrets/
