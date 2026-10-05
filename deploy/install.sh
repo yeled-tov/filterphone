@@ -83,6 +83,8 @@ if [ ! -f "$ETC/filterphone.env" ]; then
     install -m 640 -g "$USER_NAME" "$SRC/deploy/filterphone.env.example" "$ETC/filterphone.env"
 fi
 set -a; . "$ETC/filterphone.env"; set +a
+[ -n "${FP_ADGUARD_PASSWORD:-}" ] \
+    || warn "FP_ADGUARD_USER / FP_ADGUARD_PASSWORD חסרים ב-$ETC/filterphone.env — החסימות לפי מכשיר ייאכפו רק בפרוקסי, לא ב-DNS"
 
 # ------------------------------------------------------------ 7. Redis
 log "Redis: תקרת זיכרון 512MB, פינוי רק של רשומות קאש (עם תפוגה)"
