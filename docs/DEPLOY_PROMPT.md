@@ -8,6 +8,7 @@
 1. פותחים את Claude Code במחשב, **באותה תיקייה של FilterPhone** שעבדתם בה בפעם הקודמת (יש בה תיקייה `secrets`).
 2. מעתיקים את כל הבלוק שלמטה ומדביקים.
 3. מאשרים לו להריץ פקודות כשהוא מבקש. זה לוקח בערך 20–30 דקות (רובן המתנה לבניית האפליקציה).
+4. בסוף הוא גם מגדיר "ערוץ העלאה" מ-GitHub. מאותו רגע אני יכול לעדכן את השרת בעצמי, בלי המחשב שלכם.
 
 אם משהו נכשל, הוא מחזיר את השרת לגרסה הקודמת לבד. לפני כל שינוי נשמר גיבוי מלא, כולל מסד הנתונים.
 
@@ -69,7 +70,24 @@ f. ssh ubuntu@151.145.88.42 'dig +short @127.0.0.1 example.com'    ← מחזי�
 - כשהבנייה הצליחה: bash deploy/publish_apk.sh
 - בדיקה: curl -sI https://api.filterphone.com/download/FilterPhone.apk | head -3   ← 200
 
-שלב 6 — סיכום
+שלב 6 — ערוץ העלאה מ-GitHub (חד-פעמי, כדי ש-Claude בענן יוכל לעדכן את השרת בעצמו בפעם הבאה)
+מפתח SSH נפרד, שבשרת מוגבל להרצת /usr/local/sbin/fp-ci-deploy בלבד (העלאה / פרסום אפליקציה / מצב / חזרה לאחור) —
+בלי shell ובלי גישה לשום דבר אחר. עשה את זה בתיקייה זמנית מחוץ למאגר:
+- ssh-keygen -t ed25519 -N "" -C fp-ci-deploy -f fp_ci_key
+- הוספת המפתח לשרת (עם גיבוי של הקובץ, בלי לגעת במפתח שלי):
+  printf 'restrict,command="/usr/local/sbin/fp-ci-deploy" %s\n' "$(cat fp_ci_key.pub)" | ssh ubuntu@151.145.88.42 'f=~/.ssh/authorized_keys; cp "$f" "$f.bak-fpci"; grep -v " fp-ci-deploy$" "$f.bak-fpci" > "$f.new"; cat >> "$f.new"; chmod 600 "$f.new"; mv "$f.new" "$f"'
+- ודא שהחיבור הרגיל שלי עדיין עובד: ssh -o BatchMode=yes ubuntu@151.145.88.42 true
+  (אם לא — מיד: ssh ... 'cp ~/.ssh/authorized_keys.bak-fpci ~/.ssh/authorized_keys' מחלון שעוד מחובר, ודווח לי.)
+- בדיקה: ssh -i fp_ci_key -o IdentitiesOnly=yes ubuntu@151.145.88.42 status   ← מדפיס גרסה ושירותים
+  ו-ssh -i fp_ci_key -o IdentitiesOnly=yes ubuntu@151.145.88.42 id         ← חייב להיענות "פקודה לא מוכרת"
+- gh secret set FP_DEPLOY_KEY -R yeled-tov/filterphone < fp_ci_key
+- מפתח השרת לאימות: ssh-keygen -F 151.145.88.42 | grep -v '^#' | gh secret set FP_DEPLOY_KNOWN_HOSTS -R yeled-tov/filterphone
+  (אם אין שורה כזו: ssh-keyscan -t ed25519 151.145.88.42, ולוודא שטביעת האצבע זהה ל-
+   ssh ubuntu@151.145.88.42 'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub' לפני ששומרים)
+- מחק את fp_ci_key ו-fp_ci_key.pub מהמחשב.
+- בדיקה מלאה: gh workflow run deploy.yml -R yeled-tov/filterphone -f what=status ואז gh run watch — צריך להצליח.
+
+שלב 7 — סיכום
 כתוב לי בעברית, בקצרה: איזו גרסה עלתה, תוצאה של כל בדיקה, נתיב הגיבוי, ואם משהו לא עבר — מה ומה עשית.
 ותזכיר לי:
 - ממשק הניהול: https://api.filterphone.com/admin (אותו שם משתמש וסיסמה)

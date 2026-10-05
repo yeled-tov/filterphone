@@ -206,6 +206,10 @@ caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 systemctl enable caddy >/dev/null
 systemctl restart caddy
 
+# ------------------------------------------------------------ 13א. ערוץ העלאה מ-GitHub
+# הפקודה היחידה שמפתח ההעלאה של GitHub Actions מורשה להריץ (forced command) — ראו deploy/ci_deploy.sh
+install -m 755 -o root -g root "$SRC/deploy/ci_deploy.sh" /usr/local/sbin/fp-ci-deploy
+
 # ------------------------------------------------------------ 14. בדיקות
 log "בדיקות"
 sleep 3

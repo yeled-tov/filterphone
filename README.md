@@ -71,6 +71,7 @@ deploy/deploy.sh
 ```
 מעלה את `server/`, `tools/` ו-`deploy/` לשרת ומריץ `install.sh`. הסקריפט בטוח להרצה חוזרת, ומגבה לפני כל שינוי ל-`/root/fp-backups/<תאריך>` — כולל מסד הנתונים. הגרסה שרצה קודם נשמרת ב-`/opt/filterphone/src.prev`. מסד הנתונים מתעדכן לבד (גרסה 1: לקוחות, בקשות, מדיניות לכל מכשיר, יומן פעולות), ו-AdGuard מתחבר לבד (משתמש API נפרד; המשתמש שלכם לא משתנה).
 
+- **העלאה מ-GitHub, בלי המחשב** (אחרי הגדרה חד-פעמית — [DEPLOY_PROMPT.md](docs/DEPLOY_PROMPT.md) שלב 6): GitHub → Actions → "העלאה לשרת" → Run, ובוחרים both / server / apk / status / rollback. המפתח של GitHub מוגבל בשרת לפקודות של `deploy/ci_deploy.sh` בלבד.
 - **חזרה לגרסה הקודמת** (עדכון שלא הצליח): `sudo bash /opt/filterphone/src/deploy/rollback_version.sh /root/fp-backups/<תאריך>`
 - **חזרה למערכת הישנה** (של לפני 5.10.2026): `sudo bash /opt/filterphone/src/deploy/rollback.sh /root/fp-backups/<תאריך>`
 
