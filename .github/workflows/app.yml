@@ -65,20 +65,25 @@ jobs:
 
       - name: בניית APK
         run: |
-          flutter build apk --release \
-            --build-number=${{ github.run_number }} \
-            --build-name=1.0.${{ github.run_number }}
+          V=1.0.${{ github.run_number }}
+          ARGS="--release --build-number=${{ github.run_number }} --build-name=$V"
           mkdir -p ../dist
-          cp build/app/outputs/flutter-apk/app-release.apk ../dist/FilterPhone-1.0.${{ github.run_number }}.apk
+          # גרסה לכל המעבדים (גיבוי) + גרסה קלה ל-arm64 (כמעט כל הטלפונים)
+          flutter build apk $ARGS
+          cp build/app/outputs/flutter-apk/app-release.apk ../dist/FilterPhone-$V-universal.apk
+          flutter build apk $ARGS --split-per-abi --target-platform android-arm64
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/FilterPhone-$V-arm64.apk
 
       - name: אימות חתימה
         if: env.HAS_KEYSTORE == 'true' && github.event_name != 'pull_request'
         run: |
           APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           echo "apksigner: $APKSIGNER"
-          out=$("$APKSIGNER" verify --verbose --print-certs ../dist/*.apk 2>&1) || { echo "$out"; exit 1; }
-          echo "$out" | grep -iE "verified using|certificate (DN|SHA-256)" || echo "$out"
-          echo "$out" | grep -q "CN=FilterPhone" || { echo "ה-APK לא חתום במפתח של FilterPhone"; exit 1; }
+          for apk in ../dist/*.apk; do
+            out=$("$APKSIGNER" verify --verbose --print-certs "$apk" 2>&1) || { echo "$out"; exit 1; }
+            echo "$out" | grep -q "CN=FilterPhone" || { echo "$apk לא חתום במפתח של FilterPhone"; exit 1; }
+            echo "✓ $(basename "$apk") — $(echo "$out" | grep -m1 'certificate SHA-256')"
+          done
           ls -lh ../dist
 
       - name: ניקוי סודות
