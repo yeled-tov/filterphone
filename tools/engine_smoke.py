@@ -23,7 +23,7 @@ SAMPLES = ["000000000139", "000000000285", "000000000632", "000000000724", "0000
 
 
 async def run(models: str) -> int:
-    heads = ROOT / "server/filterphone/engine/heads.json"
+    heads = Path(os.environ.get("FP_HEADS_FILE", ROOT / "server/filterphone/engine/heads.json"))
     if not heads.exists():
         print("heads.json not built yet — skipping smoke test")
         return 0
