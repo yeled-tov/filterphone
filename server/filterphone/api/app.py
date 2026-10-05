@@ -163,8 +163,8 @@ def _routes(app: FastAPI) -> None:
         return svc.enroll(body.code, body.public_key, body.name, body.platform, body.app_version)
 
     @app.get("/v1/device")
-    def device(svc: SvcDep, row: DeviceRow):
-        return svc.device_status(row)
+    def device(request: Request, svc: SvcDep, row: DeviceRow):
+        return svc.device_status(row, client_ip(request))
 
     @app.get("/v1/device/vpn")
     def device_vpn(svc: SvcDep, row: DeviceRow):

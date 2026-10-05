@@ -82,6 +82,7 @@ def test_full_enrollment_flow(env):
     # המכשיר מזדהה עם הטוקן
     me = client.get("/v1/device", headers={"Authorization": f"Bearer {body['token']}"})
     assert me.status_code == 200 and me.json()["level_name"] == "בינוני"
+    assert me.json()["via_vpn"] is False        # לקוח הבדיקה לא מגיע מכתובת ה-VPN
 
 
 def test_enroll_rejects_bad_key_and_duplicates(env):

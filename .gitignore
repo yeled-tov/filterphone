@@ -48,3 +48,7 @@ google-services.json
 .DS_Store
 Thumbs.db
 .vscode/
+
+# מפתח החתימה של האפליקציה — רק מקומית ובסודות של GitHub
+app/android/keystore/
+app/android/upload.jks

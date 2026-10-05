@@ -145,12 +145,14 @@ class Services:
             c.execute("UPDATE devices SET last_seen_at = ? WHERE id = ?", (db.now(), row["id"]))
             return row
 
-    def device_status(self, row: sqlite3.Row) -> dict:
+    def device_status(self, row: sqlite3.Row, client_ip: str = "") -> dict:
         today = self.daily_stats().get(row["vpn_ip"], {})
         return {
             "device_id": row["id"], "name": row["name"], "status": row["status"],
             "level": row["level"], "level_name": LEVEL_NAMES.get(row["level"], ""),
             "vpn_ip": row["vpn_ip"], "server_time": db.now(),
+            # הבקשה הגיעה מכתובת ה-VPN של המכשיר = התעבורה באמת עוברת במנהרה ובסינון
+            "via_vpn": client_ip == row["vpn_ip"],
             "today": {"blocked": today.get("block", 0), "painted": today.get("replace", 0)},
         }
 
