@@ -1,0 +1,16 @@
+[Unit]
+Description=AdGuard Home - FilterPhone DNS
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/AdGuardHome
+ExecStart=/opt/AdGuardHome/AdGuardHome -s run -c /opt/AdGuardHome/AdGuardHome.yaml -w /opt/AdGuardHome/data
+ExecStop=/opt/AdGuardHome/AdGuardHome -s stop
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

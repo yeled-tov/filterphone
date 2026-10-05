@@ -1,0 +1,64 @@
+"""
+מודול זיהוי מגדר — DeepFace עם RetinaFace
+97.44% דיוק לזיהוי מגדר
+
+כלל ברזל: גבר = תמיד עובר. לא מסננים גברים בשום מצב.
+"""
+from deepface import DeepFace
+from PIL import Image
+import io
+import numpy as np
+
+def detect_gender(image_bytes):
+    """
+    מקבל bytes של תמונה, מחזיר:
+    {
+        "has_face": bool,
+        "faces": [
+            {
+                "gender": "Man" או "Woman",
+                "gender_confidence": float (0-100),
+                "is_female": bool,
+                "is_certain_male": bool,
+                "region": {"x": int, "y": int, "w": int, "h": int}
+            }
+        ]
+    }
+    """
+    try:
+        # המרה ל-numpy array
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        img_array = np.array(img)
+        
+        results = DeepFace.analyze(
+            img_array,
+            actions=["gender"],
+            detector_backend="retinaface",
+            enforce_detection=False,
+            silent=True
+        )
+        
+        if not isinstance(results, list):
+            results = [results]
+        
+        faces = []
+        for r in results:
+            gender = r.get("dominant_gender", "Unknown")
+            woman_score = r.get("gender", {}).get("Woman", 0)
+            man_score = r.get("gender", {}).get("Man", 0)
+            region = r.get("region", {})
+            
+            faces.append({
+                "gender": gender,
+                "gender_confidence": max(woman_score, man_score),
+                "woman_score": woman_score,
+                "man_score": man_score,
+                "is_female": woman_score > 30,  # אפילו 30% = ספק = אישה ברמה 1
+                "is_certain_male": man_score > 75,  # רק מעל 75% = בטוח גבר
+                "region": region
+            })
+        
+        return {"has_face": len(faces) > 0, "faces": faces}
+    except Exception as e:
+        # אם נכשל — לא ברור, ברמה 1 נחסום (ספק לחומרה)
+        return {"has_face": False, "faces": [], "error": str(e)}

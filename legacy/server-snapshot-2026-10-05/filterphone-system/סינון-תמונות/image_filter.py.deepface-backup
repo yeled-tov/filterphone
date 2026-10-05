@@ -1,0 +1,214 @@
+"""
+FilterPhone — מנוע סינון תמונות
+עובד כ-addon של mitmproxy במצב regular (HTTP proxy)
+
+הלוגיקה:
+1. בדוק אם הדומיין ברשימת הדפדפנים (browser_domains.txt)
+2. בדוק אם התגובה היא תמונה (Content-Type: image/*)
+3. בדוק אם התמונה גדולה מספיק (> 5KB)
+4. שלוף רמת סינון מ-Redis
+5. בדוק cache
+6. הפעל pipeline: זיהוי מגדר → זיהוי עירום → החלטה
+7. אם לחסום: החלף בתמונה אפורה
+8. שמור תוצאה ב-cache
+"""
+import mitmproxy.http
+from mitmproxy import ctx
+import os
+import time
+from datetime import datetime
+
+from config import MIN_IMAGE_SIZE, MAX_IMAGE_SIZE, GENDER_MALE_CERTAIN
+from cache_manager import get_cached_result, set_cached_result, get_filter_level, increment_stat
+from gender_detector import detect_gender
+from nsfw_detector import analyze_nudity
+from image_replacer import get_blocked_response
+
+# טעינת רשימת דומיינים לסינון
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BROWSER_DOMAINS = set()
+
+def load_browser_domains():
+    path = os.path.join(SCRIPT_DIR, "browser_domains.txt")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    BROWSER_DOMAINS.add(line.lower())
+
+load_browser_domains()
+
+def log_action(client_ip, domain, action, details, elapsed_ms):
+    """לוג בפורמט אחיד — stdout נתפס ע"י systemd journal"""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] [{client_ip}] [{domain}] [{action}] [{details}] [{elapsed_ms}ms]", flush=True)
+
+def domain_matches(host, patterns):
+    """בדיקה אם דומיין מתאים לרשימה (כולל wildcard)"""
+    host = host.lower()
+    for pattern in patterns:
+        if pattern.startswith("*."):
+            suffix = pattern[1:]  # ".example.com"
+            if host.endswith(suffix) or host == pattern[2:]:
+                return True
+        elif host == pattern:
+            return True
+    return False
+
+def should_filter_domain(host):
+    """האם לסנן את הדומיין הזה? רק דומיינים ברשימה"""
+    return domain_matches(host, BROWSER_DOMAINS)
+
+def is_image_response(flow):
+    """האם התגובה היא תמונה?"""
+    content_type = flow.response.headers.get("content-type", "")
+    return any(t in content_type.lower() for t in ["image/jpeg", "image/png", "image/webp", "image/jpg"])
+
+def decide_block(gender_result, nudity_result, filter_level):
+    """
+    ההחלטה המרכזית: לחסום או לא?
+
+    כלל ברזל: גבר = לא חוסם. אפילו בבוקסר. אפילו בלי חולצה.
+    DNS כבר חוסם פורנו ועירום מלא. אנחנו מטפלים רק בתמונות רגילות.
+    """
+    has_face = gender_result.get("has_face", False)
+    faces = gender_result.get("faces", [])
+
+    # אם אין פנים בכלל
+    if not has_face or len(faces) == 0:
+        if filter_level == 1:
+            if nudity_result.get("has_female_parts", False):
+                return True, "no face, female parts detected"
+            if nudity_result.get("has_exposed_female", False):
+                return True, "no face, exposed female detected"
+        elif filter_level == 2:
+            if nudity_result.get("has_exposed_female", False):
+                return True, "no face, exposed female detected"
+        elif filter_level == 3:
+            if nudity_result.get("has_explicit_nudity", False):
+                return True, "no face, explicit nudity detected"
+        return False, "no face, clean"
+
+    # יש פנים — בדוק מגדר
+    has_any_female = False
+    all_certain_male = True
+    gender_info = ""
+
+    for face in faces:
+        if face.get("is_certain_male", False):
+            gender_info = f"male detected, confidence={face.get('man_score', 0):.0f}%"
+            continue  # גבר ודאי — דלג
+        all_certain_male = False
+
+        if face.get("is_female", False):
+            has_any_female = True
+            gender_info = f"female detected, confidence={face.get('woman_score', 0):.0f}%"
+
+    # אם כל הפנים הם גברים ודאיים — לא חוסם בשום מצב
+    if all_certain_male:
+        return False, gender_info or "male detected"
+
+    # יש אישה או ספק
+    if filter_level == 1:
+        if has_any_female or not all_certain_male:
+            return True, gender_info or "uncertain gender, blocking (level 1)"
+
+    elif filter_level == 2:
+        if has_any_female and nudity_result.get("has_exposed_female", False):
+            return True, f"{gender_info}, exposed"
+
+    elif filter_level == 3:
+        if nudity_result.get("has_explicit_nudity", False):
+            return True, f"{gender_info}, explicit nudity"
+
+    return False, f"{gender_info}, passed"
+
+class FilterPhoneAddon:
+    def response(self, flow: mitmproxy.http.HTTPFlow):
+        start_time = time.time()
+        client_ip = flow.client_conn.peername[0] if flow.client_conn.peername else "unknown"
+        host = flow.request.pretty_host
+
+        try:
+            # שלב 1: האם הדומיין ברשימת הסינון?
+            if not should_filter_domain(host):
+                return  # לא ברשימה — עבור חופשי
+
+            # שלב 2: האם זו תמונה?
+            if not is_image_response(flow):
+                return
+
+            # שלב 3: האם גדולה מספיק?
+            content = flow.response.content
+            if not content or len(content) < MIN_IMAGE_SIZE:
+                return  # קטנה מדי — כנראה אייקון
+            if len(content) > MAX_IMAGE_SIZE:
+                return  # גדולה מדי
+
+            increment_stat("images_scanned")
+
+            # שלב 4: רמת סינון
+            filter_level = get_filter_level(client_ip)
+
+            if filter_level == 0:
+                elapsed = int((time.time() - start_time) * 1000)
+                log_action(client_ip, host, "SKIPPED", "filter level 0 (disabled)", elapsed)
+                return
+
+            # שלב 5: cache
+            cached = get_cached_result(content)
+            if cached is not None:
+                increment_stat("cache_hits")
+                if cached.get("block", False) and cached.get("level", 99) <= filter_level:
+                    flow.response.status_code = 403
+                    flow.response.reason = "Blocked by FilterPhone"
+                    flow.response.content = b""
+                    flow.response.headers["content-type"] = "text/plain"
+                    flow.response.headers["content-length"] = "0"
+                    flow.response.headers["cache-control"] = "no-store, no-cache, must-revalidate"
+                    flow.response.headers["x-filterphone"] = "blocked"
+                    increment_stat("images_blocked")
+                    elapsed = int((time.time() - start_time) * 1000)
+                    log_action(client_ip, host, "CACHED", f"cached result: blocked (level {cached.get('level')})", elapsed)
+                else:
+                    elapsed = int((time.time() - start_time) * 1000)
+                    log_action(client_ip, host, "CACHED", "cached result: passed", elapsed)
+                return
+
+            # שלב 6: ניתוח
+            gender_result = detect_gender(content)
+            nudity_result = analyze_nudity(content)
+
+            should_block, reason = decide_block(gender_result, nudity_result, filter_level)
+
+            # שמירה ב-cache
+            set_cached_result(content, {
+                "block": should_block,
+                "level": filter_level,
+                "gender": gender_result.get("faces", [{}])[0].get("gender", "Unknown") if gender_result.get("faces") else "None",
+            })
+
+            elapsed = int((time.time() - start_time) * 1000)
+
+            if should_block:
+                # חסימה מלאה - מחזירים 403 עם גוף ריק
+                flow.response.status_code = 403
+                flow.response.reason = "Blocked by FilterPhone"
+                flow.response.content = b""
+                flow.response.headers["content-type"] = "text/plain"
+                flow.response.headers["content-length"] = "0"
+                flow.response.headers["cache-control"] = "no-store, no-cache, must-revalidate"
+                flow.response.headers["x-filterphone"] = "blocked"
+                increment_stat("images_blocked")
+                log_action(client_ip, host, "BLOCKED", reason, elapsed)
+            else:
+                increment_stat("images_passed")
+                log_action(client_ip, host, "PASSED", reason, elapsed)
+
+        except Exception as e:
+            elapsed = int((time.time() - start_time) * 1000)
+            log_action(client_ip, host, "ERROR", str(e), elapsed)
+            ctx.log.error(f"[FilterPhone] error: {e}")
+
+addons = [FilterPhoneAddon()]

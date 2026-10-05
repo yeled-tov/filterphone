@@ -1,0 +1,5 @@
+[Unit]
+Description=FilterPhone disk guard (trim logs when disk is almost full)
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fp-disk-guard.sh

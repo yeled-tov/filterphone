@@ -1,0 +1,15 @@
+[Unit]
+Description=FilterPhone Image Filter (mitmproxy)
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/ubuntu/filterphone/filterphone-system/סינון-תמונות
+ExecStart=/usr/local/bin/mitmdump --mode transparent --listen-port 8080 --set confdir=/root/.mitmproxy -s image_filter.py --set block_global=false --ignore-hosts '^api\.termius\.com:443$' --ignore-hosts '^.*\.googleapis\.com:443$' --ignore-hosts '^mail\.google\.com:443$' --ignore-hosts '^chat\.google\.com:443$' --ignore-hosts '^inbox\.google\.com:443$' --ignore-hosts '^.*\.googleusercontent\.com:443$' --ignore-hosts '^claude\.ai:443$' --ignore-hosts '^.*\.claude\.ai:443$' --ignore-hosts '^.*\.truecaller\.com:443$' --ignore-hosts '^35\.190\.118\.8:443$' --ignore-hosts '^.*\.googlevideo\.com:443$' --ignore-hosts '^.*\.youtube\.com:443$' --ignore-hosts '^.*\.ytimg\.com:443$'
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

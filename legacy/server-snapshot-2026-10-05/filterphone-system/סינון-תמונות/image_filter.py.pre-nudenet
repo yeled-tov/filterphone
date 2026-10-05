@@ -1,0 +1,229 @@
+"""
+FilterPhone — מנוע סינון תמונות (גרסת YOLOv8)
+Pipeline חדש:
+1. YOLOv8-pose: מזהה אדם + צורת גוף (100ms)
+2. אם אין אדם → PASS
+3. אם גבר ודאי → PASS
+4. אחרת → BLOCK (רמה 1) או המשך לניתוח עירום (רמות 2-3)
+"""
+import mitmproxy.http
+from mitmproxy import ctx
+import os
+import time
+from datetime import datetime
+
+from config import MIN_IMAGE_SIZE, MAX_IMAGE_SIZE
+from cache_manager import get_cached_result, set_cached_result, get_filter_level, increment_stat
+from yolo_detector import detect_persons
+from skin_detector import detect_skin_ratio
+from nsfw_detector import analyze_nudity
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BROWSER_DOMAINS = set()
+
+def load_browser_domains():
+    path = os.path.join(SCRIPT_DIR, "browser_domains.txt")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    BROWSER_DOMAINS.add(line.lower())
+
+load_browser_domains()
+
+def log_action(client_ip, domain, action, details, elapsed_ms):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] [{client_ip}] [{domain}] [{action}] [{details}] [{elapsed_ms}ms]", flush=True)
+
+def domain_matches(host, patterns):
+    host = host.lower()
+    for pattern in patterns:
+        if pattern.startswith("*."):
+            suffix = pattern[1:]
+            if host.endswith(suffix) or host == pattern[2:]:
+                return True
+        elif host == pattern:
+            return True
+    return False
+
+def should_filter_domain(host):
+    return domain_matches(host, BROWSER_DOMAINS)
+
+def is_image_response(flow):
+    content_type = flow.response.headers.get("content-type", "")
+    return any(t in content_type.lower() for t in ["image/jpeg", "image/png", "image/webp", "image/jpg"])
+
+def decide_block(yolo_result, nudity_result, filter_level):
+    """
+    Pipeline חדש מבוסס YOLOv8-pose:
+    - אין אדם → PASS (בכל הרמות)
+    - יש אדם → בדיקה לפי רמה
+    """
+    has_person = yolo_result.get("has_person", False)
+    persons = yolo_result.get("persons", [])
+    
+    # אין אדם בתמונה — בדוק עור (fallback) + עירום
+    if not has_person:
+        skin_ratio = yolo_result.get("skin_ratio", 0.0)
+        # ברמה 1: אם יש הרבה עור (>18%) → סביר שזו תמונה חתוכה של אישה
+        if filter_level == 1 and skin_ratio > 0.18:
+            return True, f"no person but high skin ratio ({skin_ratio:.1%})"
+        if filter_level == 2 and nudity_result.get("has_exposed_female", False):
+            return True, "no person, exposed female detected"
+        if filter_level == 2 and skin_ratio > 0.30:
+            return True, f"no person, very high skin ratio ({skin_ratio:.1%})"
+        if filter_level == 3 and nudity_result.get("has_explicit_nudity", False):
+            return True, "no person, explicit nudity"
+        return False, f"no person (skin={skin_ratio:.1%})"
+    
+    # יש אדם — בדוק מגדר לפי צורת גוף
+    any_female = False
+    any_uncertain = False
+    all_male = True
+    num_female = 0
+    num_male = 0
+    num_uncertain = 0
+    
+    num_female_no_head = 0
+    for p in persons:
+        shape = p.get("body_shape", "uncertain")
+        if shape == "female":
+            num_female += 1
+            any_female = True
+            all_male = False
+        elif shape == "female_no_head":
+            num_female_no_head += 1
+            any_female = True
+            all_male = False
+        elif shape == "male":
+            num_male += 1
+        else:
+            num_uncertain += 1
+            any_uncertain = True
+            all_male = False
+    
+    # בניית הסבר
+    gender_summary = f"persons={len(persons)} F={num_female} Fnh={num_female_no_head} M={num_male} U={num_uncertain}"
+    
+    # אם כל האנשים גברים ודאיים → עבור
+    if all_male and num_male > 0:
+        return False, f"male only, {gender_summary}"
+    
+    # החלטה לפי רמת סינון
+    if filter_level == 1:
+        # רמה 1: ספק = חסום
+        if any_female or any_uncertain:
+            return True, f"level 1 strict, {gender_summary}"
+        return False, gender_summary
+    
+    elif filter_level == 2:
+        # רמה 2: אישה + חשיפה = חסום
+        if any_female and nudity_result.get("has_exposed_female", False):
+            return True, f"exposed female, {gender_summary}"
+        return False, gender_summary
+    
+    elif filter_level == 3:
+        # רמה 3: רק עירום מלא
+        if nudity_result.get("has_explicit_nudity", False):
+            return True, f"explicit nudity, {gender_summary}"
+        return False, gender_summary
+    
+    return False, gender_summary
+
+class FilterPhoneAddon:
+    def response(self, flow: mitmproxy.http.HTTPFlow):
+        start_time = time.time()
+        client_ip = flow.client_conn.peername[0] if flow.client_conn.peername else "unknown"
+        host = flow.request.pretty_host
+        
+        try:
+            if not should_filter_domain(host):
+                return
+            
+            if not is_image_response(flow):
+                return
+            
+            content = flow.response.content
+            if not content or len(content) < MIN_IMAGE_SIZE:
+                return
+            if len(content) > MAX_IMAGE_SIZE:
+                return
+            
+            increment_stat("images_scanned")
+            
+            filter_level = get_filter_level(client_ip)
+            
+            if filter_level == 0:
+                return
+            
+            # Cache check
+            cached = get_cached_result(content)
+            if cached is not None:
+                increment_stat("cache_hits")
+                if cached.get("block", False) and cached.get("level", 99) <= filter_level:
+                    flow.response.status_code = 403
+                    flow.response.reason = "Blocked by FilterPhone"
+                    flow.response.content = b""
+                    flow.response.headers["content-type"] = "text/plain"
+                    flow.response.headers["content-length"] = "0"
+                    flow.response.headers["cache-control"] = "no-store, no-cache, must-revalidate"
+                    flow.response.headers["x-filterphone"] = "blocked"
+                    increment_stat("images_blocked")
+                    elapsed = int((time.time() - start_time) * 1000)
+                    log_action(client_ip, host, "CACHED-BLOCK", f"level {cached.get('level')}", elapsed)
+                else:
+                    elapsed = int((time.time() - start_time) * 1000)
+                    log_action(client_ip, host, "CACHED-PASS", "cached", elapsed)
+                return
+            
+            # YOLO detection (100ms)
+            yolo_result = detect_persons(content)
+            
+            # אם YOLO לא מצא אדם — חשב יחס עור כ-fallback
+            if not yolo_result.get("has_person", False):
+                yolo_result["skin_ratio"] = detect_skin_ratio(content)
+            
+            # רק אם יש צורך — הפעל NudeNet (לרמות 2-3 על תמונות ללא אדם או עירום חשוד)
+            nudity_result = {"has_exposed_female": False, "has_explicit_nudity": False}
+            needs_nudity_check = False
+            
+            if filter_level >= 2:
+                # ברמה 2-3: רק אם יש אדם או אם אנחנו רוצים לבדוק עירום
+                if yolo_result.get("has_person", False) or filter_level == 3:
+                    needs_nudity_check = True
+            
+            if needs_nudity_check:
+                nudity_result = analyze_nudity(content)
+            
+            should_block, reason = decide_block(yolo_result, nudity_result, filter_level)
+            
+            # Cache
+            set_cached_result(content, {
+                "block": should_block,
+                "level": filter_level,
+                "persons": yolo_result.get("num_persons", 0),
+            })
+            
+            elapsed = int((time.time() - start_time) * 1000)
+            
+            if should_block:
+                flow.response.status_code = 403
+                flow.response.reason = "Blocked by FilterPhone"
+                flow.response.content = b""
+                flow.response.headers["content-type"] = "text/plain"
+                flow.response.headers["content-length"] = "0"
+                flow.response.headers["cache-control"] = "no-store, no-cache, must-revalidate"
+                flow.response.headers["x-filterphone"] = "blocked"
+                increment_stat("images_blocked")
+                log_action(client_ip, host, "BLOCKED", reason, elapsed)
+            else:
+                increment_stat("images_passed")
+                log_action(client_ip, host, "PASSED", reason, elapsed)
+                
+        except Exception as e:
+            elapsed = int((time.time() - start_time) * 1000)
+            log_action(client_ip, host, "ERROR", str(e), elapsed)
+            ctx.log.error(f"[FilterPhone] error: {e}")
+
+addons = [FilterPhoneAddon()]

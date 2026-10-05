@@ -1,0 +1,147 @@
+# ==================================
+# FilterPhone — רשימת דומיינים לסינון תמונות
+# רק דומיינים שנגישים דרך דפדפן.
+# אפליקציות עם certificate pinning עוברות חופשי.
+# ==================================
+
+# === חדשות ישראל ===
+*.ynet.co.il
+*.walla.co.il
+*.mako.co.il
+*.n12.co.il
+*.haaretz.co.il
+*.themarker.com
+*.calcalist.co.il
+*.israelhayom.co.il
+*.kan.org.il
+*.ice.co.il
+*.globes.co.il
+*.sport5.co.il
+*.one.co.il
+*.jpost.com
+*.timesofisrael.com
+*.inn.co.il
+
+# === חדשות עולם ===
+*.bbc.com
+*.cnn.com
+*.nytimes.com
+*.theguardian.com
+*.reuters.com
+*.aljazeera.com
+*.foxnews.com
+
+# === חיפוש ותמונות ===
+*.google.com
+*.google.co.il
+*.bing.com
+*.duckduckgo.com
+*.yahoo.com
+
+# === ויקיפדיה ===
+*.wikipedia.org
+*.wikimedia.org
+
+# === תוכן ===
+*.reddit.com
+*.redd.it
+*.tumblr.com
+*.pinterest.com
+*.pinterest.co.il
+*.imgur.com
+*.9gag.com
+*.medium.com
+*.wordpress.com
+*.blogger.com
+*.blogspot.com
+
+# === מסחר (גרסאות דפדפן) ===
+*.aliexpress.com
+*.shein.com
+*.temu.com
+*.ebay.com
+*.amazon.com
+*.amazon.co.il
+*.asos.com
+*.zara.com
+*.next.co.il
+*.ksp.co.il
+*.bug.co.il
+*.ivory.co.il
+*.terminalx.com
+
+# === YouTube (גרסת דפדפן) ===
+*.youtube.com
+*.ytimg.com
+*.googlevideo.com
+
+# === רשתות חברתיות (גרסת דפדפן — לא האפליקציה) ===
+*.twitter.com
+*.x.com
+*.twimg.com
+
+# === CDN נפוצים של תמונות ===
+*.cloudfront.net
+*.akamaihd.net
+*.fastly.net
+*.cloudflare.com
+*.imgix.net
+*.wp.com
+
+# === CDN של Shein ו-AliExpress (לתמונות) ===
+*.sheinsz.ltwebstatic.com
+*.sheincdn.com
+*.alicdn.com
+*.aliyuncdn.net
+*.alicdn.net
+img.alicdn.com
+ae01.alicdn.com
+ae04.alicdn.com
+img.ltwebstatic.com
+
+# === דומיינים של אפליקציות (אחרי התקנת CA במערכת) ===
+
+# AliExpress - app endpoints
+*.aliexpress-media.com
+*.alicdn.com
+ae01.alicdn.com
+ae02.alicdn.com
+ae03.alicdn.com
+ae04.alicdn.com
+gw.alicdn.com
+img.alicdn.com
+sc04.alicdn.com
+
+# Shein - app CDN
+*.ltwebstatic.com
+*.sheincdn.com
+img.ltwebstatic.com
+img2.ltwebstatic.com
+
+# Temu
+*.temu.com
+*.tvc-mall.com
+img.kwcdn.com
+aimg.kwcdn.com
+
+# Instagram (web)
+*.cdninstagram.com
+scontent.cdninstagram.com
+
+# Pinterest
+*.pinimg.com
+i.pinimg.com
+s.pinimg.com
+
+# Reddit
+*.redditmedia.com
+preview.redd.it
+i.redd.it
+
+# Imgur
+*.imgur.com
+i.imgur.com
+
+# Twitter/X
+*.twimg.com
+pbs.twimg.com

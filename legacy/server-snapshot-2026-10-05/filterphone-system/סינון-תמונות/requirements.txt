@@ -1,0 +1,10 @@
+mitmproxy>=10.0
+deepface>=0.0.93
+nudenet>=3.4
+opencv-python-headless>=4.9
+Pillow>=10.0
+redis>=5.0
+requests>=2.31
+python-dotenv>=1.0
+imagehash>=4.3
+numpy>=1.26

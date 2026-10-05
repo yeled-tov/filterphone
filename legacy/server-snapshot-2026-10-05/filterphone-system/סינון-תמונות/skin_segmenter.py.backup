@@ -1,0 +1,62 @@
+import cv2
+import numpy as np
+
+CENSOR_CLASSES = {
+    "FEMALE_BREAST_EXPOSED", "FEMALE_GENITALIA_EXPOSED", "BUTTOCKS_EXPOSED",
+    "BELLY_EXPOSED", "FEMALE_BREAST_COVERED", "FEMALE_GENITALIA_COVERED", 
+    "BUTTOCKS_COVERED", "MALE_GENITALIA_EXPOSED", "ANUS_EXPOSED"
+}
+
+def segment_skin(image_bytes, detections):
+    try:
+        # אם אין בכלל זיהוי בעייתי מה-AI, אל תעשה כלום
+        if not any(d.get("class") in CENSOR_CLASSES and d.get("score", 0) > 0.35 for d in detections):
+            return None
+            
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None: return None
+        
+        drawn = False
+        for det in detections:
+            if det.get("class") in CENSOR_CLASSES and det.get("score", 0) > 0.35:
+                box = det.get("box_2d", det.get("box"))
+                if box and len(box) == 4:
+                    x1, y1, x2, y2 = map(int, box)
+                    
+                    h, w = img.shape[:2]
+                    if x2 < x1: x2 = x1 + x2
+                    if y2 < y1: y2 = y1 + y2
+                    
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(w, x2), min(h, y2)
+                    
+                    if x2 <= x1 or y2 <= y1:
+                        continue
+                        
+                    # גזירת האזור הבעייתי בלבד (למשל רק אזור החזה/בטן)
+                    roi = img[y1:y2, x1:x2]
+                    
+                    # הפעלת זיהוי הפיקסלים של OpenCV *רק בתוך האזור הזה*
+                    YCrCb = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb)
+                    lower = np.array([0, 133, 77], np.uint8)
+                    upper = np.array([255, 173, 127], np.uint8)
+                    mask = cv2.inRange(YCrCb, lower, upper)
+                    
+                    # החלקת קווי המתאר כדי שהצביעה תהיה טבעית
+                    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+                    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+                    
+                    # צביעת פיקסלי העור (כחול-ירוק) - משאיר את הבגדים והרקע שלמים!
+                    roi[mask > 0] = [200, 255, 0]
+                    
+                    # הדבקת האזור הצבוע חזרה לתמונה
+                    img[y1:y2, x1:x2] = roi
+                    drawn = True
+                    
+        if drawn:
+            success, encoded = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+            if success: return encoded.tobytes()
+        return None
+    except Exception as e:
+        return None
