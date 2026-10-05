@@ -1,0 +1,102 @@
+# ======================================================================
+# FilterPhone — רשימות יירוט
+#
+# [passthrough] — עוברים בלי פתיחת HTTPS. אפליקציות שבודקות תעודה בעצמן
+#   (certificate pinning): יירוט ישבור אותן, ואין בהן תמונות לסנן.
+#   סינון ה-DNS (AdGuard) ממשיך לחול גם עליהן.
+# [inspect] — שרתי תמונות של רשתות חברתיות. ברמה 1 לא לומדים עליהם
+#   "passthrough" אוטומטי: עדיף שהאפליקציה לא תציג תמונות מאשר בלי סינון.
+#
+# '*.example.com' תופס גם את example.com וגם כל תת-דומיין שלו.
+# ======================================================================
+
+[passthrough]
+
+# --- מערכת: אפל ---
+*.apple.com
+*.icloud.com
+*.icloud-content.com
+*.mzstatic.com
+*.apple-cloudkit.com
+
+# --- מערכת: גוגל / אנדרואיד ---
+*.googleapis.com
+*.gvt1.com
+*.gvt2.com
+*.gvt3.com
+android.clients.google.com
+accounts.google.com
+play.google.com
+*.googlevideo.com
+*.firebaseio.com
+*.crashlytics.com
+*.app-measurement.com
+
+# --- מערכת: מיקרוסופט / סמסונג ---
+login.microsoftonline.com
+login.live.com
+*.samsungosp.com
+*.samsungcloud.com
+*.samsungdm.com
+
+# --- הודעות ושיחות ---
+*.whatsapp.net
+*.whatsapp.com
+*.telegram.org
+*.signal.org
+*.viber.com
+*.truecaller.com
+
+# --- בנקים, אשראי ותשלומים ---
+*.bankhapoalim.co.il
+*.leumi.co.il
+*.discountbank.co.il
+*.telebank.co.il
+*.mizrahi-tefahot.co.il
+*.fibi.co.il
+*.fibi-online.co.il
+*.bankjerusalem.co.il
+*.mercantile.co.il
+*.bankmassad.co.il
+*.pagi.co.il
+*.otsar-hahayal.co.il
+*.isracard.co.il
+*.cal-online.co.il
+*.max.co.il
+*.americanexpress.co.il
+*.paypal.com
+*.payboxapp.com
+*.bitpay.co.il
+
+# --- ממשלה וקופות חולים ---
+*.gov.il
+*.idf.il
+*.clalit.co.il
+*.maccabi4u.co.il
+*.meuhedet.co.il
+*.leumit.co.il
+
+# --- כלים (מהמערכת הקודמת) ---
+claude.ai
+*.claude.ai
+*.anthropic.com
+api.termius.com
+
+[inspect]
+
+*.cdninstagram.com
+*.fbcdn.net
+*.twimg.com
+*.tiktokcdn.com
+*.tiktokcdn-us.com
+*.ibyteimg.com
+*.pinimg.com
+*.ytimg.com
+*.ggpht.com
+*.googleusercontent.com
+*.redd.it
+*.redditmedia.com
+*.imgur.com
+*.sc-cdn.net
+*.giphy.com
+*.tenor.com

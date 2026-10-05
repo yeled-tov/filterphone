@@ -1,0 +1,51 @@
+name: אימון ראשי סיווג (SigLIP2)
+
+on:
+  workflow_dispatch:
+    inputs:
+      train_images:
+        description: "כמה תמונות COCO לאימון"
+        default: "24000"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: heads
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: אימון ובניית heads.json
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: התקנת ספריות
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install onnxruntime numpy pillow scikit-learn "transformers>=4.49" sentencepiece protobuf
+      - uses: actions/cache@v4
+        with:
+          path: ~/heads-work
+          key: heads-work-v1-${{ inputs.train_images }}-${{ hashFiles('tools/build_heads.py', 'tools/fetch_models.py', 'server/filterphone/engine/imaging.py') }}
+          restore-keys: heads-work-v1-
+      - name: אימון
+        run: python tools/build_heads.py --work ~/heads-work --train-images "${{ inputs.train_images }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: heads
+          path: |
+            server/filterphone/engine/heads.json
+            docs/HEADS_REPORT.md
+      - name: שמירה במאגר
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/filterphone/engine/heads.json docs/HEADS_REPORT.md
+          git commit -m "ראשי סיווג חדשים: $(python -c "import json;print(json.load(open('server/filterphone/engine/heads.json'))['version'])")"
+          git pull --rebase
+          git push
