@@ -20,7 +20,7 @@
 
 | תיקייה | מה יש בה |
 |---|---|
-| [`server/`](server/) | קוד השרת (Python): `engine` — מנוע התמונות, `proxy` — תוסף mitmproxy, `api` — API, קטלוג החסימות וממשק הניהול. 95 בדיקות |
+| [`server/`](server/) | קוד השרת (Python): `engine` — מנוע התמונות, `proxy` — תוסף mitmproxy, `api` — API, קטלוג החסימות וממשק הניהול. 98 בדיקות |
 | [`app/`](app/) | האפליקציה (Flutter). אנדרואיד מלא (כולל "מגן FilterPhone"); אייפון — המבנה מוכן, חסר Network Extension |
 | [`deploy/`](deploy/) | התקנה לשרת: `install.sh`, חומת אש, systemd, Caddy, AdGuard, חזרה לאחור |
 | [`tools/`](tools/) | אימון ראשי הסיווג (רץ ב-GitHub), הורדת מודלים עם אימות חתימה, בדיקת עשן, ממשק ניהול מקומי |
@@ -54,18 +54,14 @@
 
 | שכבה | איך | מתי זה עובד |
 |---|---|---|
-| **DNS** (AdGuard) | כלל `‎||host^$client=<IP של המכשיר>` שה-API מסנכרן | כל אפליקציה ודפדפן, כולל שיחות. **דורש** `FP_ADGUARD_USER` / `FP_ADGUARD_PASSWORD` |
+| **DNS** (AdGuard) | כלל `‎||host^$client=<IP של המכשיר>` שה-API מסנכרן | כל אפליקציה ודפדפן, כולל שיחות |
 | **פרוקסי** | חסימה לפי SNI / Host, דף "האתר חסום" בעברית, כללי כתובת (למשל לשונית "תמונות" בגוגל), בלי תמונות, בלי וידאו | תמיד, גם בלי AdGuard |
 | **מגן FilterPhone** בטלפון | שירות נגישות: אפליקציה חסומה → מסך הבית; מסך חסום (צפייה בסטטוס) → "אחורה". במנהל מכשיר — האפליקציה מוסתרת | אחרי שהלקוח מפעיל את המגן (האפליקציה מראה איך). הממשק מראה אם הוא פעיל |
 
 דוגמאות: תמונות פרופיל בוואטסאפ (`pps.whatsapp.net`), סטטוסים (מגן), חנות Play (DNS + מגן), Chrome / כל הדפדפנים (מגן), הפיד של גוגל, חיפוש תמונות, רשתות חברתיות, אליאקספרס/טמו/שיין, אתרי APK ואפליקציות VPN. בנוסף: **כל אפליקציה** מרשימת האפליקציות שהטלפון מדווח, רשימת אתרים אישית לחסימה, רשימת אתרים מותרים, ו"תמונות באפליקציות" (חסום / מותר / לפי הרמה).
 
-### הגדרת AdGuard (פעם אחת, בשרת)
-```bash
-sudo nano /etc/filterphone/filterphone.env     # FP_ADGUARD_USER=...  FP_ADGUARD_PASSWORD=...
-sudo systemctl restart fp-api
-```
-המשתמש והסיסמה של ממשק AdGuard (פורט 3002). ב"מערכת" בממשק רואים אם הסנכרון עובד. הכללים נכתבים בתוך בלוק מסומן ב-"Custom filtering rules" — כללים שכתבתם ידנית לא נגעים.
+### AdGuard
+ההתקנה (`install.sh`) יוצרת ב-AdGuard משתמש נפרד בשם `filterphone-api` עם סיסמה אקראית, ושומרת אותה ב-`/etc/filterphone/filterphone.env` — אין צורך לעשות כלום. המשתמש שלכם בממשק של AdGuard לא משתנה. ב"מערכת" בממשק הניהול רואים אם הסנכרון עובד. הכללים נכתבים בתוך בלוק מסומן ב-"Custom filtering rules" — כללים שכתבתם ידנית לא נגעים.
 
 ## הפעלה
 
@@ -73,7 +69,10 @@ sudo systemctl restart fp-api
 ```bash
 deploy/deploy.sh
 ```
-מעלה את `server/`, `tools/` ו-`deploy/` לשרת ומריץ `install.sh`. הסקריפט בטוח להרצה חוזרת, ומגבה לפני כל שינוי ל-`/root/fp-backups/<תאריך>`. מסד הנתונים מתעדכן לבד (גרסה 1: לקוחות, בקשות, מדיניות לכל מכשיר, יומן פעולות). לחזרה למערכת הישנה: `sudo bash /opt/filterphone/src/deploy/rollback.sh /root/fp-backups/<תאריך>`.
+מעלה את `server/`, `tools/` ו-`deploy/` לשרת ומריץ `install.sh`. הסקריפט בטוח להרצה חוזרת, ומגבה לפני כל שינוי ל-`/root/fp-backups/<תאריך>` — כולל מסד הנתונים. הגרסה שרצה קודם נשמרת ב-`/opt/filterphone/src.prev`. מסד הנתונים מתעדכן לבד (גרסה 1: לקוחות, בקשות, מדיניות לכל מכשיר, יומן פעולות), ו-AdGuard מתחבר לבד (משתמש API נפרד; המשתמש שלכם לא משתנה).
+
+- **חזרה לגרסה הקודמת** (עדכון שלא הצליח): `sudo bash /opt/filterphone/src/deploy/rollback_version.sh /root/fp-backups/<תאריך>`
+- **חזרה למערכת הישנה** (של לפני 5.10.2026): `sudo bash /opt/filterphone/src/deploy/rollback.sh /root/fp-backups/<תאריך>`
 
 מנהל ראשון (פעם אחת, בשרת):
 ```bash
@@ -118,7 +117,7 @@ journalctl -u fp-api -n 50        # סנכרון WireGuard / AdGuard
 
 במחשב:
 ```bash
-pip install -e "server[dev]" && pytest server/tests                 # 95 בדיקות
+pip install -e "server[dev]" && pytest server/tests                 # 98 בדיקות
 cd app && flutter analyze && flutter test                           # האפליקציה
 python tools/dev_admin.py     # ממשק הניהול עם נתוני דוגמה: http://127.0.0.1:8099/admin (admin / demo-password)
 ```

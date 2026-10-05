@@ -336,9 +336,9 @@ class FilterPhone:
     # ------------------------------------------------------------ רישום
 
     def _record_host_block(self, ip: str, host: str, req: http.Request) -> None:
-        now = time.monotonic()
-        last = self._host_events.get((ip, host), 0.0)
-        if now - last < HOST_EVENT_EVERY_S:
+        now = time.monotonic()      # שניות מאז שהשרת עלה — יכול להיות קטן מ-60 מיד אחרי אתחול
+        last = self._host_events.get((ip, host))
+        if last is not None and now - last < HOST_EVENT_EVERY_S:
             return
         if len(self._host_events) > 5000:
             self._host_events.clear()

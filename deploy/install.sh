@@ -28,10 +28,28 @@ install -d -o "$USER_NAME" -g "$USER_NAME" -m 750 "$DATA" "$DATA/models" "$DATA/
 install -d -m 755 "$APP"
 install -d -m 750 -g "$USER_NAME" "$ETC"
 
+# ------------------------------------------------------------ 1א. גיבוי לפני שינויים
+# מסד הנתונים (מכשירים, לקוחות, בקשות) וההגדרות — כדי שאפשר יהיה לחזור לגרסה הקודמת
+# (deploy/rollback_version.sh). גיבוי "חי" של SQLite: עקבי גם כשה-API רץ.
+if [ -f "$DATA/filterphone.db" ]; then
+    log "גיבוי מסד הנתונים → $BACKUP/filterphone.db"
+    python3 - "$DATA/filterphone.db" "$BACKUP/filterphone.db" <<'PY'
+import sqlite3, sys
+src, dst = sqlite3.connect(sys.argv[1], timeout=30), sqlite3.connect(sys.argv[2])
+src.backup(dst)
+n = dst.execute("SELECT count(*) FROM devices").fetchone()[0]
+dst.close(); src.close()
+print(f"  {n} מכשירים בגיבוי")
+PY
+    chmod 600 "$BACKUP/filterphone.db"
+    chown "$USER_NAME:$USER_NAME" "$DATA"/filterphone.db* 2>/dev/null || true
+fi
+[ -f "$ETC/filterphone.env" ] && cp -a "$ETC/filterphone.env" "$BACKUP/filterphone.env"
+
 # ------------------------------------------------------------ 2. חבילות מערכת
 log "חבילות מערכת"
 export DEBIAN_FRONTEND=noninteractive
-apt-get install -y -q python3.12-venv python3-yaml wireguard-tools redis-server curl gpg >/dev/null
+apt-get install -y -q python3.12-venv python3-yaml python3-bcrypt wireguard-tools redis-server curl gpg >/dev/null
 if ! command -v caddy >/dev/null; then
     log "התקנת Caddy (שרת HTTPS עם תעודות אוטומטיות)"
     curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
@@ -83,8 +101,6 @@ if [ ! -f "$ETC/filterphone.env" ]; then
     install -m 640 -g "$USER_NAME" "$SRC/deploy/filterphone.env.example" "$ETC/filterphone.env"
 fi
 set -a; . "$ETC/filterphone.env"; set +a
-[ -n "${FP_ADGUARD_PASSWORD:-}" ] \
-    || warn "FP_ADGUARD_USER / FP_ADGUARD_PASSWORD חסרים ב-$ETC/filterphone.env — החסימות לפי מכשיר ייאכפו רק בפרוקסי, לא ב-DNS"
 
 # ------------------------------------------------------------ 7. Redis
 log "Redis: תקרת זיכרון 512MB, פינוי רק של רשומות קאש (עם תפוגה)"
@@ -128,9 +144,48 @@ bash "$SRC/deploy/firewall.sh"
 # ------------------------------------------------------------ 11. AdGuard
 log "AdGuard: חיפוש בטוח, חסימת עקיפות DNS, פינוי פורט 443"
 cp -a /opt/AdGuardHome/AdGuardHome.yaml "$BACKUP/AdGuardHome.yaml"
+AG_ARGS=()
+if [ -z "${FP_ADGUARD_PASSWORD:-}" ]; then
+    # חסימות ה-DNS לפי מכשיר: ה-API צריך גישה ל-AdGuard. יוצרים לו משתמש משלו עם סיסמה אקראית
+    # (המשתמש של בעל השרת לא משתנה). הסיסמה נשמרת רק בקובץ ההגדרות של השרת.
+    AG_USER=filterphone-api
+    AG_PASSWORD=$(openssl rand -hex 24)
+    if AG_HASH=$(AG_PW="$AG_PASSWORD" python3 -c 'import bcrypt, os; print(bcrypt.hashpw(os.environ["AG_PW"].encode(), bcrypt.gensalt(10)).decode())'); then
+        AG_ARGS=(--api-user "$AG_USER" --api-hash "$AG_HASH")
+    else
+        warn "python3-bcrypt חסר — בלי משתמש API ב-AdGuard (החסימות לפי מכשיר רק בפרוקסי)"
+    fi
+fi
+ag_restore() {   # ה-DNS של כל הלקוחות תלוי ב-AdGuard: בכל תקלה — חוזרים להגדרות הקודמות ומפעילים
+    systemctl stop adguardhome || true
+    cp -a "$BACKUP/AdGuardHome.yaml" /opt/AdGuardHome/AdGuardHome.yaml
+    systemctl start adguardhome
+}
 systemctl stop adguardhome
-python3 "$SRC/deploy/adguard_patch.py" /opt/AdGuardHome/AdGuardHome.yaml
+if ! ag_out=$(python3 "$SRC/deploy/adguard_patch.py" /opt/AdGuardHome/AdGuardHome.yaml "${AG_ARGS[@]}"); then
+    ag_restore
+    die "עדכון הגדרות AdGuard נכשל — ההגדרות הקודמות שוחזרו ו-AdGuard פועל"
+fi
+echo "$ag_out"
 systemctl start adguardhome
+sleep 3
+if ! systemctl is-active --quiet adguardhome; then
+    warn "AdGuard לא עלה עם ההגדרות החדשות — משחזר את הקודמות"
+    ag_restore
+    ag_out=""
+fi
+if [ ${#AG_ARGS[@]} -gt 0 ] && grep -q "משתמש API" <<<"$ag_out"; then
+    AG_URL=$(python3 "$SRC/deploy/adguard_patch.py" /opt/AdGuardHome/AdGuardHome.yaml --print-url)
+    {
+        echo
+        echo "# נוצר אוטומטית ב-install.sh ($(date +%F)) — משתמש AdGuard של ה-API (חסימות DNS לפי מכשיר)"
+        echo "FP_ADGUARD_URL=$AG_URL"
+        echo "FP_ADGUARD_USER=$AG_USER"
+        echo "FP_ADGUARD_PASSWORD=$AG_PASSWORD"
+    } >> "$ETC/filterphone.env"
+    export FP_ADGUARD_URL="$AG_URL" FP_ADGUARD_USER="$AG_USER" FP_ADGUARD_PASSWORD="$AG_PASSWORD"
+    log "  חסימות DNS לפי מכשיר: מחובר ל-AdGuard ($AG_URL)"
+fi
 
 # ------------------------------------------------------------ 12. שירותים
 log "שירותי systemd"

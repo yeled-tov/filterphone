@@ -67,6 +67,20 @@ async def drain(a: A.FilterPhone):
 
 # ------------------------------------------------------------------ חסימת אתרים
 
+async def test_site_block_is_logged_right_after_server_boot(fp, monkeypatch):
+    """time.monotonic() = שניות מאז האתחול. מיד אחרי אתחול השרת (פחות מדקה) — עדיין רושמים חסימה."""
+    clock = [5.0]
+    monkeypatch.setattr(A.time, "monotonic", lambda: clock[0])
+    fp.policies.set(IP, DevicePolicy(level=2, hosts=compile_hosts(["tiktok.com"])))
+    for _ in range(3):                                  # 3 בקשות באותה דקה — אירוע אחד
+        fp.requestheaders(mkflow("https://www.tiktok.com/", {"sec-fetch-dest": "document"}))
+    clock[0] += A.HOST_EVENT_EVERY_S + 1                # דקה אחר כך — עוד אירוע
+    fp.requestheaders(mkflow("https://www.tiktok.com/", {"sec-fetch-dest": "document"}))
+    await drain(fp)
+    events = await fp.redis.xrange(A.EVENTS_KEY)
+    assert [e[1]["action"] for e in events] == ["site", "site"]
+
+
 async def test_blocked_site_gets_block_page_for_navigation(fp):
     fp.policies.set(IP, DevicePolicy(level=2, hosts=compile_hosts(["instagram.com"])))
     f = mkflow("https://www.instagram.com/explore", {"sec-fetch-dest": "document"})
