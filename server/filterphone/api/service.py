@@ -538,6 +538,16 @@ class Services:
         with self.db() as c:
             req = c.execute("SELECT id, kind, status, admin_note, created_at, resolved_at FROM requests"
                             " WHERE device_id = ? ORDER BY id DESC LIMIT 1", (row["id"],)).fetchone()
+            customer = None
+            if row["customer_id"]:
+                customer = c.execute(
+                    "SELECT id, name, phone, email, payment, paid_until FROM customers WHERE id = ?",
+                    (row["customer_id"],),
+                ).fetchone()
+        if customer is not None:
+            out["customer"] = dict(customer)
+        else:
+            out["customer"] = None
         if req is not None:
             out["request"] = {"id": req["id"], "kind": req["kind"], "status": req["status"],
                               "created_at": req["created_at"], "resolved_at": req["resolved_at"]}
