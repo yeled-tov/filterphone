@@ -160,6 +160,23 @@ class MainActivity : FlutterActivity() {
                 val page = SelfUpdate.available(this)?.get("page")
                 result.success(page != null && tryStart(Intent(Intent.ACTION_VIEW, Uri.parse(page))))
             }
+            // תמיכה — פתיחת שיחת WhatsApp עם פרטי מכשיר/מצב שנמסרו מה-Flutter
+            "openSupportWhatsApp" -> {
+                val number = call.argument<String>("number")
+                    ?.filter(Char::isDigit)
+                    .orEmpty()
+                val message = call.argument<String>("message").orEmpty()
+                if (number.isBlank()) {
+                    result.error("SupportNumberMissing", "מספר התמיכה לא הוגדר", null)
+                    return
+                }
+                val uri = Uri.parse("https://wa.me/\${number}?text=\${Uri.encode(message)}")
+                if (tryStart(Intent(Intent.ACTION_VIEW, uri))) {
+                    result.success(true)
+                } else {
+                    result.error("WhatsAppUnavailable", "לא ניתן לפתוח את WhatsApp במכשיר", null)
+                }
+            }
             // סוללה
             "requestBatteryExemption" -> result.success(requestBatteryExemption())
             // התראות (אנדרואיד 13+): ההתראה "הסינון פעיל"
