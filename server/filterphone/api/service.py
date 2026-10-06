@@ -79,6 +79,9 @@ _HB_SECTIONS = {
     "dpc": {"applied": list, "failed": list, "always_on_vpn": str, "lockdown": bool, "frp": bool},
     "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int,
                     "keywords_blocked": int},
+    "capabilities": {"sdk": int, "manufacturer": str, "model": str, "device_owner": bool,
+                     "profile_owner": bool, "provisioning_allowed": bool, "root": bool,
+                     "accessibility": bool, "always_on": bool, "lockdown": bool},
     "update": {"state": str, "version": str, "error": str},
 }
 # מעברים שנרשמים ביומן המכשיר
@@ -107,7 +110,7 @@ def sanitize_heartbeat(hb: dict) -> dict:
     for k in _HB_BOOL:
         if isinstance(hb.get(k), bool):
             out[k] = hb[k]
-    for k in ("app_version", "private_dns", "policy_error"):
+    for k in ("app_version", "private_dns", "policy_error", "preflight"):
         if isinstance(hb.get(k), str) and hb[k]:
             out[k] = security.clean_text(hb[k], 80)
     for k in ("sdk", "policy_version", "last_policy_sync", "ts"):

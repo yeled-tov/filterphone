@@ -761,9 +761,30 @@ function complianceCard(d) {
             UPDATE_STATES[hb.update.state][0])
           : chip(pick(hb.device_owner, g.device_owner) ? "פעיל (מנהל מכשיר)" : "ידני — מדף ההורדה")],
         ["אנדרואיד", hb.sdk ? `${ANDROID[hb.sdk] || "?"} (API ${hb.sdk})` : "—"],
+        ["דגם", hb.capabilities ? `${hb.capabilities.manufacturer || ""} ${hb.capabilities.model || ""}`.trim() || "—" : "—"],
+        ["יכולות המכשיר", capabilityChips(hb.capabilities)],
+        ["אפשרות הקמה כמנהל מכשיר", hb.preflight ? chip((PREFLIGHT[hb.preflight] || ["", hb.preflight])[1], (PREFLIGHT[hb.preflight] || [""])[0]) : "—"],
         ["גרסת מדיניות בשרת / בטלפון", el("span", { class: "row gap" }, `${d.policy_version} / ${d.device_policy_version ?? "—"}`, syncText)],
         ["סנכרון מדיניות אחרון", ago(d.policy_ack_at || hb.last_policy_sync)],
       ])));
+}
+
+const PREFLIGHT = {
+  ALREADY_MANAGED: ["ok", "מנוהל (Device Owner)"],
+  READY_WITH_ROOT: ["ok", "כשיר — אפשר בלחיצה (root)"],
+  READY_FOR_PROVISIONING: ["warn", "כשיר — הקמה ב-QR / adb"],
+  REQUIRES_FACTORY_RESET: ["warn", "דרוש איפוס יצרן להקמה כמנהל מכשיר"],
+  UNSUPPORTED: ["bad", "המכשיר לא נתמך להקמה מלאה"],
+};
+
+function capabilityChips(c) {
+  if (!c) return "—";
+  const items = [
+    ["root", "root"], ["provisioning_allowed", "ניתן להקמה"], ["device_owner", "מנהל מכשיר"],
+    ["always_on", "VPN תמיד"], ["lockdown", "נעילה בלי VPN"], ["accessibility", "מגן"],
+  ];
+  return el("span", { class: "row gap wrap" },
+    items.map(([k, t]) => chip(t, c[k] ? "ok" : "")));
 }
 
 function deviceLogCard(d) {

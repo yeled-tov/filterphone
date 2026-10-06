@@ -121,6 +121,7 @@ class MainActivity : FlutterActivity() {
             }
             "privateDnsMode" -> result.success(Settings.Global.getString(contentResolver, "private_dns_mode") ?: "off")
             "isDeviceOwner" -> result.success(DeviceOwnerManager.isDeviceOwner(this))
+            "preflight" -> background(result) { Preflight.report(this) }
             "reset" -> background(result) {
                 TunnelManager.reset()
                 GuardPolicy.clear(this)

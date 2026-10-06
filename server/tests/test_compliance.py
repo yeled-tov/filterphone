@@ -464,3 +464,19 @@ def test_keyword_changes_survive_dump_load_roundtrip(env):
     from filterphone.api.catalog import DeviceSettings
     s = DeviceSettings.load(row(svc, did)["policy"])
     assert s.keywords == {"enabled": False, "extra": ["zzz"]}
+
+
+def test_heartbeat_stores_capabilities_and_preflight(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    client.post("/v1/device/heartbeat", headers=dh, json={
+        "preflight": "REQUIRES_FACTORY_RESET",
+        "capabilities": {"sdk": 34, "manufacturer": "Samsung", "model": "SM-A546",
+                         "device_owner": False, "provisioning_allowed": False, "root": False,
+                         "always_on": True, "lockdown": True, "accessibility": True, "junk": 1}})
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    hb = d["heartbeat"]
+    assert hb["preflight"] == "REQUIRES_FACTORY_RESET"
+    assert hb["capabilities"]["model"] == "SM-A546" and hb["capabilities"]["always_on"] is True
+    assert "junk" not in hb["capabilities"]

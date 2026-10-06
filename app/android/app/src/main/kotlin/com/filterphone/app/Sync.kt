@@ -72,6 +72,11 @@ object Sync {
         }
         DeviceOwnerManager.report(context)?.let { o.put("dpc", it) }
         SelfUpdate.report(context)?.let { o.put("update", it) }
+        runCatching {
+            val caps = Preflight.capabilities(context)
+            o.put("capabilities", JSONObject(caps.toMap()))
+            o.put("preflight", Preflight.evaluate(caps).first.name)
+        }
         GuardPolicy.lastError(context)?.let { o.put("policy_error", it) }
         ProtectionState.time(context, ProtectionState.POLICY_SYNC).takeIf { it > 0 }
             ?.let { o.put("last_policy_sync", it / 1000) }
