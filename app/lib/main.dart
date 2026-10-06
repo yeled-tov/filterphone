@@ -1,9 +1,10 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'src/app_controller.dart';
 import 'src/screens/activation_screen.dart';
-import 'src/screens/home_screen.dart';
+import 'src/screens/app_shell.dart';
 import 'src/screens/pending_screen.dart';
 import 'src/screens/register_screen.dart';
 import 'src/screens/welcome_screen.dart';
@@ -38,7 +39,6 @@ class _FilterPhoneAppState extends State<FilterPhoneApp> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // חוזרים מההגדרות (אחרי התקנת התעודה / הפעלת always-on / המגן) — מרעננים מיד
     if (state != AppLifecycleState.resumed) return;
     if (widget.controller.phase == Phase.home) widget.controller.refresh();
     if (widget.controller.phase == Phase.pending) widget.controller.refreshPending();
@@ -66,7 +66,7 @@ class _FilterPhoneAppState extends State<FilterPhoneApp> with WidgetsBindingObse
           Phase.register => RegisterScreen(controller: widget.controller),
           Phase.activation => ActivationScreen(controller: widget.controller),
           Phase.pending => PendingScreen(controller: widget.controller),
-          Phase.home => HomeScreen(controller: widget.controller),
+          Phase.home => AppShell(controller: widget.controller),
           Phase.unsupported => const _Unsupported(),
         },
       ),
