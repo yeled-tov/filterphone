@@ -181,6 +181,9 @@ abstract class NativeBridge {
   /// קוד הפעלה שהגיע ב-QR של הקמת Device Owner: {code, api}, או null.
   Future<Map<String, String?>?> provisioningInfo();
   Future<void> clearProvisioning();
+
+  /// פתיחת ערוץ התמיכה ב-WhatsApp עם מזהה המכשיר ותקציר מצב ההגנה.
+  Future<void> openSupportWhatsApp(String number, String message);
 }
 
 /// מימוש דרך MethodChannel (אנדרואיד היום; אייפון — כשנוסיף את ה-Network Extension).
@@ -289,4 +292,8 @@ class ChannelNativeBridge implements NativeBridge {
 
   @override
   Future<void> clearProvisioning() => _call<bool>('clearProvisioning');
+
+  @override
+  Future<void> openSupportWhatsApp(String number, String message) =>
+      _call<bool>('openSupportWhatsApp', {'number': number, 'message': message});
 }
