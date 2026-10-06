@@ -2,6 +2,7 @@
 Description=FilterPhone — פרוקסי סינון (mitmproxy שקוף)
 After=network.target fp-engine.service redis-server.service
 Wants=fp-engine.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -20,7 +21,10 @@ ExecStart=/opt/filterphone/venv/bin/mitmdump \
 RuntimeDirectory=filterphone
 RuntimeDirectoryPreserve=yes
 Restart=always
-RestartSec=2
+RestartSec=1
+RestartSteps=5
+RestartMaxDelaySec=15
+TimeoutStopSec=15
 CPUWeight=120
 LimitNOFILE=65536
 MemoryMax=2G

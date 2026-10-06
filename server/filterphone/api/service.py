@@ -29,11 +29,12 @@ from pathlib import Path
 import redis
 
 from .. import protocol
-from ..proxy.policy import LEVELS_KEY, POLICY_KEY
+from ..proxy.policy import LEVELS_KEY, POLICY_KEY, POLICY_REV_KEY
 from ..settings import Settings
 from . import db, security
 from .adguard import AdGuard, build_rules
 from .catalog import CATALOG, LEVELS, Compiled, DeviceSettings, compile_settings, summary
+from .observe import REGISTRY as API_METRICS
 from .wg import WireGuard, WireGuardError
 
 log = logging.getLogger("filterphone.api")
@@ -42,8 +43,19 @@ LEVEL_NAMES = {k: v["name"] for k, v in LEVELS.items()}
 ONLINE_WINDOW_S = 180           # WireGuard מחדש handshake כל 2 דקות בערך
 EVENTS_KEY = "fp:events"
 PASSTHROUGH_KEY = "fp:pt"
+SYNC_MARK_KEY = "fp:policy:synced"     # נכתב בכל סנכרון מלא; אם נעלם — Redis אותחל, מסנכרנים שוב
 STAT_FIELDS = ("scanned", "block", "replace", "site", "video")
 MAX_REPORTED_APPS = 800
+LAST_SEEN_EVERY_S = 60                  # כתיבת last_seen_at למסד לכל היותר פעם בדקה למכשיר
+
+
+def observe_snapshot() -> dict[str, float]:
+    return API_METRICS.snapshot()
+
+
+def mask_phone(phone: str) -> str:
+    """ללוגים: '0501234567' → '…567'. מספר מלא נשמר רק במסד."""
+    return f"…{phone[-3:]}" if phone else ""
 
 STATUS_MESSAGES = {
     "pending": "הבקשה התקבלה ומחכה לאישור. נעדכן ברגע שהחיבור ייפתח.",
@@ -82,12 +94,19 @@ class Services:
     redis: redis.Redis
     adguard: AdGuard | None = None
     dirty: threading.Event = field(default_factory=threading.Event)   # משהו השתנה — לסנכרן DNS
+    redis_stale: bool = False           # כתיבה ל-Redis נכשלה — הסנכרון התקופתי יכתוב הכול מחדש
 
     def __post_init__(self) -> None:
         if self.adguard is None:
             self.adguard = AdGuard(self.cfg.adguard_url, self.cfg.adguard_user, self.cfg.adguard_password)
+        self.pool = db.Pool(self.cfg.db_path, size=self.cfg.db_pool_size)
+
+    def db(self):
+        """חיבור מהמאגר: with self.db() as c: ..."""
+        return self.pool.connection()
 
     def conn(self) -> sqlite3.Connection:
+        """חיבור נפרד (לכלי שורת הפקודה) — לסגור בעצמכם."""
         return db.connect(self.cfg.db_path)
 
     # ------------------------------------------------------------ תעודה
@@ -112,11 +131,11 @@ class Services:
         if c is not None:
             c.execute(sql, args)
             return
-        with db.closing(self.conn()) as c2:
+        with self.db() as c2:
             c2.execute(sql, args)
 
     def list_audit(self, limit: int = 100) -> list[dict]:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             rows = c.execute("SELECT * FROM audit ORDER BY id DESC LIMIT ?", (max(1, min(limit, 500)),))
             return [dict(r) for r in rows]
 
@@ -132,20 +151,23 @@ class Services:
         if not ip:
             return
         try:
+            pipe = self.redis.pipeline()
             if row["status"] == "active":
-                pipe = self.redis.pipeline()
                 pipe.hset(LEVELS_KEY, ip, row["level"])
                 pipe.hset(POLICY_KEY, ip, self.compiled(row).proxy_json(row["level"]))
-                pipe.execute()
             else:
-                self.redis.hdel(LEVELS_KEY, ip)
-                self.redis.hdel(POLICY_KEY, ip)
+                pipe.hdel(LEVELS_KEY, ip)
+                pipe.hdel(POLICY_KEY, ip)
+            pipe.incr(POLICY_REV_KEY)           # הפרוקסי טוען מחדש תוך 3 שניות
+            pipe.execute()
         except redis.RedisError as e:
+            # הסנכרון התקופתי (sync_redis_if_needed) יתקן — מסמנים שצריך
             log.error("redis policy sync failed for %s: %s", ip, e)
+            self.redis_stale = True
         self.dirty.set()
 
     def _active_devices(self) -> list[sqlite3.Row]:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             return c.execute("SELECT * FROM devices WHERE status = 'active' AND vpn_ip IS NOT NULL").fetchall()
 
     def sync_wireguard(self) -> tuple[int, int]:
@@ -154,14 +176,25 @@ class Services:
         return self.wg.reconcile({r["public_key"]: (r["preshared_key"], r["vpn_ip"]) for r in active})
 
     def sync_redis(self) -> None:
-        """כותב מחדש את טבלאות המדיניות שהפרוקסי קורא."""
+        """כותב מחדש את טבלאות המדיניות שהפרוקסי קורא (בטרנזקציה אחת — הפרוקסי לא רואה חצי טבלה)."""
         active = self._active_devices()
-        pipe = self.redis.pipeline()
+        pipe = self.redis.pipeline(transaction=True)
         pipe.delete(LEVELS_KEY, POLICY_KEY)
         if active:
             pipe.hset(LEVELS_KEY, mapping={r["vpn_ip"]: r["level"] for r in active})
             pipe.hset(POLICY_KEY, mapping={r["vpn_ip"]: self.compiled(r).proxy_json(r["level"]) for r in active})
+        pipe.incr(POLICY_REV_KEY)
+        pipe.set(SYNC_MARK_KEY, db.now())
         pipe.execute()
+        self.redis_stale = False
+
+    def sync_redis_if_needed(self) -> bool:
+        """אם Redis אותחל / נמחק (הסימון חסר), או שכתיבה קודמת נכשלה — סנכרון מלא. מחזיר True אם סונכרן."""
+        if not self.redis_stale and self.redis.exists(SYNC_MARK_KEY):
+            return False
+        log.warning("redis policy tables missing or stale — resyncing from the database")
+        self.sync_redis()
+        return True
 
     def adguard_rules(self) -> list[str]:
         return build_rules((r["vpn_ip"], self.compiled(r).hosts) for r in self._active_devices())
@@ -214,7 +247,7 @@ class Services:
         name = (name or "").strip()[:60] or "מכשיר"
         token = security.new_token()
         psk = security.new_preshared_key()
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM codes WHERE code_hash = ?", (security.code_hash(code),)).fetchone()
             if row is None or row["uses_left"] <= 0 or (row["expires_at"] and row["expires_at"] < db.now()):
                 raise ApiError(403, "קוד ההפעלה לא תקין או שפג תוקפו")
@@ -268,7 +301,7 @@ class Services:
         opts = sorted({o for o in options if o in CATALOG})
         note = security.clean_text(note, 1500, multiline=True)
         token = security.new_token()
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             pending = c.execute("SELECT count(*) FROM requests WHERE status = 'pending'").fetchone()[0]
             if pending >= self.cfg.max_pending:
                 raise ApiError(503, "יש כרגע עומס בקשות. נסו שוב מאוחר יותר.")
@@ -295,19 +328,22 @@ class Services:
                 " VALUES ('join',?,?,?,?,?,?)",
                 (device_id, customer_id, level, json.dumps(opts), note, t)).lastrowid
             self.audit(f"device:{device_id}", "register", f"request:{request_id}", f"{name} {phone_n}", c)
-        log.info("registration request %s from %s (device %s)", request_id, phone_n, device_id)
+        log.info("registration request %s from %s (device %s)", request_id, mask_phone(phone_n), device_id)
         return {"device_id": device_id, "token": token, "status": "pending", "request_id": request_id,
                 "message": STATUS_MESSAGES["pending"]}
 
     # ------------------------------------------------------------ מכשיר (מהאפליקציה)
 
     def device_by_token(self, token: str) -> sqlite3.Row:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             row = c.execute("SELECT * FROM devices WHERE token_hash = ?",
                             (security.token_hash(token),)).fetchone()
             if row is None:
                 raise ApiError(401, "המכשיר לא מזוהה")
-            c.execute("UPDATE devices SET last_seen_at = ? WHERE id = ?", (db.now(), row["id"]))
+            t = db.now()
+            # כתיבה למסד לכל היותר פעם בדקה למכשיר (טלפון פתוח שואל כל 20 שניות)
+            if not row["last_seen_at"] or t - row["last_seen_at"] >= LAST_SEEN_EVERY_S:
+                c.execute("UPDATE devices SET last_seen_at = ? WHERE id = ?", (t, row["id"]))
             return row
 
     def device_status(self, row: sqlite3.Row, client_ip: str = "") -> dict:
@@ -316,7 +352,7 @@ class Services:
             "level": row["level"], "level_name": LEVEL_NAMES.get(row["level"], ""),
             "server_time": db.now(), "message": STATUS_MESSAGES.get(row["status"], ""),
         }
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             req = c.execute("SELECT id, kind, status, admin_note, created_at, resolved_at FROM requests"
                             " WHERE device_id = ? ORDER BY id DESC LIMIT 1", (row["id"],)).fetchone()
         if req is not None:
@@ -328,7 +364,7 @@ class Services:
             return out
         settings = DeviceSettings.load(row["policy"])
         comp = compile_settings(row["level"], settings)
-        today = self.daily_stats().get(row["vpn_ip"], {})
+        today = self.device_stats(row["vpn_ip"])
         out.update({
             "vpn_ip": row["vpn_ip"],
             # הבקשה הגיעה מכתובת ה-VPN של המכשיר = התעבורה באמת עוברת במנהרה ובסינון
@@ -357,7 +393,7 @@ class Services:
         note = security.clean_text(note, 1500, multiline=True)
         if level is None and options is None and not note:
             raise ApiError(400, "הבקשה ריקה")
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             old = c.execute("SELECT id FROM requests WHERE device_id = ? AND kind = 'change' AND status = 'pending'",
                             (row["id"],)).fetchone()
             if old is not None:     # בקשה פתוחה — מעדכנים אותה במקום לפתוח עוד אחת
@@ -376,7 +412,7 @@ class Services:
         """ביטול הרשמה שעוד לא אושרה (מהאפליקציה). מכשיר פעיל לא יכול למחוק את עצמו."""
         if row["status"] not in ("pending", "rejected"):
             raise ApiError(403, "אפשר לבטל רק בקשה שעוד לא אושרה")
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             c.execute("UPDATE requests SET status = 'cancelled', resolved_at = ? WHERE device_id = ?"
                       " AND status = 'pending'", (db.now(), row["id"]))
             c.execute("DELETE FROM devices WHERE id = ?", (row["id"],))
@@ -402,7 +438,7 @@ class Services:
             sets += ["guard = ?", "guard_at = ?"]
             args += [json.dumps(g), db.now()]
         if sets:
-            with db.closing(self.conn()) as c:
+            with self.db() as c:
                 c.execute(f"UPDATE devices SET {', '.join(sets)} WHERE id = ?", (*args, row["id"]))
         return {"ok": True}
 
@@ -420,7 +456,7 @@ class Services:
             sql += " WHERE r.status = ?"
             args = (status,)
         sql += " ORDER BY r.id DESC LIMIT ?"
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             rows = c.execute(sql, (*args, max(1, min(limit, 1000)))).fetchall()
         out = []
         for r in rows:
@@ -438,7 +474,7 @@ class Services:
         decision: level, options, custom_hosts, allow_hosts, custom_apps, app_images, payment, paid_until,
                   admin_note — מה שהמנהל קבע בפועל (ברירת מחדל: מה שהלקוח ביקש).
         """
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             req = c.execute("SELECT * FROM requests WHERE id = ?", (request_id,)).fetchone()
             if req is None:
                 raise ApiError(404, "בקשה לא נמצאה")
@@ -486,7 +522,7 @@ class Services:
         return {"device_id": new["id"], "status": new["status"], "vpn_ip": new["vpn_ip"]}
 
     def reject_request(self, request_id: int, admin: str, note: str) -> None:
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             req = c.execute("SELECT * FROM requests WHERE id = ?", (request_id,)).fetchone()
             if req is None:
                 raise ApiError(404, "בקשה לא נמצאה")
@@ -532,7 +568,7 @@ class Services:
             c.execute(f"UPDATE customers SET {', '.join(sets)} WHERE id = ?", (*args, customer_id))
 
     def update_customer(self, customer_id: int, changes: dict, admin: str) -> dict:
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             if c.execute("SELECT 1 FROM customers WHERE id = ?", (customer_id,)).fetchone() is None:
                 raise ApiError(404, "לקוח לא נמצא")
             self._update_customer(c, customer_id, changes)
@@ -541,7 +577,7 @@ class Services:
             return dict(c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone())
 
     def list_customers(self) -> list[dict]:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             rows = c.execute(
                 "SELECT c.*, (SELECT count(*) FROM devices d WHERE d.customer_id = c.id) AS devices,"
                 " (SELECT count(*) FROM devices d WHERE d.customer_id = c.id AND d.status = 'active') AS active"
@@ -575,7 +611,7 @@ class Services:
             peers = {}
         stats = self.daily_stats()
         t = db.now()
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             rows = c.execute("SELECT * FROM devices ORDER BY id DESC").fetchall()
             customers = {r["id"]: dict(r) for r in c.execute("SELECT * FROM customers")}
         out = []
@@ -588,14 +624,14 @@ class Services:
         return out
 
     def device_row(self, device_id: int) -> sqlite3.Row:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             r = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
         if r is None:
             raise ApiError(404, "מכשיר לא נמצא")
         return r
 
     def device_detail(self, device_id: int) -> dict:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             r = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
             if r is None:
                 raise ApiError(404, "מכשיר לא נמצא")
@@ -633,7 +669,7 @@ class Services:
             raise ApiError(400, "סטטוס לא חוקי")
         policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_images")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
             if row is None:
                 raise ApiError(404, "מכשיר לא נמצא")
@@ -661,7 +697,7 @@ class Services:
         return dict(new)
 
     def delete_device(self, device_id: int, admin: str = "admin") -> None:
-        with db.closing(self.conn()) as c, db.transaction(c):
+        with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
             if row is None:
                 raise ApiError(404, "מכשיר לא נמצא")
@@ -673,8 +709,15 @@ class Services:
                 except WireGuardError as e:
                     log.warning("remove peer failed (continuing): %s", e)
         if row["vpn_ip"]:
-            self.redis.hdel(LEVELS_KEY, row["vpn_ip"])
-            self.redis.hdel(POLICY_KEY, row["vpn_ip"])
+            try:
+                pipe = self.redis.pipeline()
+                pipe.hdel(LEVELS_KEY, row["vpn_ip"])
+                pipe.hdel(POLICY_KEY, row["vpn_ip"])
+                pipe.incr(POLICY_REV_KEY)
+                pipe.execute()
+            except redis.RedisError as e:
+                log.error("redis cleanup failed for deleted device %s: %s", device_id, e)
+                self.redis_stale = True
             self.clear_passthrough(row["vpn_ip"])
         self.dirty.set()
 
@@ -704,7 +747,7 @@ class Services:
         uses = max(1, min(int(uses), 100))
         code = security.new_code()
         expires = db.now() + int(expires_days) * 86400 if expires_days else None
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             cur = c.execute(
                 "INSERT INTO codes (code_hash, hint, label, level, uses_left, expires_at, created_at)"
                 " VALUES (?,?,?,?,?,?,?)",
@@ -713,17 +756,26 @@ class Services:
                 "uses_left": uses, "expires_at": expires}
 
     def list_codes(self) -> list[dict]:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             rows = c.execute("SELECT id, hint, label, level, uses_left, expires_at, created_at FROM codes"
                              " ORDER BY id DESC").fetchall()
         return [dict(r) for r in rows]
 
     def delete_code(self, code_id: int) -> None:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             if c.execute("DELETE FROM codes WHERE id = ?", (code_id,)).rowcount == 0:
                 raise ApiError(404, "קוד לא נמצא")
 
     # ------------------------------------------------------------ אירועים וסטטיסטיקה
+
+    def device_stats(self, ip: str, day: str | None = None) -> dict[str, int]:
+        """הסטטיסטיקה היומית של מכשיר אחד (HMGET — לא כל המכשירים)."""
+        day = day or time.strftime("%Y%m%d")
+        try:
+            vals = self.redis.hmget(f"fp:stats:{day}", [f"{ip}|{k}" for k in STAT_FIELDS])
+        except redis.RedisError:
+            return {}
+        return {k: int(v) for k, v in zip(STAT_FIELDS, vals, strict=True) if v is not None}
 
     def daily_stats(self, day: str | None = None) -> dict[str, dict[str, int]]:
         day = day or time.strftime("%Y%m%d")
@@ -753,7 +805,7 @@ class Services:
                                            max(1, min(limit, 500)))
         except redis.RedisError:
             return []
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             names = {r["vpn_ip"]: (r["id"], r["name"]) for r in
                      c.execute("SELECT id, vpn_ip, name FROM devices WHERE vpn_ip IS NOT NULL")}
         out = []
@@ -778,7 +830,7 @@ class Services:
             for k, v in d["today"].items():
                 totals[k] = totals.get(k, 0) + v
         t = db.now()
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             pending = c.execute("SELECT kind, count(*) AS n FROM requests WHERE status = 'pending'"
                                 " GROUP BY kind").fetchall()
             expiring = c.execute("SELECT count(*) FROM customers WHERE payment = 'paid' AND paid_until IS NOT NULL"
@@ -803,11 +855,13 @@ class Services:
             raise ApiError(400, "לא התקבלה תמונה")
         try:
             header, body = protocol.call_sync(self.cfg.engine_socket, {"op": "explain", "level": level}, data,
-                                              timeout=60)
+                                              timeout=70)
         except (OSError, protocol.ProtocolError) as e:
-            raise ApiError(503, f"מנוע הסינון לא זמין: {e}") from e
+            log.error("engine explain failed: %s", e)
+            raise ApiError(503, "מנוע הסינון לא זמין כרגע") from e
         if not header.get("ok"):
-            raise ApiError(500, header.get("error") or "שגיאה במנוע")
+            log.error("engine explain error: %s", header.get("error"))
+            raise ApiError(500, "המנוע לא הצליח לבדוק את התמונה")
         ct = header.get("ct") or ""
         result = None
         if header.get("action") in ("block", "replace") and body:
@@ -815,10 +869,96 @@ class Services:
         return {"info": header["info"], "action": header.get("action"), "result_image": result,
                 "bytes": len(data)}
 
+    # ------------------------------------------------------------ בריאות ומדדים
+
+    def readiness(self) -> dict[str, bool]:
+        """בדיקת מוכנות: כל רכיב בנפרד. db ו-redis חיוניים ל-API; השאר — לניטור."""
+        checks: dict[str, bool] = {}
+        try:
+            with self.db() as c:
+                c.execute("SELECT 1").fetchone()
+            checks["db"] = True
+        except Exception:
+            checks["db"] = False
+        try:
+            checks["redis"] = bool(self.redis.ping())
+        except redis.RedisError:
+            checks["redis"] = False
+        engine = self.engine_metrics(max_age_s=0)
+        checks["engine"] = bool(engine and engine.get("healthy"))
+        try:
+            self.wg.public_key()
+            checks["wireguard"] = True
+        except WireGuardError:
+            checks["wireguard"] = False
+        assert self.adguard is not None
+        checks["adguard"] = not self.adguard.enabled or not self.adguard.last_error
+        return checks
+
+    _engine_cache: tuple[float, dict | None] = (0.0, None)
+
+    def engine_metrics(self, max_age_s: float = 5.0) -> dict | None:
+        """מדדי המנוע (דרך ה-socket שלו, עד 1.5 שניות). None = המנוע לא עונה."""
+        at, cached = self._engine_cache
+        if max_age_s and time.monotonic() - at < max_age_s:
+            return cached
+        try:
+            header, _ = protocol.call_sync(self.cfg.engine_socket, {"op": "metrics"}, b"", timeout=1.5)
+            result = header if header.get("ok") else None
+        except (OSError, protocol.ProtocolError, ValueError):
+            result = None
+        self._engine_cache = (time.monotonic(), result)
+        return result
+
+    def device_counts(self) -> dict[str, int]:
+        with self.db() as c:
+            rows = c.execute("SELECT status, count(*) AS n FROM devices GROUP BY status").fetchall()
+        out = {r["status"]: r["n"] for r in rows}
+        try:
+            peers = self.wg.peers()
+        except WireGuardError:
+            peers = {}
+        t = db.now()
+        out["online"] = sum(1 for p in peers.values() if p.latest_handshake and t - p.latest_handshake < ONLINE_WINDOW_S)
+        return out
+
+    def device_metrics_text(self) -> str:
+        counts = self.device_counts()
+        lines = ["# HELP fp_devices מכשירים לפי סטטוס", "# TYPE fp_devices gauge"]
+        lines += [f'fp_devices{{status="{k}"}} {v}' for k, v in sorted(counts.items())]
+        return "\n".join(lines) + "\n"
+
+    def system_status(self) -> dict:
+        engine = self.engine_metrics()
+        proxy = self.proxy_metrics()
+        assert self.adguard is not None
+        return {
+            "checks": self.readiness(),
+            "devices": self.device_counts(),
+            "engine": engine["metrics"] if engine else None,
+            "proxy": proxy,
+            "api": observe_snapshot(),
+            "adguard": self.adguard.state(),
+            "server_time": db.now(),
+        }
+
+    def proxy_metrics(self) -> dict[str, float] | None:
+        try:
+            raw = self.redis.hgetall("fp:metrics:proxy")
+        except redis.RedisError:
+            return None
+        out = {}
+        for k, v in raw.items():
+            try:
+                out[k] = float(v)
+            except ValueError:
+                continue
+        return out or None
+
     # ------------------------------------------------------------ מנהלים
 
     def admin_login(self, username: str, password: str) -> dict:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             row = c.execute("SELECT * FROM admins WHERE username = ?", (username.strip(),)).fetchone()
             if row is None or not security.verify_password(row["password_hash"], password):
                 raise ApiError(401, "שם משתמש או סיסמה שגויים")
@@ -830,7 +970,7 @@ class Services:
         return {"token": token, "expires_at": expires, "username": row["username"]}
 
     def admin_by_token(self, token: str) -> sqlite3.Row:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             row = c.execute(
                 "SELECT a.* FROM admin_sessions s JOIN admins a ON a.id = s.admin_id"
                 " WHERE s.token_hash = ? AND s.expires_at > ?", (security.token_hash(token), db.now())).fetchone()
@@ -839,13 +979,13 @@ class Services:
         return row
 
     def admin_logout(self, token: str) -> None:
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             c.execute("DELETE FROM admin_sessions WHERE token_hash = ?", (security.token_hash(token),))
 
     def set_admin(self, username: str, password: str) -> None:
         if len(password) < 10:
             raise ApiError(400, "סיסמה קצרה מדי (לפחות 10 תווים)")
-        with db.closing(self.conn()) as c:
+        with self.db() as c:
             c.execute("INSERT INTO admins (username, password_hash, created_at) VALUES (?,?,?)"
                       " ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash",
                       (username, security.hash_password(password), db.now()))

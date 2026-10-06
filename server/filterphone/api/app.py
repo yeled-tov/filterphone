@@ -11,6 +11,8 @@
     POST /v1/device/report      — דיווח: אפליקציות מותקנות + מצב ההגנה בטלפון
     GET  /v1/ca.crt             — תעודת הסינון להתקנה בטלפון
 ניהול (טוקן מנהל): /v1/admin/...      ממשק הניהול: /admin
+ניטור: /health (התהליך חי), /ready (מסד, Redis, מנוע, WireGuard, AdGuard), /metrics (Prometheus —
+       חסום ב-Caddy, רק מתוך השרת).
 """
 from __future__ import annotations
 
@@ -27,12 +29,13 @@ from typing import Annotated, Any
 import redis
 from fastapi import Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .. import logs, metrics
 from ..settings import get_settings
-from . import db
+from . import db, observe
 from .catalog import admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
 from .security import RateLimiter
@@ -55,8 +58,14 @@ device_limiter = RateLimiter(limit=30, window_s=600)       # בקשות שינו
 def build_services() -> Services:
     cfg = get_settings()
     db.init(cfg.db_path)
-    return Services(cfg, WireGuard(cfg.wg_interface),
-                    redis.Redis.from_url(cfg.redis_url, decode_responses=True, socket_timeout=2))
+    # מאגר חיבורים משותף לכל החוטים; ניסיון חוזר עם השהיה הולכת וגדלה בתקלה רגעית
+    from redis.backoff import ExponentialBackoff
+    from redis.retry import Retry
+    r = redis.Redis.from_url(cfg.redis_url, decode_responses=True, socket_timeout=2, socket_connect_timeout=2,
+                             max_connections=64, health_check_interval=30,
+                             retry=Retry(ExponentialBackoff(cap=1.0, base=0.05), 3),
+                             retry_on_error=[redis.ConnectionError, redis.TimeoutError])
+    return Services(cfg, WireGuard(cfg.wg_interface), r)
 
 
 RECONCILE_EVERY_S = 60
@@ -86,6 +95,10 @@ async def _keep_in_sync(svc: Services) -> None:
                     log.warning("wireguard drift repaired: +%d -%d", added, removed)
             except Exception as e:
                 log.error("wireguard reconcile failed: %s", e)
+            try:
+                await asyncio.to_thread(svc.sync_redis_if_needed)
+            except Exception as e:
+                log.error("redis policy resync failed: %s", e)
         if dirty or now - last_dns >= ADGUARD_EVERY_S:
             svc.dirty.clear()
             last_dns = now
@@ -101,19 +114,34 @@ async def lifespan(app: FastAPI):
     yield
     task.cancel()
     app.state.svc.dirty.set()           # מעיר את החוט שמחכה, כדי שהכיבוי לא יתעכב
+    app.state.svc.pool.close()
 
 
 def create_app(svc: Services | None = None) -> FastAPI:
-    if not logging.getLogger().handlers:      # uvicorn מגדיר רק את הלוגרים שלו
-        logging.basicConfig(level=os.environ.get("FP_LOG_LEVEL", "INFO"),
-                            format="%(levelname)s %(name)s: %(message)s")
-    app = FastAPI(title="FilterPhone API", version="2.1", lifespan=lifespan,
+    logs.setup(os.environ.get("FP_LOG_LEVEL", "INFO"))
+    app = FastAPI(title="FilterPhone API", version="2.2", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
     app.state.svc = svc or build_services()
+    cfg = app.state.svc.cfg
 
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, e: ApiError):
         return JSONResponse({"error": e.message}, status_code=e.status)
+
+    @app.exception_handler(observe.BodyTooLarge)
+    async def _too_large(_: Request, e: observe.BodyTooLarge):
+        return JSONResponse({"error": "הבקשה גדולה מדי"}, status_code=413)
+
+    @app.exception_handler(db.PoolTimeout)
+    async def _busy(_: Request, e: db.PoolTimeout):
+        return JSONResponse({"error": "השרת עמוס כרגע. נסו שוב בעוד רגע"}, status_code=503,
+                            headers={"Retry-After": "5"})
+
+    @app.exception_handler(redis.RedisError)
+    async def _redis_down(_: Request, e: redis.RedisError):
+        log.error("redis error: %s", e)
+        return JSONResponse({"error": "השרת לא זמין כרגע. נסו שוב בעוד רגע"}, status_code=503,
+                            headers={"Retry-After": "10"})
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(_: Request, e: RequestValidationError):
@@ -140,6 +168,11 @@ def create_app(svc: Services | None = None) -> FastAPI:
 
     _routes(app)
     app.mount("/admin/static", StaticFiles(directory=STATIC), name="static")
+    # הסדר: המדדים עוטפים הכול (גם 413), ומגבלת הגוף לפני קריאת ה-JSON
+    app.add_middleware(observe.BodyLimit, default=cfg.max_body_bytes,
+                       overrides={"/v1/admin/test-image": int(cfg.max_image_bytes * 1.4) + 4096,
+                                  "/v1/device/report": 2_000_000})
+    app.add_middleware(observe.RequestMetrics)
     return app
 
 
@@ -280,7 +313,29 @@ class TestImageIn(BaseModel):
 def _routes(app: FastAPI) -> None:
     @app.get("/health")
     def health():
+        """liveness: התהליך חי ועונה. בלי בדיקת תלויות (כדי שתקלה ב-Redis לא תגרום להפעלה מחדש)."""
         return {"ok": True}
+
+    @app.get("/ready")
+    def ready(svc: SvcDep):
+        """readiness: מסד ו-Redis חיוניים; מנוע / WireGuard / AdGuard — מדווחים, לא חוסמים."""
+        checks = svc.readiness()
+        ok = checks["db"] and checks["redis"]
+        return JSONResponse({"ready": ok, "checks": checks}, status_code=200 if ok else 503)
+
+    @app.get("/metrics")
+    def metrics_(svc: SvcDep):
+        """Prometheus. Caddy חוסם את הנתיב מבחוץ — נגיש רק מתוך השרת."""
+        parts = [observe.REGISTRY.render(), svc.device_metrics_text()]
+        engine = svc.engine_metrics()
+        parts.append(f"fp_engine_up {1 if engine else 0}\n")
+        if engine:
+            parts.append(metrics.render_snapshot(engine["metrics"], "engine"))
+        proxy = svc.proxy_metrics()
+        if proxy:
+            parts.append(metrics.render_snapshot({k: v for k, v in proxy.items() if not k.startswith("_")},
+                                                 "proxy"))
+        return Response("".join(parts), media_type="text/plain; version=0.0.4")
 
     @app.get("/")
     def root():
@@ -468,6 +523,11 @@ def _routes(app: FastAPI) -> None:
     @app.get("/v1/admin/levels")
     def levels(_: AdminRow):
         return LEVEL_NAMES
+
+    @app.get("/v1/admin/system")
+    def system(svc: SvcDep, _: AdminRow):
+        """מצב השרת לממשק הניהול: רכיבים, מדדי המנוע והפרוקסי, ומצב המכשירים."""
+        return svc.system_status()
 
     # --- ממשק הניהול ---
 

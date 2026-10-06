@@ -2,17 +2,27 @@
 Description=FilterPhone — מנוע זיהוי תמונות (SigLIP2 + NudeNet)
 After=network.target redis-server.service
 Wants=redis-server.service
+# בלי "ויתור" אחרי כמה קריסות רצופות — ממשיכים לנסות, עם השהיה הולכת וגדלה (RestartSteps)
+StartLimitIntervalSec=0
 
 [Service]
-Type=simple
+# READY=1 אחרי טעינת המודלים; WATCHDOG=1 כל 15 שניות כל עוד המנוע מתקדם — אחרת הפעלה מחדש
+Type=notify
+NotifyAccess=main
+WatchdogSec=40
+TimeoutStartSec=180
+TimeoutStopSec=20
 User=filterphone
 Group=filterphone
+Environment=FP_LOG_FORMAT=json
 EnvironmentFile=-/etc/filterphone/filterphone.env
 ExecStart=/opt/filterphone/venv/bin/python -m filterphone.engine.service
 RuntimeDirectory=filterphone
 RuntimeDirectoryPreserve=yes
 Restart=always
-RestartSec=2
+RestartSec=1
+RestartSteps=6
+RestartMaxDelaySec=30
 # המנוע מוותר על מעבד לטובת הפרוקסי כשיש עומס
 CPUWeight=80
 MemoryMax=3G

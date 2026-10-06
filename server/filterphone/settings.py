@@ -37,6 +37,9 @@ class Settings:
     min_side_px: int = 64               # תמונה שהצלע הקצרה שלה קטנה מזה לא נבדקת
     max_image_bytes: int = 12_000_000
     max_decode_side: int = 1024
+    engine_max_inflight: int = 16       # תמונות בעיבוד בו-זמנית (מעבר לזה — ממתינות בתור)
+    engine_max_queue: int = 64          # תור מלא = דחייה מיידית לפי מדיניות הכשל של הרמה
+    engine_job_timeout_s: float = 10.0  # תקרה לתמונה אחת, גם אם הפונה מוכן לחכות יותר
 
     # --- פרוקסי ---
     engine_timeout_s: float = 6.0
@@ -56,6 +59,12 @@ class Settings:
     mitm_ca_cert: str = "/var/lib/filterphone/mitmproxy/mitmproxy-ca-cert.pem"
     register_enabled: bool = True       # הרשמה עצמית מהאפליקציה (בקשת הצטרפות)
     max_pending: int = 300              # תקרת בקשות ממתינות — הגנה מהצפה
+    db_pool_size: int = 8
+    max_body_bytes: int = 1_000_000     # גוף בקשה רגילה; בדיקת תמונה בממשק — עד max_image_bytes × 1.4
+    heartbeat_interval_s: int = 900     # כל כמה זמן הטלפון מדווח (JobScheduler: מינימום 15 דקות)
+    offline_after_s: int = 1800         # בלי דיווח ובלי handshake יותר מזה — "לא מחובר"
+    lost_after_s: int = 172_800         # בלי שום קשר יומיים — אדום ("אין קשר")
+    sync_grace_s: int = 1500            # מדיניות שלא אושרה ע"י הטלפון יותר מזה — "סנכרון מתעכב"
 
     # --- AdGuard (שכבת ה-DNS של החסימות לפי מכשיר). בלי משתמש/סיסמה — רק הפרוקסי אוכף ---
     adguard_url: str = "http://127.0.0.1:3002"

@@ -20,7 +20,21 @@ __PUBLIC_HOST__ {
     }
     redir /download /download/ 308
 
+    # מדדים פנימיים — רק מתוך השרת (curl http://127.0.0.1:8090/metrics)
+    handle /metrics {
+        respond 404
+    }
+
     handle {
-        reverse_proxy 127.0.0.1:8090
+        # תמונה לבדיקה בממשק הניהול: עד ~17MB (base64). כל השאר — ה-API מגביל לבד
+        request_body {
+            max_size 20MB
+        }
+        reverse_proxy 127.0.0.1:8090 {
+            transport http {
+                read_timeout 90s
+                write_timeout 90s
+            }
+        }
     }
 }

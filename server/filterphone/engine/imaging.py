@@ -2,19 +2,29 @@
 from __future__ import annotations
 
 import io
+import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 
-# הגנה מפני "פצצות דחיסה" — תמונה קטנה בבייטים שנפתחת לענקית בזיכרון
-Image.MAX_IMAGE_PIXELS = 50_000_000
+# הגנה מפני "פצצות דחיסה" — תמונה קטנה בבייטים שנפתחת לענקית בזיכרון.
+# Pillow רק מזהיר בין התקרה לפעמיים התקרה; כאן כל חריגה היא שגיאה (= "לא ניתן לבדוק").
+Image.MAX_IMAGE_PIXELS = 40_000_000
+warnings.simplefilter("error", Image.DecompressionBombWarning)
 
-_DECODE_ERRORS = (UnidentifiedImageError, OSError, ValueError, SyntaxError,
-                  Image.DecompressionBombError, EOFError)
+_DECODE_ERRORS = (UnidentifiedImageError, OSError, ValueError, SyntaxError, TypeError, MemoryError,
+                  Image.DecompressionBombError, Image.DecompressionBombWarning, EOFError)
+
+# רק פורמטים של תמונות ברשת. מפענחים אקזוטיים (PSD, TGA, PCX, FITS...) = משטח תקיפה מיותר.
+# (MPO — JPEG מרובה תמונות — נפתח דרך JPEG.)
+Image.init()
+FORMATS = tuple(f for f in ("JPEG", "PNG", "GIF", "WEBP", "BMP", "AVIF", "HEIF", "ICO") if f in Image.OPEN)
 
 MAX_FRAMES = 3                  # בתמונה מונפשת: ראשון, אמצעי ואחרון
+# באנימציה כל פריים מפוענח מהקודם לו — תקרה על סך הפיקסלים שמפענחים (פריימים × גודל)
+MAX_ANIMATION_PIXELS = 16_000_000
 TILE_ASPECT = 2.0               # מעל יחס כזה (באנר ארוך) בודקים גם חלקים
 
 
@@ -53,15 +63,20 @@ def _shrink(im: Image.Image, max_side: int) -> Image.Image:
 
 
 def decode(data: bytes, max_side: int = 1024) -> Decoded | None:
-    """מפענח תמונה. מחזיר None אם הפורמט לא נתמך או שהקובץ פגום."""
+    """מפענח תמונה. מחזיר None אם הפורמט לא נתמך, הקובץ פגום או גדול מדי (פצצת דחיסה)."""
     try:
-        im = Image.open(io.BytesIO(data))
+        im = Image.open(io.BytesIO(data), formats=FORMATS)
         width, height = im.size
+        if width <= 0 or height <= 0 or width * height > Image.MAX_IMAGE_PIXELS:
+            return None
         fmt = im.format
-        n_frames = getattr(im, "n_frames", 1) or 1
+        n_frames = getattr(im, "n_frames", 1) or 1       # ב-GIF: מעבר על הכותרות בלבד, בלי פענוח
 
         if n_frames > 1:
-            picks = sorted({0, n_frames // 2, n_frames - 1})[:MAX_FRAMES]
+            # כל פריים באנימציה מפוענח מהקודם לו — מגבילים כמה רחוק מגיעים
+            reach = max(1, MAX_ANIMATION_PIXELS // (width * height))
+            last = min(n_frames - 1, reach - 1)
+            picks = sorted({0, last // 2, last})[:MAX_FRAMES]
             frames = []
             for i in picks:
                 im.seek(i)
@@ -217,7 +232,7 @@ def placeholder(width: int = 8, height: int = 8) -> bytes:
 def image_size(data: bytes) -> tuple[int, int] | None:
     """מידות התמונה מהכותרת בלבד (בלי פענוח מלא)."""
     try:
-        return Image.open(io.BytesIO(data)).size
+        return Image.open(io.BytesIO(data), formats=FORMATS).size
     except _DECODE_ERRORS:
         return None
 

@@ -62,6 +62,8 @@ class AdGuard:
     last_ok: float = 0.0
     last_error: str = ""
     rules: int = 0
+    failures: int = 0                   # כשלונות רצופים — לניסיון הבא אחרי השהיה הולכת וגדלה
+    retry_at: float = 0.0
     _applied: list[str] | None = None
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -82,11 +84,15 @@ class AdGuard:
         return json.loads(raw) if raw.strip() else None
 
     def sync(self, ours: list[str], force: bool = False) -> bool:
-        """כותב את הכללים אם השתנו. מחזיר True אם נכתב משהו."""
+        """כותב את הכללים אם השתנו. מחזיר True אם נכתב משהו.
+
+        AdGuard לא זמין: מנסים שוב אחרי 5 שניות, 10, 20... עד 5 דקות (בלי להציף אותו בניסיונות)."""
         if not self.enabled:
             return False
         with self._lock:
             if not force and self._applied == ours:
+                return False
+            if not force and time.monotonic() < self.retry_at:
                 return False
             try:
                 status = self._request("GET", "/filtering/status") or {}
@@ -97,14 +103,17 @@ class AdGuard:
                     self._request("POST", "/filtering/set_rules", {"rules": merged})
                 self._applied = list(ours)
                 self.last_ok, self.last_error, self.rules = time.time(), "", len(ours)
+                self.failures, self.retry_at = 0, 0.0
                 if changed:
                     log.info("adguard: %d per-device rules applied", len(ours))
                 return changed
             except (urllib.error.URLError, OSError, ValueError) as e:
                 self.last_error = str(getattr(e, "reason", e))[:200]
-                log.warning("adguard sync failed: %s", self.last_error)
+                self.failures += 1
+                self.retry_at = time.monotonic() + min(300.0, 5.0 * 2 ** (self.failures - 1))
+                log.warning("adguard sync failed (%d in a row): %s", self.failures, self.last_error)
                 return False
 
     def state(self) -> dict:
         return {"enabled": self.enabled, "last_ok": int(self.last_ok) or None,
-                "error": self.last_error, "rules": self.rules}
+                "error": self.last_error, "rules": self.rules, "failures": self.failures}

@@ -21,12 +21,14 @@ import redis.asyncio as aioredis
 from mitmproxy import http, tls
 from mitmproxy.proxy import server_hooks
 
+from .. import metrics
 from ..engine.imaging import PLACEHOLDER_PNG
 from ..engine.policy import Action, on_failure
 from ..settings import get_settings
 from . import inline, rewrite
 from .blockpage import block_page
-from .client import EngineClient
+from .bodies import bounded_content
+from .client import EngineClient, EngineUnavailable
 from .hosts import HostPolicy, load_lists
 from .policy import DevicePolicy, PolicyTable
 
@@ -38,8 +40,11 @@ GENERIC_TYPES = ("", "application/octet-stream", "binary/octet-stream")
 VIDEO_TYPES = ("application/vnd.apple.mpegurl", "application/x-mpegurl", "application/dash+xml",
                "application/vnd.yt-ump", "application/vnd.ms-sstr+xml")
 MAX_INLINE_BYTES = 4_000_000
+MAX_INLINE_DECODED = 16_000_000     # דף אחרי פריסת gzip/br — מעבר לזה לא סורקים (פצצת דחיסה)
 PASSTHROUGH_KEY = "fp:pt"
 EVENTS_KEY = "fp:events"
+METRICS_KEY = "fp:metrics:proxy"
+METRICS_EVERY_S = 15
 HOST_EVENT_EVERY_S = 60             # חסימת אתר נרשמת פעם בדקה לכל (מכשיר, אתר) — לא על כל בקשה
 PLACEHOLDER_HEADERS_DROP = ("etag", "last-modified", "content-md5", "content-range",
                             "accept-ranges", "content-encoding", "digest")
@@ -96,10 +101,21 @@ class FilterPhone:
         self.engine = EngineClient(self.cfg.engine_socket, self.cfg.engine_pool_size,
                                    self.cfg.engine_timeout_s)
         self.redis = aioredis.from_url(self.cfg.redis_url, decode_responses=True,
-                                       socket_timeout=1.0, socket_connect_timeout=1.0)
+                                       socket_timeout=1.0, socket_connect_timeout=1.0,
+                                       max_connections=64, health_check_interval=30)
         self.policies = PolicyTable(self.redis, self.cfg.default_level)
         self._background: set[asyncio.Task] = set()
         self._host_events: dict[tuple[str, str], float] = {}
+        m = self.metrics = metrics.Registry("fp_proxy")
+        self.m_images = m.counter("images_total", "תמונות שנבדקו, לפי תוצאה")
+        self.m_engine_errors = m.counter("engine_errors_total", "כשלים בפנייה למנוע, לפי סוג")
+        self.m_engine_latency = m.histogram("engine_seconds", "זמן תשובה של המנוע (כולל המתנה לחיבור)")
+        self.m_sites = m.counter("blocked_sites_total", "בקשות לאתרים חסומים")
+        self.m_inline = m.counter("inline_pages_total", "דפים שנסרקו לתמונות מוטמעות, לפי תוצאה")
+        self.m_oversize = m.counter("oversize_bodies_total", "גופים שלא נפרסו (גדולים מדי / קידוד לא מוכר)")
+        self.m_video = m.counter("blocked_video_total", "בקשות וידאו שנחסמו")
+        self.m_circuit = m.gauge("engine_circuit_open", "1 = המפסק למנוע פתוח")
+        self.m_devices = m.gauge("policy_devices", "מכשירים בטבלת המדיניות")
 
     # ------------------------------------------------------------ מחזור חיים
 
@@ -111,11 +127,13 @@ class FilterPhone:
             log.warning("initial policy load failed: %s", e)
         self._spawn(self.policies.run())
         self._spawn(self._reload_learned_forever())
+        self._spawn(self._publish_metrics_forever())
         log.info("FilterPhone proxy ready (%d learned passthrough hosts)", self.hosts.learned_count())
 
     async def done(self) -> None:
         for t in list(self._background):
             t.cancel()
+        self.engine.close_idle()
         await self.redis.aclose()
 
     def _spawn(self, coro) -> None:
@@ -145,6 +163,28 @@ class FilterPhone:
         while True:
             await asyncio.sleep(60)
             await self._load_learned()
+
+    async def _publish_metrics_forever(self) -> None:
+        """המדדים של הפרוקסי ל-Redis — ה-API מציג אותם ב-/metrics ובממשק הניהול."""
+        while True:
+            await asyncio.sleep(METRICS_EVERY_S)
+            await self.publish_metrics()
+
+    async def publish_metrics(self) -> None:
+        self.m_circuit.set(1 if self.engine.breaker.is_open else 0)
+        self.m_devices.set(len(self.policies))
+        snap = {k: str(v) for k, v in self.metrics.snapshot().items()}
+        snap["_ts"] = str(int(time.time()))
+        snap["fp_proxy_memory_bytes"] = str(metrics.process_memory_bytes())
+        snap["fp_proxy_learned_hosts"] = str(self.hosts.learned_count())
+        try:
+            async with self.redis.pipeline(transaction=True) as p:
+                p.delete(METRICS_KEY)
+                p.hset(METRICS_KEY, mapping=snap)
+                p.expire(METRICS_KEY, 300)
+                await p.execute()
+        except Exception as e:
+            log.debug("metrics publish failed: %s", e)
 
     # ------------------------------------------------------------ TLS
 
@@ -185,6 +225,7 @@ class FilterPhone:
         if pol.blocks(host) or (pol.paths and pol.blocks_path(host, req.path)):
             flow.response = self._blocked_host_response(req, host)
             flow.metadata["fp_handled"] = True
+            self.m_sites.inc()
             self._record_host_block(ip, host, req)
             return
         if not pol.filtering or not _is_image_request(req):
@@ -215,6 +256,7 @@ class FilterPhone:
             resp.stream = True
             return
         if pol.video and _is_video(flow):
+            self.m_video.inc()
             self._spawn(self._record(ip, flow.request.pretty_host, "video", "video blocked", "video",
                                      _short_path(flow.request)))
             flow.kill()
@@ -250,25 +292,39 @@ class FilterPhone:
         """→ (פעולה, סיבה, גוף חדש, סוג תוכן). פעולה pass = להשאיר כמו שזה."""
         if pol.images == "block":
             return "block", "images off", PLACEHOLDER_PNG, "image/png"
+        t0 = time.perf_counter()
         try:
             header, out = await self.engine.classify(body, {"level": pol.level, "host": host, "client": ip})
             action, reason = header.get("action", "pass"), header.get("reason", "")
             ct = header.get("ct") or "image/png"
+            self.m_engine_latency.observe(time.perf_counter() - t0)
         except Exception as e:
-            log.warning("engine unavailable (%s): %s", type(e).__name__, e)
+            kind = "circuit_open" if isinstance(e, EngineUnavailable) else type(e).__name__
+            self.m_engine_errors.inc(kind=kind)
+            if not isinstance(e, EngineUnavailable):
+                log.warning("engine unavailable (%s): %s", kind, e)
             d = on_failure(pol.level)
-            action, reason, out, ct = d.action.value, f"engine error: {type(e).__name__}", b"", "image/png"
+            action, reason, out, ct = d.action.value, f"engine error: {kind}", b"", "image/png"
         if action == Action.BLOCK and not out:
             out, ct = PLACEHOLDER_PNG, "image/png"
+        self.m_images.inc(action=str(action))
         return action, reason, out, ct
 
     async def _filter_image(self, flow: http.HTTPFlow) -> None:
-        body = flow.response.get_content(strict=False)
-        if not body or len(body) < self.cfg.min_image_bytes:
-            return
         ip = _client_ip(flow)
         pol = self.policies.get(ip)
         host = flow.request.pretty_host
+        body = bounded_content(flow.response, self.cfg.max_image_bytes)
+        if body is None:
+            # דחוס מעבר לתקרה / קידוד לא מוכר — אי אפשר לבדוק: מדיניות הכשל של הרמה
+            self.m_oversize.inc(kind="image")
+            d = on_failure(pol.level)
+            if d.action is Action.BLOCK or pol.images == "block":
+                self._replace(flow.response, PLACEHOLDER_PNG, "image/png", "block")
+                self._spawn(self._record(ip, host, "block", "unverifiable: body", "image", _short_path(flow.request)))
+            return
+        if len(body) < self.cfg.min_image_bytes:
+            return
         action, reason, out, ct = await self._judge(body, pol, host, ip)
         self._spawn(self._count(ip, "scanned"))
         if action == Action.PASS:
@@ -278,7 +334,10 @@ class FilterPhone:
             self._spawn(self._record(ip, host, action, reason, "image", _short_path(flow.request)))
 
     async def _filter_inline(self, flow: http.HTTPFlow) -> None:
-        body = flow.response.get_content(strict=False)
+        body = bounded_content(flow.response, MAX_INLINE_DECODED)
+        if body is None:
+            self.m_oversize.inc(kind="inline")
+            return
         if not body or b"data:image" not in body:
             return
         ip = _client_ip(flow)
@@ -297,6 +356,7 @@ class FilterPhone:
             return (PLACEHOLDER_PNG, "image/png") if on_failure(pol.level).action is Action.BLOCK else None
 
         result = await inline.rewrite(body, judge, self.cfg.min_image_bytes, overflow=overflow)
+        self.m_inline.inc(result="replaced" if result.replaced else "clean")
         if not result.replaced:
             return
         resp = flow.response

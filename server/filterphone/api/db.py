@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import os
+import queue
 import sqlite3
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -135,13 +137,81 @@ def now() -> int:
     return int(time.time())
 
 
-def connect(path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path, timeout=10, isolation_level=None)   # autocommit; טרנזקציות במפורש
+def connect(path: str, shared: bool = False) -> sqlite3.Connection:
+    conn = sqlite3.connect(path, timeout=10, isolation_level=None,    # autocommit; טרנזקציות במפורש
+                           check_same_thread=not shared)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA synchronous=NORMAL")       # ב-WAL: עמיד לקריסת תהליך, מהיר בהרבה
     return conn
+
+
+class PoolTimeout(sqlite3.OperationalError):
+    pass
+
+
+class Pool:
+    """מאגר חיבורים ל-SQLite: עד size חיבורים פתוחים, כל אחד בשימוש של חוט אחד בכל רגע.
+
+    חוסך פתיחה והגדרה (PRAGMA) בכל בקשה, ומגביל כמה חיבורים פתוחים בו-זמנית.
+    חיבור שחוזר באמצע טרנזקציה (לא אמור לקרות — transaction() מבטל בשגיאה) מבוטל לפני שימוש חוזר.
+    """
+
+    def __init__(self, path: str, size: int = 8, wait_s: float = 10.0):
+        self.path = path
+        self.size = size
+        self.wait_s = wait_s
+        self._idle: queue.LifoQueue[sqlite3.Connection] = queue.LifoQueue()
+        self._lock = threading.Lock()
+        self._created = 0
+
+    def _acquire(self) -> sqlite3.Connection:
+        try:
+            return self._idle.get_nowait()
+        except queue.Empty:
+            pass
+        with self._lock:
+            if self._created < self.size:
+                self._created += 1
+                try:
+                    return connect(self.path, shared=True)
+                except BaseException:
+                    self._created -= 1
+                    raise
+        try:
+            return self._idle.get(timeout=self.wait_s)
+        except queue.Empty as e:
+            raise PoolTimeout("database pool exhausted") from e
+
+    def _release(self, conn: sqlite3.Connection) -> None:
+        try:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            conn.close()
+            with self._lock:
+                self._created -= 1
+            return
+        self._idle.put(conn)
+
+    @contextmanager
+    def connection(self) -> Iterator[sqlite3.Connection]:
+        conn = self._acquire()
+        try:
+            yield conn
+        finally:
+            self._release(conn)
+
+    def close(self) -> None:
+        while True:
+            try:
+                self._idle.get_nowait().close()
+            except queue.Empty:
+                break
+        with self._lock:
+            self._created = 0
 
 
 def init(path: str) -> None:

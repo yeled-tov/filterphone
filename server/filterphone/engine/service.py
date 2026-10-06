@@ -5,14 +5,20 @@
 בקשות זהות שמגיעות במקביל (אותה תמונה פעמיים בדף) מחושבות פעם אחת.
 
 פעולות (שדה op בכותרת):
-    classify (ברירת מחדל) — החלטה לתמונה, מהפרוקסי.
+    classify (ברירת מחדל) — החלטה לתמונה, מהפרוקסי. budget_ms = כמה זמן הפרוקסי עוד מחכה.
     explain — לממשק הניהול ("בדיקת תמונה"): כל הציונים וההחלטה בכל רמה.
+    metrics — מדדי המנוע (JSON), ל-/metrics של ה-API.
 
-הפעלה:  python -m filterphone.engine.service
+עומס: לכל היותר engine_max_inflight תמונות בעיבוד, ועוד engine_max_queue בתור. תור מלא, או
+תמונה שלא הספיקה בזמן שהפרוקסי מחכה — מקבלות מיד את מדיניות הכשל של הרמה (רמות 1–2: חסימה,
+רמה 3: מעבר), והעבודה עליהן מתבטלת. כך עומס לא מצטבר, והמנוע לא קורס.
+
+הפעלה:  python -m filterphone.engine.service   (systemd: Type=notify עם watchdog)
 """
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import signal
@@ -23,7 +29,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .. import protocol
+from .. import metrics, protocol, sdnotify
 from ..settings import Settings, get_settings
 from . import segment
 from .batcher import Batcher
@@ -49,6 +55,8 @@ log = logging.getLogger("filterphone.engine")
 MIN_SIDE_BY_LEVEL = {1: 40}         # ברמה 1 בודקים גם תמונות ממוזערות קטנות יותר
 NO_PERSON = SegStats(0.0, 0.0)      # סגמנטציה שלא רצה/נכשלה — המדיניות חוזרת לגלאי
 FEMALE = SCORE_NAMES.index("female")
+MIN_USEFUL_S = 0.25                 # פחות זמן מזה עד שהפרוקסי מוותר — לא מתחילים לעבוד (עבודה שתיזרק)
+STUCK_AFTER_S = 60.0                # יש עבודה, ושום תמונה לא הסתיימה בהצלחה דקה שלמה — המנוע תקוע
 
 
 @dataclass(slots=True)
@@ -91,6 +99,28 @@ class Engine:
         self.cache = ResultCache(cfg.redis_url, self.heads.version, cfg.cache_ttl_days)
         self.inflight: dict[str, asyncio.Future[Entry]] = {}
         self.stats: Counter[str] = Counter()
+        self._init_runtime(cfg)
+
+    def _init_runtime(self, cfg: Settings) -> None:
+        """בקרת עומס ומדדים (נפרד מטעינת המודלים — כדי שאפשר יהיה לבדוק בלי מודלים)."""
+        self.cfg = cfg
+        self._slots = asyncio.Semaphore(cfg.engine_max_inflight)
+        self._explain_slot = asyncio.Semaphore(1)
+        self.active = 0
+        self.waiting = 0
+        self.last_success = time.monotonic()    # תמונה אחרונה שהסתיימה בהצלחה (ל-watchdog)
+        self.busy_since = time.monotonic()      # מתי התחילה תקופת העבודה הנוכחית (אחרי מנוחה)
+        m = self.metrics = metrics.Registry("fp_engine")
+        self.m_jobs = m.counter("jobs_total", "תמונות שהתקבלו, לפי תוצאה סופית")
+        self.m_failed = m.counter("jobs_failed_total", "תמונות שנכשלו, לפי סיבה (timeout/overload/error)")
+        self.m_job_seconds = m.histogram("job_seconds", "זמן עיבוד תמונה (בלי ההמתנה בתור)")
+        self.m_queue_seconds = m.histogram("queue_seconds", "זמן המתנה בתור לפני עיבוד")
+        self.m_cache = m.counter("cache_total", "פגיעות בקאש (hit/miss)")
+        self.m_models = m.counter("model_runs_total", "הרצות מודלים, לפי מודל")
+        self.m_active = m.gauge("active_jobs", "תמונות בעיבוד עכשיו")
+        self.m_waiting = m.gauge("waiting_jobs", "תמונות בתור")
+        self.m_batch_depth = m.gauge("batch_queue", "תצוגות שממתינות לאצוות SigLIP2")
+        self.m_memory = m.gauge("memory_bytes", "זיכרון התהליך (RSS)")
 
     async def start(self) -> None:
         self.batcher.start()
@@ -99,6 +129,73 @@ class Engine:
         await self.batcher.submit(dummy)
         log.info("engine ready: heads=%s embedder=%s segmentation=%s", self.heads.version,
                  self.cfg.embedder_model, "on" if self.segmenter else "off")
+
+    # ------------------------------------------------------------ בקרת עומס
+
+    def _failure(self, level: int, reason: str) -> Verdict:
+        d = on_failure(level)
+        block = d.action is Action.BLOCK
+        return Verdict(d.action.value, reason, PLACEHOLDER_PNG if block else b"", "image/png" if block else "")
+
+    async def run_job(self, data: bytes, level: int, budget_s: float | None = None) -> Verdict:
+        """תמונה מהפרוקסי, עם בקרת עומס ומגבלת זמן. לעולם לא זורק — כשל = מדיניות הכשל של הרמה."""
+        loop = asyncio.get_running_loop()
+        t0 = loop.time()
+        budget = min(budget_s or self.cfg.engine_job_timeout_s, self.cfg.engine_job_timeout_s)
+        if self.waiting >= self.cfg.engine_max_queue:
+            self.m_failed.inc(reason="overload")
+            self.m_jobs.inc(action=on_failure(level).action.value)
+            return self._failure(level, "overloaded")
+        if self.active == 0 and self.waiting == 0:
+            self.busy_since = time.monotonic()
+        self.waiting += 1
+        acquired = False
+        try:
+            async with asyncio.timeout_at(t0 + budget):
+                await self._slots.acquire()
+                acquired = True
+                self.waiting -= 1
+                t1 = loop.time()
+                self.m_queue_seconds.observe(t1 - t0)
+                if t0 + budget - t1 < MIN_USEFUL_S:
+                    raise TimeoutError          # חיכה בתור כמעט את כל הזמן — מפנים את המקום לבקשה אחרת
+                self.active += 1
+                try:
+                    v = await self.classify(data, level)
+                    self.last_success = time.monotonic()
+                finally:
+                    self.active -= 1
+                    self.m_job_seconds.observe(loop.time() - t1)
+        except TimeoutError:
+            self.m_failed.inc(reason="timeout" if acquired else "queue_timeout")
+            v = self._failure(level, "timeout")
+        except Exception as e:
+            log.exception("classify failed")
+            self.m_failed.inc(reason="error")
+            v = self._failure(level, f"error: {type(e).__name__}")
+        finally:
+            if acquired:
+                self._slots.release()
+            else:
+                self.waiting -= 1
+        self.m_jobs.inc(action=v.action)
+        return v
+
+    def healthy(self) -> bool:
+        """ל-watchdog: אין עבודה, או שתמונה הסתיימה בהצלחה לאחרונה. אחרת (דקה שלמה שבה כל
+        התמונות נכשלות / ממתינות) — חוט ההסקה תקוע, ועדיף הפעלה מחדש."""
+        if not self.batcher.alive:
+            return False
+        if self.active == 0 and self.waiting == 0:
+            return True
+        return time.monotonic() - max(self.last_success, self.busy_since) < STUCK_AFTER_S
+
+    def snapshot(self) -> dict[str, float]:
+        self.m_active.set(self.active)
+        self.m_waiting.set(self.waiting)
+        self.m_batch_depth.set(self.batcher.depth)
+        self.m_memory.set(metrics.process_memory_bytes())
+        return self.metrics.snapshot()
 
     # ------------------------------------------------------------ ניתוח
 
@@ -119,6 +216,7 @@ class Engine:
         self.stats[verdict.action] += 1
         if cached:
             self.stats["cache_hits"] += 1
+        self.m_cache.inc(result="hit" if cached else "miss")
         return verdict
 
     async def _resolve(self, level: int, entry: Entry, work: _Work) -> tuple[Entry, Decision]:
@@ -176,8 +274,11 @@ class Engine:
             await self.cache.put(key, entry)
             return entry, decoded
         except BaseException as e:
-            fut.set_exception(e)
-            fut.exception()             # מסמן כ"נקרא" כדי שלא יודפס אזהרה
+            if not fut.done():
+                # מי שמחכה לאותה תמונה מקבל שגיאה רגילה — גם אם הבקשה שלנו בוטלה (פג זמנה)
+                fut.set_exception(RuntimeError("analysis cancelled")
+                                  if isinstance(e, asyncio.CancelledError) else e)
+                fut.exception()         # מסמן כ"נקרא" כדי שלא יודפס אזהרה
             raise
         finally:
             self.inflight.pop(key, None)
@@ -199,6 +300,7 @@ class Engine:
         for frame in decoded.frames:
             views.extend(await loop.run_in_executor(self.decode_pool, siglip_views, frame, size))
         embs = np.stack(await asyncio.gather(*(self.batcher.submit(v) for v in views)))
+        self.m_models.inc(len(views), model="siglip2")
         scores = self.heads.scores(embs).max(axis=0)       # הציון המחמיר מבין כל התצוגות
         return Entry([round(float(x), 4) for x in scores], note=note, wh=wh), decoded
 
@@ -214,6 +316,7 @@ class Engine:
                                                  self.detector.size)
                 dets.extend(await loop.run_in_executor(self.infer_pool, self.detector, inp))
             self.stats["detector_runs"] += 1
+            self.m_models.inc(model="nudenet")
             work.steps.append("detector")
             entry = entry.with_(dets=[list(d) for d in dets])
         except Exception as e:
@@ -247,6 +350,7 @@ class Engine:
         work.labels = labels
         work.steps.append("segment")
         self.stats["segment_runs"] += 1
+        self.m_models.inc(model="segmentation")
         await self.cache.put_labels(work.key, png)
         return st
 
@@ -355,26 +459,34 @@ class Server:
     def __init__(self, engine: Engine, path: str):
         self.engine = engine
         self.path = path
+        self._server: asyncio.base_events.Server | None = None
+        self.connections = 0
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        self.connections += 1
         try:
             while True:
                 try:
                     header, body = await protocol.read_message(reader)
                 except (asyncio.IncompleteReadError, ConnectionError):
                     return
-                level = int(header.get("level", 1))
-                if header.get("op") == "explain":
-                    await self._explain(writer, body, level)
+                op = header.get("op", "classify")
+                if op == "metrics":
+                    snap = self.engine.snapshot()
+                    snap["fp_engine_connections"] = self.connections
+                    writer.write(protocol.encode({"ok": True, "metrics": snap, "healthy": self.engine.healthy()}))
+                    await writer.drain()
                     continue
                 try:
-                    v = await self.engine.classify(body, level)
-                except Exception as e:
-                    log.exception("classify failed")
-                    d = on_failure(level)
-                    v = Verdict(d.action.value, f"error: {e}",
-                                PLACEHOLDER_PNG if d.action is Action.BLOCK else b"",
-                                "image/png" if d.action is Action.BLOCK else "")
+                    level = int(header.get("level", 1))
+                except (TypeError, ValueError):
+                    level = 1
+                if op == "explain":
+                    await self._explain(writer, body, level)
+                    continue
+                budget = header.get("budget_ms")
+                budget_s = float(budget) / 1000.0 if isinstance(budget, int | float) and budget > 0 else None
+                v = await self.engine.run_job(body, level, budget_s)
                 writer.write(protocol.encode(
                     {"action": v.action, "reason": v.reason, "ct": v.ct,
                      "cached": v.cached, "ms": v.ms},
@@ -382,28 +494,41 @@ class Server:
                 await writer.drain()
         except protocol.ProtocolError as e:
             log.warning("protocol error: %s", e)
+        except ConnectionError:
+            pass                        # הפרוקסי סגר את החיבור (ויתר על הבקשה)
         finally:
+            self.connections -= 1
             writer.close()
 
     async def _explain(self, writer: asyncio.StreamWriter, body: bytes, level: int) -> None:
         try:
-            info, v = await self.engine.explain(body, level)
+            async with self.engine._explain_slot, asyncio.timeout(60):
+                info, v = await self.engine.explain(body, level)
             header = {"ok": True, "info": info, "action": v.action, "ct": v.ct}
             out = v.body
+        except TimeoutError:
+            header, out = {"ok": False, "error": "timeout"}, b""
         except Exception as e:
             log.exception("explain failed")
-            header, out = {"ok": False, "error": str(e)}, b""
+            header, out = {"ok": False, "error": type(e).__name__}, b""
         writer.write(protocol.encode(header, out))
         await writer.drain()
 
-    async def serve(self) -> None:
+    async def start(self) -> None:
         if os.path.exists(self.path):
             os.unlink(self.path)
-        server = await asyncio.start_unix_server(self.handle, path=self.path)
+        self._server = await asyncio.start_unix_server(self.handle, path=self.path)
         os.chmod(self.path, 0o660)
         log.info("listening on %s", self.path)
-        async with server:
-            await server.serve_forever()
+
+    async def drain(self, timeout_s: float = 8.0) -> None:
+        """כיבוי מסודר: מפסיקים לקבל חיבורים, ומחכים שהתמונות שבעיבוד יסתיימו."""
+        if self._server is not None:
+            self._server.close()
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        while (self.engine.active or self.engine.waiting) and loop.time() < deadline:
+            await asyncio.sleep(0.05)
 
 
 async def _report_stats(engine: Engine, every_s: float = 300.0) -> None:
@@ -412,10 +537,23 @@ async def _report_stats(engine: Engine, every_s: float = 300.0) -> None:
         await asyncio.sleep(every_s)
         s = engine.stats
         if s["scanned"]:
-            log.info("stats: scanned=%d cache_hits=%d block=%d replace=%d pass=%d detector=%d segment=%d"
-                     " undecodable=%d", s["scanned"], s["cache_hits"], s["block"], s["replace"], s["pass"],
-                     s["detector_runs"], s["segment_runs"], s["undecodable"])
+            log.info("stats %s", json.dumps({
+                "scanned": s["scanned"], "cache_hits": s["cache_hits"], "block": s["block"],
+                "replace": s["replace"], "pass": s["pass"], "detector": s["detector_runs"],
+                "segment": s["segment_runs"], "undecodable": s["undecodable"],
+                "memory_mb": metrics.process_memory_bytes() // 1_000_000}))
         engine.stats.clear()
+
+
+async def _watchdog(engine: Engine, interval: float) -> None:
+    """systemd מפעיל מחדש אם הפינג לא מגיע: לולאת האירועים תקועה, או חוט ההסקה תקוע."""
+    while True:
+        if engine.healthy():
+            sdnotify.notify("WATCHDOG=1")
+        else:
+            log.error("engine unhealthy: active=%d waiting=%d batch_queue=%d — skipping watchdog ping",
+                      engine.active, engine.waiting, engine.batcher.depth)
+        await asyncio.sleep(interval)
 
 
 async def main() -> None:
@@ -431,9 +569,16 @@ async def main() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
 
-    tasks = [asyncio.create_task(Server(engine, cfg.engine_socket).serve()),
-             asyncio.create_task(_report_stats(engine))]
+    server = Server(engine, cfg.engine_socket)
+    await server.start()
+    tasks = [asyncio.create_task(_report_stats(engine))]
+    interval = sdnotify.watchdog_interval_s()
+    if interval:
+        tasks.append(asyncio.create_task(_watchdog(engine, interval)))
+    sdnotify.notify("READY=1")
     await stop.wait()
+    sdnotify.notify("STOPPING=1")
+    await server.drain()
     for t in tasks:
         t.cancel()
     await engine.close()

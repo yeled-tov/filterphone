@@ -5,8 +5,9 @@ import base64
 import hashlib
 import re
 import secrets
+import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
@@ -94,19 +95,41 @@ def verify_password(stored: str, password: str) -> bool:
 
 
 class RateLimiter:
-    """חלון זמן נע לכל מפתח (כתובת IP). בזיכרון — מספיק לשרת יחיד."""
+    """חלון זמן נע לכל מפתח (כתובת IP / מכשיר). בזיכרון — מספיק לשרת יחיד.
 
-    def __init__(self, limit: int, window_s: float):
+    מוגן מגישה מקבילה (ה-API מריץ בקשות בחוטים), ומפתחות ישנים נמחקים — המילון לא גדל לנצח.
+    """
+
+    def __init__(self, limit: int, window_s: float, max_keys: int = 20_000):
         self.limit = limit
         self.window = window_s
-        self._hits: dict[str, deque[float]] = defaultdict(deque)
+        self.max_keys = max_keys
+        self._hits: dict[str, deque[float]] = {}
+        self._lock = threading.Lock()
+        self._last_sweep = time.monotonic()
+
+    def _sweep(self, t: float) -> None:
+        for key in [k for k, q in self._hits.items() if not q or q[-1] <= t - self.window]:
+            del self._hits[key]
+        self._last_sweep = t
 
     def allow(self, key: str) -> bool:
         t = time.monotonic()
-        q = self._hits[key]
-        while q and q[0] <= t - self.window:
-            q.popleft()
-        if len(q) >= self.limit:
-            return False
-        q.append(t)
-        return True
+        with self._lock:
+            if t - self._last_sweep > self.window or len(self._hits) > self.max_keys:
+                self._sweep(t)
+            q = self._hits.get(key)
+            if q is None:
+                if len(self._hits) >= self.max_keys:
+                    return False            # הצפה ממקורות רבים — עדיף לסרב מלגדול בלי גבול
+                q = self._hits[key] = deque()
+            while q and q[0] <= t - self.window:
+                q.popleft()
+            if len(q) >= self.limit:
+                return False
+            q.append(t)
+            return True
+
+    def clear(self) -> None:
+        with self._lock:
+            self._hits.clear()
