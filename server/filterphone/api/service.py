@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import sqlite3
 import threading
 import time
@@ -135,6 +136,10 @@ def _dig(d: dict, path: tuple[str, ...]):
 
 # הגרסה שפורסמה בדף ההורדה — נכתב בבנייה (tools/apk_release.py) ומתפרסם יחד עם קובצי ה-APK
 RELEASE_MANIFEST = "FilterPhone.json"
+# מדיניות פרוקסי "שקופה" למכשיר בהשהיה (level 0 — בלי סינון תמונות)
+_PASSTHROUGH_POLICY = json.dumps({"level": 0, "hosts": [], "paths": [], "images": "filter",
+                                  "video": False, "app_images": "allow"}, separators=(",", ":"))
+MAX_PAUSE_MINUTES = 1440
 _RELEASE_NAME = re.compile(r"^FilterPhone[A-Za-z0-9._-]{0,40}\.apk$")
 _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 _ABI = re.compile(r"^[a-z0-9_-]{1,20}$")
@@ -280,14 +285,24 @@ class Services:
     def compiled(row: sqlite3.Row) -> Compiled:
         return compile_settings(row["level"], DeviceSettings.load(row["policy"]))
 
+    @staticmethod
+    def is_paused(row: sqlite3.Row, t: int | None = None) -> bool:
+        """ההגנה מושהית (מצב תחזוקה שהמנהל אישר, עם תוקף)."""
+        pu = row["pause_until"] if "pause_until" in row.keys() else None
+        return bool(pu and pu > (t if t is not None else db.now()))
+
     def push_device(self, row: sqlite3.Row) -> None:
-        """מעדכן את הפרוקסי (Redis) לגבי מכשיר אחד, ומסמן שצריך לסנכרן את ה-DNS."""
+        """מעדכן את הפרוקסי (Redis) לגבי מכשיר אחד, ומסמן שצריך לסנכרן את ה-DNS.
+        בהשהיה (pause) — סינון התמונות בפרוקסי כבוי (level 0, passthrough) עד שהתוקף פג."""
         ip = row["vpn_ip"]
         if not ip:
             return
         try:
             pipe = self.redis.pipeline()
-            if row["status"] == "active":
+            if row["status"] == "active" and self.is_paused(row):
+                pipe.hset(LEVELS_KEY, ip, 0)
+                pipe.hset(POLICY_KEY, ip, _PASSTHROUGH_POLICY)
+            elif row["status"] == "active":
                 pipe.hset(LEVELS_KEY, ip, row["level"])
                 pipe.hset(POLICY_KEY, ip, self.compiled(row).proxy_json(row["level"]))
             else:
@@ -572,6 +587,10 @@ class Services:
                     sets["policy_ack_at"] = t
             if hb.get("device_owner") is True and not cur["managed_at"]:
                 sets["managed_at"] = t
+            full = c.execute("SELECT unmanage_at FROM devices WHERE id = ?", (row["id"],)).fetchone()
+            if full["unmanage_at"] and hb.get("device_owner") is False:   # הטלפון אישר שהניהול הוסר
+                sets["unmanage_at"] = None
+                self.log_device(c, row["id"], "management_cleared")
             c.execute(f"UPDATE devices SET {', '.join(f'{k} = ?' for k in sets)} WHERE id = ?",
                       (*sets.values(), row["id"]))
             if prev:
@@ -589,14 +608,40 @@ class Services:
             err = _dig(hb, ("update", "error"))
             if err and err != _dig(prev, ("update", "error")):
                 self.log_device(c, row["id"], "app_update_failed", f"{_dig(hb, ('update', 'version')) or ''} {err}")
+            # השהיה שפג תוקפה בין דיווחים — מנקים ומשחזרים את מדיניות הפרוקסי המלאה
+            cur_pause = c.execute("SELECT pause_until FROM devices WHERE id = ?", (row["id"],)).fetchone()
+            pause_expired = bool(prev.get("_was_paused")) and not self.is_paused(cur_pause, t)
+            if pause_expired:
+                c.execute("UPDATE devices SET pause_until = NULL, pause_reason = '', pause_nonce = '' WHERE id = ?",
+                          (row["id"],))
+                self.log_device(c, row["id"], "resumed", "פג תוקף ההשהיה")
             fresh = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
+            if self.is_paused(fresh, t):
+                hb["_was_paused"] = True      # נשמר ב-heartbeat כדי לזהות פקיעה בדיווח הבא
+                c.execute("UPDATE devices SET heartbeat = ? WHERE id = ?",
+                          (json.dumps(hb, ensure_ascii=False), row["id"]))
+        if pause_expired:
+            self.push_device(fresh)           # פג התוקף → סינון מלא חוזר
         out = {"server_time": t, "status": fresh["status"], "policy_version": fresh["policy_version"],
                "interval_s": self.cfg.heartbeat_interval_s, "message": STATUS_MESSAGES.get(fresh["status"], "")}
+        admin_cmd = self._admin_command(fresh, t)
+        if admin_cmd:
+            out["admin"] = admin_cmd
         if fresh["status"] == "active" and (acked != fresh["policy_version"] or raw.get("want_policy")):
             out["policy"] = self.device_policy(fresh)
         if fresh["status"] == "active" and (release := self.app_release()):
             out["app_update"] = release     # הטלפון מחליט: עדכון שקט במנהל מכשיר, אחרת הודעה בלבד
         return out
+
+    def _admin_command(self, row: sqlite3.Row, t: int) -> dict | None:
+        """פקודת מנהל שמועברת לטלפון בערוץ המאומת (heartbeat): השהיה או הסרת ניהול. התוקף מגיע
+        מהשרת; הטלפון מאשר לפי ה-nonce (anti-replay) ומשחזר לבד בפקיעה."""
+        if row["unmanage_at"]:
+            return {"action": "unmanage", "nonce": f"u{row['unmanage_at']}"}
+        if self.is_paused(row, t):
+            return {"action": "pause", "nonce": row["pause_nonce"], "until": row["pause_until"],
+                    "reason": row["pause_reason"]}
+        return None
 
     def device_vpn(self, row: sqlite3.Row) -> dict:
         if row["status"] != "active" or not row["vpn_ip"]:
@@ -904,6 +949,9 @@ class Services:
             "network_only_unknown": list(comp.network_only_unknown),
             "app_rules": [{"package": p, **rule} for p, rule in settings.app_rules.items()],
             "latest_app_version": (self.app_release() or {}).get("version_name"),
+            "pause": {"active": self.is_paused(r), "until": r["pause_until"], "reason": r["pause_reason"],
+                      "by": r["pause_by"]} if r["pause_until"] else None,
+            "unmanage_requested": bool(r["unmanage_at"]),
         })
         return out
 
@@ -943,6 +991,55 @@ class Services:
                 f"{k}={allowed[k]}" if k in ("level", "status") else k for k in what), c)
         self.push_device(new)
         return dict(new)
+
+    def pause_device(self, device_id: int, minutes: int, reason: str, admin: str) -> dict:
+        """השהיית הגנה מאושרת (מצב תחזוקה): עד [minutes] דקות. סינון התמונות בפרוקסי כבוי, ובטלפון
+        המגן ונעילת ה-VPN מורפים — עד שהתוקף פג, ואז הכול חוזר לבד. פעולה רגישה — נרשמת ב-audit."""
+        minutes = max(1, min(int(minutes), MAX_PAUSE_MINUTES))
+        reason = security.clean_text(reason, 200, multiline=True)
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            if row["status"] != "active":
+                raise ApiError(409, "אפשר להשהות רק מכשיר פעיל")
+            nonce = secrets.token_hex(8)
+            c.execute("UPDATE devices SET pause_until = ?, pause_reason = ?, pause_by = ?, pause_nonce = ? "
+                      "WHERE id = ?", (t + minutes * 60, reason, admin[:60], nonce, device_id))
+            self.log_device(c, device_id, "paused", f"{minutes} דק' · {reason}"[:200])
+            self.audit(admin, "pause", f"device:{device_id}", f"{minutes}m nonce={nonce} {reason}", c)
+            new = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        self.push_device(new)      # פרוקסי → passthrough מיידי
+        return self.device_detail(device_id)
+
+    def resume_device(self, device_id: int, admin: str) -> dict:
+        """ביטול ההשהיה מיד (לפני שהתוקף פג) — ההגנה המלאה חוזרת."""
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            was_paused = self.is_paused(row)
+            c.execute("UPDATE devices SET pause_until = NULL, pause_reason = '', pause_nonce = '' WHERE id = ?",
+                      (device_id,))
+            if was_paused:
+                self.log_device(c, device_id, "resumed")
+                self.audit(admin, "resume", f"device:{device_id}", "", c)
+            new = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        self.push_device(new)      # פרוקסי → מדיניות מלאה שוב
+        return self.device_detail(device_id)
+
+    def request_unmanage(self, device_id: int, admin: str) -> dict:
+        """בקשה מאושרת להסרת ניהול: הטלפון יסיר את עצמו כ-Device Owner בדיווח הבא (clearDeviceOwnerApp).
+        לא מוחק את המכשיר — רק משחרר ניהול, כדי שאפשר יהיה להסיר/להעביר. נרשם ב-audit."""
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            c.execute("UPDATE devices SET unmanage_at = ? WHERE id = ?", (db.now(), device_id))
+            self.log_device(c, device_id, "unmanage_requested")
+            self.audit(admin, "unmanage", f"device:{device_id}", "", c)
+        return self.device_detail(device_id)
 
     def delete_device(self, device_id: int, admin: str = "admin") -> None:
         with self.db() as c, db.transaction(c):

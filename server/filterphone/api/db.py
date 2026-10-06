@@ -159,7 +159,19 @@ CREATE INDEX device_log_device ON device_log(device_id, ts);
 CREATE INDEX device_log_ts ON device_log(ts);
 """
 
-MIGRATIONS: list[str] = [_V1, _V2]
+# גרסה 3 — השהיית הגנה מאושרת (pause) והסרת ניהול יזומה, להעברת מכשיר ול"מצב תחזוקה"
+_V3 = """
+ALTER TABLE devices ADD COLUMN pause_until INTEGER;          -- עד מתי ההגנה מושהית (NULL = פעילה)
+ALTER TABLE devices ADD COLUMN pause_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE devices ADD COLUMN pause_by TEXT NOT NULL DEFAULT '';
+ALTER TABLE devices ADD COLUMN pause_nonce TEXT NOT NULL DEFAULT '';
+ALTER TABLE devices ADD COLUMN unmanage_at INTEGER;          -- המנהל ביקש להסיר ניהול; הטלפון יבצע
+ALTER TABLE devices ADD COLUMN transfer_token TEXT NOT NULL DEFAULT '';  -- טוקן העברה חד-פעמי (hash)
+ALTER TABLE devices ADD COLUMN transfer_expires INTEGER;
+CREATE INDEX devices_pause ON devices(pause_until);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3]
 VERSION = len(MIGRATIONS)
 
 

@@ -307,6 +307,11 @@ class DevicePatch(BaseModel):
     keywords: dict | None = None
 
 
+class PauseIn(BaseModel):
+    minutes: int = Field(default=60, ge=1, le=1440)
+    reason: str = Field(default="", max_length=200)
+
+
 class Decision(BaseModel):
     level: int | None = None
     options: list[str] | None = Field(default=None, max_length=200)
@@ -495,6 +500,18 @@ def _routes(app: FastAPI) -> None:
     @app.delete("/v1/admin/devices/{device_id}", status_code=204)
     def delete_device(device_id: int, svc: SvcDep, admin: AdminRow):
         svc.delete_device(device_id, admin["username"])
+
+    @app.post("/v1/admin/devices/{device_id}/pause")
+    def pause_device(device_id: int, body: PauseIn, svc: SvcDep, admin: AdminRow):
+        return svc.pause_device(device_id, body.minutes, body.reason, admin["username"])
+
+    @app.post("/v1/admin/devices/{device_id}/resume")
+    def resume_device(device_id: int, svc: SvcDep, admin: AdminRow):
+        return svc.resume_device(device_id, admin["username"])
+
+    @app.post("/v1/admin/devices/{device_id}/unmanage")
+    def unmanage_device(device_id: int, svc: SvcDep, admin: AdminRow):
+        return svc.request_unmanage(device_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/reset-apps")
     def reset_apps(device_id: int, svc: SvcDep, admin: AdminRow):

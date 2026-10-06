@@ -683,6 +683,7 @@ async function viewDevice(id) {
   const logCard = deviceLogCard(d);
   const dpcCardEl = dpcCard(d, patch);
   const keywordCardEl = keywordCard(d, patch);
+  const maintenanceCardEl = maintenanceCard(d);
 
   // --- סטטיסטיקה ואירועים
   const statsCard = card("7 הימים האחרונים", null, statsBars(d.history));
@@ -706,6 +707,7 @@ async function viewDevice(id) {
   return [back, header,
     complianceCardEl,
     el("div", { class: "grid two" }, customerCard, logCard),
+    maintenanceCardEl,
     levelCard, policyCard, appsCard, appImagesCard, customCard, keywordCardEl, dpcCardEl,
     el("div", { class: "grid two" }, statsCard, learnedCard),
     eventsCard, historyCard];
@@ -820,6 +822,41 @@ function dpcCard(d, patch) {
     el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
       await patch({ dpc: { frp_accounts: lines(frp.value) } });
     } }, "שמירת FRP")));
+}
+
+function maintenanceCard(d) {
+  const id = d.id;
+  const pause = d.pause;
+  const act = async (path, body) => {
+    await attempt(() => api(`/v1/admin/devices/${id}/${path}`, { method: "POST", body }));
+    render();
+  };
+  const rows = [];
+  if (pause?.active) {
+    rows.push(el("div", { class: "row gap wrap" },
+      chip(`מושהה עד ${dateTime(pause.until)}${pause.reason ? " · " + pause.reason : ""}`, "warn"),
+      el("button", { class: "primary small", onclick: () => act("resume", {}) }, "חזרה להגנה מלאה")));
+  } else {
+    const minutes = el("input", { type: "number", min: 1, max: 1440, value: 60, style: "width:5rem" });
+    const reason = el("input", { placeholder: "סיבה (למשל: תחזוקה)" });
+    rows.push(el("div", { class: "row gap wrap end" }, el("label", {}, "דקות", minutes), reason,
+      el("button", { class: "ghost small", onclick: () => act("pause", { minutes: Number(minutes.value) || 60, reason: reason.value }) },
+        "השהה הגנה")));
+  }
+  const unmanage = d.unmanage_requested
+    ? chip("נשלחה בקשה להסרת ניהול — ממתין לטלפון", "warn")
+    : el("button", { class: "danger small", onclick: async () => {
+        if (!await confirmDialog("להסיר ניהול מהמכשיר?",
+          "הטלפון יחדל להיות מנהל מכשיר בדיווח הבא (אפשר יהיה להסיר/להעביר). לא מוחק נתונים.",
+          "הסרת ניהול", true)) return;
+        await act("unmanage", {});
+      } }, "הסרת ניהול מהמכשיר");
+  return card("תחזוקה וניהול", "פעולות מנהל מאושרות — כולן נרשמות ביומן הפעולות (audit).",
+    el("div", { class: "stack" },
+      el("div", {}, el("b", {}, "השהיית הגנה (מצב תחזוקה)"),
+        el("small", {}, "זמנית: סינון התמונות, המגן ונעילת ה-VPN מורפים עד שהזמן נגמר — ואז הכול חוזר לבד."),
+        ...rows),
+      el("div", {}, el("b", {}, "הסרת ניהול"), el("small", {}, "שחרור FilterPhone מתפקיד מנהל המכשיר."), unmanage)));
 }
 
 function keywordCard(d, patch) {

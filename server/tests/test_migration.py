@@ -59,7 +59,7 @@ def _services(tmp_path) -> Services:
 def test_migration_keeps_every_device_code_and_admin(tmp_path):
     svc = _services(tmp_path)
     with db.closing(db.connect(svc.cfg.db_path)) as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == db.VERSION == 2
+        assert c.execute("PRAGMA user_version").fetchone()[0] == db.VERSION == 3
         assert c.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert c.execute("PRAGMA foreign_key_check").fetchall() == []
         rows = c.execute("SELECT * FROM devices ORDER BY id").fetchall()
@@ -87,7 +87,7 @@ def test_migration_keeps_every_device_code_and_admin(tmp_path):
     # הרצה חוזרת (אתחול נוסף של ה-API) לא משנה כלום
     db.init(svc.cfg.db_path)
     with db.closing(db.connect(svc.cfg.db_path)) as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert c.execute("PRAGMA user_version").fetchone()[0] == db.VERSION
         assert c.execute("SELECT count(*) FROM devices").fetchone()[0] == len(DEVICES)
 
 

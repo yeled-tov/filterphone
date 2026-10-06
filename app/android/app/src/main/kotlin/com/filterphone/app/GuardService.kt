@@ -82,6 +82,11 @@ class GuardService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: return
+        // מצב תחזוקה (השהיה שהמנהל אישר): המגן לא חוסם עד שהתוקף פג. עדיין מסמנים "חי".
+        if (AdminState.isPaused(this)) {
+            if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) markAlive()
+            return
+        }
         val policy = GuardPolicy.get(this)
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
             if (scanKeywords) onTyped(pkg, event)

@@ -105,6 +105,15 @@ object Sync {
             runCatching { SelfUpdate.consider(context, first.optJSONObject("app_update")) }
                 .onFailure { Log.w(TAG, "self-update check failed", it) }
         }
+        // פקודת מנהל: השהיית הגנה (מצב תחזוקה) או הסרת ניהול — מהערוץ המאומת בלבד
+        runCatching {
+            val action = AdminState.apply(context, first.optJSONObject("admin"), first.optLong("server_time"))
+            when (action) {
+                AdminState.Action.UNMANAGE -> DeviceOwnerManager.clearManagement(context)
+                else -> DeviceOwnerManager.apply(context, GuardPolicy.get(context))   // מחיל/מרפה נעילה לפי ההשהיה
+            }
+            GuardService.onPolicyChanged()
+        }.onFailure { Log.w(TAG, "admin command failed", it) }
         return true
     }
 

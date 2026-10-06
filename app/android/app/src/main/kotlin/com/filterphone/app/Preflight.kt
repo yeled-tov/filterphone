@@ -80,7 +80,7 @@ object Preflight {
             provisioningAllowed = provisioningAllowed,
             rootAvailable = rootAvailable(),
             accessibilityEnabled = runCatching { GuardPolicy.isServiceEnabled(context) }.getOrDefault(false),
-            alwaysOnSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N,
+            alwaysOnSupported = true,     // תמיד נתמך מ-minSdk 26
             lockdownSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
         )
     }

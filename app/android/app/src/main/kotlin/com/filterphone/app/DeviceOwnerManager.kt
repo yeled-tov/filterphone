@@ -102,6 +102,7 @@ object DeviceOwnerManager {
         val dpm = dpm(context) ?: return null
         val admin = DeviceAdmin.component(context)
         val want = effective(policy.dpc)
+        val paused = AdminState.isPaused(context)   // מצב תחזוקה — נעילת ה-VPN מורפה זמנית
         val applied = mutableListOf<String>()
         val failed = mutableListOf<String>()
         val pending = mutableListOf<String>()
@@ -123,8 +124,10 @@ object DeviceOwnerManager {
             pending += "always_on_vpn"
         } else {
             step("always_on_vpn") {
-                // דורש ששירות ה-VPN של האפליקציה תומך ב"תמיד מופעל" (WireGuard תומך)
-                if (want.getValue("always_on_vpn")) dpm.setAlwaysOnVpnPackage(admin, context.packageName, true)
+                // דורש ששירות ה-VPN של האפליקציה תומך ב"תמיד מופעל" (WireGuard תומך).
+                // בהשהיה (מצב תחזוקה) משאירים VPN תמיד-מופעל אבל בלי נעילה (lockdown=false), כדי שיהיה
+                // אינטרנט גם אם מכבים את ה-VPN לרגע. בפקיעת ההשהיה החלה חוזרת ומחזירה את הנעילה.
+                if (want.getValue("always_on_vpn")) dpm.setAlwaysOnVpnPackage(admin, context.packageName, !paused)
                 else if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) dpm.setAlwaysOnVpnPackage(admin, null, false)
             }
         }
@@ -184,6 +187,31 @@ object DeviceOwnerManager {
 
     /** ברירת המחדל מיד בסיום ההקמה (לפני שיש מדיניות מהשרת). */
     fun applyBaseline(context: Context): Result? = apply(context, GuardPolicy.get(context))
+
+    /**
+     * הסרת ניהול יזומה (רק לפי בקשת השרת, אחרי אישור מנהל): משחרר הגבלות, מבטל "VPN תמיד מופעל",
+     * ומסיר את FilterPhone כמנהל המכשיר (clearDeviceOwnerApp — API רשמי). אחרי זה אפשר להסיר/להעביר.
+     * לא מוחק נתוני משתמש (לא wipe). נקרא רק מ-Sync בתגובה לפקודת unmanage.
+     */
+    fun clearManagement(context: Context): Boolean {
+        if (!isDeviceOwner(context)) return true
+        val dpm = dpm(context) ?: return false
+        val admin = DeviceAdmin.component(context)
+        runCatching {
+            RESTRICTIONS.values.flatten().forEach { dpm.clearUserRestriction(admin, it) }
+            if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) dpm.setAlwaysOnVpnPackage(admin, null, false)
+            dpm.setUninstallBlocked(admin, context.packageName, false)
+        }
+        return try {
+            @Suppress("DEPRECATION")
+            dpm.clearDeviceOwnerApp(context.packageName)   // ה-API הרשמי להסרת ניהול עצמית
+            Log.i(TAG, "device management cleared")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "clearDeviceOwnerApp failed", e)
+            false
+        }
+    }
 
     /** לדיווח לשרת: מה הוחל, מה נכשל, ומצב ה-VPN הקבוע. */
     fun report(context: Context): JSONObject? {

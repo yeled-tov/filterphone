@@ -324,7 +324,7 @@ def test_device_log_is_removed_with_device(env):
     assert client.delete(f"/v1/admin/devices/{did}", headers=h).status_code == 204
     with svc.db() as c:
         assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
-    assert db.VERSION == 2
+    assert db.VERSION == 3
 
 
 def test_rekey_keeps_address_and_policy_and_swaps_wireguard_peer(env):
@@ -480,3 +480,79 @@ def test_heartbeat_stores_capabilities_and_preflight(env):
     assert hb["preflight"] == "REQUIRES_FACTORY_RESET"
     assert hb["capabilities"]["model"] == "SM-A546" and hb["capabilities"]["always_on"] is True
     assert "junk" not in hb["capabilities"]
+
+
+# ------------------------------------------------------------------ השהיית הגנה / הסרת ניהול
+
+
+def test_pause_sets_passthrough_and_delivers_admin_command(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, ip = enroll(svc, client, level=1)
+    import json as _json
+    # לפני: רמה 1 עם סינון תמונות
+    assert _json.loads(svc.redis.hget("fp:policy", ip))["level"] == 1
+
+    r = client.post(f"/v1/admin/devices/{did}/pause", headers=h, json={"minutes": 30, "reason": "תחזוקה"})
+    assert r.status_code == 200, r.text
+    assert r.json()["pause"]["active"] is True and r.json()["pause"]["reason"] == "תחזוקה"
+    # הפרוקסי עבר ל-passthrough (level 0)
+    assert int(svc.redis.hget("fp:levels", ip)) == 0
+    assert _json.loads(svc.redis.hget("fp:policy", ip))["level"] == 0
+    # הטלפון מקבל פקודת השהיה ב-heartbeat (עם nonce ותוקף)
+    hb = client.post("/v1/device/heartbeat", headers=dh, json={}).json()
+    assert hb["admin"]["action"] == "pause" and hb["admin"]["nonce"] and hb["admin"]["until"] > hb["server_time"]
+    assert any(e["kind"] == "paused" for e in client.get(f"/v1/admin/devices/{did}", headers=h).json()["device_log"])
+    assert any(a["action"] == "pause" for a in svc.list_audit())
+
+
+def test_resume_restores_full_filtering(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, ip = enroll(svc, client, level=1)
+    client.post(f"/v1/admin/devices/{did}/pause", headers=h, json={"minutes": 30})
+    import json as _json
+    assert _json.loads(svc.redis.hget("fp:policy", ip))["level"] == 0
+    r = client.post(f"/v1/admin/devices/{did}/resume", headers=h)
+    assert r.status_code == 200 and r.json()["pause"] is None
+    assert int(svc.redis.hget("fp:levels", ip)) == 1
+    assert "admin" not in client.post("/v1/device/heartbeat", headers=dh, json={}).json()
+
+
+def test_expired_pause_auto_restores_on_next_heartbeat(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, ip = enroll(svc, client, level=1)
+    client.post(f"/v1/admin/devices/{did}/pause", headers=h, json={"minutes": 30})
+    client.post("/v1/device/heartbeat", headers=dh, json={})            # נרשם "_was_paused"
+    with svc.db() as c, db.transaction(c):                               # מזייפים פקיעת תוקף
+        c.execute("UPDATE devices SET pause_until = ? WHERE id = ?", (db.now() - 5, did))
+    hb = client.post("/v1/device/heartbeat", headers=dh, json={}).json()
+    assert "admin" not in hb                                            # כבר לא מושהה
+    assert int(svc.redis.hget("fp:levels", ip)) == 1                    # הסינון חזר לבד
+    assert svc.device_detail(did)["pause"] is None
+
+
+def test_unmanage_request_then_device_confirms(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    client.post("/v1/device/heartbeat", headers=dh, json={"device_owner": True})
+    assert client.post(f"/v1/admin/devices/{did}/unmanage", headers=h).json()["unmanage_requested"] is True
+    hb = client.post("/v1/device/heartbeat", headers=dh, json={"device_owner": True}).json()
+    assert hb["admin"]["action"] == "unmanage"
+    # הטלפון אישר שהניהול הוסר
+    client.post("/v1/device/heartbeat", headers=dh, json={"device_owner": False})
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    assert d["unmanage_requested"] is False
+    assert any(e["kind"] == "management_cleared" for e in d["device_log"])
+    assert any(a["action"] == "unmanage" for a in svc.list_audit())
+
+
+def test_cannot_pause_inactive_device(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, _, _ = enroll(svc, client)
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"status": "disabled"})
+    # מכשיר שאינו פעיל — לא ניתן להשהות
+    assert client.post(f"/v1/admin/devices/{did}/pause", headers=h, json={"minutes": 10}).status_code == 409
