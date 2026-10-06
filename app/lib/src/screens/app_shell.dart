@@ -182,14 +182,14 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
     }
 
     final ok = await widget.controller.requestChange(
-      note: 'בקשת התקנת אפליקציה: \${app.name} (\${app.packageName})',
+      note: 'בקשת התקנת אפליקציה: ${app.name} (${app.packageName})',
     );
     if (!mounted) return;
     messenger.showSnackBar(
       SnackBar(
         content: Text(
           ok
-              ? 'הבקשה ל\${app.name} נשלחה. האפליקציה תותקן דרך מנגנון האישור המנוהל.'
+              ? 'הבקשה ל${app.name} נשלחה. לאחר אישור, ההתקנה תבוצע דרך המנגנון המנוהל המתאים למכשיר.'
               : (widget.controller.error ?? 'לא הצלחנו לשלוח את הבקשה.'),
         ),
       ),
@@ -249,7 +249,7 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                 child: Text(
-                  'אפליקציות מאושרות',
+                  'אפליקציות זמינות',
                   style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
               ),
@@ -321,12 +321,12 @@ class _StoreHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  active ? 'אפליקציות באישור FilterPhone' : 'החנות תיפתח לאחר האישור',
+                  active ? 'אפליקציות באישור FilterPhone' : 'האפליקציות זמינות לאחר אישור המכשיר',
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'רק אפליקציות שמתאימות לפרופיל המוגן יוצגו כאן.',
+                  'קטלוג בסיסי. בהמשך ניתן לחבר אותו לקטלוג האפליקציות המנוהל מהשרת.',
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
@@ -484,7 +484,7 @@ class _SupportScreenState extends State<SupportScreen> {
       final level = c.device?.levelName;
       return level == null
           ? 'אני צריך שהמכשיר יהיה פעיל כדי לבדוק את רמת הסינון.'
-          : 'רמת הסינון הפעילה כרגע היא "\$level". בלשונית "סינון" אפשר לראות את כל מצב ההגנה והחסימות.';
+          : 'רמת הסינון הפעילה כרגע היא "$level". בלשונית "סינון" אפשר לראות את כל מצב ההגנה והחסימות.';
     }
     return 'אני כאן כדי לעזור. כתוב למשל "ה-VPN לא מתחבר", "החסימה לא עובדת", או "אני צריך נציג".';
   }
@@ -704,8 +704,8 @@ class ProfileScreen extends StatelessWidget {
   String _initials(String value) {
     final parts = value.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return 'פ';
-    if (parts.length == 1) return parts.first.characters.first;
-    return '\${parts.first.characters.first}\${parts.last.characters.first}';
+    if (parts.length == 1) return parts.first.substring(0, 1);
+    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}';
   }
 
   Future<void> _copy(BuildContext context, String label, String value) async {
