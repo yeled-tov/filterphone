@@ -1,10 +1,10 @@
+
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
 import 'config.dart';
 
-/// שגיאה מהשרת, עם הודעה בעברית שאפשר להציג למשתמש.
 class ApiException implements Exception {
   ApiException(this.status, this.message);
   final int status;
@@ -15,8 +15,6 @@ class ApiException implements Exception {
   @override
   String toString() => message;
 }
-
-// ------------------------------------------------------------------ קטלוג (טופס ההרשמה)
 
 class LevelInfo {
   const LevelInfo({required this.level, required this.name, required this.short, required this.desc});
@@ -80,6 +78,7 @@ class Catalog {
 
   List<OptionInfo> inCategory(String id) => options.where((o) => o.category == id).toList();
   List<OptionInfo> get popular => options.where((o) => o.popular).toList();
+
   OptionInfo? option(String id) {
     for (final o in options) {
       if (o.id == id) return o;
@@ -103,8 +102,6 @@ class Catalog {
 
 List<Map<String, Object?>> _list(Object? v) =>
     (v as List? ?? const []).map((e) => Map<String, Object?>.from(e as Map)).toList();
-
-// ------------------------------------------------------------------ הרשמה והפעלה
 
 class RegistrationForm {
   RegistrationForm({
@@ -163,7 +160,6 @@ class Enrollment {
       );
 }
 
-/// הגדרות ה-VPN (בלי התעודה) + התעודה — כמו שהשרת מחזיר ל-/v1/device/vpn.
 class VpnBundle {
   VpnBundle(this.vpn, this.caPem);
   final Map<String, Object?> vpn;
@@ -176,7 +172,32 @@ class VpnBundle {
   }
 }
 
-// ------------------------------------------------------------------ מצב המכשיר
+class CustomerInfo {
+  const CustomerInfo({
+    this.id,
+    this.name = '',
+    this.phone = '',
+    this.email = '',
+    this.payment = '',
+    this.paidUntil,
+  });
+
+  final int? id;
+  final String name;
+  final String phone;
+  final String email;
+  final String payment;
+  final int? paidUntil;
+
+  factory CustomerInfo.fromJson(Map<String, Object?> j) => CustomerInfo(
+        id: (j['id'] as num?)?.toInt(),
+        name: j['name'] as String? ?? '',
+        phone: j['phone'] as String? ?? '',
+        email: j['email'] as String? ?? '',
+        payment: j['payment'] as String? ?? '',
+        paidUntil: (j['paid_until'] as num?)?.toInt(),
+      );
+}
 
 class BlockInfo {
   const BlockInfo({required this.id, required this.title, required this.category});
@@ -193,6 +214,7 @@ class BlockInfo {
 
 class DeviceStatus {
   DeviceStatus({
+    required this.id,
     required this.name,
     required this.status,
     required this.level,
@@ -207,22 +229,25 @@ class DeviceStatus {
     this.blocks = const [],
     this.guardPolicy = const {},
     this.appsReportNeeded = false,
+    this.customer,
   });
 
+  final int id;
   final String name;
-  final String status; // pending / active / disabled / rejected
+  final String status;
   final int level;
   final String levelName;
-  final bool viaVpn; // הבקשה הזו הגיעה לשרת דרך המנהרה — הוכחה שהסינון פעיל
+  final bool viaVpn;
   final int blockedToday;
   final int paintedToday;
   final int sitesToday;
   final String message;
-  final String? requestKind; // join / change — הבקשה האחרונה
-  final String? requestStatus; // pending / approved / rejected / cancelled
+  final String? requestKind;
+  final String? requestStatus;
   final List<BlockInfo> blocks;
-  final Map<String, Object?> guardPolicy; // blocked_apps, blocked_screens — נאכף בטלפון
+  final Map<String, Object?> guardPolicy;
   final bool appsReportNeeded;
+  final CustomerInfo? customer;
 
   bool get isActive => status == 'active';
   bool get isPending => status == 'pending';
@@ -236,7 +261,11 @@ class DeviceStatus {
   factory DeviceStatus.fromJson(Map<String, Object?> j) {
     final today = Map<String, Object?>.from(j['today'] as Map? ?? const {});
     final req = j['request'] is Map ? Map<String, Object?>.from(j['request'] as Map) : null;
+    final customer =
+        j['customer'] is Map ? CustomerInfo.fromJson(Map<String, Object?>.from(j['customer'] as Map)) : null;
+
     return DeviceStatus(
+      id: (j['device_id'] as num?)?.toInt() ?? 0,
       name: j['name'] as String? ?? '',
       status: j['status'] as String? ?? 'active',
       level: (j['level'] as num?)?.toInt() ?? 1,
@@ -251,11 +280,10 @@ class DeviceStatus {
       blocks: _list(j['blocks']).map(BlockInfo.fromJson).toList(),
       guardPolicy: Map<String, Object?>.from(j['device_policy'] as Map? ?? const {}),
       appsReportNeeded: j['apps_report_needed'] as bool? ?? false,
+      customer: customer,
     );
   }
 }
-
-// ------------------------------------------------------------------ הלקוח
 
 class ApiClient {
   ApiClient({http.Client? client, String? baseUrl})
@@ -266,7 +294,6 @@ class ApiClient {
   final String _base;
   static const _timeout = Duration(seconds: 15);
 
-  /// כתובת השרת — גם למגן שבטלפון, שמרענן את רשימת החסימות בעצמו.
   String get baseUrl => _base;
 
   Future<Catalog> catalog() async => Catalog.fromJson(await _send('GET', '/v1/catalog'));
@@ -313,7 +340,6 @@ class ApiClient {
   Future<VpnBundle> vpnConfig(String token) async =>
       VpnBundle.fromJson(await _send('GET', '/v1/device/vpn', token: token));
 
-  /// מפתח VPN חדש (הקודם אבד בטלפון) — אותה כתובת ואותה מדיניות.
   Future<VpnBundle> rekey(String token, String publicKey) async =>
       VpnBundle.fromJson(await _send('POST', '/v1/device/rekey', token: token, body: {'public_key': publicKey}));
 
@@ -329,37 +355,45 @@ class ApiClient {
 
   Future<void> cancel(String token) => _send('DELETE', '/v1/device', token: token);
 
-  Future<Map<String, Object?>> _send(String method, String path,
-      {Map<String, Object?>? body, String? token}) async {
+  Future<Map<String, Object?>> _send(
+    String method,
+    String path, {
+    Map<String, Object?>? body,
+    String? token,
+  }) async {
     final uri = Uri.parse('$_base$path');
     final headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       if (token != null) 'Authorization': 'Bearer $token',
     };
+
     final http.Response res;
     try {
       res = await switch (method) {
         'POST' => _http.post(uri, headers: headers, body: jsonEncode(body)),
         'DELETE' => _http.delete(uri, headers: headers),
         _ => _http.get(uri, headers: headers),
-      }
-          .timeout(_timeout);
+      }.timeout(_timeout);
     } on Exception {
       throw ApiException(0, 'אין חיבור לשרת. בדקו את החיבור לאינטרנט ונסו שוב.');
     }
+
     Object? decoded;
     try {
       decoded = res.bodyBytes.isEmpty ? <String, Object?>{} : jsonDecode(utf8.decode(res.bodyBytes));
     } on FormatException {
       decoded = null;
     }
+
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return decoded is Map ? Map<String, Object?>.from(decoded) : <String, Object?>{};
     }
+
     final message = decoded is Map && decoded['error'] is String
         ? decoded['error'] as String
-        : 'שגיאה בשרת (${res.statusCode})';
+        : 'שגיאה בשרת (\${res.statusCode})';
+
     throw ApiException(res.statusCode, message);
   }
 }
