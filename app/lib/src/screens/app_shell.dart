@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
+import '../theme.dart';
 import '../config.dart';
 import 'change_request_screen.dart';
 import 'home_screen.dart';
@@ -269,7 +270,7 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
                       avatar: label == 'הכול' ? const Icon(Icons.apps_rounded, size: 18) : null,
                     );
                   },
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemCount: categories.length,
                 ),
               ),
@@ -325,7 +326,7 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
                       installed: installed.contains(visible[index].packageName),
                       onInstall: () => _requestInstall(visible[index]),
                     ),
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
                   );
                 },
               ),
@@ -548,10 +549,10 @@ class _SupportScreenState extends State<SupportScreen> {
     final d = widget.controller.device;
     final message = [
       'שלום, אני צריך עזרה ב-FilterPhone.',
-      'מזהה מכשיר: \${d?.id.toString() ?? 'לא ידוע'}',
-      'מכשיר: \${d?.name ?? 'לא ידוע'}',
-      'רמת סינון: \${d?.levelName ?? 'לא ידוע'}',
-      'VPN: \${widget.controller.vpn.isUp ? 'פעיל' : 'לא פעיל'}',
+      'מזהה מכשיר: ${d?.id.toString() ?? 'לא ידוע'}',
+      'מכשיר: ${d?.name ?? 'לא ידוע'}',
+      'רמת סינון: ${d?.levelName ?? 'לא ידוע'}',
+      'VPN: ${widget.controller.vpn.isUp ? 'פעיל' : 'לא פעיל'}',
     ].join('\n');
 
     if (supportWhatsAppNumber.trim().isEmpty) {
@@ -580,7 +581,7 @@ class _SupportScreenState extends State<SupportScreen> {
     } on PlatformException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('לא ניתן לפתוח WhatsApp: \${e.message ?? e.code}')),
+        SnackBar(content: Text('לא ניתן לפתוח WhatsApp: ${e.message ?? e.code}')),
       );
     }
   }
