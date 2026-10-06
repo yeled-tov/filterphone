@@ -5,6 +5,7 @@
     <string name="guard_app_blocked">האפליקציה חסומה בטלפון הזה (FilterPhone)</string>
     <string name="guard_screen_blocked">המסך הזה חסום בטלפון הזה (FilterPhone)</string>
     <string name="guard_profile_photo_blocked">תמונות פרופיל חסומות בטלפון הזה (FilterPhone)</string>
+    <string name="guard_keyword_blocked">החיפוש הזה חסום בטלפון הזה (FilterPhone)</string>
     <string name="protection_channel">הגנת FilterPhone</string>
     <string name="protection_channel_desc">התראה קבועה כל עוד הסינון פעיל — כדי שאנדרואיד לא יעצור את ההגנה ברקע.</string>
     <string name="protection_title">FilterPhone</string>

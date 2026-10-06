@@ -415,3 +415,52 @@ def test_heartbeat_logs_app_update_and_failure(env, tmp_path):
     assert next(e for e in d["device_log"] if e["kind"] == "app_updated")["detail"] == "1.0.7 → 1.0.8"
     assert d["latest_app_version"] == "1.0.8"
     assert row(svc, did)["app_version"] == "1.0.8"
+
+
+# ------------------------------------------------------------------ חסימת מילות חיפוש
+
+
+def test_keyword_block_is_on_by_default_in_device_policy(env):
+    svc, client = env
+    did, dh, _ = enroll(svc, client)
+    kw = client.get("/v1/device", headers=dh).json()["device_policy"]["keywords"]
+    assert kw["enabled"] is True and kw["action"] == "back"
+    assert "sex" in kw["terms"] and "porn" in kw["terms"] and "בקיני" in kw["terms"]
+    # דורש נגישות — ולכן מופיע כחסימה פעילה בסיכום
+    assert svc.compiled(row(svc, did)).needs_accessibility
+    assert any(b["id"] == "keyword_block" for b in client.get(f"/v1/admin/devices/{did}",
+                                                               headers=admin_headers(client)).json()["blocks"])
+
+
+def test_admin_can_disable_add_and_remove_keywords(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    base = len(client.get("/v1/device", headers=dh).json()["device_policy"]["keywords"]["terms"])
+
+    r = client.patch(f"/v1/admin/devices/{did}", headers=h,
+                     json={"keywords": {"extra": ["MyBadWord", "ביטוי רע"], "removed": ["bikini"]}})
+    assert r.status_code == 200, r.text
+    kw = client.get("/v1/device", headers=dh).json()["device_policy"]["keywords"]
+    assert "mybadword" in kw["terms"] and "ביטוי רע" in kw["terms"]   # מנורמל לאותיות קטנות
+    assert "bikini" not in kw["terms"]                                 # הוסר מברירת המחדל
+    assert len(kw["terms"]) == base + 2 - 1
+    # גרסת המדיניות עלתה — הטלפון יקבל עדכון
+    assert row(svc, did)["policy_version"] >= 2
+
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"keywords": {"enabled": False}})
+    kw = client.get("/v1/device", headers=dh).json()["device_policy"]["keywords"]
+    assert kw["enabled"] is False and kw["terms"]           # הרשימה נשמרת, רק כבויה
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    assert d["settings"]["keywords_effective"]["enabled"] is False
+    assert sorted(d["settings"]["keywords"]["extra"]) == sorted(["ביטוי רע", "mybadword"])
+
+
+def test_keyword_changes_survive_dump_load_roundtrip(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"keywords": {"enabled": False, "extra": ["zzz"]}})
+    from filterphone.api.catalog import DeviceSettings
+    s = DeviceSettings.load(row(svc, did)["policy"])
+    assert s.keywords == {"enabled": False, "extra": ["zzz"]}

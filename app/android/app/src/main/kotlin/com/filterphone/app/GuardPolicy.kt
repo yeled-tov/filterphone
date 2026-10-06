@@ -64,12 +64,16 @@ object GuardPolicy {
         }
     }
 
+    /** חסימת מילות חיפוש: רשימת מונחים מהשרת (כבר מנורמלת) + האם פעיל. null = כבוי. */
+    data class KeywordRule(val terms: List<String>, val action: String = "back")
+
     data class Policy(
         val apps: Set<String>,
         val screens: List<Screen>,
         val version: Int = 0,
         val checksum: String = "",
         val waProfile: WaDetector? = null,
+        val keywords: KeywordRule? = null,
         val dpc: JSONObject? = null,
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null
@@ -157,6 +161,7 @@ object GuardPolicy {
             version = o.optInt("version", 0),
             checksum = o.optString("checksum", ""),
             waProfile = wa,
+            keywords = parseKeywords(o.opt("keywords")),
             dpc = dpc,
         )
     }
@@ -185,6 +190,16 @@ object GuardPolicy {
             minArea = o.optDouble("min_area", d.minArea.toDouble()).toFloat().coerceIn(0.05f, 0.95f),
             excludeWindows = list("exclude_windows", d.excludeWindows),
         )
+    }
+
+    /** חסימת מילות חיפוש: רק אם פעיל ויש מונחים. גרסה ישנה של השרת (בלי השדה) → null. */
+    private fun parseKeywords(raw: Any?): KeywordRule? {
+        val o = raw as? JSONObject ?: return null
+        if (!o.optBoolean("enabled", false)) return null
+        val a = o.optJSONArray("terms") ?: return null
+        val terms = (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() }
+        if (terms.isEmpty()) return null
+        return KeywordRule(terms, o.optString("action", "back"))
     }
 
     /**

@@ -682,6 +682,7 @@ async function viewDevice(id) {
   const complianceCardEl = complianceCard(d);
   const logCard = deviceLogCard(d);
   const dpcCardEl = dpcCard(d, patch);
+  const keywordCardEl = keywordCard(d, patch);
 
   // --- סטטיסטיקה ואירועים
   const statsCard = card("7 הימים האחרונים", null, statsBars(d.history));
@@ -705,7 +706,7 @@ async function viewDevice(id) {
   return [back, header,
     complianceCardEl,
     el("div", { class: "grid two" }, customerCard, logCard),
-    levelCard, policyCard, appsCard, appImagesCard, customCard, dpcCardEl,
+    levelCard, policyCard, appsCard, appImagesCard, customCard, keywordCardEl, dpcCardEl,
     el("div", { class: "grid two" }, statsCard, learnedCard),
     eventsCard, historyCard];
 }
@@ -742,7 +743,7 @@ function complianceCard(d) {
         ["מגן FilterPhone (נגישות)", c.accessibility === "not_required" ? chip("לא נדרש") : c.accessibility === "on"
           ? chip(acc.running === false ? "מופעל אבל לא רץ" : "פעיל", acc.running === false ? "warn" : "ok")
           : c.accessibility === "off" ? chip("כבוי", "bad") : chip("לא דווח")],
-        ["חסימות שבוצעו בטלפון", hb.protections ? `${num(hb.protections.apps_blocked)} אפליקציות · ${num(hb.protections.screens_blocked)} מסכים · ${num(hb.protections.wa_profile_photo)} תמונות פרופיל` : "—"],
+        ["חסימות שבוצעו בטלפון", hb.protections ? `${num(hb.protections.apps_blocked)} אפליקציות · ${num(hb.protections.screens_blocked)} מסכים · ${num(hb.protections.wa_profile_photo)} תמונות פרופיל · ${num(hb.protections.keywords_blocked)} מילות חיפוש` : "—"],
       ]),
       kv([
         ["מנהל מכשיר (Device Owner)", yesNo(pick(hb.device_owner, g.device_owner))],
@@ -798,6 +799,27 @@ function dpcCard(d, patch) {
     el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
       await patch({ dpc: { frp_accounts: lines(frp.value) } });
     } }, "שמירת FRP")));
+}
+
+function keywordCard(d, patch) {
+  const kw = d.settings.keywords || {};
+  const eff = d.settings.keywords_effective || { enabled: true, terms: [] };
+  const defaults = d.settings.keyword_defaults_count || 0;
+  const toggle = el("input", { type: "checkbox", checked: eff.enabled !== false, "aria-label": "חסימת מילות חיפוש",
+    onchange: async (e) => { try { await patch({ keywords: { enabled: e.target.checked } }); } catch (_) { e.target.checked = !e.target.checked; } } });
+  const extra = el("textarea", { class: "rtl", rows: 3, placeholder: "מילה בכל שורה — נחסמת בנוסף לרשימת הבסיס", value: (kw.extra || []).join("\n") });
+  const removed = el("textarea", { class: "rtl", rows: 2, placeholder: "מילים מרשימת הבסיס שלא לחסום במכשיר הזה", value: (kw.removed || []).join("\n") });
+  return card("חסימת מילות חיפוש (נגישות)",
+    "אם הלקוח מקליד או מחפש מילה מהרשימה — בכל אפליקציה ובכל שפה — המגן מחזיר אותו אחורה. " +
+    "ההשוואה נעשית בטלפון בלבד; מה שמוקלד לא נשמר ולא נשלח. דורש שמגן FilterPhone יהיה פעיל.",
+    el("div", { class: "app-row" }, el("label", { class: "switch" }, toggle, el("span")),
+      el("div", { class: "grow" }, el("b", {}, "פעיל"),
+        el("small", {}, `רשימת בסיס רב-לשונית (${defaults} מילים) + מה שתוסיפו. סה"כ פעילות: ${eff.terms.length}`))),
+    el("label", {}, "מילים נוספות לחסימה", extra),
+    el("label", {}, "מילים מרשימת הבסיס להתיר (לא לחסום) במכשיר הזה", removed),
+    el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
+      await patch({ keywords: { extra: lines(extra.value), removed: lines(removed.value) } });
+    } }, "שמירת מילים")));
 }
 
 function phoneAppsCard(d, patch) {

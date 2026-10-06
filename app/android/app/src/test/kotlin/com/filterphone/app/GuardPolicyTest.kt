@@ -84,6 +84,21 @@ class GuardPolicyTest {
     }
 
     @Test
+    fun keywordBlockParsesWhenEnabledAndHasTerms() {
+        val p = GuardPolicy.parseStrict("""{"keywords":{"enabled":true,"action":"back","terms":["sex","סקס"]}}""")
+        assertNotNull(p.keywords)
+        assertEquals(listOf("sex", "סקס"), p.keywords!!.terms)
+        assertEquals("back", p.keywords!!.action)
+    }
+
+    @Test
+    fun keywordBlockIsNullWhenDisabledMissingOrEmpty() {
+        assertNull(GuardPolicy.parseStrict("""{"keywords":{"enabled":false,"terms":["sex"]}}""").keywords)
+        assertNull(GuardPolicy.parseStrict("""{"keywords":{"enabled":true,"terms":[]}}""").keywords)
+        assertNull(GuardPolicy.parseStrict("""{"blocked_apps":["a.b"]}""").keywords)   // גרסת שרת ישנה
+    }
+
+    @Test
     fun deviceOwnerDefaultsMatchServer() {
         val eff = DeviceOwnerManager.effective(null)
         assertTrue(eff.getValue("block_uninstall"))

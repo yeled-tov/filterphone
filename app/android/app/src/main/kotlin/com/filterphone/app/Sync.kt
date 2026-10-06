@@ -38,7 +38,7 @@ object Sync {
         ProtectionState.string(context, ProtectionState.VPN_ERROR)?.let { vpn.put("error", it.take(80)) }
 
         val policy = GuardPolicy.get(context)
-        val needsAccessibility = policy.screens.isNotEmpty() || policy.waProfile != null ||
+        val needsAccessibility = policy.screens.isNotEmpty() || policy.waProfile != null || policy.keywords != null ||
             (policy.apps.isNotEmpty() && !DeviceOwnerManager.isDeviceOwner(context))
         val accessibility = JSONObject()
             .put("enabled", GuardPolicy.isServiceEnabled(context))
@@ -61,7 +61,8 @@ object Sync {
             .put("protections", JSONObject()
                 .put("apps_blocked", ProtectionState.count(context, ProtectionState.APPS_BLOCKED))
                 .put("screens_blocked", ProtectionState.count(context, ProtectionState.SCREENS_BLOCKED))
-                .put("wa_profile_photo", ProtectionState.count(context, ProtectionState.WA_PHOTOS_BLOCKED)))
+                .put("wa_profile_photo", ProtectionState.count(context, ProtectionState.WA_PHOTOS_BLOCKED))
+                .put("keywords_blocked", ProtectionState.count(context, ProtectionState.KEYWORDS_BLOCKED)))
         power?.let { o.put("battery_unrestricted", it.isIgnoringBatteryOptimizations(context.packageName)) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) am?.let { o.put("background_restricted", it.isBackgroundRestricted) }
         context.getSystemService(NotificationManager::class.java)?.let { o.put("notifications", it.areNotificationsEnabled()) }

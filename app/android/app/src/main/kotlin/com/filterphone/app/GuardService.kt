@@ -33,6 +33,9 @@ class GuardService : AccessibilityService() {
     private var lastToastAt = 0L
     private var foreground: String? = null
     private var contentEvents = false
+    private var scanKeywords = false
+    private var keywordDetector: KeywordDetector? = null
+    private var keywordVersion = -1
     private var lastScanAt = 0L
     private var waStrikes = 0
     private var waFirstStrikeAt = 0L
@@ -49,14 +52,27 @@ class GuardService : AccessibilityService() {
         Recovery.syncSoon(this)            // לדווח לשרת שהמגן חזר
     }
 
-    /** סוגי האירועים: תמיד מעבר בין מסכים; שינויי תוכן — רק בוואטסאפ, רק כשצריך זיהוי תמונות פרופיל. */
+    /**
+     * סוגי האירועים: תמיד מעבר בין מסכים; שינויי תוכן — רק בוואטסאפ (זיהוי תמונות פרופיל);
+     * שינויי טקסט — כשחסימת מילות חיפוש פעילה (כל אפליקציה, כדי לתפוס הקלדה בשדה חיפוש).
+     */
     private fun reconfigure() {
-        val wa = GuardPolicy.get(this).waProfile
+        val policy = GuardPolicy.get(this)
+        val wa = policy.waProfile
         val wantContent = wa != null && wa.packages.contains(foreground)
+        scanKeywords = policy.keywords != null
+        if (scanKeywords && keywordVersion != policy.version) {
+            keywordDetector = KeywordDetector(policy.keywords!!.terms)
+            keywordVersion = policy.version
+        } else if (!scanKeywords) {
+            keywordDetector = null
+            keywordVersion = -1
+        }
         if (serviceInfo == null) return
         val info = serviceInfo
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
-            (if (wantContent) AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED else 0)
+            (if (wantContent) AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED else 0) or
+            (if (scanKeywords) AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED else 0)
         info.flags = info.flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         info.notificationTimeout = if (wantContent) 150 else 0
         runCatching { serviceInfo = info }
@@ -67,12 +83,62 @@ class GuardService : AccessibilityService() {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: return
         val policy = GuardPolicy.get(this)
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            if (scanKeywords) onTyped(pkg, event)
+            return
+        }
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             markAlive()
             trackForeground(pkg, policy)
             if (!policy.isEmpty) onWindow(pkg, event.className?.toString(), policy)
+            if (scanKeywords) checkFocusedInput(pkg)
         } else if (contentEvents) {
             onContent(pkg, policy)
+        }
+    }
+
+    /**
+     * המשתמש הקליד בשדה (חיפוש, כתובת, כל שדה טקסט): אם מה שהוקלד מכיל מילה חסומה — חזרה אחורה,
+     * וניקוי השדה (אם אפשר) כדי שהחיפוש לא יישאר. בלי לשמור או לשלוח את מה שהוקלד.
+     */
+    private fun onTyped(pkg: String, event: AccessibilityEvent) {
+        if (pkg == packageName || event.isPassword) return
+        val detector = keywordDetector ?: return
+        val typed = event.text.joinToString(" ")
+        val hit = detector.match(typed) ?: event.source?.let { src ->
+            val m = if (src.isPassword) null else detector.match(src.text) ?: detector.match(src.contentDescription)
+            if (m != null) clearField(src)
+            recycle(src)
+            m
+        }
+        if (hit != null) blockKeyword(pkg, hit)
+    }
+
+    /** מסך נפתח עם טקסט שכבר מולא (למשל חזרה לתוצאות חיפוש): בודקים את שדה הקלט שבפוקוס. */
+    private fun checkFocusedInput(pkg: String) {
+        if (pkg == packageName) return
+        val detector = keywordDetector ?: return
+        val node = runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull() ?: return
+        val hit = if (node.isPassword) null else detector.match(node.text) ?: detector.match(node.contentDescription)
+        if (hit != null) clearField(node)
+        recycle(node)
+        if (hit != null) blockKeyword(pkg, hit)
+    }
+
+    private fun clearField(node: AccessibilityNodeInfo) {
+        if (!node.isEditable) return
+        runCatching {
+            val args = android.os.Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "")
+            }
+            node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+        }
+    }
+
+    private fun blockKeyword(pkg: String, rule: String) {
+        if (debug) Log.d(TAG, "keyword blocked: $rule")
+        if (block(pkg, GLOBAL_ACTION_BACK, R.string.guard_keyword_blocked, minGapMs = 700)) {
+            ProtectionState.inc(this, ProtectionState.KEYWORDS_BLOCKED)
         }
     }
 

@@ -230,7 +230,8 @@ class DeviceStatus {
   bool get hasPendingChange => requestKind == 'change' && requestStatus == 'pending';
   bool get needsGuard =>
       (guardPolicy['blocked_apps'] as List? ?? const []).isNotEmpty ||
-      (guardPolicy['blocked_screens'] as List? ?? const []).isNotEmpty;
+      (guardPolicy['blocked_screens'] as List? ?? const []).isNotEmpty ||
+      (guardPolicy['keywords'] as Map?)?['enabled'] == true;
 
   factory DeviceStatus.fromJson(Map<String, Object?> j) {
     final today = Map<String, Object?>.from(j['today'] as Map? ?? const {});

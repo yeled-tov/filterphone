@@ -362,6 +362,27 @@ DPC_DEFAULTS: dict[str, bool | list] = {
 }
 _FRP_ID = re.compile(r"^\d{6,30}$")
 
+# חסימת מילות חיפוש דרך הנגישות: אם הלקוח מקליד/מחפש מילה מהרשימה בכל אפליקציה, המגן מחזיר אותו
+# אחורה. פעיל כברירת מחדל, עם רשימת בסיס רב-לשונית שהמנהל יכול להרחיב או לצמצם לכל מכשיר.
+# זו רשימת חסימה (denylist) של מונחי תוכן מפורש בלבד — הטלפון משווה אליה טקסט מקומית ולא שומר/שולח
+# כלום. הרשימה מנורמלת (אותיות קטנות, בלי ניקוד/טעמים) — ראו clean_term והזיהוי באנדרואיד.
+_KEYWORD_SEED: tuple[str, ...] = (
+    # עברית
+    "סקס", "סקסי", "פורנו", "פורנוגרפיה", "פורנהאב", "עירום", "תמונות עירום", "זיון", "זונה",
+    "חשפנית", "בקיני", "ביקיני", "אתרי סקס",
+    # English
+    "sex", "sexy", "porn", "porno", "pornography", "pornhub", "xvideos", "xnxx", "redtube",
+    "youporn", "onlyfans", "hentai", "xxx", "nude", "nudes", "naked", "boobs", "milf", "escort",
+    "camgirl", "lingerie", "bikini", "nsfw",
+    # العربية / Русский / Français / Español
+    "سكس", "اباحي", "عاري", "секс", "порно", "голый", "sexe", "porno", "desnuda", "sexo",
+    # 中文 / 日本語 / 한국어
+    "性交", "色情", "裸体", "エロ", "アダルト", "포르노", "섹스",
+)
+KEYWORD_DEFAULTS: dict = {"enabled": True, "action": "back"}
+MAX_KEYWORD_TERMS = 1000
+_TERM_STRIP = re.compile(r"\s+")
+
 APP_IMAGES = ("auto", "block", "allow")
 _HOST_RE = re.compile(r"^(?:\*\.)?(?:[a-z0-9*](?:[a-z0-9*-]{0,61}[a-z0-9*])?\.)+[a-z*]{2,63}$")
 _PKG_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$")
@@ -394,6 +415,24 @@ def clean_package(raw: str) -> str | None:
     return p if _PKG_RE.match(p) and len(p) <= 200 else None
 
 
+def clean_term(raw: str) -> str | None:
+    """מילת חיפוש לחסימה: אותיות קטנות, בלי רווחים כפולים, עד 40 תווים. None אם ריק."""
+    t = _TERM_STRIP.sub(" ", str(raw).strip().lower())[:40].strip()
+    return t or None
+
+
+def resolve_keywords(cfg: dict | None) -> dict:
+    """ההגדרה האפקטיבית שנשלחת לטלפון: {enabled, action, terms} — ברירת המחדל + תוספות המנהל
+    פחות מה שהוסר. terms מנורמל וממוין (השוואה בטלפון היא מקומית, בלי לשמור טקסט)."""
+    cfg = cfg if isinstance(cfg, dict) else {}
+    enabled = cfg.get("enabled", KEYWORD_DEFAULTS["enabled"])
+    removed = {t for t in map(clean_term, cfg.get("removed") or []) if t}
+    extra = {t for t in map(clean_term, cfg.get("extra") or []) if t}
+    base = {t for t in map(clean_term, _KEYWORD_SEED) if t}
+    terms = sorted((base | extra) - removed)[:MAX_KEYWORD_TERMS]
+    return {"enabled": bool(enabled), "action": "back", "terms": terms}
+
+
 # ---------------------------------------------------------------- מדיניות מכשיר
 
 @dataclass(slots=True)
@@ -405,6 +444,7 @@ class DeviceSettings:
     app_rules: dict[str, dict] = field(default_factory=dict)    # pkg → {"mode": ..., "hosts": [...]}
     app_images: str = "auto"                    # auto = לפי הרמה (1–2 חסום, 3 מותר)
     dpc: dict = field(default_factory=dict)     # רק מה ששונה מ-DPC_DEFAULTS
+    keywords: dict = field(default_factory=dict)  # חסימת מילות חיפוש: {enabled, extra, removed} מעל ברירת המחדל
 
     @property
     def custom_apps(self) -> list[str]:
@@ -459,6 +499,20 @@ class DeviceSettings:
                     out[k] = pk
         return out
 
+    @staticmethod
+    def _load_keywords(raw) -> dict:
+        if not isinstance(raw, dict):
+            return {}
+        out: dict = {}
+        if isinstance(raw.get("enabled"), bool) and raw["enabled"] != KEYWORD_DEFAULTS["enabled"]:
+            out["enabled"] = raw["enabled"]
+        for key in ("extra", "removed"):
+            if isinstance(raw.get(key), list):
+                vals = sorted({t for t in map(clean_term, raw[key]) if t})[:MAX_KEYWORD_TERMS]
+                if vals:
+                    out[key] = vals
+        return out
+
     @classmethod
     def load(cls, raw: str | None) -> DeviceSettings:
         try:
@@ -474,18 +528,22 @@ class DeviceSettings:
             app_rules=cls._load_rules(d),
             app_images=d.get("app_images") if d.get("app_images") in APP_IMAGES else "auto",
             dpc=cls._load_dpc(d.get("dpc")),
+            keywords=cls._load_keywords(d.get("keywords")),
         )
 
     def dump(self) -> str:
         # custom_apps נשמר גם הוא — כדי שגרסה קודמת של השרת (חזרה לאחור) תמשיך לחסום
         return json.dumps({"options": self.options, "custom_hosts": self.custom_hosts,
                            "allow_hosts": self.allow_hosts, "custom_apps": self.custom_apps,
-                           "app_rules": self.app_rules, "app_images": self.app_images, "dpc": self.dpc},
+                           "app_rules": self.app_rules, "app_images": self.app_images, "dpc": self.dpc,
+                           "keywords": self.keywords},
                           ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
         d = json.loads(self.dump())
         d["dpc_effective"] = {**DPC_DEFAULTS, **self.dpc}
+        d["keywords_effective"] = resolve_keywords(self.keywords)      # {enabled, action, terms}
+        d["keyword_defaults_count"] = len(resolve_keywords({})["terms"])
         return d
 
     def update(self, changes: dict) -> list[str]:
@@ -546,6 +604,21 @@ class DeviceSettings:
                 if bad_frp:
                     errors.append("מזהה חשבון Google לשחרור FRP צריך להיות מספר (לא כתובת מייל)")
                 self.dpc = self._load_dpc({**self.dpc, **changes["dpc"]})
+        if changes.get("keywords") is not None:
+            kw = changes["keywords"]
+            if not isinstance(kw, dict):
+                errors.append("הגדרות חסימת מילים לא תקינות")
+            else:
+                merged = dict(self.keywords)
+                if isinstance(kw.get("enabled"), bool):
+                    merged["enabled"] = kw["enabled"]
+                for key in ("extra", "removed"):
+                    if kw.get(key) is not None:
+                        if not isinstance(kw[key], list):
+                            errors.append(f"רשימת מילים לא תקינה ({key})")
+                        else:
+                            merged[key] = [str(x) for x in kw[key]]
+                self.keywords = self._load_keywords(merged)
         return errors
 
 
@@ -565,6 +638,7 @@ class Compiled:
     app_rules: tuple[dict, ...] = ()            # [{"package", "mode"}] — מה שהמנהל בחר לכל אפליקציה
     protections: tuple[str, ...] = ()
     dpc: dict = field(default_factory=dict)
+    keywords: dict = field(default_factory=dict)  # {enabled, action, terms} — חסימת מילות חיפוש בנגישות
     network_only_unknown: tuple[str, ...] = ()  # אפליקציות "ברשת" בלי שרתים ידועים — אין מה לחסום
 
     def proxy_json(self, level: int) -> str:
@@ -575,8 +649,8 @@ class Compiled:
 
     @property
     def needs_accessibility(self) -> bool:
-        """מסכים והגנות מיוחדות — רק בנגישות. חסימת אפליקציות — גם מנהל מכשיר יכול (הסתרה)."""
-        return bool(self.screens or self.protections)
+        """מסכים, הגנות מיוחדות וחסימת מילים — רק בנגישות. חסימת אפליקציות — גם מנהל מכשיר (הסתרה)."""
+        return bool(self.screens or self.protections or self.keywords.get("enabled"))
 
     def device_json(self) -> dict:
         """מה שהאפליקציה בטלפון אוכפת (מגן FilterPhone / מנהל מכשיר).
@@ -589,6 +663,7 @@ class Compiled:
             "app_rules": list(self.app_rules),
             "protections": {k: PROTECTIONS[k] for k in self.protections if k in PROTECTIONS},
             "dpc": self.dpc,
+            "keywords": self.keywords,
         }
 
 
@@ -622,6 +697,7 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         app_rules=tuple({"package": p, "mode": r["mode"]} for p, r in s.app_rules.items()),
         protections=tuple(sorted({k for o in opts for k in o.protections})),
         dpc={**DPC_DEFAULTS, **s.dpc},
+        keywords=resolve_keywords(s.keywords),
         network_only_unknown=tuple(unknown),
     )
 
@@ -640,4 +716,7 @@ def summary(s: DeviceSettings) -> list[dict]:
         out.append({"id": "custom_hosts", "title": f"אתרים נוספים ({len(s.custom_hosts)})", "category": "custom"})
     if s.app_rules:
         out.append({"id": "custom_apps", "title": f"אפליקציות נוספות ({len(s.app_rules)})", "category": "custom"})
+    kw = resolve_keywords(s.keywords)
+    if kw["enabled"] and kw["terms"]:
+        out.append({"id": "keyword_block", "title": f"חסימת מילות חיפוש ({len(kw['terms'])})", "category": "custom"})
     return out

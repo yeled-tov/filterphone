@@ -20,6 +20,7 @@ object ProtectionState {
     const val APPS_BLOCKED = "apps_blocked"
     const val SCREENS_BLOCKED = "screens_blocked"
     const val WA_PHOTOS_BLOCKED = "wa_photos_blocked"
+    const val KEYWORDS_BLOCKED = "keywords_blocked"      // חיפושים שנחסמו לפי מילה
     const val CA_PEM = "ca_pem"                       // תעודת הסינון (ציבורית) — לבדיקה אם מותקנת
 
     fun prefs(context: Context): SharedPreferences =

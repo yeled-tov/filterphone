@@ -77,7 +77,8 @@ _HB_SECTIONS = {
     "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool},
     "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
     "dpc": {"applied": list, "failed": list, "always_on_vpn": str, "lockdown": bool, "frp": bool},
-    "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int},
+    "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int,
+                    "keywords_blocked": int},
     "update": {"state": str, "version": str, "error": str},
 }
 # מעברים שנרשמים ביומן המכשיר
@@ -909,7 +910,8 @@ class Services:
             raise ApiError(400, "רמה לא חוקית")
         if "status" in allowed and allowed["status"] not in ("active", "disabled"):
             raise ApiError(400, "סטטוס לא חוקי")
-        policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc")
+        policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc",
+                       "keywords")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()

@@ -87,11 +87,12 @@ class AppController extends ChangeNotifier {
 
   bool get guardNeeded => device?.needsGuard ?? false;
 
-  /// מסכים והגנות מיוחדות (סטטוסים, תמונות פרופיל) עובדים רק במגן — גם כשיש מנהל מכשיר.
+  /// מסכים, הגנות מיוחדות (סטטוסים, תמונות פרופיל) וחסימת מילות חיפוש — רק במגן, גם עם מנהל מכשיר.
   bool get _guardOnlyNeeded {
     final p = device?.guardPolicy ?? const {};
     return (p['blocked_screens'] as List? ?? const []).isNotEmpty ||
-        (p['protections'] as Map? ?? const {}).isNotEmpty;
+        (p['protections'] as Map? ?? const {}).isNotEmpty ||
+        (p['keywords'] as Map?)?['enabled'] == true;
   }
 
   Map<Check, bool> get checks => {

@@ -304,6 +304,7 @@ class DevicePatch(BaseModel):
     app_rules: list[dict] | None = Field(default=None, max_length=500)
     app_images: str | None = None
     dpc: dict | None = None
+    keywords: dict | None = None
 
 
 class Decision(BaseModel):
