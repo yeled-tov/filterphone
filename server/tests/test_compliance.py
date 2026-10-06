@@ -556,3 +556,50 @@ def test_cannot_pause_inactive_device(env):
     client.patch(f"/v1/admin/devices/{did}", headers=h, json={"status": "disabled"})
     # מכשיר שאינו פעיל — לא ניתן להשהות
     assert client.post(f"/v1/admin/devices/{did}/pause", headers=h, json={"minutes": 10}).status_code == 409
+
+
+# ------------------------------------------------------------------ החלפת מכשיר
+
+
+def test_device_transfer_inherits_policy_and_disables_old(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, old_ip = enroll(svc, client, level=1)
+    # נותנים למכשיר הישן מדיניות ייחודית שתעבור לחדש
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"level": 2, "options": ["whatsapp_status"]})
+
+    r = client.post(f"/v1/admin/devices/{did}/transfer", headers=h)
+    assert r.status_code == 200, r.text
+    token = r.json()["token"]
+
+    # הטלפון החדש נרשם עם טוקן ההחלפה
+    new = client.post("/v1/transfer", json={"token": token, "public_key": wg_key(80), "name": "טלפון חדש",
+                                            "platform": "android"})
+    assert new.status_code == 201, new.text
+    nj = new.json()
+    assert nj["level"] == 2 and nj["vpn"]["address"].split("/")[0] != old_ip
+    new_id = nj["device_id"]
+    nh = {"Authorization": f"Bearer {nj['token']}"}
+    # יורש את המדיניות (רמה 2 + הסטטוסים)
+    pol = client.get("/v1/device", headers=nh).json()
+    assert pol["level"] == 2 and any(b["id"] == "whatsapp_status" for b in pol["blocks"])
+    # הישן הושבת ואין לו גישה
+    assert row(svc, did)["status"] == "disabled"
+    assert client.get("/v1/device", headers=dh).json()["status"] == "disabled"
+    # הטוקן חד-פעמי — לא ניתן לשימוש חוזר
+    assert client.post("/v1/transfer", json={"token": token, "public_key": wg_key(81),
+                                             "platform": "android"}).status_code == 403
+    assert any(a["action"] == "transfer_done" for a in svc.list_audit())
+    d = client.get(f"/v1/admin/devices/{new_id}", headers=h).json()
+    assert any(e["kind"] == "transfer_in" for e in d["device_log"])
+
+
+def test_expired_transfer_token_rejected(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, _, _ = enroll(svc, client)
+    token = client.post(f"/v1/admin/devices/{did}/transfer", headers=h).json()["token"]
+    with svc.db() as c, db.transaction(c):
+        c.execute("UPDATE devices SET transfer_expires = ? WHERE id = ?", (db.now() - 5, did))
+    assert client.post("/v1/transfer", json={"token": token, "public_key": wg_key(82),
+                                             "platform": "android"}).status_code == 403

@@ -851,11 +851,24 @@ function maintenanceCard(d) {
           "הסרת ניהול", true)) return;
         await act("unmanage", {});
       } }, "הסרת ניהול מהמכשיר");
+  const transfer = el("button", { class: "ghost small", onclick: async () => {
+    if (!await confirmDialog("להחליף מכשיר?",
+      "ייווצר קוד חד-פעמי (24 שעות). הטלפון החדש נרשם איתו ויורש את הלקוח, הרמה והחסימות. " +
+      "הטלפון הישן יושבת ברגע שההחלפה תתבצע.", "צור קוד החלפה")) return;
+    const r = await attempt(() => api(`/v1/admin/devices/${id}/transfer`, { method: "POST" }));
+    await dialog("קוד החלפת מכשיר", el("div", { class: "stack" },
+      el("p", { class: "code" }, r.token),
+      el("p", { class: "muted small" }, "מזינים אותו בטלפון החדש (מסך ההפעלה ← 'החלפת מכשיר'). תקף 24 שעות, לשימוש חד-פעמי."),
+      el("button", { type: "button", class: "ghost", onclick: () => navigator.clipboard.writeText(r.token).then(() => toast("הועתק")) }, "העתקה")),
+      "סגירה");
+    render();
+  } }, "החלפת מכשיר");
   return card("תחזוקה וניהול", "פעולות מנהל מאושרות — כולן נרשמות ביומן הפעולות (audit).",
     el("div", { class: "stack" },
       el("div", {}, el("b", {}, "השהיית הגנה (מצב תחזוקה)"),
         el("small", {}, "זמנית: סינון התמונות, המגן ונעילת ה-VPN מורפים עד שהזמן נגמר — ואז הכול חוזר לבד."),
         ...rows),
+      el("div", {}, el("b", {}, "החלפת מכשיר"), el("small", {}, "העברת הלקוח והמדיניות לטלפון חדש."), transfer),
       el("div", {}, el("b", {}, "הסרת ניהול"), el("small", {}, "שחרור FilterPhone מתפקיד מנהל המכשיר."), unmanage)));
 }
 

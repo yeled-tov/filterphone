@@ -204,8 +204,23 @@ MockClient fakeServer({int deviceStatus = 200, String? enrollError}) => MockClie
             201,
             headers: {'content-type': 'application/json; charset=utf-8'});
       }
+      if (path == '/v1/transfer') {
+        final body = jsonDecode(req.body) as Map;
+        expect(body['token'], startsWith('FPT-'));
+        expect(body['public_key'], isNotEmpty);
+        return http.Response(
+            jsonEncode({
+              'token': 'new-device-token',
+              'level': 2,
+              'level_name': 'בינוני',
+              'vpn': _vpn,
+              'ca': {'pem': '-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n'},
+            }),
+            201,
+            headers: {'content-type': 'application/json; charset=utf-8'});
+      }
       if (path == '/v1/device') {
-        expect(req.headers['authorization'], 'Bearer device-token');
+        expect(req.headers['authorization'], startsWith('Bearer '));
         if (deviceStatus != 200) {
           return http.Response(jsonEncode({'error': 'המכשיר לא מזוהה'}), deviceStatus,
               headers: {'content-type': 'application/json; charset=utf-8'});
@@ -445,6 +460,19 @@ void main() {
     native.caInstalled = true;
     await c.refresh();
     expect(c.isProtected, isTrue);
+    c.dispose();
+  });
+
+  test('transfer code activates via /v1/transfer and inherits the level', () async {
+    final native = FakeNative();
+    final store = MemoryStore();
+    final c = makeController(native, fakeServer(), store);
+    await c.start();
+    // קוד החלפה (ארוך, בלי מקף) → נתיב /v1/transfer, יורש רמה 2 מהמכשיר הישן
+    expect(await c.activate('FPT-abc123def456ghi789', ''), isTrue);
+    expect(c.phase, Phase.home);
+    expect(store.data['device_token'], 'new-device-token');
+    expect(native.savedVpn?['address'], '10.8.0.10/32');
     c.dispose();
   });
 

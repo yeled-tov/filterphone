@@ -334,6 +334,24 @@ class ApiClient {
     return Enrollment.fromJson(j);
   }
 
+  /// הפעלה בקוד החלפת מכשיר: הטלפון החדש יורש את הלקוח, הרמה והמדיניות מהישן.
+  Future<Enrollment> transfer({
+    required String token,
+    required String publicKey,
+    required String name,
+    required String platform,
+    required String appVersion,
+  }) async {
+    final j = await _send('POST', '/v1/transfer', body: {
+      'token': token,
+      'public_key': publicKey,
+      'name': name,
+      'platform': platform,
+      'app_version': appVersion,
+    });
+    return Enrollment.fromJson(j);
+  }
+
   Future<DeviceStatus> device(String token) async =>
       DeviceStatus.fromJson(await _send('GET', '/v1/device', token: token));
 

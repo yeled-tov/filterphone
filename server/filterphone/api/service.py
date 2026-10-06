@@ -460,6 +460,68 @@ class Services:
             "ca": self.ca_info(),
         }
 
+    # ------------------------------------------------------------ החלפת מכשיר (ישן → חדש)
+
+    TRANSFER_TTL_S = 24 * 3600
+
+    def create_transfer(self, device_id: int, admin: str) -> dict:
+        """המנהל מתחיל החלפת מכשיר: טוקן חד-פעמי (24ש') שאיתו הטלפון החדש יירשם ויירש את הלקוח,
+        הרמה והמדיניות של הישן. הטלפון הישן מושבת ברגע שההחלפה מתבצעת. נרשם ב-audit."""
+        token = "FPT-" + security.new_token()     # קידומת לזיהוי בטלפון (קוד החלפה, לא קוד הפעלה רגיל)
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            exp = db.now() + self.TRANSFER_TTL_S
+            c.execute("UPDATE devices SET transfer_token = ?, transfer_expires = ? WHERE id = ?",
+                      (security.token_hash(token), exp, device_id))
+            self.log_device(c, device_id, "transfer_started")
+            self.audit(admin, "transfer_start", f"device:{device_id}", "", c)
+        return {"token": token, "expires_at": db.now() + self.TRANSFER_TTL_S}
+
+    def transfer_enroll(self, token: str, public_key: str, name: str, platform: str, app_version: str) -> dict:
+        """הטלפון החדש נרשם עם טוקן ההחלפה: מקבל כתובת ומפתחות חדשים, יורש לקוח/רמה/מדיניות מהישן,
+        והישן מושבת (anti-replay: הטוקן חד-פעמי ונמחק, ובדיקת תוקף)."""
+        if not security.is_wg_key(public_key):
+            raise ApiError(400, "מפתח ציבורי לא תקין")
+        name = (name or "").strip()[:60] or "מכשיר"
+        new_token = security.new_token()
+        psk = security.new_preshared_key()
+        with self.db() as c, db.transaction(c):
+            old = c.execute("SELECT * FROM devices WHERE transfer_token = ? AND transfer_token != ''",
+                            (security.token_hash(token),)).fetchone()
+            if old is None or not old["transfer_expires"] or old["transfer_expires"] < db.now():
+                raise ApiError(403, "קוד ההחלפה לא תקין או שפג תוקפו")
+            if c.execute("SELECT 1 FROM devices WHERE public_key = ?", (public_key,)).fetchone():
+                raise ApiError(409, "המכשיר כבר רשום")
+            ip = self._allocate_ip(c)
+            t = db.now()
+            cur = c.execute(
+                "INSERT INTO devices (name, label, platform, app_version, public_key, preshared_key, vpn_ip,"
+                " level, policy, customer_id, token_hash, code_id, created_at, approved_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, old["label"], platform[:20], app_version[:20], public_key, psk, ip, old["level"],
+                 old["policy"], old["customer_id"], security.token_hash(new_token), old["code_id"], t, t))
+            new_id = cur.lastrowid
+            # הישן: מושבת, הטוקן נשרף (חד-פעמי), והחיבור שלו מוסר
+            c.execute("UPDATE devices SET status = 'disabled', transfer_token = '', transfer_expires = NULL "
+                      "WHERE id = ?", (old["id"],))
+            self.bump_policy(c, new_id)
+            self.log_device(c, old["id"], "transfer_done", f"→ מכשיר {new_id}")
+            self.log_device(c, new_id, "transfer_in", f"← מכשיר {old['id']}")
+            self.audit("transfer", "transfer_done", f"device:{new_id}", f"from device:{old['id']}", c)
+            if old["public_key"]:
+                self.wg.remove_peer(old["public_key"])
+            self.wg.add_peer(public_key, psk, ip)
+            new = c.execute("SELECT * FROM devices WHERE id = ?", (new_id,)).fetchone()
+            old_full = c.execute("SELECT * FROM devices WHERE id = ?", (old["id"],)).fetchone()
+        self.push_device(old_full)      # מסיר את הישן מהפרוקסי
+        self.push_device(new)
+        log.info("transferred device %s → %s at %s", old["id"], new_id, ip)
+        return {"device_id": new_id, "token": new_token, "status": "active", "level": old["level"],
+                "level_name": LEVEL_NAMES.get(old["level"], str(old["level"])),
+                "vpn": self.vpn_config(ip, psk), "ca": self.ca_info()}
+
     # ------------------------------------------------------------ הרשמה מהאפליקציה
 
     def register(self, *, name: str, phone: str, email: str, level: int, options: list[str], note: str,

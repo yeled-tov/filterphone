@@ -335,13 +335,16 @@ class AppController extends ChangeNotifier {
     return _guard(() async {
       final info = await native.deviceInfo();
       final publicKey = await native.generateKeyPair();
-      final e = await api.enroll(
-        code: code.trim(),
-        publicKey: publicKey,
-        name: name.trim().isEmpty ? '${info['manufacturer']} ${info['model']}' : name.trim(),
-        platform: 'android',
-        appVersion: '${info['appVersion'] ?? ''}',
-      );
+      final trimmed = code.trim();
+      final deviceName = name.trim().isEmpty ? '${info['manufacturer']} ${info['model']}' : name.trim();
+      final appVersion = '${info['appVersion'] ?? ''}';
+      // קוד החלפת מכשיר (קידומת FPT-) נרשם דרך /v1/transfer ויורש מהמכשיר הישן; אחרת קוד הפעלה רגיל.
+      final isTransfer = trimmed.toUpperCase().startsWith('FPT-');
+      final e = isTransfer
+          ? await api.transfer(token: trimmed, publicKey: publicKey, name: deviceName,
+              platform: 'android', appVersion: appVersion)
+          : await api.enroll(code: trimmed, publicKey: publicKey, name: deviceName,
+              platform: 'android', appVersion: appVersion);
       await native.saveVpnConfig(e.vpn);
       await store.write(_kToken, e.token);
       await store.write(_kCa, e.caPem);

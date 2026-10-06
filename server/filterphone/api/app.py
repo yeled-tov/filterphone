@@ -238,6 +238,14 @@ class EnrollIn(BaseModel):
     app_version: str = Field(default="", max_length=20)
 
 
+class TransferIn(BaseModel):
+    token: str = Field(min_length=10, max_length=80)
+    public_key: str = Field(min_length=44, max_length=44)
+    name: str = Field(default="", max_length=60)
+    platform: str = Field(default="", max_length=20)
+    app_version: str = Field(default="", max_length=20)
+
+
 class RegisterIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     phone: str = Field(min_length=1, max_length=30)
@@ -401,6 +409,11 @@ def _routes(app: FastAPI) -> None:
         _limit(enroll_limiter, client_ip(request))
         return svc.enroll(body.code, body.public_key, body.name, body.platform, body.app_version)
 
+    @app.post("/v1/transfer", status_code=201)
+    def transfer(body: TransferIn, request: Request, svc: SvcDep):
+        _limit(enroll_limiter, client_ip(request))
+        return svc.transfer_enroll(body.token, body.public_key, body.name, body.platform, body.app_version)
+
     @app.get("/v1/device")
     def device(request: Request, svc: SvcDep, row: DeviceRow):
         return svc.device_status(row, client_ip(request))
@@ -512,6 +525,10 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/admin/devices/{device_id}/unmanage")
     def unmanage_device(device_id: int, svc: SvcDep, admin: AdminRow):
         return svc.request_unmanage(device_id, admin["username"])
+
+    @app.post("/v1/admin/devices/{device_id}/transfer")
+    def transfer_device(device_id: int, svc: SvcDep, admin: AdminRow):
+        return svc.create_transfer(device_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/reset-apps")
     def reset_apps(device_id: int, svc: SvcDep, admin: AdminRow):
