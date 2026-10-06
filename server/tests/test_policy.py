@@ -1,7 +1,7 @@
 import dataclasses
 
-from filterphone.engine.policy import Action, PaintMode, Thresholds, decide, on_failure
-from filterphone.engine.segment import SegStats
+from filterphone.engine.policy import Action, PaintMode, Thresholds, decide, on_failure, women_among
+from filterphone.engine.segment import Person, SegStats
 
 T = Thresholds(person=0.5, female_strict=0.6, female_check=0.2, female=0.5,
                immodest=0.5, immodest_high=0.85, nsfw_check=0.15, nsfw_block=0.95)
@@ -146,3 +146,69 @@ def test_thresholds_from_dict_ignores_unknown_keys():
 def test_thresholds_gate_derived_for_old_heads():
     assert Thresholds.from_dict({"immodest": 0.38}).immodest_check == 0.19
     assert Thresholds.from_dict({"immodest": 0.38, "immodest_check": 0.1}).immodest_check == 0.1
+
+
+# ---------------------------------------------------------------- רמה 2: צובעים רק נשים
+
+TW = dataclasses.replace(T, person_female=0.4, headless_female=0.3, female_strict=0.8)
+
+
+def test_women_among_judges_each_person_with_a_head():
+    assert women_among([0.9], [True], 0.9, TW) == [True]
+    assert women_among([0.05], [True], 0.5, TW) == [False]                   # גבר לבד
+    assert women_among([0.9, 0.05], [True, True], 0.9, TW) == [True, False]  # אישה וגבר — רק היא
+
+
+def test_women_among_parts_without_head_follow_the_people_in_the_image():
+    # רגל/יד שהסגמנטציה הפרידה: הולכת לפי מי שיש בתמונה
+    assert women_among([0.9, -1.0], [True, False], 0.9, TW) == [True, True]
+    assert women_among([0.05, -1.0], [True, False], 0.5, TW) == [False, False]
+    # אף אחד לא מראה ראש — לפי התמונה כולה
+    assert women_among([-1.0], [False], 0.35, TW) == [True]
+    assert women_among([-1.0], [False], 0.2, TW) == [False]
+    # מעבר למכסה (לא סווג) — כמו חלק בלי ראש
+    assert women_among([0.9, -1.0], [True, True], 0.9, TW) == [True, True]
+
+
+def test_women_among_never_drops_a_clear_woman_image():
+    # התמונה כולה בבירור של אישה, אבל אף חיתוך לא עבר את הסף — המתאים ביותר נחשב אישה
+    assert women_among([0.3, 0.1], [True, True], 0.95, TW) == [True, False]
+    assert women_among([0.3, 0.1], [True, True], 0.6, TW) == [False, False]
+
+
+WOMAN, MAN = (0, 0, 100, 200), (200, 0, 100, 200)
+
+
+def test_level2_men_only_passes_even_when_very_exposed():
+    sc = s(person=0.9, female=0.5, immodest=0.99)
+    men = SegStats(0.0, 0.0, 0, 0.3, (Person(MAN, 0.05, False),))
+    d = decide(2, sc, T, [], men)
+    assert d.action is Action.PASS and d.reason == "men only"
+
+
+def test_level2_exposed_skin_of_a_man_does_not_paint_a_modest_woman():
+    sc = s(person=0.9, female=0.9, immodest=0.7)
+    people = (Person(WOMAN, 0.9, True), Person(MAN, 0.05, False))
+    belly_on_man = [("BELLY_EXPOSED", 0.8, 230, 80, 40, 40)]
+    d = decide(2, sc, T, belly_on_man, SegStats(0.03, 0.2, 0, 0.2, people))
+    assert d.action is Action.PASS                              # היא בלבוש צנוע; הוא לא נספר
+    belly_on_woman = [("BELLY_EXPOSED", 0.8, 30, 80, 40, 40)]
+    d = decide(2, sc, T, belly_on_woman, SegStats(0.03, 0.2, 0, 0.2, people))
+    assert d.action is Action.PAINT and d.mode is PaintMode.SKIN and d.boxes == ((30, 80, 40, 40),)
+
+
+def test_level2_very_exposed_score_from_someone_else_does_not_paint_a_covered_woman():
+    people = (Person(WOMAN, 0.9, True), Person(MAN, 0.05, False))
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.99), T, [], SegStats(0.02, 0.2, 0, 0.2, people))
+    assert d.action is Action.PASS
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.99), T, [], SegStats(0.2, 0.2, 0, 0.2, people))
+    assert d.action is Action.PAINT and d.mode is PaintMode.BODY
+
+
+def test_level2_without_person_mask_needs_a_sign_of_a_woman():
+    none = SegStats(0.0, 0.0)
+    belly = [("BELLY_EXPOSED", 0.6, 10, 20, 30, 40)]
+    assert decide(2, s(person=0.9, female=0.3, immodest=0.99), T, belly, none).action is Action.PASS
+    face = [("FACE_FEMALE", 0.7, 0, 0, 5, 5)]
+    d = decide(2, s(person=0.9, female=0.3, immodest=0.7), T, belly + face, none)
+    assert d.action is Action.PAINT and d.mode is PaintMode.BOXES

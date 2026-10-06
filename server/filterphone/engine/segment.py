@@ -10,7 +10,11 @@
   2. לכל אדם קטן (עד 3): חיתוך ריבועי סביבו והרצה נוספת. בלי זה, אדם שתופס
      עשירית מהתמונה מקבל מסכה של 25×25 פיקסלים ו"חצי יד" נשארת גלויה.
 
-הכול כאן פונקציות טהורות (numpy + Pillow) — הרצת המודל עצמה ב-models.py.
+צובעים רק נשים: אחרי הסגמנטציה מוצאים כל אדם בנפרד (find_people), המנוע מסווג כל אחד
+(אישה / גבר) לפי חיתוך סביבו, ואנשים שאינם נשים מסומנים MAN — לא נצבעים ולא נספרים
+בחישוב "כמה עור גלוי" (keep_women + stats).
+
+הכול כאן פונקציות טהורות (numpy + Pillow) — הרצת המודלים עצמה ב-models.py וב-service.py.
 """
 from __future__ import annotations
 
@@ -24,6 +28,8 @@ from PIL import Image, ImageFilter
 
 BG, HAIR, SKIN, FACE, CLOTHES, OTHER = range(6)
 N_CLASSES = 6
+MAN = 6                     # במפת התוויות: אדם שזוהה כגבר — לא נצבע ולא נספר
+FORMAT = 2                  # גרסת SegStats/מפת התוויות בקאש (2 = הפרדה לנשים/גברים)
 
 WORK_SIDE = 512             # רזולוציית מפת התוויות (הצלע הארוכה)
 SKIN_MIN_P = 0.35           # עור "כמעט בטוח" כבר נחשב עור — עדיף לצבוע מעט יותר מאשר לפספס
@@ -32,20 +38,48 @@ CROP_MAX_AREA = 0.45        # אדם שתופס יותר מזה מהתמונה �
 CROP_PAD = 0.18
 GRID = 64                   # רשת גסה למציאת אנשים נפרדים
 DILATE = 0.012              # הרחבת האזור הצבוע: 1.2% מהצלע הארוכה — שוליים בלי "קצוות" גלויים
+MAX_PEOPLE = 4              # כמה אנשים מסווגים בנפרד (הגדולים); השאר — לפי מי שכן סווג / ציון התמונה
+PERSON_TOP = 0.7            # לסיווג אישה/גבר: 70% העליונים של האדם (ראש + פלג גוף עליון), ריבוע הדוק בלי שוליים.
+                            # נבדק על COCO מול חיתוך האדם כולו עם שוליים: AUC 0.996 מול 0.970 במקרים הקשים
+HEAD_MIN_PX = 20            # "יש ראש" (פנים/שיער) — רק לחלק כזה יש טעם לסווג אישה/גבר;
+HEAD_MIN_FRAC = 0.02        # יד או רגל לבד (חלק שהסגמנטציה הפרידה) לא נראית "אישה" גם כשהיא של אישה
+
+Box = tuple[int, int, int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class Person:
+    box: Box                # x, y, w, h בפיקסלים של התמונה
+    female: float           # ציון "אישה" של החיתוך סביבו (‎-1 = לא סווג בנפרד — לפי ציון התמונה)
+    woman: bool
 
 
 @dataclass(frozen=True, slots=True)
 class SegStats:
-    skin: float             # עור הגוף (בלי פנים) מתוך שטח האנשים
-    person: float           # שטח האנשים מתוך התמונה
+    skin: float             # עור גלוי (בלי פנים) מתוך שטח הנשים
+    person: float           # שטח הנשים מתוך התמונה
     crops: int = 0
+    others: float = 0.0     # שטח האנשים שזוהו כגברים (לא נצבעים) מתוך התמונה
+    people: tuple[Person, ...] = ()
+
+    @property
+    def women(self) -> tuple[Box, ...]:
+        return tuple(p.box for p in self.people if p.woman)
 
     def dump(self) -> dict:
-        return {"skin": round(self.skin, 4), "person": round(self.person, 4), "crops": self.crops}
+        return {"v": FORMAT, "skin": round(self.skin, 4), "person": round(self.person, 4), "crops": self.crops,
+                "others": round(self.others, 4),
+                "people": [[*p.box, round(p.female, 3), int(p.woman)] for p in self.people]}
 
     @classmethod
-    def load(cls, d: dict) -> SegStats:
-        return cls(float(d["skin"]), float(d["person"]), int(d.get("crops", 0)))
+    def load(cls, d: dict) -> SegStats | None:
+        """None = נשמר בפורמט ישן (בלי הפרדה לנשים) — המנוע יחשב מחדש."""
+        if d.get("v") != FORMAT:
+            return None
+        people = tuple(Person((int(x), int(y), int(w), int(h)), float(f), bool(wo))
+                       for x, y, w, h, f, wo in d.get("people", []))
+        return cls(float(d["skin"]), float(d["person"]), int(d.get("crops", 0)), float(d.get("others", 0.0)),
+                   people)
 
 
 def softmax(logits: np.ndarray) -> np.ndarray:
@@ -62,15 +96,19 @@ def seg_input(im: Image.Image, size: int, box: tuple[int, int, int, int] | None 
 
 # ---------------------------------------------------------------- מציאת אנשים
 
-def _components(grid: np.ndarray) -> list[tuple[int, int, int, int, int]]:
-    """רכיבים קשירים (שכנות 8) ברשת בוליאנית קטנה → [(גודל, y0, x0, y1, x1)]."""
+def _label_components(grid: np.ndarray) -> tuple[np.ndarray, list[tuple[int, int, int, int, int]]]:
+    """רכיבים קשירים (שכנות 8) ברשת בוליאנית קטנה.
+
+    מחזיר מפת מזהים (0 = ריק, k = הרכיב ה-k לפי גודל, 1 = הגדול) ו-[(גודל, y0, x0, y1, x1)] באותו סדר.
+    """
     h, w = grid.shape
-    seen = np.zeros_like(grid, dtype=bool)
-    out = []
+    raw = np.zeros((h, w), np.int32)
+    found = []
     for sy, sx in zip(*np.nonzero(grid), strict=True):
-        if seen[sy, sx]:
+        if raw[sy, sx]:
             continue
-        seen[sy, sx] = True
+        k = len(found) + 1
+        raw[sy, sx] = k
         q = deque([(sy, sx)])
         n, y0, x0, y1, x1 = 0, sy, sx, sy, sx
         while q:
@@ -80,11 +118,31 @@ def _components(grid: np.ndarray) -> list[tuple[int, int, int, int, int]]:
             for dy in (-1, 0, 1):
                 for dx in (-1, 0, 1):
                     ny, nx = y + dy, x + dx
-                    if 0 <= ny < h and 0 <= nx < w and grid[ny, nx] and not seen[ny, nx]:
-                        seen[ny, nx] = True
+                    if 0 <= ny < h and 0 <= nx < w and grid[ny, nx] and not raw[ny, nx]:
+                        raw[ny, nx] = k
                         q.append((ny, nx))
-        out.append((n, int(y0), int(x0), int(y1), int(x1)))
-    return out
+        found.append((n, int(y0), int(x0), int(y1), int(x1)))
+    order = sorted(range(len(found)), key=lambda i: -found[i][0])
+    remap = np.zeros(len(found) + 1, np.int32)
+    for new_id, old in enumerate(order, 1):
+        remap[old + 1] = new_id
+    return remap[raw], [found[i] for i in order]
+
+
+def _components(grid: np.ndarray) -> list[tuple[int, int, int, int, int]]:
+    """רכיבים קשירים (שכנות 8) ברשת בוליאנית קטנה → [(גודל, y0, x0, y1, x1)], מהגדול לקטן."""
+    return _label_components(grid)[1]
+
+
+def square_box(box: tuple[float, float, float, float], width: int, height: int, pad: float) -> Box:
+    """(x0, y0, x1, y1) → ריבוע עם שוליים בתוך התמונה — כדי שהמודל לא יקבל אדם מעוות."""
+    bx0, by0, bx1, by1 = box
+    side = max(bx1 - bx0, by1 - by0) * (1 + 2 * pad)
+    side = min(max(side, 24.0), float(max(width, height)))
+    cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
+    x0 = int(round(min(max(cx - side / 2, 0), max(width - side, 0))))
+    y0 = int(round(min(max(cy - side / 2, 0), max(height - side, 0))))
+    return x0, y0, min(width, x0 + int(round(side))), min(height, y0 + int(round(side)))
 
 
 def person_boxes(probs: np.ndarray, width: int, height: int) -> list[tuple[int, int, int, int]]:
@@ -101,16 +159,49 @@ def person_boxes(probs: np.ndarray, width: int, height: int) -> list[tuple[int, 
         fx0, fy0, fx1, fy1 = x0 / g, y0 / g, (x1 + 1) / g, (y1 + 1) / g
         if (fx1 - fx0) * (fy1 - fy0) > CROP_MAX_AREA:
             continue
-        # לפיקסלים, עם שוליים, ואז לריבוע — כדי שהמודל לא יקבל אדם מעוות
-        bx0, bx1 = fx0 * width, fx1 * width
-        by0, by1 = fy0 * height, fy1 * height
-        side = max(bx1 - bx0, by1 - by0) * (1 + 2 * CROP_PAD)
-        side = min(max(side, 24.0), float(max(width, height)))
-        cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
-        x0p = int(round(min(max(cx - side / 2, 0), max(width - side, 0))))
-        y0p = int(round(min(max(cy - side / 2, 0), max(height - side, 0))))
-        boxes.append((x0p, y0p, min(width, x0p + int(round(side))), min(height, y0p + int(round(side)))))
+        boxes.append(square_box((fx0 * width, fy0 * height, fx1 * width, fy1 * height), width, height, CROP_PAD))
     return boxes
+
+
+def find_people(labels: np.ndarray, width: int, height: int) -> tuple[np.ndarray, list[Box], list[bool]]:
+    """כל אדם במפת התוויות בנפרד (רכיבים קשירים ברשת גסה), מהגדול לקטן.
+
+    מחזיר מפת מזהים בגודל labels (0 = לא אדם, k = האדם ה-k), תיבה (x, y, w, h) בפיקסלים של
+    התמונה לכל אחד, והאם רואים לו ראש (פנים או שיער). שני אנשים שנוגעים זה בזה נחשבים אדם
+    אחד; אדם שהסגמנטציה פיצלה (למשל רגל בנפרד) — כמה חלקים, ורק לחלק עם ראש יש מראה של אישה/גבר.
+    """
+    lh, lw = labels.shape
+    cell = max(1, -(-max(lh, lw) // GRID))
+    gh, gw = -(-lh // cell), -(-lw // cell)
+    occ = np.zeros((gh * cell, gw * cell), bool)
+    occ[:lh, :lw] = labels != BG
+    ids_grid, comps = _label_components(occ.reshape(gh, cell, gw, cell).any(axis=(1, 3)))
+    ids = np.repeat(np.repeat(ids_grid, cell, axis=0), cell, axis=1)[:lh, :lw]
+    ids = np.where(labels != BG, ids, 0).astype(np.int16)
+    sx, sy = width / lw, height / lh
+    boxes = []
+    for _, y0, x0, y1, x1 in comps:
+        X0, Y0 = int(x0 * cell * sx), int(y0 * cell * sy)
+        X1, Y1 = min(width, int(np.ceil((x1 + 1) * cell * sx))), min(height, int(np.ceil((y1 + 1) * cell * sy)))
+        boxes.append((X0, Y0, max(1, X1 - X0), max(1, Y1 - Y0)))
+    n = len(comps) + 1
+    size = np.bincount(ids.ravel(), minlength=n)
+    head = np.bincount(ids[(labels == FACE) | (labels == HAIR)], minlength=n)
+    headed = [bool(head[k] >= max(HEAD_MIN_PX, HEAD_MIN_FRAC * size[k])) for k in range(1, n)]
+    return ids, boxes, headed
+
+
+def person_view_box(box: Box, width: int, height: int) -> Box:
+    """החיתוך לסיווג אדם אחד (x0, y0, x1, y1): החלק העליון שלו, בריבוע הדוק — בלי אנשים אחרים מסביב."""
+    x, y, w, h = box
+    return square_box((x, y, x + w, y + max(1.0, h * PERSON_TOP)), width, height, 0.0)
+
+
+def keep_women(labels: np.ndarray, ids: np.ndarray, women: set[int]) -> np.ndarray:
+    """מסמן MAN את כל האנשים שאינם ברשימת הנשים (מזהים מ-find_people) — הם לא ייצבעו."""
+    out = labels.copy()
+    out[(ids > 0) & ~np.isin(ids, sorted(women))] = MAN
+    return out
 
 
 def analyze(model: Callable[[np.ndarray], np.ndarray], im: Image.Image) -> tuple[np.ndarray, SegStats]:
@@ -180,10 +271,12 @@ def labels_from_probs(p: np.ndarray) -> np.ndarray:
     return lab
 
 
-def stats(labels: np.ndarray, crops: int = 0) -> SegStats:
-    person = int(np.count_nonzero(labels != BG))
+def stats(labels: np.ndarray, crops: int = 0, people: tuple[Person, ...] = ()) -> SegStats:
+    """כמה עור גלוי — מתוך שטח הנשים בלבד (גברים מסומנים MAN ולא נספרים)."""
+    women = int(np.count_nonzero((labels != BG) & (labels != MAN)))
     skin = int(np.count_nonzero(labels == SKIN))
-    return SegStats(skin / person if person else 0.0, person / labels.size, crops)
+    men = int(np.count_nonzero(labels == MAN))
+    return SegStats(skin / women if women else 0.0, women / labels.size, crops, men / labels.size, people)
 
 
 # ---------------------------------------------------------------- שמירה בקאש
@@ -206,8 +299,6 @@ def decode_labels(data: bytes) -> np.ndarray | None:
 
 # ---------------------------------------------------------------- צביעה
 
-Box = tuple[int, int, int, int]
-
 
 def region_mask(labels: np.ndarray, mode: str, size: tuple[int, int],
                 extra_boxes: tuple[Box, ...] = (), keep_boxes: tuple[Box, ...] = ()) -> Image.Image:
@@ -216,7 +307,8 @@ def region_mask(labels: np.ndarray, mode: str, size: tuple[int, int],
     mode="skin": עור חשוף (בלי פנים).  mode="body": כל הגוף חוץ מהפנים והשיער —
     לבגד ים ולבוש חשוף מאוד, שבהם גם הבגד עצמו לא צריך להיראות.
     extra_boxes: אזורים מגלאי חלקי הגוף (x, y, w, h בקואורדינטות התמונה) — נצבעים רק
-    איפה שיש אדם, כדי להשלים פספוס של הסגמנטציה בלי "מלבנים" על הרקע.
+    איפה שיש אישה, כדי להשלים פספוס של הסגמנטציה בלי "מלבנים" על הרקע או על גבר.
+    גברים (MAN) לא נצבעים בשום מצב.
     keep_boxes: פנים שהגלאי זיהה — לא נצבעות גם אם הסגמנטציה סימנה אותן כעור
     (קורה באנשים קטנים, שבהם המודל מתקשה להבדיל בין פנים לשאר העור).
     """
@@ -228,7 +320,7 @@ def region_mask(labels: np.ndarray, mode: str, size: tuple[int, int],
     mask = Image.fromarray((m * 255).astype(np.uint8))
     if extra_boxes:
         lh, lw = labels.shape
-        person = Image.fromarray(((labels != BG) * 255).astype(np.uint8))
+        person = Image.fromarray((((labels != BG) & (labels != MAN)) * 255).astype(np.uint8))
         person = person.filter(ImageFilter.MaxFilter(_odd(max(lw, lh) * DILATE * 2)))
         boxes = Image.new("L", (lw, lh), 0)
         sx, sy = lw / W, lh / H

@@ -76,6 +76,19 @@ async def run(models: str) -> int:
             fail = 1
     info, v = await engine.explain(images[0][1], 2)
     print("explain:", {k: info[k] for k in ("decisions", "steps", "ms")})
+    # רמה 2 צובעת רק נשים: כל תמונה שהגיעה לסגמנטציה מחזיקה סיווג לכל אדם
+    seen = 0
+    for sid, data in images:
+        info, _ = await engine.explain(data, 2)
+        seg = info.get("segmentation")
+        if seg:
+            seen += 1
+            people = [("אישה" if w else "גבר", f) for *_, f, w in seg.get("people", [])]
+            print(f"  {sid} people: {people} women-area={seg['person']} men-area={seg['others']} skin={seg['skin']}")
+            if seg.get("v") != segment.FORMAT:
+                print("FAIL: segmentation stats in old format")
+                fail += 1
+    print(f"level-2 images with per-person classification: {seen}")
     await engine.close()
     def med(xs: list[float]) -> str:
         return f"{statistics.median(xs):.1f}ms" if xs else "n/a"

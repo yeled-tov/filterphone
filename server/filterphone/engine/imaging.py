@@ -96,6 +96,11 @@ def siglip_views(im: Image.Image, size: int) -> list[np.ndarray]:
     return [_siglip_tensor(v, size) for v in views]
 
 
+def siglip_crop(im: Image.Image, box: tuple[int, int, int, int], size: int) -> np.ndarray:
+    """חיתוך (x0, y0, x1, y1) מהתמונה → קלט ל-SigLIP2 (לסיווג אדם אחד בתמונה)."""
+    return _siglip_tensor(im.crop(box), size)
+
+
 def _siglip_tensor(im: Image.Image, size: int) -> np.ndarray:
     im = im.resize((size, size), Image.Resampling.BILINEAR)
     a = np.asarray(im, dtype=np.float32)

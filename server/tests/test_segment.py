@@ -134,3 +134,65 @@ def test_paint_regions_outputs_jpeg_with_black_skin():
     assert out.format == "JPEG" and out.size == (200, 200)
     assert max(out.getpixel((45, 90))) < 30
     assert min(out.getpixel((100, 120))) > 150
+
+
+# ---------------------------------------------------------------- רק נשים נצבעות
+
+def _two_people() -> np.ndarray:
+    """שני אנשים נפרדים: משמאל — עם ראש (פנים ושיער) וזרוע חשופה; מימין — רגל בלבד (בלי ראש)."""
+    lab = np.zeros((120, 240), np.uint8)
+    lab[5:15, 30:50] = S.HAIR
+    lab[15:35, 30:50] = S.FACE
+    lab[35:110, 20:60] = S.CLOTHES
+    lab[40:80, 10:20] = S.SKIN
+    lab[60:110, 170:190] = S.SKIN
+    return lab
+
+
+def test_find_people_separates_people_and_sees_heads():
+    lab = _two_people()
+    ids, boxes, headed = S.find_people(lab, 480, 240)       # התמונה פי 2 ממפת התוויות
+    assert ids.shape == lab.shape and set(np.unique(ids)) == {0, 1, 2}
+    assert headed == [True, False]                          # הגדול (עם ראש) ראשון
+    x, y, w, h = boxes[0]
+    assert x <= 20 and y <= 10 and x + w >= 120 and y + h >= 220
+    assert (ids[lab == S.BG] == 0).all() and (ids[50, 15] == 1) and (ids[80, 180] == 2)
+
+
+def test_keep_women_marks_men_and_stats_count_only_women():
+    lab = _two_people()
+    ids, boxes, headed = S.find_people(lab, 240, 120)
+    only_first = S.keep_women(lab, ids, {1})
+    assert (only_first[60:110, 170:190] == S.MAN).all()      # השני — גבר: מסומן, לא נצבע
+    assert only_first[50, 15] == S.SKIN                      # הראשון — אישה: כמו קודם
+    st = S.stats(only_first)
+    women = int(np.count_nonzero((lab != S.BG)[:, :100]))
+    assert st.person == women / lab.size
+    assert st.skin == 400 / women                            # רק העור שלה (הזרוע) — לא הרגל של הגבר
+    assert st.others == 1000 / lab.size
+    nobody = S.stats(S.keep_women(lab, ids, set()))
+    assert nobody.person == 0 and nobody.skin == 0 and nobody.others > 0
+
+
+def test_men_are_never_painted():
+    lab = S.keep_women(_two_people(), S.find_people(_two_people(), 240, 120)[0], {1})
+    for mode in ("skin", "body"):
+        m = np.asarray(S.region_mask(lab, mode, (240, 120)))
+        assert m[60, 15] == 255                              # הזרוע שלה
+        assert m[80, 180] == 0                               # הרגל של הגבר
+    # גם מלבן מהגלאי שנופל על הגבר לא נצבע
+    m = np.asarray(S.region_mask(lab, "skin", (240, 120), extra_boxes=((160, 60, 40, 50),)))
+    assert m[80, 180] == 0
+
+
+def test_person_view_box_is_tight_square_of_upper_body():
+    x0, y0, x1, y1 = S.person_view_box((100, 50, 40, 200), 1000, 1000)
+    assert (x1 - x0) == (y1 - y0) == 140                     # 70% מהגובה, ריבוע, בלי שוליים
+    assert y0 == 50 and x0 == 120 - 70                       # מתחיל בראש, ממורכז לרוחב
+
+
+def test_segstats_with_people_roundtrip_and_old_format_is_recomputed():
+    st = S.SegStats(0.2, 0.3, 1, 0.1, (S.Person((1, 2, 3, 4), 0.91, True), S.Person((5, 6, 7, 8), 0.04, False)))
+    assert S.SegStats.load(st.dump()) == st
+    assert st.women == ((1, 2, 3, 4),)
+    assert S.SegStats.load({"skin": 0.2, "person": 0.3, "crops": 0}) is None   # פורמט ישן — יחושב מחדש

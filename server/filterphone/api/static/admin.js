@@ -808,7 +808,9 @@ function testResult(r, lv) {
     card("ההחלטה", `${i.image ? `${i.image.width}×${i.image.height} ${i.image.format || ""}` : ""} · ${i.ms} מ"ש · שלבים: ${(i.steps || []).join(", ") || "סיווג בלבד"}`, decisions),
     el("div", { class: "grid two" },
       card("ציונים", "0 = בטוח שלא, 1 = בטוח שכן", scores,
-        seg ? el("p", { class: "muted small" }, `סגמנטציה: עור גלוי ${(seg.skin * 100).toFixed(1)}% משטח האדם · אדם ${(seg.person * 100).toFixed(1)}% מהתמונה · ${seg.crops} חיתוכים`) : null,
+        seg ? el("p", { class: "muted small" }, `סגמנטציה: נשים ${(seg.person * 100).toFixed(1)}% מהתמונה · עור גלוי אצלן ${(seg.skin * 100).toFixed(1)}% · גברים (לא נצבעים) ${((seg.others || 0) * 100).toFixed(1)}% · ${seg.crops} חיתוכים`) : null,
+        seg?.people?.length ? el("div", { class: "chips" }, seg.people.map(([, , , , score, woman]) =>
+          chip(`${woman ? "אישה" : "גבר"} ${score >= 0 ? score.toFixed(2) : "(לפי שאר התמונה)"}`, woman ? "warn" : "ok"))) : null,
         i.detections?.length ? el("div", { class: "chips" }, i.detections.map(([label, score]) => chip(`${label} ${score}`))) : null),
       card(`מה הטלפון מקבל ברמה ${lv}`, null, r.result_image
         ? el("img", { src: r.result_image, class: "result-img", alt: "התוצאה אחרי הסינון" })

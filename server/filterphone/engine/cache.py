@@ -15,6 +15,8 @@ from dataclasses import dataclass
 
 import redis.asyncio as aioredis
 
+from .segment import FORMAT as SEG_FORMAT
+
 log = logging.getLogger(__name__)
 
 SEG_TTL_DAYS = 7
@@ -60,7 +62,7 @@ class ResultCache:
         self._rb = aioredis.from_url(redis_url, decode_responses=False,
                                      socket_timeout=0.5, socket_connect_timeout=0.5)
         self._ns = f"fp:img:{namespace}:"
-        self._seg_ns = f"fp:seg:{namespace}:"
+        self._seg_ns = f"fp:seg{SEG_FORMAT}:{namespace}:"      # מפות בפורמט ישן (בלי הפרדה לנשים) — לא נקראות
         self._ttl = ttl_days * 86400
 
     async def get(self, key: str) -> Entry | None:

@@ -37,16 +37,18 @@ from .imaging import (
     nudenet_input,
     paint_boxes,
     placeholder,
+    siglip_crop,
     siglip_views,
 )
 from .models import Embedder, NudeDetector, Segmenter
-from .policy import Action, Decision, PaintMode, Thresholds, decide, on_failure
-from .segment import SegStats
+from .policy import Action, Decision, PaintMode, Thresholds, decide, on_failure, women_among
+from .segment import Person, SegStats
 
 log = logging.getLogger("filterphone.engine")
 
 MIN_SIDE_BY_LEVEL = {1: 40}         # ברמה 1 בודקים גם תמונות ממוזערות קטנות יותר
 NO_PERSON = SegStats(0.0, 0.0)      # סגמנטציה שלא רצה/נכשלה — המדיניות חוזרת לגלאי
+FEMALE = SCORE_NAMES.index("female")
 
 
 @dataclass(slots=True)
@@ -220,8 +222,9 @@ class Engine:
         await self.cache.put(work.key, entry)
         return entry
 
-    async def _segment(self, work: _Work) -> SegStats | None:
-        """מריץ את הסגמנטציה ושומר את מפת התוויות (בבקשה ובקאש). None = נכשל / אין מודל."""
+    async def _segment(self, work: _Work, entry: Entry) -> SegStats | None:
+        """מריץ את הסגמנטציה, מסווג כל אדם (אישה / גבר) ושומר את מפת התוויות — שבה גברים
+        מסומנים MAN ולא ייצבעו (בבקשה ובקאש). None = נכשל / אין מודל."""
         if self.segmenter is None:
             work.seg_failed = True
             return None
@@ -230,8 +233,12 @@ class Engine:
             decoded = await self._decode(work)
             if decoded is None:
                 raise ValueError("undecodable")
-            labels, st = await loop.run_in_executor(self.infer_pool, segment.analyze, self.segmenter,
-                                                    decoded.primary)
+            im = decoded.primary
+            labels, st = await loop.run_in_executor(self.infer_pool, segment.analyze, self.segmenter, im)
+            ids, boxes, headed = segment.find_people(labels, im.width, im.height)
+            people = await self._classify_people(im, boxes, headed, entry)
+            labels = segment.keep_women(labels, ids, {i for i, p in enumerate(people, 1) if p.woman})
+            st = segment.stats(labels, st.crops, people)
             png = await loop.run_in_executor(self.decode_pool, segment.encode_labels, labels)
         except Exception as e:
             log.warning("segmentation failed: %s", e)
@@ -243,15 +250,34 @@ class Engine:
         await self.cache.put_labels(work.key, png)
         return st
 
+    async def _classify_people(self, im, boxes: list[segment.Box], headed: list[bool],
+                               entry: Entry) -> tuple[Person, ...]:
+        """לכל אדם: אישה או גבר. ה-MAX_PEOPLE הגדולים שרואים להם ראש — לפי החלק העליון שלהם בלבד
+        (SigLIP2 + ראש "אישה", חיתוך אחד לאדם); השאר לפי האחרים / ציון התמונה (women_among)."""
+        image_female = float(entry.scores[FEMALE]) if entry.scores else 1.0
+        judge = [i for i, h in enumerate(headed) if h][:segment.MAX_PEOPLE]
+        female = [-1.0] * len(boxes)
+        if judge:
+            loop = asyncio.get_running_loop()
+            size = self.embedder.size
+
+            vs = await loop.run_in_executor(self.decode_pool, lambda: [
+                siglip_crop(im, segment.person_view_box(boxes[i], im.width, im.height), size) for i in judge])
+            embs = np.stack(await asyncio.gather(*(self.batcher.submit(v) for v in vs)))
+            for i, f in zip(judge, self.heads.scores(embs)[:, FEMALE], strict=True):
+                female[i] = round(float(f), 4)
+        woman = women_among(female, headed, image_female, self.thresholds)
+        return tuple(Person(b, f, w) for b, f, w in zip(boxes, female, woman, strict=True))
+
     async def _add_segmentation(self, work: _Work, entry: Entry) -> Entry:
-        st = await self._segment(work)
+        st = await self._segment(work, entry)
         if st is None:
             return entry
         entry = entry.with_(seg=st.dump())
         await self.cache.put(work.key, entry)
         return entry
 
-    async def _labels(self, work: _Work) -> np.ndarray | None:
+    async def _labels(self, work: _Work, entry: Entry) -> np.ndarray | None:
         """מפת הסגמנטציה: מהבקשה הזו, מהקאש, או חישוב מחדש (אם פגה בקאש לפני הרשומה)."""
         if work.labels is not None:
             return work.labels
@@ -260,7 +286,7 @@ class Engine:
         if labels is not None:
             work.labels = labels
             return labels
-        await self._segment(work)
+        await self._segment(work, entry)
         return work.labels
 
     async def _render(self, decision: Decision, work: _Work, entry: Entry) -> Verdict:
@@ -270,7 +296,7 @@ class Engine:
             decoded = await self._decode(work)
             if decoded is not None and not decoded.animated:
                 loop = asyncio.get_running_loop()
-                labels = None if decision.mode is PaintMode.BOXES else await self._labels(work)
+                labels = None if decision.mode is PaintMode.BOXES else await self._labels(work, entry)
                 if labels is not None:
                     body = await loop.run_in_executor(
                         self.decode_pool, lambda: segment.paint_regions(
