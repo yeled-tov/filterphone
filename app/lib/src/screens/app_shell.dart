@@ -147,7 +147,15 @@ class AppStoreScreen extends StatefulWidget {
 
 class _AppStoreScreenState extends State<AppStoreScreen> {
   String _category = 'הכול';
+  String _query = '';
   late Future<List<Map<String, Object?>>> _installedFuture;
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   static const _apps = <_StoreApp>[
     _StoreApp('Waze', 'ניווט וחניה', 'com.waze', 'ניווט', Icons.navigation_rounded),
@@ -200,9 +208,15 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final categories = ['הכול', ...{for (final app in _apps) app.category}];
-    final visible = _category == 'הכול'
-        ? _apps
-        : _apps.where((app) => app.category == _category).toList();
+    final visible = _apps.where((app) {
+      final inCategory = _category == 'הכול' || app.category == _category;
+      final q = _query.trim().toLowerCase();
+      final matchesQuery = q.isEmpty ||
+          app.name.toLowerCase().contains(q) ||
+          app.subtitle.toLowerCase().contains(q) ||
+          app.category.toLowerCase().contains(q);
+      return inCategory && matchesQuery;
+    }).toList();
 
     return _SectionScaffold(
       title: 'חנות אפליקציות',
@@ -222,6 +236,21 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                 child: _StoreHero(controller: widget.controller),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                child: TextField(
+                  controller: _search,
+                  onChanged: (value) => setState(() => _query = value),
+                  textDirection: TextDirection.rtl,
+                  decoration: const InputDecoration(
+                    hintText: 'חיפוש אפליקציות...',
+                    prefixIcon: Icon(Icons.search_rounded),
+                    suffixIcon: Icon(Icons.tune_rounded),
+                  ),
+                ),
               ),
             ),
             SliverToBoxAdapter(
@@ -263,6 +292,32 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
                     for (final app in snapshot.data ?? const [])
                       (app['package'] as String? ?? '').trim(),
                   };
+                  if (visible.isEmpty) {
+                    return SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 36),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.search_off_rounded,
+                              size: 44,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'לא נמצאה אפליקציה מתאימה',
+                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'נסה חיפוש אחר או קטגוריה אחרת.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
                   return SliverList.separated(
                     itemCount: visible.length,
                     itemBuilder: (context, index) => _StoreAppCard(
