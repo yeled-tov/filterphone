@@ -4,5 +4,11 @@ const String apiBaseUrl = String.fromEnvironment(
   defaultValue: 'https://api.filterphone.com',
 );
 
-/// כל כמה זמן לרענן את המצב כשהאפליקציה פתוחה.
+/// מספר WhatsApp של התמיכה. בבנייה אפשר לדרוס:
+/// --dart-define=FP_SUPPORT_WHATSAPP=9725XXXXXXXX
+const String supportWhatsAppNumber = String.fromEnvironment(
+  'FP_SUPPORT_WHATSAPP',
+  defaultValue: '',
+);
+
 const Duration refreshInterval = Duration(seconds: 20);
