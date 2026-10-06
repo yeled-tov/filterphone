@@ -158,6 +158,9 @@ class FakeNative implements NativeBridge {
     provisioning = null;
     provisioningCleared = true;
   }
+
+  @override
+  Future<void> openSupportWhatsApp(String number, String message) async {}
 }
 
 class MemoryStore implements KeyValueStore {
