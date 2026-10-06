@@ -13,7 +13,31 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = controller;
     return Scaffold(
-      appBar: AppBar(title: const Text('FilterPhone'), centerTitle: true),
+      appBar: AppBar(
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: const Icon(Icons.shield_rounded, color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 9),
+            const Text('פילטרפון'),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'רענון',
+            onPressed: c.busy ? null : c.refresh,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: c.refresh,
@@ -26,6 +50,7 @@ class HomeScreen extends StatelessWidget {
                 text: 'המכשיר הושבת על ידי המנהל. פנו ל-FilterPhone.',
               ),
               _StatusHero(controller: c),
+              const SizedBox(height: 4),
               if (c.protection.updateAvailable != null) ...[
                 const SizedBox(height: 16),
                 _UpdateCard(controller: c),
@@ -64,11 +89,30 @@ class _StatusHero extends StatelessWidget {
     final color = ok ? StatusColors.ok(context) : StatusColors.warn(context);
     final d = c.device;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [
+              theme.colorScheme.primaryContainer,
+              theme.colorScheme.surface,
+            ],
+          ),
+        ),
         child: Column(
           children: [
-            Icon(ok ? Icons.verified_user : Icons.gpp_maybe, size: 72, color: color),
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withValues(alpha: .10),
+              ),
+              child: Icon(ok ? Icons.verified_user_rounded : Icons.gpp_maybe_rounded, size: 43, color: color),
+            ),
             const SizedBox(height: 12),
             Text(ok ? 'הטלפון מוגן' : 'נדרשת פעולה כדי להשלים את ההגנה',
                 textAlign: TextAlign.center,
