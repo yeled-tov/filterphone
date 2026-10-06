@@ -45,7 +45,7 @@ jobs:
       - name: ניתוח סטטי
         run: flutter analyze
 
-      - name: בדיקות
+      - name: בדיקות (Flutter)
         run: flutter test
 
       - name: מפתח חתימה
@@ -74,6 +74,17 @@ jobs:
           flutter build apk $ARGS --split-per-abi --target-platform android-arm64
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/FilterPhone-$V-arm64.apk
 
+      # בדיקות היחידה של הקוד הנייטיבי (מדיניות, זיהוי תמונות פרופיל, השהיות, עדכון עצמי) + lint.
+      # אחרי הבנייה: היא יוצרת את gradlew ואת local.properties
+      - name: בדיקות ו-lint (Kotlin)
+        working-directory: app/android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug
+
+      - name: בדיקת ה-APK (הרשאות, רכיבים, לא debuggable) + FilterPhone.json
+        run: |
+          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          python3 ../tools/apk_release.py --aapt2 "$AAPT2" ../dist
+
       - name: אימות חתימה
         if: env.HAS_KEYSTORE == 'true' && github.event_name != 'pull_request'
         run: |
@@ -93,5 +104,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: FilterPhone-APK
-          path: dist/*.apk
+          path: |
+            dist/*.apk
+            dist/FilterPhone.json
           retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-reports
+          path: |
+            app/build/app/reports/
+            app/build/app/test-results/
+          retention-days: 14

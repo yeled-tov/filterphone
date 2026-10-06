@@ -76,8 +76,11 @@ jobs:
           gh run download "$run_id" -R "$GITHUB_REPOSITORY" -n FilterPhone-APK -D apk
           cp apk/*-arm64.apk FilterPhone.apk
           cp apk/*-universal.apk FilterPhone-universal.apk
+          files="FilterPhone.apk FilterPhone-universal.apk"
+          # הגרסה והטביעות — מהן השרת מציע עדכון לטלפונים (בבניות ישנות אין את הקובץ)
+          if [ -f apk/FilterPhone.json ]; then cp apk/FilterPhone.json .; files="$files FilterPhone.json"; fi
           echo "מפרסם את הבנייה $run_id: $(ls apk)"
-          tar -cf - FilterPhone.apk FilterPhone-universal.apk | ssh -o BatchMode=yes "$SERVER" apk
+          tar -cf - $files | ssh -o BatchMode=yes "$SERVER" apk
           curl -fsSI "$PUBLIC/download/FilterPhone.apk" | head -1
 
       - name: חזרה לגרסה הקודמת

@@ -18,8 +18,15 @@ arm64=$(ls "$tmp"/*-arm64.apk | head -1)
 universal=$(ls "$tmp"/*-universal.apk | head -1)
 echo "מפרסם $(basename "$arm64") + $(basename "$universal") (בנייה $run_id)"
 
-# FilterPhone.apk = arm64 (קל, מתאים כמעט לכל טלפון); FilterPhone-universal.apk = לכל המעבדים
+# FilterPhone.apk = arm64 (קל, מתאים כמעט לכל טלפון); FilterPhone-universal.apk = לכל המעבדים;
+# FilterPhone.json = הגרסה והטביעות — מהן השרת מציע עדכון לטלפונים (במנהל מכשיר: עדכון שקט)
 scp -o BatchMode=yes "$arm64" "$SERVER:/tmp/FilterPhone.apk"
 scp -o BatchMode=yes "$universal" "$SERVER:/tmp/FilterPhone-universal.apk"
-ssh -o BatchMode=yes "$SERVER" "sudo install -m 644 -o root -g root /tmp/FilterPhone.apk /tmp/FilterPhone-universal.apk /var/www/filterphone/ \
-    && rm -f /tmp/FilterPhone.apk /tmp/FilterPhone-universal.apk && ls -lh /var/www/filterphone/"
+json=""
+if [ -f "$tmp/FilterPhone.json" ]; then
+    scp -o BatchMode=yes "$tmp/FilterPhone.json" "$SERVER:/tmp/FilterPhone.json"
+    json=/tmp/FilterPhone.json
+fi
+ssh -o BatchMode=yes "$SERVER" "sudo install -m 644 -o root -g root /tmp/FilterPhone.apk /tmp/FilterPhone-universal.apk $json /var/www/filterphone/ \
+    && { [ -n '$json' ] || sudo rm -f /var/www/filterphone/FilterPhone.json; } \
+    && rm -f /tmp/FilterPhone.apk /tmp/FilterPhone-universal.apk /tmp/FilterPhone.json && ls -lh /var/www/filterphone/"

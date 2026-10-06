@@ -6,6 +6,7 @@ import 'package:filterphone/main.dart';
 import 'package:filterphone/src/api_client.dart';
 import 'package:filterphone/src/app_controller.dart';
 import 'package:filterphone/src/native_bridge.dart';
+import 'package:filterphone/src/screens/home_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -22,8 +23,14 @@ class FakeNative implements NativeBridge {
   @override
   Future<Map<String, Object?>> deviceInfo() async =>
       {'model': 'Pixel 9', 'manufacturer': 'Google', 'sdk': 36, 'appVersion': '1.0.0'};
+  int keyPairs = 0;
+
   @override
-  Future<String> generateKeyPair() async => base64Encode(List.filled(32, 7));
+  Future<String> generateKeyPair() async {
+    keyPairs++;
+    hasKey = true;
+    return base64Encode(List.filled(32, 7 + keyPairs));
+  }
   @override
   Future<String?> publicKey() async => null;
   @override
@@ -37,9 +44,11 @@ class FakeNative implements NativeBridge {
     return state;
   }
 
+  bool hasKey = true;
+
   @override
-  Future<VpnStatus> vpnStatus() async =>
-      VpnStatus(state: state, permission: permission, hasConfig: savedVpn != null, alwaysOn: alwaysOn);
+  Future<VpnStatus> vpnStatus() async => VpnStatus(
+      state: state, permission: permission, hasConfig: savedVpn != null, alwaysOn: alwaysOn, hasKey: hasKey);
   @override
   Stream<String> vpnStateChanges() => _states.stream;
   @override
@@ -80,6 +89,74 @@ class FakeNative implements NativeBridge {
   Future<void> setGuardPolicy(Map<String, Object?> policy, {String? api, String? token}) async {
     guardPolicy = policy;
     guardToken = token;
+  }
+
+  // --- אמינות ---
+  bool batteryUnrestricted = true;
+  int batteryRequests = 0;
+  String? updateAvailable;
+  int updatePageOpens = 0;
+  int syncs = 0;
+  int protectionStarts = 0;
+  String? credentialsApi;
+  String? credentialsToken;
+  Map<String, String?>? provisioning;
+  bool provisioningCleared = false;
+
+  @override
+  Future<void> setCredentials(String? api, String? token) async {
+    credentialsApi = api;
+    credentialsToken = token;
+  }
+
+  @override
+  Future<ProtectionStatus> protectionStatus() async => ProtectionStatus(
+        batteryUnrestricted: batteryUnrestricted,
+        backgroundRestricted: false,
+        guardEnabled: guard,
+        guardRunning: guard,
+        policyVersion: (guardPolicy?['version'] as int?) ?? 0,
+        lastPolicySync: guardPolicy == null ? null : DateTime.now(),
+        updateAvailable: updateAvailable,
+      );
+
+  @override
+  Future<bool> openUpdatePage() async {
+    updatePageOpens++;
+    return true;
+  }
+
+  @override
+  Future<bool> syncNow() async {
+    syncs++;
+    return true;
+  }
+
+  @override
+  Future<bool> startProtection() async {
+    protectionStarts++;
+    return true;
+  }
+
+  @override
+  Future<String> requestBatteryExemption() async {
+    batteryRequests++;
+    return 'dialog';
+  }
+
+  @override
+  Future<void> requestNotifications() async {}
+
+  @override
+  Future<bool> requestDeviceAdmin() async => true;
+
+  @override
+  Future<Map<String, String?>?> provisioningInfo() async => provisioning;
+
+  @override
+  Future<void> clearProvisioning() async {
+    provisioning = null;
+    provisioningCleared = true;
   }
 }
 
@@ -145,7 +222,28 @@ MockClient fakeServer({int deviceStatus = 200, String? enrollError}) => MockClie
       if (path == '/v1/device/vpn') {
         return http.Response(jsonEncode(_vpn), 200);
       }
+      if (path == '/v1/device/rekey') {
+        final body = jsonDecode(req.body) as Map;
+        expect(body['public_key'], isNotEmpty);
+        rekeys.add(body['public_key'] as String);
+        return http.Response(jsonEncode(_vpn), 200);
+      }
       return http.Response('not found', 404);
+    });
+
+final rekeys = <String>[];
+
+/// שרת בלי expect בתוך התשובות — לבדיקות מסך, שבהן הבקשות רצות בזמן pumpWidget.
+MockClient quietServer() => MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      return switch (req.url.path) {
+        '/v1/device' => http.Response(
+            jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר', 'via_vpn': true}),
+            200,
+            headers: json),
+        '/v1/device/vpn' => http.Response(jsonEncode(_vpn), 200, headers: json),
+        _ => http.Response('not found', 404),
+      };
     });
 
 const _catalog = {
@@ -398,6 +496,92 @@ void main() {
     expect(native.guardToken, isNull);
   });
 
+  test('battery optimization blocks "protected" until the user exempts the app', () async {
+    final native = FakeNative()
+      ..caInstalled = true
+      ..batteryUnrestricted = false;
+    final store = MemoryStore()
+      ..data['device_token'] = 'device-token'
+      ..data['ca_pem'] = 'PEM'
+      ..data['vpn_config_hash'] = 'x';
+    final c = makeController(native, fakeServer(), store);
+    await c.start();
+    native.state = 'UP';
+    await c.refresh();
+    expect(c.checks[Check.battery], isFalse);
+    expect(c.isProtected, isFalse);
+    await c.requestBatteryExemption();
+    expect(native.batteryRequests, 1);
+    // המשתמש אישר בחלון של המערכת; חוזרים לאפליקציה → refresh
+    native.batteryUnrestricted = true;
+    await c.refresh();
+    expect(c.checks[Check.battery], isTrue);
+    expect(c.isProtected, isTrue);
+    c.dispose();
+  });
+
+  test('home registers background reporting and syncs at most once a minute', () async {
+    final native = FakeNative()..caInstalled = true;
+    final store = MemoryStore()
+      ..data['device_token'] = 'device-token'
+      ..data['vpn_config_hash'] = 'x';
+    final c = makeController(native, fakeServer(), store);
+    await c.start();
+    expect(native.credentialsToken, 'device-token');
+    expect(native.credentialsApi, 'https://api.test');
+    expect(native.protectionStarts, greaterThan(0));
+    final before = native.syncs;
+    await c.refresh();
+    await c.refresh();
+    expect(native.syncs, before); // פחות מדקה — בלי דיווח נוסף
+    expect(native.syncs, greaterThanOrEqualTo(1));
+    c.dispose();
+  });
+
+  test('device-owner QR provisioning activates by itself with the code from the QR', () async {
+    final native = FakeNative()..provisioning = {'code': 'ABCDE-FGHJK', 'api': 'https://api.test'};
+    final store = MemoryStore();
+    final c = makeController(native, fakeServer(), store);
+    await c.start();
+    expect(c.phase, Phase.home);
+    expect(store.data['device_token'], 'device-token');
+    expect(native.savedVpn?['address'], '10.8.0.10/32');
+    expect(native.provisioningCleared, isTrue);
+    c.dispose();
+  });
+
+  test('lost VPN key is replaced: new key pair, server rekey, config saved again', () async {
+    rekeys.clear();
+    final native = FakeNative()
+      ..hasKey = false
+      ..savedVpn = null;
+    final store = MemoryStore()
+      ..data['device_token'] = 'device-token'
+      ..data['vpn_config_hash'] = 'x';
+    final c = makeController(native, fakeServer(), store);
+    await c.start();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(rekeys, hasLength(1));
+    expect(native.keyPairs, 1);
+    expect(native.savedVpn?['address'], '10.8.0.10/32');
+    expect(native.state, 'UP');
+    c.dispose();
+  });
+
+  test('lost VPN config (same key) is saved again from the server', () async {
+    rekeys.clear();
+    final native = FakeNative()..savedVpn = null;
+    final store = MemoryStore()
+      ..data['device_token'] = 'device-token'
+      ..data['vpn_config_hash'] = base64Encode(utf8.encode(jsonEncode(_vpn)));     // אותו hash — בעבר לא נשמר שוב
+    final c = makeController(native, fakeServer(), store);
+    await c.start();
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(rekeys, isEmpty);
+    expect(native.savedVpn?['address'], '10.8.0.10/32');
+    c.dispose();
+  });
+
   testWidgets('welcome and activation screens render in Hebrew, right to left', (tester) async {
     final c = makeController(FakeNative(), fakeServer());
     await c.start();
@@ -409,6 +593,36 @@ void main() {
     expect(find.text('הזינו את קוד ההפעלה שקיבלתם'), findsOneWidget);
     final dir = Directionality.of(tester.element(find.text('הפעלה')));
     expect(dir, TextDirection.rtl);
+  });
+
+  testWidgets('a new version (without device owner) shows a download button', (tester) async {
+    final native = FakeNative()
+      ..caInstalled = true
+      ..updateAvailable = '1.0.8';
+    final store = MemoryStore()
+      ..data['device_token'] = 'device-token'
+      ..data['ca_pem'] = 'PEM'
+      ..data['vpn_config_hash'] = 'x';
+    final c = makeController(native, quietServer(), store);
+    await c.start();
+    // המסך הראשי לבד (בלי מחזור החיים של האפליקציה, שמרענן מול השרת בזמן pumpWidget)
+    await tester.pumpWidget(MaterialApp(
+      home: Directionality(
+        textDirection: TextDirection.rtl,
+        child: ListenableBuilder(listenable: c, builder: (_, _) => HomeScreen(controller: c)),
+      ),
+    ));
+    await tester.pump();
+    expect(find.text('גרסה חדשה של FilterPhone (1.0.8)'), findsOneWidget);
+    await tester.tap(find.text('להורדה'));
+    await tester.pump();
+    expect(native.updatePageOpens, 1);
+    // אחרי העדכון הטלפון כבר לא מדווח על גרסה חדשה — ההודעה נעלמת
+    native.updateAvailable = null;
+    await c.refresh();
+    await tester.pump();
+    expect(find.text('להורדה'), findsNothing);
+    c.dispose();
   });
 
   testWidgets('registration form walks through all four steps', (tester) async {

@@ -3,6 +3,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- השירות הקדמי ששומר על הסינון (התראה קבועה) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- בקשה מהמשתמש לפטור מאופטימיזציית סוללה (חלון של המערכת — המשתמש מאשר) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".FilterPhoneApp"
@@ -30,6 +36,33 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- סוף הקמה כ-Device Owner (QR): המערכת פותחת את האפליקציה כדי להשלים את החיבור -->
+            <intent-filter>
+                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- הקמה כ-Device Owner (אנדרואיד 10+): סוג ההקמה, וסוף ההקמה (הגדרות בסיס + קוד מה-QR) -->
+        <activity
+            android:name=".ProvisioningModeActivity"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.app.action.GET_PROVISIONING_MODE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".PolicyComplianceActivity"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.app.action.ADMIN_POLICY_COMPLIANCE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- חיבור מחדש של ה-VPN אחרי אתחול / עדכון -->
@@ -42,7 +75,12 @@
             </intent-filter>
         </receiver>
 
-        <!-- מנהל מכשיר (Device Owner) — לשלב הנעילה -->
+        <!-- תוצאת עדכון עצמי (רק במנהל מכשיר — SelfUpdate). לא חשוף: רק ה-PendingIntent שלנו -->
+        <receiver
+            android:name=".UpdateReceiver"
+            android:exported="false" />
+
+        <!-- מנהל המכשיר: Device Owner (QR / adb) או מנהל מכשיר רגיל — ראו DeviceOwnerManager -->
         <receiver
             android:name=".DeviceAdmin"
             android:exported="true"
@@ -52,8 +90,27 @@
                 android:resource="@xml/device_admin" />
             <intent-filter>
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.DEVICE_ADMIN_DISABLE_REQUESTED" />
+                <action android:name="android.app.action.DEVICE_ADMIN_DISABLED" />
+                <action android:name="android.app.action.PROFILE_PROVISIONING_COMPLETE" />
             </intent-filter>
         </receiver>
+
+        <!-- "הסינון פעיל": שירות קדמי ששומר על ה-VPN ומחזיר אותו אחרי ניתוק (התראה קבועה, שקטה) -->
+        <service
+            android:name=".ProtectionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Content filter: keeps the filtering VPN connected and restores it after disconnects" />
+        </service>
+
+        <!-- בדיקה + דיווח לשרת כל 15 דקות, וניסיונות חיבור חוזרים (JobScheduler) -->
+        <service
+            android:name=".SyncJob"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- מגן FilterPhone: חסימת אפליקציות ומסכים שהמנהל בחר (שירות נגישות, מופעל ע"י המשתמש) -->
         <service

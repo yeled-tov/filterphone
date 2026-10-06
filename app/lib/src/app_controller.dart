@@ -15,7 +15,7 @@ import 'native_bridge.dart';
 enum Phase { loading, welcome, register, activation, pending, home, unsupported }
 
 /// סעיף ברשימת "מה צריך כדי שהטלפון יהיה מוגן".
-enum Check { vpn, certificate, alwaysOn, privateDns, guard }
+enum Check { vpn, certificate, alwaysOn, privateDns, guard, battery }
 
 /// אחסון קטן ומאובטח (Keystore באנדרואיד / Keychain באייפון).
 abstract class KeyValueStore {
@@ -67,6 +67,10 @@ class AppController extends ChangeNotifier {
   bool serverReachable = true;
   bool deviceRemoved = false;
 
+  /// סוללה, מנהל מכשיר, סנכרון אחרון, בדיקת VPN אחרונה — מהקוד הנייטיבי.
+  ProtectionStatus protection = ProtectionStatus.unknown;
+  DateTime? _lastSync;
+
   /// הקטלוג (רמות ואפשרויות) — לטופס ההרשמה ולבקשת שינוי.
   Catalog? catalog;
 
@@ -83,20 +87,30 @@ class AppController extends ChangeNotifier {
 
   bool get guardNeeded => device?.needsGuard ?? false;
 
+  /// מסכים והגנות מיוחדות (סטטוסים, תמונות פרופיל) עובדים רק במגן — גם כשיש מנהל מכשיר.
+  bool get _guardOnlyNeeded {
+    final p = device?.guardPolicy ?? const {};
+    return (p['blocked_screens'] as List? ?? const []).isNotEmpty ||
+        (p['protections'] as Map? ?? const {}).isNotEmpty;
+  }
+
   Map<Check, bool> get checks => {
         Check.vpn: vpn.isUp,
         Check.certificate: caInstalled,
         Check.alwaysOn: vpn.alwaysOn == true,
         Check.privateDns: privateDns != 'hostname',
-        Check.guard: guardEnabled || deviceOwner,
+        Check.guard: guardEnabled || (deviceOwner && !_guardOnlyNeeded),
+        Check.battery: protection.backgroundOk,
       };
 
-  /// מוגן = המנהרה פעילה, התעודה מותקנת, DNS פרטי לא עוקף — ואם המנהל חסם אפליקציות,
-  /// גם מגן FilterPhone פעיל. "תמיד מופעל" מומלץ מאוד אבל לא תנאי (אנדרואיד לא תמיד מדווח עליו).
+  /// מוגן = המנהרה פעילה, התעודה מותקנת, DNS פרטי לא עוקף, אנדרואיד לא עוצר את FilterPhone ברקע
+  /// (סוללה) — ואם המנהל חסם אפליקציות, גם מגן FilterPhone פעיל.
+  /// "תמיד מופעל" מומלץ מאוד אבל לא תנאי (אנדרואיד לא תמיד מדווח עליו).
   bool get isProtected =>
       checks[Check.vpn]! &&
       checks[Check.certificate]! &&
       checks[Check.privateDns]! &&
+      checks[Check.battery]! &&
       (!guardNeeded || checks[Check.guard]!);
 
   // ------------------------------------------------------------------ הפעלה
@@ -114,6 +128,7 @@ class AppController extends ChangeNotifier {
     if (_token == null) {
       phase = Phase.welcome;
       notifyListeners();
+      await _autoProvision();
       return;
     }
     final summary = await store.read(_kSummary);
@@ -134,9 +149,44 @@ class AppController extends ChangeNotifier {
     phase = Phase.home;
     notifyListeners();
     _listenVpn();
+    await _nativeCredentials();
     await refresh();
     unawaited(_syncVpnConfig());
     _startTimer(refresh);
+  }
+
+  /// טלפון שהוקם כמנהל מכשיר ב-QR: קוד ההפעלה הגיע בתוך ה-QR — מתחברים לבד, בלי הקלדה.
+  Future<void> _autoProvision() async {
+    Map<String, String?>? info;
+    try {
+      info = await native.provisioningInfo();
+    } on PlatformException catch (e) {
+      debugPrint('provisioning info failed: $e');
+    } on MissingPluginException {
+      return;
+    }
+    final code = info?['code'];
+    if (code == null || code.isEmpty) return;
+    notice = 'הטלפון הוקם כמכשיר מנוהל — מתחבר לסינון…';
+    final ok = await activate(code, '');
+    if (ok) {
+      await native.clearProvisioning();
+    } else {
+      phase = Phase.activation; // הקוד לא עבד (פג תוקף?) — אפשר להזין ידנית
+      notifyListeners();
+    }
+  }
+
+  /// הדיווח התקופתי מהרקע צריך את כתובת השרת והאסימון (מוצפנים בצד הנייטיבי).
+  Future<void> _nativeCredentials() async {
+    final token = _token;
+    if (token == null) return;
+    try {
+      await native.setCredentials(api.baseUrl, token);
+      await native.startProtection();
+    } on PlatformException catch (e) {
+      debugPrint('native credentials failed: $e');
+    }
   }
 
   // ------------------------------------------------------------------ ניווט בפתיחה
@@ -248,6 +298,8 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     _listenVpn();
     _startTimer(refresh);
+    await _nativeCredentials();
+    unawaited(_askNotifications());
     try {
       await _connect();
     } on _UserMessage catch (e) {
@@ -299,6 +351,8 @@ class AppController extends ChangeNotifier {
       notifyListeners();
       _listenVpn();
       _startTimer(refresh);
+      await _nativeCredentials();
+      unawaited(_askNotifications());
       try {
         await _connect();
       } on _UserMessage catch (e) {
@@ -333,6 +387,49 @@ class AppController extends ChangeNotifier {
       });
 
   Future<void> openVpnSettings() => native.openVpnSettings();
+
+  Future<void> _askNotifications() async {
+    try {
+      await native.requestNotifications();
+    } on PlatformException catch (e) {
+      debugPrint('notifications request failed: $e');
+    }
+  }
+
+  /// פטור מאופטימיזציית סוללה: חלון המערכת. המצב נבדק שוב כשחוזרים לאפליקציה (refresh ב-resume).
+  Future<void> requestBatteryExemption() async {
+    try {
+      final mode = await native.requestBatteryExemption();
+      if (mode == 'list') {
+        notice = 'ברשימה: בחרו "כל האפליקציות" ← FilterPhone ← "ללא אופטימיזציה" / "ללא הגבלה".';
+      } else if (mode == 'app_details') {
+        notice = 'בדף האפליקציה: סוללה ← "ללא הגבלה" (ובטלפוני שיאומי: "הפעלה אוטומטית" ← מופעל).';
+      }
+    } on PlatformException catch (e) {
+      error = 'לא נפתח מסך הסוללה: ${e.message ?? e.code}';
+    }
+    notifyListeners();
+  }
+
+  /// גרסה חדשה (בלי מנהל מכשיר): דף ההורדה בדפדפן. ההתקנה — של המשתמש, בחלון של אנדרואיד.
+  Future<void> openUpdatePage() async {
+    try {
+      if (!await native.openUpdatePage()) error = 'לא נפתח דף ההורדה';
+    } on PlatformException catch (e) {
+      error = 'לא נפתח דף ההורדה: ${e.message ?? e.code}';
+    }
+    notifyListeners();
+  }
+
+  /// מנהל מכשיר רגיל — רק מקשה על הסרה (לא נעילה מלאה). המשתמש מאשר בחלון של המערכת.
+  Future<void> requestDeviceAdmin() async {
+    try {
+      await native.requestDeviceAdmin();
+    } on PlatformException catch (e) {
+      error = 'לא נפתח מסך מנהל המכשיר: ${e.message ?? e.code}';
+      notifyListeners();
+    }
+  }
 
   Future<void> openGuardSettings() async {
     notice = 'בהגדרות הנגישות: "אפליקציות מותקנות" ← "מגן FilterPhone" ← הפעלה. '
@@ -390,8 +487,15 @@ class AppController extends ChangeNotifier {
       deviceOwner = await native.isDeviceOwner();
       guardEnabled = await native.isGuardEnabled();
       if (_caPem != null) caInstalled = await native.isCaInstalled(_caPem!);
+      protection = await native.protectionStatus();
     } on PlatformException catch (e) {
       debugPrint('native refresh failed: $e');
+    }
+    // דיווח לשרת (ואישור גרסת המדיניות) — לכל היותר פעם בדקה כשהאפליקציה פתוחה
+    final now = DateTime.now();
+    if (_token != null && (_lastSync == null || now.difference(_lastSync!) > const Duration(minutes: 1))) {
+      _lastSync = now;
+      unawaited(native.syncNow().then((_) {}, onError: (Object e) => debugPrint('sync failed: $e')));
     }
     final token = _token;
     if (token != null) {
@@ -452,16 +556,27 @@ class AppController extends ChangeNotifier {
   }
 
   /// אם השרת שינה את הגדרות ה-VPN (למשל החלפת מפתח שרת) — שומרים ומתחברים מחדש.
+  /// ואם ההגדרות בטלפון נמחקו (ה-Keystore התאפס) — שומרים מחדש; אם גם המפתח הפרטי אבד —
+  /// יוצרים מפתח חדש ומעדכנים את השרת (אותה כתובת, אותה מדיניות).
   Future<void> _syncVpnConfig() async {
     final token = _token;
     if (token == null) return;
     try {
+      if (!vpn.hasKey) {
+        final publicKey = await native.generateKeyPair();
+        final b = await api.rekey(token, publicKey);
+        await native.saveVpnConfig(b.vpn);
+        await store.write(_kVpnHash, _hash(b.vpn));
+        notice = 'מפתח הסינון בטלפון חודש. אם צריך — לחצו "חיבור".';
+        await _connect();
+        return;
+      }
       final b = await api.vpnConfig(token);
       final h = _hash(b.vpn);
-      if (h != await store.read(_kVpnHash)) {
+      if (h != await store.read(_kVpnHash) || !vpn.hasConfig) {
         await native.saveVpnConfig(b.vpn);
         await store.write(_kVpnHash, h);
-        if (vpn.isUp) await native.connect();
+        if (vpn.isUp || !vpn.hasConfig) await native.connect();
       }
       if (b.caPem != null && b.caPem != _caPem) {
         _caPem = b.caPem;

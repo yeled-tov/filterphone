@@ -15,6 +15,9 @@ class VpnStatus {
     this.rx = 0,
     this.tx = 0,
     this.error,
+    this.hasKey = true,
+    this.lastHealthOk,
+    this.reconnects = 0,
   });
 
   final String state; // UP / DOWN / TOGGLE
@@ -26,6 +29,9 @@ class VpnStatus {
   final int rx;
   final int tx;
   final String? error;
+  final bool hasKey; // המפתח הפרטי קיים (false = ה-Keystore נמחק — צריך מפתח חדש)
+  final DateTime? lastHealthOk; // בדיקת התקינות האחרונה שעברה (handshake טרי)
+  final int reconnects;
 
   bool get isUp => state == 'UP';
 
@@ -41,10 +47,77 @@ class VpnStatus {
       rx: (m['rx'] as num?)?.toInt() ?? 0,
       tx: (m['tx'] as num?)?.toInt() ?? 0,
       error: m['error'] as String?,
+      hasKey: m['hasKey'] as bool? ?? true,
+      lastHealthOk: _time(m['lastHealthOkMs']),
+      reconnects: (m['reconnects'] as num?)?.toInt() ?? 0,
     );
   }
 
   static const down = VpnStatus(state: 'DOWN');
+}
+
+DateTime? _time(Object? ms) {
+  final v = (ms as num?)?.toInt() ?? 0;
+  return v > 0 ? DateTime.fromMillisecondsSinceEpoch(v) : null;
+}
+
+/// מצב ההגנה בטלפון — מה שהמסך הראשי מציג, ומה שנשלח לשרת בדיווח התקופתי.
+class ProtectionStatus {
+  const ProtectionStatus({
+    this.batteryUnrestricted,
+    this.backgroundRestricted,
+    this.notifications,
+    this.guardEnabled = false,
+    this.guardRunning = false,
+    this.deviceOwner = false,
+    this.deviceAdmin = false,
+    this.policyVersion = 0,
+    this.lastPolicySync,
+    this.lastVpnHealthOk,
+    this.lastHeartbeat,
+    this.heartbeatError,
+    this.policyError,
+    this.updateAvailable,
+  });
+
+  final bool? batteryUnrestricted; // null = לא ידוע
+  final bool? backgroundRestricted;
+  final bool? notifications;
+  final bool guardEnabled;
+  final bool guardRunning;
+  final bool deviceOwner;
+  final bool deviceAdmin;
+  final int policyVersion;
+  final DateTime? lastPolicySync;
+  final DateTime? lastVpnHealthOk;
+  final DateTime? lastHeartbeat;
+  final String? heartbeatError;
+  final String? policyError;
+
+  /// גרסה חדשה שהמשתמש צריך להתקין בעצמו (בלי מנהל מכשיר). במנהל מכשיר העדכון שקט — תמיד null.
+  final String? updateAvailable;
+
+  /// הטלפון לא מגביל את FilterPhone ברקע (סוללה + הגבלת רקע).
+  bool get backgroundOk => batteryUnrestricted == true && backgroundRestricted != true;
+
+  factory ProtectionStatus.fromMap(Map<Object?, Object?> m) => ProtectionStatus(
+        batteryUnrestricted: m['batteryUnrestricted'] as bool?,
+        backgroundRestricted: m['backgroundRestricted'] as bool?,
+        notifications: m['notifications'] as bool?,
+        guardEnabled: m['guardEnabled'] as bool? ?? false,
+        guardRunning: m['guardRunning'] as bool? ?? false,
+        deviceOwner: m['deviceOwner'] as bool? ?? false,
+        deviceAdmin: m['deviceAdmin'] as bool? ?? false,
+        policyVersion: (m['policyVersion'] as num?)?.toInt() ?? 0,
+        lastPolicySync: _time(m['lastPolicySyncMs']),
+        lastVpnHealthOk: _time(m['lastVpnHealthOkMs']),
+        lastHeartbeat: _time(m['lastHeartbeatMs']),
+        heartbeatError: m['heartbeatError'] as String?,
+        policyError: m['policyError'] as String?,
+        updateAvailable: m['updateAvailable'] as String?,
+      );
+
+  static const unknown = ProtectionStatus();
 }
 
 /// ממשק לקוד הנייטיבי. מופרד לממשק כדי שאפשר יהיה להחליף בבדיקות ובאייפון.
@@ -78,6 +151,36 @@ abstract class NativeBridge {
   /// שומר את רשימת החסימות מהשרת; במנהל מכשיר — גם מסתיר את האפליקציות.
   /// [api] ו-[token] מאפשרים למגן לרענן את הרשימה לבד, גם כשהאפליקציה סגורה (null = מחיקה).
   Future<void> setGuardPolicy(Map<String, Object?> policy, {String? api, String? token});
+
+  // --- אמינות: דיווח לשרת, סוללה, מנהל מכשיר ---
+
+  /// כתובת השרת והאסימון — לדיווח התקופתי מהרקע (גם כשהאפליקציה סגורה).
+  Future<void> setCredentials(String? api, String? token);
+
+  /// המצב המלא: סוללה, מגן, מנהל מכשיר, סנכרון אחרון, בדיקת VPN אחרונה.
+  Future<ProtectionStatus> protectionStatus();
+
+  /// דיווח לשרת עכשיו (מחזיר true אם השרת ענה). מחיל מדיניות חדשה אם יש.
+  Future<bool> syncNow();
+
+  /// השירות הקבוע ("הסינון פעיל") ששומר על ה-VPN ברקע.
+  Future<bool> startProtection();
+
+  /// חלון המערכת לפטור מאופטימיזציית סוללה. מחזיר מה נפתח (dialog / list / app_details / already).
+  Future<String> requestBatteryExemption();
+
+  /// הרשאת התראות (אנדרואיד 13+) — להתראה "הסינון פעיל".
+  Future<void> requestNotifications();
+
+  /// מנהל מכשיר רגיל (לא Device Owner): מקשה על הסרה בלבד.
+  Future<bool> requestDeviceAdmin();
+
+  /// דף ההורדה בדפדפן — כשיש גרסה חדשה ואין מנהל מכשיר (המשתמש מתקין בעצמו).
+  Future<bool> openUpdatePage();
+
+  /// קוד הפעלה שהגיע ב-QR של הקמת Device Owner: {code, api}, או null.
+  Future<Map<String, String?>?> provisioningInfo();
+  Future<void> clearProvisioning();
 }
 
 /// מימוש דרך MethodChannel (אנדרואיד היום; אייפון — כשנוסיף את ה-Network Extension).
@@ -151,4 +254,39 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<void> setGuardPolicy(Map<String, Object?> policy, {String? api, String? token}) =>
       _call<bool>('setGuardPolicy', {'policy': jsonEncode(policy), 'api': api, 'token': token});
+
+  @override
+  Future<void> setCredentials(String? api, String? token) =>
+      _call<bool>('setCredentials', {'api': api, 'token': token});
+
+  @override
+  Future<ProtectionStatus> protectionStatus() async =>
+      ProtectionStatus.fromMap(await _call<Map<Object?, Object?>>('protectionStatus'));
+
+  @override
+  Future<bool> syncNow() => _call<bool>('syncNow');
+
+  @override
+  Future<bool> startProtection() => _call<bool>('startProtection');
+
+  @override
+  Future<String> requestBatteryExemption() => _call<String>('requestBatteryExemption');
+
+  @override
+  Future<void> requestNotifications() => _call<bool>('requestNotifications');
+
+  @override
+  Future<bool> requestDeviceAdmin() => _call<bool>('requestDeviceAdmin');
+
+  @override
+  Future<bool> openUpdatePage() => _call<bool>('openUpdatePage');
+
+  @override
+  Future<Map<String, String?>?> provisioningInfo() async {
+    final m = await _channel.invokeMethod<Map<Object?, Object?>>('provisioningInfo');
+    return m?.map((k, v) => MapEntry(k as String, v as String?));
+  }
+
+  @override
+  Future<void> clearProvisioning() => _call<bool>('clearProvisioning');
 }

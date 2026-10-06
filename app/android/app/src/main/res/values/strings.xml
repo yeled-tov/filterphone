@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="guard_label">מגן FilterPhone</string>
-    <string name="guard_description">חוסם את האפליקציות והמסכים שמנהל הסינון חסם בטלפון הזה (למשל חנות האפליקציות או צפייה בסטטוסים). המגן רואה רק איזו אפליקציה נפתחה — הוא לא קורא הודעות, תוכן או הקלדות.</string>
+    <string name="guard_description">חוסם את האפליקציות והמסכים שמנהל הסינון חסם בטלפון הזה (למשל חנות האפליקציות או צפייה בסטטוסים). המגן רואה איזו אפליקציה ואיזה מסך נפתחו. רק בוואטסאפ, ורק אם המנהל חסם תמונות פרופיל, הוא בודק גם היכן מוצגות תמונות במסך — כדי לסגור צפייה בתמונת פרופיל. הוא לא קורא הודעות, טקסט או הקלדות, ולא שומר שום דבר.</string>
     <string name="guard_app_blocked">האפליקציה חסומה בטלפון הזה (FilterPhone)</string>
     <string name="guard_screen_blocked">המסך הזה חסום בטלפון הזה (FilterPhone)</string>
+    <string name="guard_profile_photo_blocked">תמונות פרופיל חסומות בטלפון הזה (FilterPhone)</string>
+    <string name="protection_channel">הגנת FilterPhone</string>
+    <string name="protection_channel_desc">התראה קבועה כל עוד הסינון פעיל — כדי שאנדרואיד לא יעצור את ההגנה ברקע.</string>
+    <string name="protection_title">FilterPhone</string>
+    <string name="protection_on">הסינון פעיל</string>
+    <string name="protection_reconnecting">מתחבר מחדש לסינון…</string>
+    <string name="protection_needs_permission">נדרש אישור חיבור VPN — פתחו את FilterPhone</string>
+    <string name="admin_add_explanation">מקשה על הסרת FilterPhone: כדי להסיר צריך קודם לבטל כאן את מנהל המכשיר, והמנהל מקבל על כך הודעה. (זה לא נועל את הטלפון — לנעילה מלאה יש הקמה כמנהל מכשיר מלא.)</string>
+    <string name="admin_disable_warning">ביטול מנהל המכשיר מאפשר להסיר את FilterPhone. המנהל יקבל על כך הודעה.</string>
 </resources>

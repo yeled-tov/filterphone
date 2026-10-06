@@ -9,6 +9,7 @@
     GET  /v1/device/vpn         — הגדרות ה-VPN + התעודה (רק למכשיר פעיל)
     POST /v1/device/requests    — בקשת שינוי (רמה / חסימות) — רק המנהל מבצע
     POST /v1/device/report      — דיווח: אפליקציות מותקנות + מצב ההגנה בטלפון
+    POST /v1/device/rekey       — מפתח VPN חדש (הטלפון איבד את הקודם) — אותה כתובת ומדיניות
     POST /v1/device/heartbeat   — דיווח תקופתי (גם מהרקע): VPN, נגישות, מנהל מכשיר, סוללה,
                                   גרסת המדיניות שהוחלה. התשובה: המדיניות העדכנית אם הטלפון מאחור
     GET  /v1/ca.crt             — תעודת הסינון להתקנה בטלפון
@@ -56,6 +57,7 @@ register_limiter = RateLimiter(limit=5, window_s=3600)
 login_limiter = RateLimiter(limit=8, window_s=600)
 device_limiter = RateLimiter(limit=30, window_s=600)       # בקשות שינוי / דיווחים מהטלפון
 heartbeat_limiter = RateLimiter(limit=40, window_s=600)    # דיווח תקופתי: כל 15 דקות + רענון ידני
+rekey_limiter = RateLimiter(limit=3, window_s=86400)       # החלפת מפתח VPN — נדיר מאוד
 
 
 def build_services() -> Services:
@@ -266,6 +268,10 @@ class ReportIn(BaseModel):
     guard: dict[str, bool | str | int] | None = None
 
 
+class RekeyIn(BaseModel):
+    public_key: str = Field(min_length=44, max_length=44)
+
+
 class HeartbeatIn(BaseModel):
     """שדות לא מוכרים נזרקים; סוגים לא נכונים — מתעלמים מהם (sanitize_heartbeat)."""
     model_config = {"extra": "allow"}
@@ -411,6 +417,11 @@ def _routes(app: FastAPI) -> None:
         _limit(device_limiter, f"rep:{row['id']}")
         apps = [a.model_dump() for a in body.apps] if body.apps is not None else None
         return svc.report_device(row, apps, body.guard)
+
+    @app.post("/v1/device/rekey")
+    def device_rekey(body: RekeyIn, svc: SvcDep, row: DeviceRow):
+        _limit(rekey_limiter, f"rk:{row['id']}")
+        return svc.rekey(row, body.public_key)
 
     @app.post("/v1/device/heartbeat")
     def device_heartbeat(body: HeartbeatIn, request: Request, svc: SvcDep, row: DeviceRow):

@@ -312,6 +312,10 @@ class ApiClient {
   Future<VpnBundle> vpnConfig(String token) async =>
       VpnBundle.fromJson(await _send('GET', '/v1/device/vpn', token: token));
 
+  /// מפתח VPN חדש (הקודם אבד בטלפון) — אותה כתובת ואותה מדיניות.
+  Future<VpnBundle> rekey(String token, String publicKey) async =>
+      VpnBundle.fromJson(await _send('POST', '/v1/device/rekey', token: token, body: {'public_key': publicKey}));
+
   Future<void> requestChange(String token, {int? level, List<String>? options, String note = ''}) =>
       _send('POST', '/v1/device/requests', token: token, body: {
         'level': level,

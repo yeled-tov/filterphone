@@ -41,6 +41,13 @@ const LOG_KINDS = {
   accessibility_off: ["bad", "המגן כובה"], management_on: ["ok", "מנהל מכשיר פעיל"],
   management_removed: ["bad", "מנהל המכשיר הוסר"], battery_unrestricted: ["ok", "סוללה: ללא הגבלה"],
   battery_restricted: ["warn", "סוללה: מוגבלת"], outside_vpn: ["bad", "דיווח מחוץ למנהרה"], policy_error: ["warn", "שגיאת מדיניות"],
+  app_updated: ["ok", "האפליקציה עודכנה"], app_update_failed: ["warn", "עדכון האפליקציה נכשל"],
+};
+const UPDATE_STATES = {
+  available: ["warn", "גרסה חדשה זמינה — הטלפון צריך להתקין ידנית"],
+  waiting: ["", "ממתין ל-Wi-Fi לעדכון"],
+  installing: ["", "מתקין עדכון..."],
+  failed: ["bad", "העדכון נכשל"],
 };
 
 const APP_IMAGES = {
@@ -745,7 +752,13 @@ function complianceCard(d) {
         ["אופטימיזציית סוללה", pick(hb.battery_unrestricted, g.battery_unrestricted) === undefined ? chip("לא דווח")
           : pick(hb.battery_unrestricted, g.battery_unrestricted) ? chip("ללא הגבלה", "ok") : chip("מוגבלת", "warn")],
         ["תעודת סינון", yesNo(pick(hb.ca_installed, g.ca_installed))],
-        ["גרסת אפליקציה", d.app_version || hb.app_version || "—"],
+        ["גרסת אפליקציה", el("span", { class: "row gap" }, d.app_version || hb.app_version || "—",
+          d.latest_app_version && (d.app_version || hb.app_version) && d.latest_app_version !== (d.app_version || hb.app_version)
+            ? chip(`האחרונה: ${d.latest_app_version}`, "warn") : null)],
+        ["עדכון אוטומטי", hb.update?.state && UPDATE_STATES[hb.update.state]
+          ? chip(`${UPDATE_STATES[hb.update.state][1]}${hb.update.version ? ` (${hb.update.version})` : ""}${hb.update.error ? ` · ${hb.update.error}` : ""}`,
+            UPDATE_STATES[hb.update.state][0])
+          : chip(pick(hb.device_owner, g.device_owner) ? "פעיל (מנהל מכשיר)" : "ידני — מדף ההורדה")],
         ["אנדרואיד", hb.sdk ? `${ANDROID[hb.sdk] || "?"} (API ${hb.sdk})` : "—"],
         ["גרסת מדיניות בשרת / בטלפון", el("span", { class: "row gap" }, `${d.policy_version} / ${d.device_policy_version ?? "—"}`, syncText)],
         ["סנכרון מדיניות אחרון", ago(d.policy_ack_at || hb.last_policy_sync)],
@@ -1012,7 +1025,7 @@ async function viewCodes() {
       el("img", { src: r.qr, alt: "QR להקמה", class: "qr" }),
       el("ol", { class: "small" },
         el("li", {}, "טלפון מאופס להגדרות יצרן (חדש, או אחרי איפוס). אין להוסיף חשבון Google לפני ההקמה."),
-        el("li", {}, "במסך הפתיחה הראשון: הקשה 6 פעמים באותו מקום → נפתח סורק QR (באנדרואיד 7–8 צריך להתחבר קודם ל-Wi-Fi)."),
+        el("li", {}, "במסך הפתיחה הראשון: הקשה 6 פעמים באותו מקום → נפתח סורק QR (באנדרואיד 8 צריך להתחבר קודם ל-Wi-Fi)."),
         el("li", {}, "סורקים את הקוד. הטלפון מוריד את FilterPhone, מאמת את הטביעה, ומגדיר אותה כמנהלת המכשיר."),
         el("li", {}, "בסיום FilterPhone נפתחת ומתחברת לבד (הקוד החד-פעמי שבתוך ה-QR). מאשרים חיבור VPN ומתקינים תעודה אם מתבקש.")),
       el("p", { class: "muted small" }, `קוד חד-פעמי, תקף יומיים: ${r.code.code}. טביעת ה-APK: ${r.apk_sha256.slice(0, 16)}…`),

@@ -55,6 +55,21 @@ android {
         // ספריות ה-native של WireGuard נטענות ישירות מה-APK
         jniLibs.useLegacyPackaging = false
     }
+
+    // בדיקות יחידה של הקוד הנייטיבי (JVM): org.json האמיתי במקום ה-stub של android.jar
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
+    // Lint: שגיאות (למשל API חדש בלי בדיקת גרסה, מניפסט שגוי) מכשילות את הבנייה ב-CI.
+    // רק הקוד שלנו — לא התוספים של Flutter ולא הבדיקות שלהם.
+    lint {
+        abortOnError = true
+        checkDependencies = false
+        ignoreTestSources = true
+        warningsAsErrors = false
+        disable += setOf("GradleDependency", "NewerVersionAvailable", "AndroidGradlePluginVersion", "OldTargetApi")
+    }
 }
 
 kotlin {
@@ -65,6 +80,8 @@ kotlin {
 
 dependencies {
     implementation("com.wireguard.android:tunnel:1.0.20260102")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20250517")
 }
 
 flutter {

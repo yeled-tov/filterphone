@@ -101,6 +101,17 @@ if [ ! -f "$ETC/filterphone.env" ]; then
     install -m 640 -g "$USER_NAME" "$SRC/deploy/filterphone.env.example" "$ETC/filterphone.env"
 fi
 set -a; . "$ETC/filterphone.env"; set +a
+# כתובת IP חלופית שהטלפונים מקבלים (כשאין DNS מיד אחרי אתחול) — מוסיפים פעם אחת אם חסרה
+if ! grep -q '^FP_PUBLIC_IP=' "$ETC/filterphone.env"; then
+    ep="${FP_VPN_ENDPOINT:-vpn.filterphone.com:51820}"
+    ip4=$(getent ahostsv4 "${ep%%:*}" 2>/dev/null | awk 'NR==1{print $1}' || true)
+    if [[ "$ip4" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        printf '\n# נוסף אוטומטית ב-install.sh (%s) — כתובת השרת לטלפונים כשה-DNS לא זמין\nFP_PUBLIC_IP=%s\n' \
+            "$(date +%F)" "$ip4" >> "$ETC/filterphone.env"
+        export FP_PUBLIC_IP="$ip4"
+        log "  FP_PUBLIC_IP=$ip4 (מ-${ep%%:*})"
+    fi
+fi
 
 # ------------------------------------------------------------ 7. Redis
 log "Redis: תקרת זיכרון 512MB, פינוי רק של רשומות קאש (עם תפוגה)"

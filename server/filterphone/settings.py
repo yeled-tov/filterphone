@@ -52,6 +52,7 @@ class Settings:
     api_port: int = 8090
     public_host: str = "api.filterphone.com"
     vpn_endpoint: str = "vpn.filterphone.com:51820"
+    public_ip: str = ""                 # כתובת השרת — גיבוי בטלפון כשה-DNS לא זמין (מיד אחרי הפעלה)
     wg_interface: str = "wg0"
     vpn_network: str = "10.8.0.0/24"
     vpn_server_ip: str = "10.8.0.1"

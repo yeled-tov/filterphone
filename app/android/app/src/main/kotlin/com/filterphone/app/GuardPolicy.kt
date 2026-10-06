@@ -1,6 +1,5 @@
 package com.filterphone.app
 
-import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -11,28 +10,28 @@ import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
- * מה שהמנהל חסם בטלפון הזה: אפליקציות שלמות, ומסכים בתוך אפליקציות (למשל צפייה בסטטוסים).
+ * מה שהמנהל חסם בטלפון הזה: אפליקציות שלמות, מסכים בתוך אפליקציות (למשל צפייה בסטטוסים),
+ * הגנות מיוחדות (תמונות פרופיל בוואטסאפ) והגדרות מנהל מכשיר.
  *
- * הרשימה מגיעה מהשרת — דרך Flutter (setGuardPolicy) כשהאפליקציה פתוחה, ומהשירות עצמו
- * (refreshFromServer) כל חצי שעה, כך ששינוי של המנהל נכנס לתוקף גם בלי לפתוח את האפליקציה.
- * האכיפה:
- *   - GuardService (שירות נגישות): כשאפליקציה חסומה נפתחת — חוזרים למסך הבית;
- *     כשמסך חסום נפתח — "אחורה". עובד בכל טלפון, אחרי שהמשתמש מפעיל את המגן.
- *   - מנהל מכשיר (Device Owner), אם הוגדר: האפליקציות החסומות מוסתרות לגמרי מהמכשיר.
- * הרשימה אינה סוד, ולכן נשמרת ב-SharedPreferences רגיל; אסימון המכשיר נשמר מוצפן.
+ * מקורות: Flutter (setGuardPolicy) כשהאפליקציה פתוחה, והדיווח התקופתי (Sync) גם כשהיא סגורה.
+ * לכל מדיניות גרסה מהשרת — גרסה ישנה לא דורסת חדשה, והטלפון מאשר לשרת איזו גרסה הוחלה.
+ *
+ * לעולם לא "נפתח" בגלל תקלה: רשימה פגומה לא נשמרת (נשארת הקודמת), אין רשת — נשארת השמורה,
+ * והעותק האחרון שעבד נשמר בנפרד ליתר ביטחון.
  */
 object GuardPolicy {
     private const val TAG = "FilterPhone"
     private const val PREFS = "fp_guard"
     private const val K_POLICY = "policy"
-    private const val K_HIDDEN = "hidden_by_owner"
+    private const val K_POLICY_GOOD = "policy_last_good"
     private const val K_API = "api"
     private const val K_TOKEN = "guard_token"
+    private const val K_ERROR = "policy_error"
 
     /** אסור לחסום — בלעדיהם הטלפון לא שמיש או שאי אפשר לחייג למוקד חירום. */
     val PROTECTED = setOf(
@@ -42,50 +41,150 @@ object GuardPolicy {
     )
 
     data class Screen(val pkg: String, val match: List<String>)
-    data class Policy(val apps: Set<String>, val screens: List<Screen>) {
-        val isEmpty get() = apps.isEmpty() && screens.isEmpty()
+
+    /** זיהוי מסך תמונת פרופיל בוואטסאפ — התבניות מגיעות מהשרת (עם ברירת מחדל זהה כאן). */
+    data class WaDetector(
+        val packages: Set<String>,
+        val activities: List<String>,
+        val viewIds: List<String>,
+        val descriptions: List<String>,
+        val minArea: Float,
+        val excludeWindows: List<String> = listOf("mediaview", "gallery", "camera", "status"),
+    ) {
+        companion object {
+            val DEFAULT = WaDetector(
+                packages = setOf("com.whatsapp", "com.whatsapp.w4b"),
+                activities = listOf("viewprofilephoto", "profilephoto", "profilepicture", "quickcontact", "photo.viewprofile"),
+                viewIds = listOf("profile_picture", "profile_photo", "contact_photo", "quick_contact_photo",
+                    "wds_profile_photo", "profile_picture_image"),
+                descriptions = listOf("profile photo", "profile picture", "תמונת פרופיל", "תמונת הפרופיל",
+                    "foto de perfil", "photo de profil", "profilbild"),
+                minArea = 0.3f,
+            )
+        }
+    }
+
+    data class Policy(
+        val apps: Set<String>,
+        val screens: List<Screen>,
+        val version: Int = 0,
+        val checksum: String = "",
+        val waProfile: WaDetector? = null,
+        val dpc: JSONObject? = null,
+    ) {
+        val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null
     }
 
     enum class Block { APP, SCREEN }
+
+    private val EMPTY = Policy(emptySet(), emptyList())
 
     @Volatile private var cached: Policy? = null
     @Volatile private var untouchable: Set<String> = emptySet()
     @Volatile private var untouchableAt = 0L
 
-    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun save(context: Context, json: String) {
-        val policy = parse(json)
-        prefs(context).edit().putString(K_POLICY, json).apply()
+    /**
+     * שומר מדיניות חדשה. מחזיר false אם היא פגומה (אז נשארת הקודמת). גרסה ישנה מהנוכחית — מתעלמים
+     * (למשל תשובה ישנה מהשרת שהגיעה אחרי חדשה), ומחזירים true.
+     */
+    fun save(context: Context, json: String): Boolean {
+        val policy = try {
+            parseStrict(json)
+        } catch (e: Exception) {
+            Log.w(TAG, "rejected bad guard policy: ${e.javaClass.simpleName}")
+            prefs(context).edit().putString(K_ERROR, "invalid policy: ${e.javaClass.simpleName}").apply()
+            return false
+        }
+        val current = get(context)
+        if (policy.version > 0 && current.version > policy.version) return true
+        prefs(context).edit().putString(K_POLICY, json).putString(K_POLICY_GOOD, json).remove(K_ERROR).commit()
         cached = policy
-        applyDeviceOwner(context, policy)
+        ProtectionState.mark(context, ProtectionState.POLICY_SYNC)
+        runCatching { DeviceOwnerManager.apply(context, policy) }.onFailure { Log.w(TAG, "device owner apply failed", it) }
+        GuardService.onPolicyChanged()
+        return true
     }
 
-    fun get(context: Context): Policy =
-        cached ?: parse(prefs(context).getString(K_POLICY, null)).also { cached = it }
-
-    fun parse(json: String?): Policy {
-        if (json.isNullOrBlank()) return Policy(emptySet(), emptyList())
-        return try {
-            val o = JSONObject(json)
-            val apps = o.optJSONArray("blocked_apps")?.let { a -> (0 until a.length()).map { a.optString(it) } }
-                ?: emptyList()
-            // רשומה פגומה אחת מדלגים עליה — לא מבטלים בגללה את כל הרשימה
-            val screens = o.optJSONArray("blocked_screens")?.let { a ->
-                (0 until a.length()).mapNotNull { i ->
-                    val s = a.optJSONObject(i) ?: return@mapNotNull null
-                    val m = s.optJSONArray("match") ?: return@mapNotNull null
-                    Screen(s.optString("package"), (0 until m.length()).map { m.optString(it) }.filter { it.isNotBlank() })
-                }
-            } ?: emptyList()
-            Policy(
-                apps.filter { it.isNotBlank() && it !in PROTECTED }.toSet(),
-                screens.filter { it.pkg.isNotBlank() && it.match.isNotEmpty() },
-            )
-        } catch (e: Exception) {
-            Log.w(TAG, "bad guard policy", e)
-            Policy(emptySet(), emptyList())
+    fun get(context: Context): Policy {
+        cached?.let { return it }
+        val p = prefs(context)
+        for (key in arrayOf(K_POLICY, K_POLICY_GOOD)) {
+            val raw = p.getString(key, null) ?: continue
+            try {
+                return parseStrict(raw).also { cached = it }
+            } catch (e: Exception) {
+                Log.w(TAG, "stored policy ($key) unreadable: ${e.javaClass.simpleName}")
+            }
         }
+        return EMPTY.also { cached = it }
+    }
+
+    fun version(context: Context): Int = get(context).version
+
+    fun lastError(context: Context): String? = prefs(context).getString(K_ERROR, null)
+
+    /** פירוש לבדיקות ולתאימות: שגיאה → מדיניות ריקה. לשמירה — רק parseStrict. */
+    fun parse(json: String?): Policy =
+        if (json.isNullOrBlank()) EMPTY else try { parseStrict(json) } catch (e: Exception) { EMPTY }
+
+    /**
+     * פירוש קפדני: JSON לא תקין או שדה עליון מסוג שגוי — חריגה (והמדיניות הקודמת נשארת).
+     * רשומה פגומה אחת בתוך רשימה — מדלגים עליה, בלי לבטל את כל השאר.
+     */
+    @Throws(JSONException::class)
+    fun parseStrict(json: String): Policy {
+        val o = JSONObject(json)
+        val apps = o.optArrayStrict("blocked_apps")?.let { a -> (0 until a.length()).mapNotNull { a.opt(it) as? String } }
+            ?: emptyList()
+        val screens = o.optArrayStrict("blocked_screens")?.let { a ->
+            (0 until a.length()).mapNotNull { i ->
+                val s = a.optJSONObject(i) ?: return@mapNotNull null
+                val m = s.optJSONArray("match") ?: return@mapNotNull null
+                Screen(s.optString("package"), (0 until m.length()).map { m.optString(it) }.filter { it.isNotBlank() })
+            }
+        } ?: emptyList()
+        val protections = o.opt("protections")
+        if (protections != null && protections != JSONObject.NULL && protections !is JSONObject) {
+            throw JSONException("protections is not an object")
+        }
+        val wa = (protections as? JSONObject)?.let { parseWa(it.opt("wa_profile_photo")) }
+        val dpc = o.optJSONObject("dpc")
+        return Policy(
+            apps.filter { it.isNotBlank() && it !in PROTECTED }.toSet(),
+            screens.filter { it.pkg.isNotBlank() && it.match.isNotEmpty() },
+            version = o.optInt("version", 0),
+            checksum = o.optString("checksum", ""),
+            waProfile = wa,
+            dpc = dpc,
+        )
+    }
+
+    private fun JSONObject.optArrayStrict(key: String): JSONArray? {
+        val v = opt(key) ?: return null
+        if (v == JSONObject.NULL) return null
+        return v as? JSONArray ?: throw JSONException("$key is not an array")
+    }
+
+    private fun parseWa(raw: Any?): WaDetector? {
+        if (raw == null || raw == JSONObject.NULL || raw == false) return null
+        if (raw == true) return WaDetector.DEFAULT
+        val o = raw as? JSONObject ?: return WaDetector.DEFAULT
+        fun list(key: String, fallback: List<String>): List<String> {
+            val a = o.optJSONArray(key) ?: return fallback
+            return (0 until a.length()).map { a.optString(it).trim().lowercase() }.filter { it.isNotEmpty() }
+                .ifEmpty { fallback }
+        }
+        val d = WaDetector.DEFAULT
+        return WaDetector(
+            packages = list("packages", d.packages.toList()).toSet(),
+            activities = list("activities", d.activities),
+            viewIds = list("view_ids", d.viewIds),
+            descriptions = list("descriptions", d.descriptions),
+            minArea = o.optDouble("min_area", d.minArea.toDouble()).toFloat().coerceIn(0.05f, 0.95f),
+            excludeWindows = list("exclude_windows", d.excludeWindows),
+        )
     }
 
     /**
@@ -124,18 +223,6 @@ object GuardPolicy {
         return set
     }
 
-    /** מנהל מכשיר: מסתירים את האפליקציות החסומות, ומחזירים את אלה שהוסרו מהרשימה. */
-    fun applyDeviceOwner(context: Context, policy: Policy) {
-        if (!DeviceAdmin.isDeviceOwner(context)) return
-        val dpm = context.getSystemService(DevicePolicyManager::class.java)
-        val admin = DeviceAdmin.component(context)
-        val before = prefs(context).getStringSet(K_HIDDEN, emptySet())!!.toSet()
-        val wanted = policy.apps - untouchable(context)
-        for (pkg in wanted - before) runCatching { dpm.setApplicationHidden(admin, pkg, true) }
-        for (pkg in before - wanted) runCatching { dpm.setApplicationHidden(admin, pkg, false) }
-        prefs(context).edit().putStringSet(K_HIDDEN, wanted).apply()
-    }
-
     /** האפליקציות שאפשר לפתוח מהמסך הראשי — כדי שהמנהל יוכל לחסום כל אחת בלחיצה. */
     fun installedApps(context: Context): List<Map<String, Any>> {
         val pm = context.packageManager
@@ -154,7 +241,7 @@ object GuardPolicy {
             .sortedBy { (it["label"] as String).lowercase() }
     }
 
-    /** האם המשתמש הפעיל את שירות הנגישות של FilterPhone. */
+    /** האם המשתמש הפעיל את שירות הנגישות של FilterPhone (בהגדרות). */
     fun isServiceEnabled(context: Context): Boolean {
         val enabled = Settings.Secure.getString(
             context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
@@ -163,9 +250,9 @@ object GuardPolicy {
         return enabled.split(':').any { ComponentName.unflattenFromString(it) == me }
     }
 
-    // ------------------------------------------------------------ רענון מהשרת (בלי Flutter)
+    // ------------------------------------------------------------ פרטי הגישה לשרת (לרענון בלי Flutter)
 
-    /** הכתובת והאסימון של המכשיר, כדי שהשירות יוכל לרענן לבד. token=null — מחיקה. */
+    /** הכתובת והאסימון של המכשיר, כדי שהדיווח התקופתי יעבוד גם כשהאפליקציה סגורה. null — מחיקה. */
     fun setCredentials(context: Context, api: String?, token: String?) {
         if (api.isNullOrBlank() || token.isNullOrBlank()) {
             prefs(context).edit().remove(K_API).apply()
@@ -176,35 +263,17 @@ object GuardPolicy {
         SecureStore(context).put(K_TOKEN, token)
     }
 
-    /**
-     * מושך את רשימת החסימות העדכנית מהשרת (GET /v1/device). בכל תקלה — משאירים את הקיימת:
-     * עדיף חסימה ישנה מאשר פתיחה בגלל רשת חלשה.
-     */
-    fun refreshFromServer(context: Context): Boolean {
-        // רץ ב-thread של השירות: חריגה שלא נתפסת הייתה מפילה את כל האפליקציה — לכן הכול בתוך try
-        var conn: HttpURLConnection? = null
-        return try {
-            val api = prefs(context).getString(K_API, null) ?: return false
-            val token = SecureStore(context).get(K_TOKEN) ?: return false
-            conn = (URL("$api/v1/device").openConnection() as HttpURLConnection).apply {
-                connectTimeout = 15_000
-                readTimeout = 15_000
-                setRequestProperty("Authorization", "Bearer $token")
-                setRequestProperty("Accept", "application/json")
-            }
-            if (conn.responseCode != HttpURLConnection.HTTP_OK) return false
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val o = JSONObject(body)
-            if (o.optString("status", "active") != "active") return false
-            val json = o.optJSONObject("device_policy")?.toString() ?: return false
-            if (parse(json) != get(context)) save(context, json)
-            true
-        } catch (e: Exception) {
-            Log.i(TAG, "guard refresh skipped: ${e.javaClass.simpleName}")
-            false
-        } finally {
-            conn?.disconnect()
-        }
+    fun credentials(context: Context): Pair<String, String>? {
+        val api = prefs(context).getString(K_API, null) ?: return null
+        val token = SecureStore(context).get(K_TOKEN) ?: return null
+        return api to token
+    }
+
+    /** מחיקה מלאה (איפוס המכשיר מהאפליקציה). */
+    fun clear(context: Context) {
+        prefs(context).edit().clear().commit()
+        cached = null
+        SecureStore(context).put(K_TOKEN, null)
     }
 
     private fun query(pm: PackageManager, intent: Intent): List<ResolveInfo> =

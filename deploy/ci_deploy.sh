@@ -7,7 +7,7 @@
 #   restrict,command="/usr/local/sbin/fp-ci-deploy" ssh-ed25519 AAAA... fp-ci-deploy
 # כך שמי שמחזיק במפתח לא מקבל shell — רק את הפקודות כאן:
 #   deploy <rev>       stdin: tar.gz של server/ tools/ deploy/ → התקנה (כמו deploy/deploy.sh)
-#   apk                stdin: tar עם FilterPhone.apk + FilterPhone-universal.apk → דף ההורדה
+#   apk                stdin: tar עם FilterPhone.apk + FilterPhone-universal.apk (+ FilterPhone.json) → דף ההורדה
 #   status             גרסה, שירותים, מקום פנוי
 #   rollback <גיבוי>   חזרה לגרסה הקודמת (deploy/rollback_version.sh) עם /root/fp-backups/<גיבוי>
 # =====================================================================
@@ -37,11 +37,29 @@ deploy)
 apk)
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
-    tar -C "$tmp" -xf - FilterPhone.apk FilterPhone-universal.apk
+    cat > "$tmp/in.tar"
+    # רק השמות האלה — שום נתיב אחר לא נפתח
+    while read -r name; do
+        case "$name" in
+            FilterPhone.apk|FilterPhone-universal.apk|FilterPhone.json) ;;
+            *) echo "קובץ לא צפוי בחבילה: $name"; exit 2 ;;
+        esac
+    done < <(tar -tf "$tmp/in.tar")
+    mkdir "$tmp/x"
+    tar -C "$tmp/x" -xf "$tmp/in.tar"
     for f in FilterPhone.apk FilterPhone-universal.apk; do
-        [ "$(head -c 2 "$tmp/$f")" = "PK" ] || { echo "$f אינו APK"; exit 2; }
+        [ -f "$tmp/x/$f" ] && [ "$(head -c 2 "$tmp/x/$f")" = "PK" ] || { echo "$f חסר או אינו APK"; exit 2; }
     done
-    sudo -n install -m 644 -o root -g root "$tmp/FilterPhone.apk" "$tmp/FilterPhone-universal.apk" /var/www/filterphone/
+    files=("$tmp/x/FilterPhone.apk" "$tmp/x/FilterPhone-universal.apk")
+    if [ -f "$tmp/x/FilterPhone.json" ]; then
+        python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert isinstance(d.get("files"), list)' 2>/dev/null \
+            "$tmp/x/FilterPhone.json" || { echo "FilterPhone.json לא תקין"; exit 2; }
+        files+=("$tmp/x/FilterPhone.json")
+    else
+        # בלי רשימת גרסה: לא משאירים רשימה ישנה (השרת ממילא לא מציע קובץ שלא תואם לה)
+        sudo -n rm -f /var/www/filterphone/FilterPhone.json
+    fi
+    sudo -n install -m 644 -o root -g root "${files[@]}" /var/www/filterphone/
     ls -lh /var/www/filterphone/
     ;;
 status)

@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- מגן FilterPhone: רק "איזו אפליקציה / איזה מסך נפתח". בלי קריאת תוכן המסך. -->
+<!-- מגן FilterPhone: "איזו אפליקציה / איזה מסך נפתח". canRetrieveWindowContent — רק לזיהוי
+     תמונת פרופיל בוואטסאפ (מזהים ומיקום של רכיבי תמונה; בלי טקסט). שינויי תוכן מופעלים
+     בזמן ריצה רק כשוואטסאפ בחזית והמנהל חסם תמונות פרופיל (GuardService.reconfigure). -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagDefault"
-    android:canRetrieveWindowContent="false"
+    android:accessibilityFlags="flagDefault|flagReportViewIds"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="false"
     android:description="@string/guard_description"
     android:isAccessibilityTool="false"
     android:notificationTimeout="0" />

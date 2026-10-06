@@ -8,7 +8,7 @@ from helpers import admin_headers, wg_key
 
 from filterphone.api import compliance as C
 from filterphone.api import db
-from filterphone.api.app import device_limiter, enroll_limiter, heartbeat_limiter
+from filterphone.api.app import device_limiter, enroll_limiter, heartbeat_limiter, rekey_limiter
 from filterphone.api.catalog import DPC_DEFAULTS, PROTECTIONS, DeviceSettings, compile_settings
 
 
@@ -17,6 +17,7 @@ def _limits():
     enroll_limiter._hits.clear()
     device_limiter._hits.clear()
     heartbeat_limiter._hits.clear()
+    rekey_limiter._hits.clear()
 
 
 def enroll(svc, client, n=1, level=2):
@@ -324,3 +325,93 @@ def test_device_log_is_removed_with_device(env):
     with svc.db() as c:
         assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
     assert db.VERSION == 2
+
+
+def test_rekey_keeps_address_and_policy_and_swaps_wireguard_peer(env):
+    svc, client = env
+    did, dh, ip = enroll(svc, client, 3)
+    old = wg_key(3)
+    assert old in svc.wg.peers_
+    r = client.post("/v1/device/rekey", headers=dh, json={"public_key": wg_key(33)})
+    assert r.status_code == 200, r.text
+    assert r.json()["address"] == f"{ip}/32"
+    assert wg_key(33) in svc.wg.peers_ and old not in svc.wg.peers_
+    assert row(svc, did)["public_key"] == wg_key(33)
+    # מפתח של מכשיר אחר — אסור
+    enroll(svc, client, 4)
+    assert client.post("/v1/device/rekey", headers=dh, json={"public_key": wg_key(4)}).status_code == 409
+    assert client.post("/v1/device/rekey", headers=dh, json={"public_key": "x" * 44}).status_code == 400
+    codes = [client.post("/v1/device/rekey", headers=dh, json={"public_key": wg_key(60 + i)}).status_code
+             for i in range(3)]
+    assert codes[-1] == 429
+
+
+def test_vpn_config_has_ip_fallback_when_configured(env):
+    svc, client = env
+    object.__setattr__(svc.cfg, "public_ip", "151.145.88.42")
+    _, dh, _ = enroll(svc, client, 5)
+    vpn = client.get("/v1/device/vpn", headers=dh).json()
+    assert vpn["endpoint"] == "vpn.filterphone.com:51820" and vpn["endpoint_fallback"] == "151.145.88.42:51820"
+
+
+# ------------------------------------------------------------------ עדכון האפליקציה
+
+
+def _publish(www, files, version_name="1.0.7"):
+    www.mkdir(exist_ok=True)
+    entries = []
+    for name, (data, code, abis) in files.items():
+        (www / name).write_bytes(data)
+        entries.append({"name": name, "version_code": code, "abis": abis, "size": len(data),
+                        "sha256": hashlib.sha256(data).hexdigest()})
+    (www / "FilterPhone.json").write_text(json.dumps({"version_name": version_name, "files": entries}))
+
+
+def test_heartbeat_offers_published_release_verified_against_the_files(env, tmp_path):
+    svc, client = env
+    www = tmp_path / "www"
+    object.__setattr__(svc.cfg, "apk_dir", str(www))
+    did, dh, _ = enroll(svc, client)
+    assert "app_update" not in client.post("/v1/device/heartbeat", headers=dh, json={}).json()   # לא פורסם
+
+    _publish(www, {"FilterPhone.apk": (b"PK arm64 build", 2007, ["arm64-v8a"]),
+                   "FilterPhone-universal.apk": (b"PK universal build", 7, ["arm64-v8a", "armeabi-v7a", "x86_64"])})
+    up = client.post("/v1/device/heartbeat", headers=dh, json={}).json()["app_update"]
+    assert up["version_name"] == "1.0.7"
+    by_name = {f["url"].rsplit("/", 1)[1]: f for f in up["files"]}
+    assert by_name["FilterPhone.apk"]["version_code"] == 2007
+    assert by_name["FilterPhone.apk"]["url"] == "https://api.filterphone.com/download/FilterPhone.apk"
+    assert by_name["FilterPhone.apk"]["sha256"] == hashlib.sha256(b"PK arm64 build").hexdigest()
+    assert by_name["FilterPhone-universal.apk"]["abis"] == ["arm64-v8a", "armeabi-v7a", "x86_64"]
+
+    # הקובץ הוחלף בלי שהרשימה עודכנה — לא מציעים אותו (רק את מה שעדיין תואם)
+    (www / "FilterPhone.apk").write_bytes(b"PK arm64 BUILD")          # אותו גודל, תוכן אחר
+    up = client.post("/v1/device/heartbeat", headers=dh, json={}).json()["app_update"]
+    assert [f["url"].rsplit("/", 1)[1] for f in up["files"]] == ["FilterPhone-universal.apk"]
+
+    # רשימה פגומה / שם קובץ לא חוקי — לא מציעים כלום, ולא נופלים
+    (www / "FilterPhone.json").write_text("{not json")
+    assert "app_update" not in client.post("/v1/device/heartbeat", headers=dh, json={}).json()
+    (www / "FilterPhone.json").write_text(json.dumps({"files": [{"name": "../../etc/passwd", "version_code": 9,
+                                                                 "sha256": "0" * 64, "size": 1}]}))
+    assert "app_update" not in client.post("/v1/device/heartbeat", headers=dh, json={}).json()
+    assert svc.device_detail(did)["latest_app_version"] is None
+
+
+def test_heartbeat_logs_app_update_and_failure(env, tmp_path):
+    svc, client = env
+    h = admin_headers(client)
+    object.__setattr__(svc.cfg, "apk_dir", str(tmp_path / "www"))
+    _publish(tmp_path / "www", {"FilterPhone.apk": (b"PK new", 2008, ["arm64-v8a"])}, "1.0.8")
+    did, dh, _ = enroll(svc, client)
+    client.post("/v1/device/heartbeat", headers=dh, json={"app_version": "1.0.7", "device_owner": True})
+    client.post("/v1/device/heartbeat", headers=dh, json={
+        "app_version": "1.0.7", "device_owner": True,
+        "update": {"state": "failed", "version": "1.0.8", "error": "sha256", "junk": "x"}})
+    client.post("/v1/device/heartbeat", headers=dh, json={"app_version": "1.0.8", "device_owner": True})
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    kinds = [e["kind"] for e in d["device_log"]]
+    assert "app_update_failed" in kinds and "app_updated" in kinds
+    assert next(e for e in d["device_log"] if e["kind"] == "app_updated")["detail"] == "1.0.7 → 1.0.8"
+    assert d["latest_app_version"] == "1.0.8"
+    assert row(svc, did)["app_version"] == "1.0.8"

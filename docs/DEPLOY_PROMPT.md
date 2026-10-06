@@ -51,6 +51,12 @@ c. ssh ubuntu@151.145.88.42 'systemctl is-active fp-engine fp-proxy fp-api adgua
 d. ssh ubuntu@151.145.88.42 'sudo journalctl -u fp-api -u fp-engine -n 120 --no-pager | grep -Ei "initial sync|traceback|error|adguard"'
    צריך "initial sync ok", בלי Traceback.
 e. ssh ubuntu@151.145.88.42 'dig +short @127.0.0.1 example.com'    ← מחזיר כתובת IP
+f. ssh ubuntu@151.145.88.42 'curl -fsS http://127.0.0.1:8090/ready; echo; curl -fsS http://127.0.0.1:8090/metrics | grep -c "^fp_"'
+   צריך "ready": true (וב-checks: db, redis, engine, wireguard — true), ומספר מדדים גדול מ-0.
+   (אם engine=false — לחכות דקה ולבדוק שוב: המנוע טוען מודלים בעלייה.)
+g. ssh ubuntu@151.145.88.42 'grep -c "^FP_PUBLIC_IP=" /etc/filterphone/filterphone.env'   ← 1
+   (ההתקנה מוסיפה לבד את כתובת השרת — גיבוי לטלפונים כשה-DNS לא זמין.)
+h. ssh ubuntu@151.145.88.42 'curl -s https://www.google.com -o /dev/null -w "%{http_code}\n"'   ← 200
 
 חזרה לאחור — רק אם בדיקה נכשלה ואין תיקון בטוח ומהיר:
   ssh ubuntu@151.145.88.42 'sudo bash /opt/filterphone/src/deploy/rollback_version.sh /root/fp-backups/<התאריך משלב 1>'
@@ -72,6 +78,13 @@ e. ssh ubuntu@151.145.88.42 'dig +short @127.0.0.1 example.com'    ← מחזי�
    אם gh לא מותקן או לא מחובר — הסבר לי צעד-צעד איך להריץ gh auth login.)
 - bash deploy/publish_apk.sh
 - בדיקה: curl -sI https://api.filterphone.com/download/FilterPhone.apk | head -3   ← 200
+- בדיקה: curl -fsS https://api.filterphone.com/download/FilterPhone.json | head -c 300   ← "version_name" ו-"files"
+  (ממנו השרת מציע עדכון לטלפונים: במנהל מכשיר — עדכון שקט אחרי בדיקת טביעה וחתימה; בשאר — הודעה באפליקציה.)
+- טביעת החתימה להקמת מכשיר מנוהל ב-QR (חד-פעמי, לא חובה אבל מומלץ):
+  מצא בלוג של הבנייה האחרונה (gh run view <המספר> -R yeled-tov/filterphone --log | grep "certificate SHA-256")
+  את 64 התווים, ואם בשרת אין עדיין FP_APK_SIGNATURE_SHA256 — הוסף:
+  ssh ubuntu@151.145.88.42 'grep -q "^FP_APK_SIGNATURE_SHA256=" /etc/filterphone/filterphone.env || echo "FP_APK_SIGNATURE_SHA256=<64 התווים>" | sudo tee -a /etc/filterphone/filterphone.env >/dev/null; sudo systemctl restart fp-api'
+  ובדוק שוב את בדיקה a.
 
 שלב 5 — ערוץ העלאה מ-GitHub (חד-פעמי, כדי ש-Claude בענן יוכל לעדכן את השרת בעצמו בפעם הבאה)
 מפתח SSH נפרד, שבשרת מוגבל להרצת /usr/local/sbin/fp-ci-deploy בלבד (העלאה / פרסום אפליקציה / מצב / חזרה לאחור) —
@@ -106,3 +119,5 @@ e. ssh ubuntu@151.145.88.42 'dig +short @127.0.0.1 example.com'    ← מחזי�
 3. **האפליקציה:** בטלפון נכנסים ל-https://api.filterphone.com/download/, מורידים ומתקינים מעל הקיימת.
 4. **הרשמה של לקוח חדש:** בטלפון אחר מתקינים, בוחרים "הצטרפות לשירות" וממלאים. הבקשה מופיעה בממשק תחת "בקשות", ושם מאשרים.
 5. **אם המנהל חסם אפליקציות בטלפון** (חנות, דפדפנים, סטטוסים): האפליקציה תבקש להפעיל את "מגן FilterPhone" בהגדרות הנגישות.
+6. **מצב ההגנה:** במסך הראשי של האפליקציה מופיעים "סוללה", "מגן", "סנכרון אחרון". אם כתוב "סוללה: מוגבלת" — לוחצים ומאשרים "ללא הגבלה". בממשק, ברשימת המכשירים, כל מכשיר ירוק / צהוב / אדום עם הסיבה.
+7. **מכשיר מנוהל (Device Owner) — לא חובה:** טלפון מאופס ← בממשק "קודים" ← "הקמת מכשיר מנוהל ב-QR". הסבר מלא, כולל מה אנדרואיד לא מאפשר: [DEVICE_OWNER.md](DEVICE_OWNER.md).

@@ -329,8 +329,11 @@ PROTECTIONS: dict[str, dict] = {
         # שכבה 1: שם המסך (Activity / חלון) — מכיל אחד מאלה (בלי תלות באותיות גדולות)
         "activities": ["viewprofilephoto", "profilephoto", "profilepicture", "quickcontact", "photo.viewprofile"],
         # שכבה 2: מזהי רכיבים (view id) של תמונת פרופיל גדולה
-        "view_ids": ["profile_picture", "profile_photo", "contact_photo", "quick_contact_photo", "picture",
-                     "photo_view", "wds_profile_photo", "profile_picture_image"],
+        # (בלי מזהים כלליים כמו "picture" — כדי לא לחסום בטעות צפייה בתמונות בצ'אט)
+        "view_ids": ["profile_picture", "profile_photo", "contact_photo", "quick_contact_photo",
+                     "wds_profile_photo", "profile_picture_image"],
+        # מסכים שלעולם לא נחשבים צפייה בתמונת פרופיל (צפייה במדיה של הצ'אט, גלריה, מצלמה)
+        "exclude_windows": ["mediaview", "gallery", "camera", "status"],
         # שכבה 3: תיאור נגישות של התמונה (רק ברכיב תמונה; בלי לקרוא טקסט אחר)
         "descriptions": ["profile photo", "profile picture", "תמונת פרופיל", "תמונת הפרופיל", "foto de perfil",
                          "photo de profil", "profilbild", "фото профиля", "صورة الملف الشخصي"],

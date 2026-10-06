@@ -20,6 +20,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -77,6 +78,7 @@ _HB_SECTIONS = {
     "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
     "dpc": {"applied": list, "failed": list, "always_on_vpn": str, "lockdown": bool, "frp": bool},
     "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int},
+    "update": {"state": str, "version": str, "error": str},
 }
 # מעברים שנרשמים ביומן המכשיר
 _LOG_TRANSITIONS = (
@@ -126,6 +128,13 @@ def _dig(d: dict, path: tuple[str, ...]):
             return None
         d = d.get(k)
     return d
+
+# הגרסה שפורסמה בדף ההורדה — נכתב בבנייה (tools/apk_release.py) ומתפרסם יחד עם קובצי ה-APK
+RELEASE_MANIFEST = "FilterPhone.json"
+_RELEASE_NAME = re.compile(r"^FilterPhone[A-Za-z0-9._-]{0,40}\.apk$")
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+_ABI = re.compile(r"^[a-z0-9_-]{1,20}$")
+MAX_APK_BYTES = 200 * 1024 * 1024
 
 STATUS_MESSAGES = {
     "pending": "הבקשה התקבלה ומחכה לאישור. נעדכן ברגע שהחיבור ייפתח.",
@@ -351,7 +360,7 @@ class Services:
         raise ApiError(503, "אין כתובות פנויות ב-VPN")
 
     def vpn_config(self, ip: str, psk: str) -> dict:
-        return {
+        out = {
             "address": f"{ip}/32",
             "dns": [self.cfg.vpn_server_ip],
             "mtu": 1280,
@@ -361,6 +370,36 @@ class Services:
             "allowed_ips": ["0.0.0.0/0", "::/0"],
             "persistent_keepalive": 25,
         }
+        if self.cfg.public_ip:
+            # מיד אחרי הפעלת הטלפון לפעמים אין עדיין DNS — אז מתחברים לפי הכתובת
+            port = self.cfg.vpn_endpoint.rpartition(":")[2] or "51820"
+            out["endpoint_fallback"] = f"{self.cfg.public_ip}:{port}"
+        return out
+
+    def rekey(self, row: sqlite3.Row, public_key: str) -> dict:
+        """הטלפון איבד את המפתח הפרטי (למשל ה-Keystore נמחק אחרי עדכון מערכת) ויצר חדש.
+        מאומת בטוקן המכשיר; אותה כתובת VPN, אותה מדיניות — רק המפתח מתחלף."""
+        if row["status"] != "active" or not row["vpn_ip"]:
+            raise ApiError(403, STATUS_MESSAGES.get(row["status"], "המכשיר לא פעיל"))
+        if not security.is_wg_key(public_key):
+            raise ApiError(400, "מפתח ציבורי לא תקין")
+        if public_key == row["public_key"]:
+            return self.device_vpn(row)
+        with self.db() as c, db.transaction(c):
+            if c.execute("SELECT 1 FROM devices WHERE public_key = ? AND id != ?", (public_key, row["id"])).fetchone():
+                raise ApiError(409, "המפתח כבר רשום למכשיר אחר")
+            c.execute("UPDATE devices SET public_key = ? WHERE id = ?", (public_key, row["id"]))
+            self.audit(f"device:{row['id']}", "rekey", f"device:{row['id']}", "", c)
+            self.log_device(c, row["id"], "rekey", "מפתח VPN חדש")
+            # אם WireGuard נכשל — הטרנזקציה מתבטלת והמפתח הישן נשאר
+            self.wg.add_peer(public_key, row["preshared_key"], row["vpn_ip"])
+            try:
+                self.wg.remove_peer(row["public_key"])
+            except WireGuardError as e:
+                log.warning("old peer removal failed (reconcile will fix): %s", e)
+            fresh = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
+        log.info("device %s rotated its VPN key", row["id"])
+        return self.device_vpn(fresh)
 
     # ------------------------------------------------------------ הפעלה בקוד
 
@@ -541,11 +580,18 @@ class Services:
                 self.log_device(c, row["id"], "outside_vpn", "דיווח שהגיע שלא דרך המנהרה")
             if hb.get("policy_error") and hb.get("policy_error") != prev.get("policy_error"):
                 self.log_device(c, row["id"], "policy_error", hb["policy_error"])
+            if prev.get("app_version") and hb.get("app_version") and prev["app_version"] != hb["app_version"]:
+                self.log_device(c, row["id"], "app_updated", f"{prev['app_version']} → {hb['app_version']}")
+            err = _dig(hb, ("update", "error"))
+            if err and err != _dig(prev, ("update", "error")):
+                self.log_device(c, row["id"], "app_update_failed", f"{_dig(hb, ('update', 'version')) or ''} {err}")
             fresh = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
         out = {"server_time": t, "status": fresh["status"], "policy_version": fresh["policy_version"],
                "interval_s": self.cfg.heartbeat_interval_s, "message": STATUS_MESSAGES.get(fresh["status"], "")}
         if fresh["status"] == "active" and (acked != fresh["policy_version"] or raw.get("want_policy")):
             out["policy"] = self.device_policy(fresh)
+        if fresh["status"] == "active" and (release := self.app_release()):
+            out["app_update"] = release     # הטלפון מחליט: עדכון שקט במנהל מכשיר, אחרת הודעה בלבד
         return out
 
     def device_vpn(self, row: sqlite3.Row) -> dict:
@@ -853,6 +899,7 @@ class Services:
             "policy": self.device_policy(r),
             "network_only_unknown": list(comp.network_only_unknown),
             "app_rules": [{"package": p, **rule} for p, rule in settings.app_rules.items()],
+            "latest_app_version": (self.app_release() or {}).get("version_name"),
         })
         return out
 
@@ -961,6 +1008,61 @@ class Services:
         with self.db() as c:
             if c.execute("DELETE FROM codes WHERE id = ?", (code_id,)).rowcount == 0:
                 raise ApiError(404, "קוד לא נמצא")
+
+    # ------------------------------------------------------------ גרסת האפליקציה שפורסמה
+
+    _release_cache: tuple[tuple, dict | None] = ((), None)
+    _release_lock = threading.Lock()
+
+    def app_release(self) -> dict | None:
+        """הגרסה האחרונה בדף ההורדה, לפי FilterPhone.json: לכל קובץ — versionCode, מעבדים, גודל
+        ו-SHA-256. ה-SHA-256 נבדק כאן מול הקובץ עצמו (פעם אחת לכל שינוי): קובץ שלא תואם לרשום
+        לא מוצע — עדיף לא לעדכן מאשר לשלוח לטלפונים משהו אחר ממה שנבנה."""
+        root = Path(self.cfg.apk_dir)
+        try:
+            st = (root / RELEASE_MANIFEST).stat()
+        except OSError:
+            return None
+        with self._release_lock:
+            try:
+                raw = json.loads((root / RELEASE_MANIFEST).read_text(encoding="utf-8"))
+                entries = [f for f in raw.get("files", []) if isinstance(f, dict)
+                           and isinstance(f.get("name"), str) and _RELEASE_NAME.match(f["name"])]
+                stats = {f["name"]: (root / f["name"]).stat() for f in entries if (root / f["name"]).is_file()}
+            except (OSError, ValueError, AttributeError):
+                log.warning("app release manifest unreadable")
+                return None
+            key = (st.st_mtime_ns, st.st_size, *sorted((n, s.st_mtime_ns, s.st_size) for n, s in stats.items()))
+            if self._release_cache[0] == key:
+                return self._release_cache[1]
+            files = []
+            for f in entries:
+                code, sha, size = f.get("version_code"), str(f.get("sha256", "")).lower(), f.get("size")
+                fst = stats.get(f["name"])
+                if (fst is None or not isinstance(code, int) or isinstance(code, bool) or not 0 < code < 2**31
+                        or not _SHA256_HEX.match(sha) or size != fst.st_size or not 0 < fst.st_size <= MAX_APK_BYTES):
+                    log.warning("app release: skipping %s (missing / invalid entry)", f["name"])
+                    continue
+                if self._sha256_hex(root / f["name"]) != sha:
+                    log.warning("app release: %s does not match FilterPhone.json — not offered", f["name"])
+                    continue
+                abis = [a for a in f.get("abis", []) if isinstance(a, str) and _ABI.match(a)][:8] \
+                    if isinstance(f.get("abis"), list) else []
+                files.append({"url": f"https://{self.cfg.public_host}/download/{f['name']}", "version_code": code,
+                              "abis": abis, "sha256": sha, "size": size})
+            name = raw.get("version_name") if isinstance(raw, dict) else None
+            release = {"version_name": security.clean_text(name, 20) if isinstance(name, str) else "",
+                       "files": files} if files else None
+            self._release_cache = (key, release)
+            return release
+
+    @staticmethod
+    def _sha256_hex(path: Path) -> str:
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
 
     # ------------------------------------------------------------ הקמת Device Owner ב-QR
 

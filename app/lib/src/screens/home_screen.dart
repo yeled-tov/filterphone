@@ -26,12 +26,18 @@ class HomeScreen extends StatelessWidget {
                 text: 'המכשיר הושבת על ידי המנהל. פנו ל-FilterPhone.',
               ),
               _StatusHero(controller: c),
+              if (c.protection.updateAvailable != null) ...[
+                const SizedBox(height: 16),
+                _UpdateCard(controller: c),
+              ],
               if (c.notice != null || c.error != null) ...[
                 const SizedBox(height: 16),
                 _Message(controller: c),
               ],
               const SizedBox(height: 16),
               _Checklist(controller: c),
+              const SizedBox(height: 16),
+              _StatusDetails(controller: c),
               if (c.device?.isActive ?? false) ...[
                 const SizedBox(height: 16),
                 _BlocksCard(controller: c),
@@ -147,6 +153,16 @@ class _Checklist extends StatelessWidget {
             actionLabel: 'הגדרות',
             onAction: c.openVpnSettings,
           ),
+          const Divider(height: 1),
+          _CheckTile(
+            ok: checks[Check.battery]!,
+            title: 'פעולה ברקע (סוללה)',
+            okText: 'ללא הגבלה — אנדרואיד לא יעצור את הסינון',
+            todo: 'כדי לחסוך סוללה אנדרואיד עוצר אפליקציות ברקע — וזה עלול לנתק את הסינון ואת המגן. '
+                'צריך לאשר ל-FilterPhone לפעול ללא הגבלת סוללה.',
+            actionLabel: 'אישור',
+            onAction: c.requestBatteryExemption,
+          ),
           if (c.guardNeeded) ...[
             const Divider(height: 1),
             _CheckTile(
@@ -221,6 +237,67 @@ class _BlocksCard extends StatelessWidget {
               icon: const Icon(Icons.edit_note),
               label: const Text('בקשת שינוי (רמה / חסימות)'),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// פירוט המצב — מה באמת פועל עכשיו בטלפון (לא רק "מוגן / לא מוגן").
+class _StatusDetails extends StatelessWidget {
+  const _StatusDetails({required this.controller});
+  final AppController controller;
+
+  static String _ago(DateTime? t) {
+    if (t == null) return 'עוד לא';
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 2) return 'עכשיו';
+    if (d.inMinutes < 60) return 'לפני ${d.inMinutes} דק\'';
+    if (d.inHours < 24) return 'לפני ${d.inHours} שע\'';
+    return 'לפני ${d.inDays} ימים';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    final p = c.protection;
+    final theme = Theme.of(context);
+    Color? tone(bool? good) => good == null ? null : (good ? StatusColors.ok(context) : StatusColors.warn(context));
+    Widget row(String label, String value, {bool? good}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(children: [
+            Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
+            Text(value, style: theme.textTheme.bodyMedium?.copyWith(color: tone(good), fontWeight: FontWeight.w600)),
+          ]),
+        );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('מצב ההגנה', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            row('VPN (סינון)', c.vpn.isUp ? 'פעיל' : 'לא פעיל', good: c.vpn.isUp),
+            row('מגן FilterPhone (נגישות)',
+                p.guardEnabled ? (p.guardRunning ? 'פעיל' : 'מופעל, ממתין') : (c.guardNeeded ? 'כבוי' : 'לא נדרש'),
+                good: p.guardEnabled || !c.guardNeeded),
+            row('מנהל מכשיר (Device Owner)', p.deviceOwner ? 'פעיל' : 'לא פעיל'),
+            row('סוללה', p.batteryUnrestricted == null ? 'לא ידוע' : (p.backgroundOk ? 'ללא הגבלה' : 'מוגבלת'),
+                good: p.batteryUnrestricted == null ? null : p.backgroundOk),
+            row('סנכרון מדיניות אחרון', _ago(p.lastPolicySync)),
+            row('בדיקת VPN אחרונה שעברה', _ago(p.lastVpnHealthOk ?? c.vpn.lastHealthOk)),
+            if (!p.deviceOwner && !p.deviceAdmin) ...[
+              const SizedBox(height: 8),
+              Text('הגנה מפני הסרה: אפשר להפעיל "מנהל מכשיר" — זה מקשה על הסרת FilterPhone ומודיע למנהל '
+                  'אם מבטלים. (זו לא נעילה מלאה; נעילה מלאה — רק בהקמה כמכשיר מנוהל.)',
+                  style: theme.textTheme.bodySmall),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(onPressed: c.requestDeviceAdmin, child: const Text('הפעלת הגנה מפני הסרה')),
+              ),
+            ],
           ],
         ),
       ),
@@ -314,6 +391,24 @@ class _ServerProof extends StatelessWidget {
         const SizedBox(width: 8),
         Flexible(child: Text(text, style: theme.textTheme.bodySmall)),
       ],
+    );
+  }
+}
+
+class _UpdateCard extends StatelessWidget {
+  const _UpdateCard({required this.controller});
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final version = controller.protection.updateAvailable ?? '';
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.system_update),
+        title: Text(version.isEmpty ? 'גרסה חדשה של FilterPhone' : 'גרסה חדשה של FilterPhone ($version)'),
+        subtitle: const Text('מורידים מדף ההורדה ומתקינים מעל הקיימת — ההגדרות והסינון נשמרים.'),
+        trailing: FilledButton(onPressed: controller.openUpdatePage, child: const Text('להורדה')),
+      ),
     );
   }
 }
