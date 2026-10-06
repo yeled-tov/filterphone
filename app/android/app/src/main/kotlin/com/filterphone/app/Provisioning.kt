@@ -12,12 +12,12 @@ import android.util.Log
 /**
  * הקמת טלפון מאופס כ-Device Owner (Android Enterprise, "fully managed") — בסריקת QR מממשק הניהול.
  *
- * הזרימה (אנדרואיד 10+):
+ * הזרימה החדשה (חובה מאנדרואיד 12; בחלק מהמכשירים כבר מ-10):
  *   1. המערכת מורידה את ה-APK, בודקת את הטביעה, ומפעילה את GET_PROVISIONING_MODE →
  *      ProvisioningModeActivity עונה "מכשיר מנוהל במלואו".
  *   2. בסוף ההקמה: ADMIN_POLICY_COMPLIANCE → PolicyComplianceActivity מחילה את הגדרות הבסיס
  *      ושומרת את קוד ההפעלה החד-פעמי שבתוך ה-QR (fp_code) — האפליקציה מתחברת איתו לבד.
- * באנדרואיד 8–9: DeviceAdmin.onProfileProvisioningComplete.
+ * בזרימה הישנה (אנדרואיד 8–11): DeviceAdmin.onProfileProvisioningComplete.
  */
 object Provisioning {
     private const val PREFS = "fp_provisioning"
