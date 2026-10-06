@@ -171,7 +171,20 @@ ALTER TABLE devices ADD COLUMN transfer_expires INTEGER;
 CREATE INDEX devices_pause ON devices(pause_until);
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3]
+# גרסה 4 — פרופילים מוכנים (חבילות מדיניות בשם, שהמנהל מחיל על מכשיר)
+_V4 = """
+CREATE TABLE profiles (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    level      INTEGER NOT NULL DEFAULT 1,
+    settings   TEXT NOT NULL DEFAULT '{}',   -- DeviceSettings (JSON)
+    builtin    INTEGER NOT NULL DEFAULT 0,   -- פרופיל ברירת מחדל (אפשר לערוך, אי אפשר למחוק)
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4]
 VERSION = len(MIGRATIONS)
 
 

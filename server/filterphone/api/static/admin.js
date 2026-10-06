@@ -329,6 +329,7 @@ const ROUTES = {
   requests: ["בקשות הצטרפות ושינוי", viewRequests],
   devices: ["מכשירים", viewDevices],
   customers: ["לקוחות", viewCustomers],
+  profiles: ["פרופילים מוכנים", viewProfiles],
   events: ["חסימות אחרונות", viewEvents],
   test: ["בדיקת תמונה", viewTest],
   codes: ["קודי הפעלה", viewCodes],
@@ -824,6 +825,52 @@ function dpcCard(d, patch) {
     } }, "שמירת FRP")));
 }
 
+async function viewProfiles() {
+  catalog = catalog || await api("/v1/admin/catalog");
+  const { profiles } = await api("/v1/admin/profiles");
+  const list = el("div", { class: "cards" }, profiles.map((p) => el("div", { class: "card profile" },
+    el("div", { class: "row between" }, el("b", {}, p.name),
+      el("span", { class: "row gap" }, chip(`רמה ${p.level}`, p.level === 1 ? "bad" : p.level === 3 ? "ok" : "warn"),
+        p.builtin ? chip("מובנה") : null)),
+    el("div", { class: "chips" }, (p.summary || []).slice(0, 12).map((b) => chip(b.title)),
+      (p.summary || []).length ? null : el("small", { class: "muted" }, "רק סינון תמונות לפי הרמה")),
+    el("div", { class: "row end gap" },
+      el("button", { class: "ghost small", onclick: () => openProfileEditor(p) }, "עריכה"),
+      p.builtin ? null : el("button", { class: "danger small", onclick: async () => {
+        if (!await confirmDialog("למחוק את הפרופיל?", p.name, "מחיקה", true)) return;
+        await attempt(() => api(`/v1/admin/profiles/${p.id}`, { method: "DELETE" }), "נמחק");
+        render();
+      } }, "מחיקה")))));
+  return [
+    card("פרופילים מוכנים", "חבילות מדיניות בשם שאפשר להחיל על מכשיר בלחיצה. בכל החלה נוצרת גרסת מדיניות חדשה.",
+      el("div", { class: "row end" }, el("button", { class: "primary", onclick: () => openProfileEditor(null) }, "פרופיל חדש"))),
+    list,
+  ];
+}
+
+async function openProfileEditor(p) {
+  catalog = catalog || await api("/v1/admin/catalog");
+  const selected = new Set((p?.settings?.options) || []);
+  let level = p?.level ?? 2;
+  const nameInput = el("input", { value: p?.name || "", placeholder: "שם הפרופיל", maxlength: 60 });
+  const kw = el("input", { type: "checkbox", checked: (p?.settings?.keywords_effective?.enabled ?? true) });
+  const body = el("div", { class: "stack" },
+    el("label", {}, "שם", nameInput),
+    el("label", {}, "רמת סינון תמונות"),
+    levelPicker(level, (l) => { level = l; return true; }),
+    el("label", {}, "חסימות (כמו בעמוד המכשיר)"),
+    policyEditor(selected, {}),
+    el("label", { class: "row gap" }, kw, "חסימת מילות חיפוש פעילה"));
+  const ok = await dialog(p ? "עריכת פרופיל" : "פרופיל חדש", body, "שמירה");
+  if (!ok) return;
+  const settings = { options: [...selected], keywords: { enabled: kw.checked } };
+  const payload = { name: nameInput.value.trim(), level, settings };
+  await attempt(() => p
+    ? api(`/v1/admin/profiles/${p.id}`, { method: "PATCH", body: payload })
+    : api("/v1/admin/profiles", { method: "POST", body: payload }), "נשמר");
+  render();
+}
+
 function maintenanceCard(d) {
   const id = d.id;
   const pause = d.pause;
@@ -837,7 +884,7 @@ function maintenanceCard(d) {
       chip(`מושהה עד ${dateTime(pause.until)}${pause.reason ? " · " + pause.reason : ""}`, "warn"),
       el("button", { class: "primary small", onclick: () => act("resume", {}) }, "חזרה להגנה מלאה")));
   } else {
-    const minutes = el("input", { type: "number", min: 1, max: 1440, value: 60, style: "width:5rem" });
+    const minutes = el("input", { type: "number", min: 1, max: 1440, value: 60, class: "narrow" });
     const reason = el("input", { placeholder: "סיבה (למשל: תחזוקה)" });
     rows.push(el("div", { class: "row gap wrap end" }, el("label", {}, "דקות", minutes), reason,
       el("button", { class: "ghost small", onclick: () => act("pause", { minutes: Number(minutes.value) || 60, reason: reason.value }) },
@@ -863,8 +910,18 @@ function maintenanceCard(d) {
       "סגירה");
     render();
   } }, "החלפת מכשיר");
+  const applyProfile = el("button", { class: "ghost small", onclick: async () => {
+    const { profiles } = await api("/v1/admin/profiles");
+    const sel = el("select", {}, profiles.map((p) => el("option", { value: p.id }, `${p.name} (רמה ${p.level})`)));
+    if (!await dialog("החלת פרופיל על המכשיר", el("div", { class: "stack" },
+      el("p", { class: "muted small" }, "הרמה והחסימות של הפרופיל יחליפו את המדיניות הנוכחית של המכשיר."), sel),
+      "החל")) return;
+    await attempt(() => api(`/v1/admin/devices/${id}/apply-profile`, { method: "POST", body: { profile_id: Number(sel.value) } }), "הפרופיל הוחל");
+    render();
+  } }, "החלת פרופיל");
   return card("תחזוקה וניהול", "פעולות מנהל מאושרות — כולן נרשמות ביומן הפעולות (audit).",
     el("div", { class: "stack" },
+      el("div", {}, el("b", {}, "פרופיל מדיניות"), el("small", {}, "החלת חבילת מדיניות מוכנה על המכשיר."), applyProfile),
       el("div", {}, el("b", {}, "השהיית הגנה (מצב תחזוקה)"),
         el("small", {}, "זמנית: סינון התמונות, המגן ונעילת ה-VPN מורפים עד שהזמן נגמר — ואז הכול חוזר לבד."),
         ...rows),

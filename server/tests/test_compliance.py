@@ -324,7 +324,7 @@ def test_device_log_is_removed_with_device(env):
     assert client.delete(f"/v1/admin/devices/{did}", headers=h).status_code == 204
     with svc.db() as c:
         assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
-    assert db.VERSION == 3
+    assert db.VERSION == 4
 
 
 def test_rekey_keeps_address_and_policy_and_swaps_wireguard_peer(env):
@@ -603,3 +603,54 @@ def test_expired_transfer_token_rejected(env):
         c.execute("UPDATE devices SET transfer_expires = ? WHERE id = ?", (db.now() - 5, did))
     assert client.post("/v1/transfer", json={"token": token, "public_key": wg_key(82),
                                              "platform": "android"}).status_code == 403
+
+
+# ------------------------------------------------------------------ פרופילים
+
+
+def test_builtin_profiles_seeded_and_applied(env):
+    svc, client = env
+    h = admin_headers(client)
+    profs = client.get("/v1/admin/profiles", headers=h).json()["profiles"]
+    assert len(profs) >= 5 and all(p["builtin"] for p in profs)
+    basic = next(p for p in profs if p["level"] == 3)   # "בסיסי — רק עירום"
+    did, dh, _ = enroll(svc, client, level=1)
+
+    r = client.post(f"/v1/admin/devices/{did}/apply-profile", headers=h, json={"profile_id": basic["id"]})
+    assert r.status_code == 200, r.text
+    assert row(svc, did)["level"] == 3 and row(svc, did)["policy_version"] >= 2
+    pol = client.get("/v1/device", headers=dh).json()
+    assert pol["level"] == 3
+    assert any(e["kind"] == "profile_applied" for e in client.get(f"/v1/admin/devices/{did}", headers=h).json()["device_log"])
+    assert any(a["action"] == "profile_apply" for a in svc.list_audit())
+
+
+def test_profile_crud_and_builtin_protection(env):
+    svc, client = env
+    h = admin_headers(client)
+    # יצירה
+    r = client.post("/v1/admin/profiles", headers=h,
+                    json={"name": "מותאם אישית", "level": 2, "settings": {"options": ["tiktok", "instagram"]}})
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    # שם כפול — נדחה
+    assert client.post("/v1/admin/profiles", headers=h,
+                       json={"name": "מותאם אישית", "level": 1, "settings": {}}).status_code == 409
+    # עריכה
+    assert client.patch(f"/v1/admin/profiles/{pid}", headers=h,
+                        json={"name": "מותאם אישית", "level": 1, "settings": {"options": ["tiktok"]}}).status_code == 200
+    prof = next(p for p in client.get("/v1/admin/profiles", headers=h).json()["profiles"] if p["id"] == pid)
+    assert prof["level"] == 1 and prof["settings"]["options"] == ["tiktok"]
+    # מחיקה של מותאם — מותר; של מובנה — אסור
+    assert client.delete(f"/v1/admin/profiles/{pid}", headers=h).status_code == 204
+    builtin = next(p for p in client.get("/v1/admin/profiles", headers=h).json()["profiles"] if p["builtin"])
+    assert client.delete(f"/v1/admin/profiles/{builtin['id']}", headers=h).status_code == 409
+
+
+def test_profile_rejects_bad_settings(env):
+    svc, client = env
+    h = admin_headers(client)
+    assert client.post("/v1/admin/profiles", headers=h,
+                       json={"name": "רע", "level": 2, "settings": {"options": ["no_such_option"]}}).status_code == 400
+    assert client.post("/v1/admin/profiles", headers=h,
+                       json={"name": "רע", "level": 9, "settings": {}}).status_code == 400

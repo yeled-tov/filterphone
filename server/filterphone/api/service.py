@@ -140,6 +140,21 @@ RELEASE_MANIFEST = "FilterPhone.json"
 _PASSTHROUGH_POLICY = json.dumps({"level": 0, "hosts": [], "paths": [], "images": "filter",
                                   "video": False, "app_images": "allow"}, separators=(",", ":"))
 MAX_PAUSE_MINUTES = 1440
+
+# פרופילי ברירת מחדל: (שם, רמה, אפשרויות, שדות נוספים של DeviceSettings). בתוך מודל החסימה הקיים —
+# בלי "הבטחות" של allowlist/קיוסק שהמנוע לא תומך בהן. המנהל יכול לערוך, להוסיף ולהחיל על מכשיר.
+SEED_PROFILES: list[tuple[str, int, list[str], dict]] = [
+    ("מחמיר — סינון תמונות מלא", 1,
+     ["whatsapp_profile", "whatsapp_status", "play_store", "google_images", "browsers_other"],
+     {"keywords": {"enabled": True}}),
+    ("בינוני — לבוש צנוע עובר", 2, ["whatsapp_profile", "google_images"], {}),
+    ("בלי חנות ובלי דפדפנים", 2, ["play_store", "browsers_all"], {}),
+    ("וואטסאפ מוגן בלבד (בלי מסנג'רים אחרים)", 2,
+     ["whatsapp_profile", "whatsapp_status", "telegram", "viber", "discord"], {}),
+    ("בלי רשתות חברתיות", 2,
+     ["facebook", "instagram", "tiktok", "twitter", "threads", "snapchat", "pinterest", "reddit"], {}),
+    ("בסיסי — רק עירום מפורש", 3, ["play_store"], {}),
+]
 _RELEASE_NAME = re.compile(r"^FilterPhone[A-Za-z0-9._-]{0,40}\.apk$")
 _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 _ABI = re.compile(r"^[a-z0-9_-]{1,20}$")
@@ -190,8 +205,9 @@ class Services:
         self.pool = db.Pool(self.cfg.db_path, size=self.cfg.db_pool_size)
         try:
             self.backfill_policy_checksums()
+            self.seed_profiles()
         except sqlite3.Error as e:            # מסד ישן שעוד לא עבר הגירה (כלי שורת פקודה) — לא עוצרים
-            log.warning("policy checksum backfill skipped: %s", e)
+            log.warning("startup data step skipped: %s", e)
 
     def db(self):
         """חיבור מהמאגר: with self.db() as c: ..."""
@@ -1111,6 +1127,90 @@ class Services:
             c.execute("UPDATE devices SET unmanage_at = ? WHERE id = ?", (db.now(), device_id))
             self.log_device(c, device_id, "unmanage_requested")
             self.audit(admin, "unmanage", f"device:{device_id}", "", c)
+        return self.device_detail(device_id)
+
+    # ------------------------------------------------------------ פרופילים מוכנים
+
+    def seed_profiles(self) -> None:
+        """פרופילי ברירת מחדל (פעם אחת, אם הטבלה ריקה). המנהל יכול לערוך; את המובנים אי אפשר למחוק."""
+        with self.db() as c, db.transaction(c):
+            if c.execute("SELECT 1 FROM profiles LIMIT 1").fetchone():
+                return
+            t = db.now()
+            for name, level, opts, extra in SEED_PROFILES:
+                s = DeviceSettings.load(json.dumps({"options": opts, **extra}))
+                c.execute("INSERT INTO profiles (name, level, settings, builtin, created_at, updated_at) "
+                          "VALUES (?,?,?,1,?,?)", (name, level, s.dump(), t, t))
+        log.info("seeded %d built-in profiles", len(SEED_PROFILES))
+
+    def list_profiles(self) -> list[dict]:
+        with self.db() as c:
+            rows = c.execute("SELECT * FROM profiles ORDER BY builtin DESC, name").fetchall()
+        out = []
+        for r in rows:
+            s = DeviceSettings.load(r["settings"])
+            out.append({"id": r["id"], "name": r["name"], "level": r["level"], "builtin": bool(r["builtin"]),
+                        "settings": s.as_dict(), "summary": summary(s), "updated_at": r["updated_at"]})
+        return out
+
+    def save_profile(self, admin: str, name: str, level: int, settings: dict,
+                     profile_id: int | None = None) -> dict:
+        name = security.clean_text(name, 60)
+        if not name:
+            raise ApiError(400, "שם פרופיל חסר")
+        if level not in LEVEL_NAMES:
+            raise ApiError(400, "רמה לא חוקית")
+        s = DeviceSettings.load("{}")
+        errors = s.update(settings or {})
+        if errors:
+            raise ApiError(400, "; ".join(errors))
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            if profile_id is None:
+                if c.execute("SELECT 1 FROM profiles WHERE name = ?", (name,)).fetchone():
+                    raise ApiError(409, "כבר קיים פרופיל בשם הזה")
+                cur = c.execute("INSERT INTO profiles (name, level, settings, created_at, updated_at) "
+                                "VALUES (?,?,?,?,?)", (name, level, s.dump(), t, t))
+                profile_id = cur.lastrowid
+                self.audit(admin, "profile_create", f"profile:{profile_id}", name, c)
+            else:
+                if c.execute("SELECT 1 FROM profiles WHERE id = ?", (profile_id,)).fetchone() is None:
+                    raise ApiError(404, "פרופיל לא נמצא")
+                dup = c.execute("SELECT 1 FROM profiles WHERE name = ? AND id != ?", (name, profile_id)).fetchone()
+                if dup:
+                    raise ApiError(409, "כבר קיים פרופיל בשם הזה")
+                c.execute("UPDATE profiles SET name = ?, level = ?, settings = ?, updated_at = ? WHERE id = ?",
+                          (name, level, s.dump(), t, profile_id))
+                self.audit(admin, "profile_update", f"profile:{profile_id}", name, c)
+        return {"id": profile_id, "name": name}
+
+    def delete_profile(self, profile_id: int, admin: str) -> None:
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "פרופיל לא נמצא")
+            if row["builtin"]:
+                raise ApiError(409, "אי אפשר למחוק פרופיל מובנה")
+            c.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
+            self.audit(admin, "profile_delete", f"profile:{profile_id}", row["name"], c)
+
+    def apply_profile(self, device_id: int, profile_id: int, admin: str) -> dict:
+        """מחיל פרופיל על מכשיר: מחליף את הרמה והמדיניות, יוצר גרסה חדשה, ומסנכרן. נרשם ב-audit."""
+        with self.db() as c, db.transaction(c):
+            dev = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+            if dev is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            prof = c.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+            if prof is None:
+                raise ApiError(404, "פרופיל לא נמצא")
+            s = DeviceSettings.load(prof["settings"])
+            c.execute("UPDATE devices SET level = ?, policy = ? WHERE id = ?",
+                      (prof["level"], s.dump(), device_id))
+            self.bump_policy(c, device_id)
+            self.log_device(c, device_id, "profile_applied", prof["name"])
+            self.audit(admin, "profile_apply", f"device:{device_id}", prof["name"], c)
+            new = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        self.push_device(new)
         return self.device_detail(device_id)
 
     def delete_device(self, device_id: int, admin: str = "admin") -> None:

@@ -238,6 +238,16 @@ class EnrollIn(BaseModel):
     app_version: str = Field(default="", max_length=20)
 
 
+class ProfileIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    level: int
+    settings: dict = Field(default_factory=dict)
+
+
+class ApplyProfileIn(BaseModel):
+    profile_id: int
+
+
 class TransferIn(BaseModel):
     token: str = Field(min_length=10, max_length=80)
     public_key: str = Field(min_length=44, max_length=44)
@@ -529,6 +539,28 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/admin/devices/{device_id}/transfer")
     def transfer_device(device_id: int, svc: SvcDep, admin: AdminRow):
         return svc.create_transfer(device_id, admin["username"])
+
+    @app.post("/v1/admin/devices/{device_id}/apply-profile")
+    def apply_profile(device_id: int, body: ApplyProfileIn, svc: SvcDep, admin: AdminRow):
+        return svc.apply_profile(device_id, body.profile_id, admin["username"])
+
+    # --- ניהול: פרופילים מוכנים ---
+
+    @app.get("/v1/admin/profiles")
+    def list_profiles(svc: SvcDep, _: AdminRow):
+        return {"profiles": svc.list_profiles()}
+
+    @app.post("/v1/admin/profiles", status_code=201)
+    def create_profile(body: ProfileIn, svc: SvcDep, admin: AdminRow):
+        return svc.save_profile(admin["username"], body.name, body.level, body.settings)
+
+    @app.patch("/v1/admin/profiles/{profile_id}")
+    def update_profile(profile_id: int, body: ProfileIn, svc: SvcDep, admin: AdminRow):
+        return svc.save_profile(admin["username"], body.name, body.level, body.settings, profile_id)
+
+    @app.delete("/v1/admin/profiles/{profile_id}", status_code=204)
+    def delete_profile(profile_id: int, svc: SvcDep, admin: AdminRow):
+        svc.delete_profile(profile_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/reset-apps")
     def reset_apps(device_id: int, svc: SvcDep, admin: AdminRow):
