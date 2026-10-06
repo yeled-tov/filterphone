@@ -129,7 +129,37 @@ CREATE TABLE audit (
 );
 """
 
-MIGRATIONS: list[str] = [_V1]
+# גרסה 2 — גרסאות מדיניות ואישור מהטלפון, דיווח תקופתי (heartbeat), יומן אירועי מכשיר
+_V2 = """
+ALTER TABLE devices ADD COLUMN policy_version INTEGER NOT NULL DEFAULT 1;   -- עולה בכל שינוי במה שהטלפון אוכף
+ALTER TABLE devices ADD COLUMN policy_updated_at INTEGER;
+ALTER TABLE devices ADD COLUMN policy_checksum TEXT NOT NULL DEFAULT '';
+ALTER TABLE devices ADD COLUMN policy_revision INTEGER NOT NULL DEFAULT 0;  -- מונה גלובלי ברגע השינוי
+ALTER TABLE devices ADD COLUMN device_policy_version INTEGER;               -- מה שהטלפון אישר שהחיל
+ALTER TABLE devices ADD COLUMN policy_ack_at INTEGER;
+ALTER TABLE devices ADD COLUMN heartbeat TEXT;                              -- JSON: הדיווח האחרון מהטלפון
+ALTER TABLE devices ADD COLUMN heartbeat_at INTEGER;
+ALTER TABLE devices ADD COLUMN managed_at INTEGER;                          -- מתי דווח לראשונה Device Owner
+CREATE INDEX devices_heartbeat ON devices(heartbeat_at);
+
+CREATE TABLE meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+INSERT INTO meta (key, value) VALUES ('policy_revision', '0');
+
+CREATE TABLE device_log (
+    id        INTEGER PRIMARY KEY,
+    device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    ts        INTEGER NOT NULL,
+    kind      TEXT NOT NULL,      -- vpn_down / vpn_up / accessibility_off / accessibility_on / management_removed ...
+    detail    TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX device_log_device ON device_log(device_id, ts);
+CREATE INDEX device_log_ts ON device_log(ts);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2]
 VERSION = len(MIGRATIONS)
 
 

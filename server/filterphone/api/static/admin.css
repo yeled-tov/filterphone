@@ -291,3 +291,18 @@ details.more[open] > summary { margin-bottom: 10px; }
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; display: inline-block; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading { display: grid; place-items: center; padding: 50px; }
+
+/* מצב תאימות */
+.state-badge { display: inline-block; padding: 6px 14px; border-radius: 999px; font-weight: 700; }
+.state-badge.green { background: var(--ok-soft); color: var(--ok); }
+.state-badge.yellow { background: var(--warn-soft); color: var(--warn); }
+.state-badge.red { background: var(--bad-soft); color: var(--bad); }
+.state-badge.inactive { background: var(--line); color: var(--muted); }
+.issues { margin: 8px 0; padding-inline-start: 20px; }
+.issues li.bad { color: var(--bad); }
+.issues li.warn { color: var(--warn); }
+.ok-text { color: var(--ok); }
+button.selected { outline: 2px solid var(--accent); }
+.app-row select { width: auto; flex: none; min-width: 130px; }
+img.qr { width: 280px; max-width: 100%; align-self: center; background: #fff; padding: 8px; border-radius: 8px; }
+.dpc-list { margin-bottom: 12px; }

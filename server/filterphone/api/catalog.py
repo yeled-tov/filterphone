@@ -6,12 +6,20 @@
   apps    — חסימה בתוך הטלפון: "מגן FilterPhone" (נגישות / מנהל מכשיר) לא נותן לפתוח
             את האפליקציה. נחוץ כשאי אפשר להבדיל ברשת (דפדפנים, טלגרם, משחקים).
   screens — מסך מסוים בתוך אפליקציה (למשל צפייה בסטטוסים בוואטסאפ).
+  protections — הגנה מיוחדת בטלפון (למשל זיהוי צפייה בתמונת פרופיל בוואטסאפ — PROTECTIONS).
 ועוד דגלים לפרוקסי: images=block (בלי תמונות), video (בלי וידאו), paths (כתובות מסוימות).
 
 כתובת 'example.com' חוסמת גם כל תת-דומיין. '*' = כל רצף (למשל media*.whatsapp.net).
+
+בנוסף לאפשרויות — חסימה של כל אפליקציה שמותקנת בטלפון, בשלושה מצבים (app_rules):
+  network       — השרתים של האפליקציה נחסמים ברשת (מוכרים מהקטלוג, או שהמנהל הוסיף);
+                  האפליקציה נפתחת אבל לא מתחברת.
+  accessibility — האפליקציה לא נפתחת בטלפון (מגן FilterPhone / מנהל מכשיר); הרשת לא משתנה.
+  both          — שניהם.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -60,13 +68,14 @@ class Option:
     popular: bool = False                       # מודגש בטופס ההרשמה ("הכי מבוקשים")
     warn: str = ""                              # מה עוד ייפגע — מוצג בממשק
     needs_guard: bool = False                   # עובד רק כשמגן FilterPhone פעיל בטלפון
+    protections: tuple[str, ...] = ()           # מפתחות ב-PROTECTIONS — הגנות מיוחדות בטלפון
 
     @property
     def mechanisms(self) -> list[str]:
         m = []
         if self.hosts or self.paths:
             m.append("network")
-        if self.apps or self.screens:
+        if self.apps or self.screens or self.protections:
             m.append("device")
         if self.images or self.video:
             m.append("proxy")
@@ -81,7 +90,7 @@ class Option:
         return {**self.public(), "hosts": list(self.hosts), "apps": list(self.apps),
                 "screens": [{"package": p, "match": list(m)} for p, m in self.screens],
                 "mechanisms": self.mechanisms, "needs_guard": self.needs_guard,
-                "images": self.images, "video": self.video}
+                "protections": list(self.protections), "images": self.images, "video": self.video}
 
 
 WA = ("com.whatsapp", "com.whatsapp.w4b")
@@ -105,8 +114,11 @@ OPTIONS: tuple[Option, ...] = (
 
     # ------------------------------------------------------------ וואטסאפ והודעות
     Option("whatsapp_profile", "messaging", "תמונות פרופיל בוואטסאפ",
-           "תמונות הפרופיל של אנשי הקשר והקבוצות לא נטענות. הודעות, שיחות, קבצים ותמונות בצ'אט — כרגיל.",
-           hosts=("pps.whatsapp.net",), popular=True),
+           "תמונות הפרופיל של אנשי הקשר והקבוצות לא נטענות, ואי אפשר לפתוח תמונת פרופיל (גם כזו שכבר "
+           "שמורה בטלפון). הודעות, שיחות, קבצים ותמונות בצ'אט — כרגיל.",
+           hosts=("pps.whatsapp.net",), protections=("wa_profile_photo",), popular=True, needs_guard=True,
+           warn="פתיחת תמונת פרופיל נחסמת בטלפון עצמו (מגן FilterPhone). התמונות הקטנות ברשימת הצ'אטים "
+                "שכבר שמורות בטלפון עשויות להמשיך להופיע עד שוואטסאפ מרענן אותן."),
     Option("whatsapp_status", "messaging", "סטטוסים בוואטסאפ",
            "אי אפשר לפתוח סטטוסים. נאכף בטלפון עצמו (מגן FilterPhone), כי וואטסאפ מוריד סטטוסים מאותם "
            "שרתים כמו תמונות בצ'אט. לחסימה מלאה גם של התמונות — 'מדיה בוואטסאפ'.",
@@ -298,6 +310,55 @@ CATALOG: dict[str, Option] = {o.id: o for o in OPTIONS}
 assert len(CATALOG) == len(OPTIONS), "duplicate option id"
 assert {o.category for o in OPTIONS} <= {c["id"] for c in CATEGORIES}
 
+# שרתים מוכרים לכל אפליקציה (מהקטלוג) — לחסימת אפליקציה "ברשת" גם כשהיא נבחרה בנפרד
+KNOWN_APP_HOSTS: dict[str, tuple[str, ...]] = {}
+for _o in OPTIONS:
+    if _o.hosts and _o.apps and not _o.id.startswith("browsers"):
+        for _pkg in _o.apps:
+            KNOWN_APP_HOSTS[_pkg] = tuple(sorted({*KNOWN_APP_HOSTS.get(_pkg, ()), *_o.hosts}))
+
+APP_MODES = ("network", "accessibility", "both")
+DEVICE_MODES = ("accessibility", "both")       # נאכף בטלפון
+NETWORK_MODES = ("network", "both")            # נאכף בשרת
+
+# הגנות מיוחדות בטלפון. ההגדרות (תבניות זיהוי) נשלחות מהשרת — כשוואטסאפ משנה את המסכים שלו,
+# מעדכנים כאן בלי לשחרר אפליקציה חדשה. האפליקציה מחזיקה גם ברירת מחדל זהה.
+PROTECTIONS: dict[str, dict] = {
+    "wa_profile_photo": {
+        "packages": ["com.whatsapp", "com.whatsapp.w4b"],
+        # שכבה 1: שם המסך (Activity / חלון) — מכיל אחד מאלה (בלי תלות באותיות גדולות)
+        "activities": ["viewprofilephoto", "profilephoto", "profilepicture", "quickcontact", "photo.viewprofile"],
+        # שכבה 2: מזהי רכיבים (view id) של תמונת פרופיל גדולה
+        "view_ids": ["profile_picture", "profile_photo", "contact_photo", "quick_contact_photo", "picture",
+                     "photo_view", "wds_profile_photo", "profile_picture_image"],
+        # שכבה 3: תיאור נגישות של התמונה (רק ברכיב תמונה; בלי לקרוא טקסט אחר)
+        "descriptions": ["profile photo", "profile picture", "תמונת פרופיל", "תמונת הפרופיל", "foto de perfil",
+                         "photo de profil", "profilbild", "фото профиля", "صورة الملف الشخصي"],
+        # תמונה שתופסת לפחות חלק כזה מהמסך = מצב צפייה (ולא אייקון קטן ברשימה)
+        "min_area": 0.3,
+    },
+}
+
+# מנהל מכשיר (Device Owner) — מה נאכף כשהאפליקציה מוגדרת כמנהלת המכשיר. רק יכולות רשמיות
+# של DevicePolicyManager. במכשיר שאינו Device Owner — אין לזה השפעה (ומוצג ככזה בממשק).
+DPC_DEFAULTS: dict[str, bool | list] = {
+    "block_uninstall": True,            # אי אפשר להסיר את FilterPhone
+    "always_on_vpn": True,              # VPN תמיד מופעל + חסימת חיבורים בלי VPN (lockdown)
+    "disallow_config_vpn": True,        # אי אפשר לשנות הגדרות VPN
+    "disallow_factory_reset": True,     # איפוס להגדרות יצרן מתוך ההגדרות חסום (לא מצב שחזור!)
+    "disallow_safe_boot": True,         # מצב בטוח (שעוקף אפליקציות) חסום
+    "disallow_add_user": True,          # אי אפשר להוסיף משתמש / אורח
+    "disallow_unknown_sources": True,   # אי אפשר להתקין קבצי APK
+    "disallow_private_dns": True,       # אי אפשר להגדיר DNS פרטי (עוקף)
+    "disallow_debugging": False,        # ניפוי באגים (ADB) — כבוי כברירת מחדל כדי שאפשר יהיה לתקן
+    "disallow_install_apps": False,     # אי אפשר להתקין אפליקציות בכלל (גם מהחנות)
+    "disallow_modify_accounts": False,  # אי אפשר להוסיף / להסיר חשבונות
+    "hide_blocked_apps": True,          # אפליקציות חסומות מוסתרות לגמרי (במקום חסימה בנגישות)
+    "frp_accounts": [],                 # Factory Reset Protection: מזהי חשבון Google שיכולים לשחרר
+    "lock_task_packages": [],           # אפליקציות שמותר להן מצב קיוסק (lock task)
+}
+_FRP_ID = re.compile(r"^\d{6,30}$")
+
 APP_IMAGES = ("auto", "block", "allow")
 _HOST_RE = re.compile(r"^(?:\*\.)?(?:[a-z0-9*](?:[a-z0-9*-]{0,61}[a-z0-9*])?\.)+[a-z*]{2,63}$")
 _PKG_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$")
@@ -338,8 +399,62 @@ class DeviceSettings:
     options: list[str] = field(default_factory=list)
     custom_hosts: list[str] = field(default_factory=list)
     allow_hosts: list[str] = field(default_factory=list)
-    custom_apps: list[str] = field(default_factory=list)
+    app_rules: dict[str, dict] = field(default_factory=dict)    # pkg → {"mode": ..., "hosts": [...]}
     app_images: str = "auto"                    # auto = לפי הרמה (1–2 חסום, 3 מותר)
+    dpc: dict = field(default_factory=dict)     # רק מה ששונה מ-DPC_DEFAULTS
+
+    @property
+    def custom_apps(self) -> list[str]:
+        """תאימות לאחור: האפליקציות שנחסמות בטלפון (כמו הרשימה הישנה)."""
+        return sorted(p for p, r in self.app_rules.items() if r["mode"] in DEVICE_MODES)
+
+    @staticmethod
+    def _clean_rule(mode, hosts) -> dict | None:
+        if mode not in APP_MODES:
+            return None
+        rule: dict = {"mode": mode}
+        hosts = sorted({h for h in map(clean_host, hosts or []) if h})[:50]
+        if hosts:
+            rule["hosts"] = hosts
+        return rule
+
+    @classmethod
+    def _load_rules(cls, d: dict) -> dict[str, dict]:
+        rules: dict[str, dict] = {}
+        for p in map(clean_package, d.get("custom_apps", []) or []):     # פורמט ישן: חסימה בטלפון
+            if p:
+                rules[p] = {"mode": "accessibility"}
+        raw = d.get("app_rules") or {}
+        if isinstance(raw, list):                                         # [{"package", "mode", "hosts"}]
+            raw = {str(r.get("package", "")): r for r in raw if isinstance(r, dict)}
+        if isinstance(raw, dict):
+            for pkg, r in raw.items():
+                p = clean_package(str(pkg))
+                rule = cls._clean_rule(r.get("mode"), r.get("hosts")) if p and isinstance(r, dict) else None
+                if rule:
+                    rules[p] = rule
+        return dict(sorted(rules.items())[:500])
+
+    @staticmethod
+    def _load_dpc(raw) -> dict:
+        out: dict = {}
+        if not isinstance(raw, dict):
+            return out
+        for k, default in DPC_DEFAULTS.items():
+            if k not in raw:
+                continue
+            v = raw[k]
+            if isinstance(default, bool) and isinstance(v, bool) and v != default:
+                out[k] = v
+            elif k == "frp_accounts" and isinstance(v, list):
+                ids = sorted({str(x).strip() for x in v if _FRP_ID.match(str(x).strip())})[:10]
+                if ids:
+                    out[k] = ids
+            elif k == "lock_task_packages" and isinstance(v, list):
+                pk = sorted({p for p in map(clean_package, map(str, v)) if p})[:20]
+                if pk:
+                    out[k] = pk
+        return out
 
     @classmethod
     def load(cls, raw: str | None) -> DeviceSettings:
@@ -347,21 +462,28 @@ class DeviceSettings:
             d = json.loads(raw or "{}")
         except ValueError:
             d = {}
+        if not isinstance(d, dict):
+            d = {}
         return cls(
             options=[o for o in d.get("options", []) if o in CATALOG],
             custom_hosts=[h for h in map(clean_host, d.get("custom_hosts", [])) if h],
             allow_hosts=[h for h in map(clean_host, d.get("allow_hosts", [])) if h],
-            custom_apps=[p for p in map(clean_package, d.get("custom_apps", [])) if p],
+            app_rules=cls._load_rules(d),
             app_images=d.get("app_images") if d.get("app_images") in APP_IMAGES else "auto",
+            dpc=cls._load_dpc(d.get("dpc")),
         )
 
     def dump(self) -> str:
+        # custom_apps נשמר גם הוא — כדי שגרסה קודמת של השרת (חזרה לאחור) תמשיך לחסום
         return json.dumps({"options": self.options, "custom_hosts": self.custom_hosts,
                            "allow_hosts": self.allow_hosts, "custom_apps": self.custom_apps,
-                           "app_images": self.app_images}, ensure_ascii=False, separators=(",", ":"))
+                           "app_rules": self.app_rules, "app_images": self.app_images, "dpc": self.dpc},
+                          ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
-        return json.loads(self.dump())
+        d = json.loads(self.dump())
+        d["dpc_effective"] = {**DPC_DEFAULTS, **self.dpc}
+        return d
 
     def update(self, changes: dict) -> list[str]:
         """מעדכן מ-PATCH של המנהל. מחזיר רשימת שגיאות (ריקה = הכול תקין)."""
@@ -371,8 +493,7 @@ class DeviceSettings:
             if unknown:
                 errors.append(f"אפשרויות לא מוכרות: {', '.join(unknown)}")
             self.options = sorted({o for o in changes["options"] if o in CATALOG})
-        for key, cleaner, label in (("custom_hosts", clean_host, "אתר"), ("allow_hosts", clean_host, "אתר"),
-                                    ("custom_apps", clean_package, "שם חבילה")):
+        for key, cleaner, label in (("custom_hosts", clean_host, "אתר"), ("allow_hosts", clean_host, "אתר")):
             if key in changes and changes[key] is not None:
                 raw = [x for x in changes[key] if str(x).strip()]
                 good = [cleaner(str(x)) for x in raw]
@@ -380,11 +501,48 @@ class DeviceSettings:
                 if bad:
                     errors.append(f"{label} לא תקין: {', '.join(bad[:5])}")
                 setattr(self, key, sorted({g for g in good if g})[:500])
+        if changes.get("custom_apps") is not None:
+            # הפורמט הישן: הרשימה המלאה של האפליקציות שנחסמות בטלפון
+            raw = [str(x) for x in changes["custom_apps"] if str(x).strip()]
+            good = [clean_package(x) for x in raw]
+            bad = [x for x, g in zip(raw, good, strict=True) if g is None]
+            if bad:
+                errors.append(f"שם חבילה לא תקין: {', '.join(bad[:5])}")
+            wanted = {g for g in good if g}
+            rules = {p: r for p, r in self.app_rules.items() if r["mode"] == "network" or p in wanted}
+            for p in wanted:
+                if p not in rules or rules[p]["mode"] == "network":
+                    rules[p] = {**rules.get(p, {}), "mode": "both" if p in rules else "accessibility"}
+            self.app_rules = dict(sorted(rules.items())[:500])
+        if changes.get("app_rules") is not None:
+            raw = changes["app_rules"]
+            items = raw.items() if isinstance(raw, dict) else (
+                (r.get("package"), r) for r in raw if isinstance(r, dict))
+            rules: dict[str, dict] = {}
+            for pkg, r in items:
+                p = clean_package(str(pkg or ""))
+                rule = self._clean_rule((r or {}).get("mode"), (r or {}).get("hosts")) if p else None
+                if rule is None:
+                    errors.append(f"כלל אפליקציה לא תקין: {pkg}")
+                    continue
+                rules[p] = rule
+            self.app_rules = dict(sorted(rules.items())[:500])
         if changes.get("app_images") is not None:
             if changes["app_images"] not in APP_IMAGES:
                 errors.append("ערך לא חוקי לתמונות באפליקציות")
             else:
                 self.app_images = changes["app_images"]
+        if changes.get("dpc") is not None:
+            if not isinstance(changes["dpc"], dict):
+                errors.append("הגדרות מנהל מכשיר לא תקינות")
+            else:
+                unknown = [k for k in changes["dpc"] if k not in DPC_DEFAULTS]
+                if unknown:
+                    errors.append(f"הגדרות מנהל מכשיר לא מוכרות: {', '.join(unknown)}")
+                bad_frp = [x for x in changes["dpc"].get("frp_accounts") or [] if not _FRP_ID.match(str(x).strip())]
+                if bad_frp:
+                    errors.append("מזהה חשבון Google לשחרור FRP צריך להיות מספר (לא כתובת מייל)")
+                self.dpc = self._load_dpc({**self.dpc, **changes["dpc"]})
         return errors
 
 
@@ -395,12 +553,16 @@ def _covered_by(host: str, allow: list[str]) -> bool:
 @dataclass(frozen=True, slots=True)
 class Compiled:
     hosts: tuple[str, ...]
-    apps: tuple[str, ...]
+    apps: tuple[str, ...]                       # נחסמות בטלפון (נגישות / מנהל מכשיר)
     screens: tuple[dict, ...]
     paths: tuple[dict, ...]
     images: str
     video: bool
     app_images: str
+    app_rules: tuple[dict, ...] = ()            # [{"package", "mode"}] — מה שהמנהל בחר לכל אפליקציה
+    protections: tuple[str, ...] = ()
+    dpc: dict = field(default_factory=dict)
+    network_only_unknown: tuple[str, ...] = ()  # אפליקציות "ברשת" בלי שרתים ידועים — אין מה לחסום
 
     def proxy_json(self, level: int) -> str:
         """מה שהפרוקסי קורא (fp:policy ב-Redis)."""
@@ -408,14 +570,35 @@ class Compiled:
                            "images": self.images, "video": self.video, "app_images": self.app_images},
                           separators=(",", ":"))
 
+    @property
+    def needs_accessibility(self) -> bool:
+        """מסכים והגנות מיוחדות — רק בנגישות. חסימת אפליקציות — גם מנהל מכשיר יכול (הסתרה)."""
+        return bool(self.screens or self.protections)
+
     def device_json(self) -> dict:
-        """מה שהאפליקציה בטלפון אוכפת (מגן FilterPhone)."""
-        return {"blocked_apps": list(self.apps), "blocked_screens": list(self.screens)}
+        """מה שהאפליקציה בטלפון אוכפת (מגן FilterPhone / מנהל מכשיר).
+
+        blocked_apps נשאר רשימת מחרוזות — גרסאות ישנות של האפליקציה ממשיכות לחסום.
+        שדות חדשים (app_rules, protections, dpc) — גרסאות ישנות פשוט מתעלמות."""
+        return {
+            "blocked_apps": list(self.apps),
+            "blocked_screens": list(self.screens),
+            "app_rules": list(self.app_rules),
+            "protections": {k: PROTECTIONS[k] for k in self.protections if k in PROTECTIONS},
+            "dpc": self.dpc,
+        }
 
 
 def compile_settings(level: int, s: DeviceSettings) -> Compiled:
     opts = [CATALOG[o] for o in s.options if o in CATALOG]
     hosts = {h for o in opts for h in o.hosts} | set(s.custom_hosts)
+    unknown: list[str] = []
+    for pkg, rule in s.app_rules.items():
+        if rule["mode"] in NETWORK_MODES:
+            app_hosts = set(rule.get("hosts", ())) | set(KNOWN_APP_HOSTS.get(pkg, ()))
+            hosts |= app_hosts
+            if not app_hosts:
+                unknown.append(pkg)
     hosts = {h for h in hosts if not _covered_by(h.removeprefix("*."), s.allow_hosts)}
     screens: dict[str, set[str]] = {}
     for o in opts:
@@ -424,15 +607,27 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
     app_images = s.app_images
     if app_images == "auto":
         app_images = "block" if level in (1, 2) else "allow"
+    device_apps = {a for o in opts for a in o.apps} | {p for p, r in s.app_rules.items() if r["mode"] in DEVICE_MODES}
     return Compiled(
         hosts=tuple(sorted(hosts)),
-        apps=tuple(sorted({a for o in opts for a in o.apps} | set(s.custom_apps))),
+        apps=tuple(sorted(device_apps)),
         screens=tuple({"package": p, "match": sorted(m)} for p, m in sorted(screens.items())),
         paths=tuple({"host": h, "re": r} for o in opts for h, r in o.paths),
         images="block" if any(o.images == "block" for o in opts) else "filter",
         video=any(o.video for o in opts),
         app_images=app_images,
+        app_rules=tuple({"package": p, "mode": r["mode"]} for p, r in s.app_rules.items()),
+        protections=tuple(sorted({k for o in opts for k in o.protections})),
+        dpc={**DPC_DEFAULTS, **s.dpc},
+        network_only_unknown=tuple(unknown),
     )
+
+
+def policy_checksum(level: int, comp: Compiled) -> str:
+    """טביעה של מה שהטלפון צריך לאכוף (ושל הרמה) — לזיהוי שינוי ולאימות בטלפון."""
+    material = json.dumps({"level": level, "device": comp.device_json()}, sort_keys=True,
+                          separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(material.encode()).hexdigest()[:32]
 
 
 def summary(s: DeviceSettings) -> list[dict]:
@@ -440,6 +635,6 @@ def summary(s: DeviceSettings) -> list[dict]:
     out = [{"id": o, "title": CATALOG[o].title, "category": CATALOG[o].category} for o in s.options]
     if s.custom_hosts:
         out.append({"id": "custom_hosts", "title": f"אתרים נוספים ({len(s.custom_hosts)})", "category": "custom"})
-    if s.custom_apps:
-        out.append({"id": "custom_apps", "title": f"אפליקציות נוספות ({len(s.custom_apps)})", "category": "custom"})
+    if s.app_rules:
+        out.append({"id": "custom_apps", "title": f"אפליקציות נוספות ({len(s.app_rules)})", "category": "custom"})
     return out

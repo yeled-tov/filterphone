@@ -31,9 +31,18 @@ import redis
 from .. import protocol
 from ..proxy.policy import LEVELS_KEY, POLICY_KEY, POLICY_REV_KEY
 from ..settings import Settings
-from . import db, security
+from . import compliance, db, security
 from .adguard import AdGuard, build_rules
-from .catalog import CATALOG, LEVELS, Compiled, DeviceSettings, compile_settings, summary
+from .catalog import (
+    CATALOG,
+    KNOWN_APP_HOSTS,
+    LEVELS,
+    Compiled,
+    DeviceSettings,
+    compile_settings,
+    policy_checksum,
+    summary,
+)
 from .observe import REGISTRY as API_METRICS
 from .wg import WireGuard, WireGuardError
 
@@ -56,6 +65,67 @@ def observe_snapshot() -> dict[str, float]:
 def mask_phone(phone: str) -> str:
     """ללוגים: '0501234567' → '…567'. מספר מלא נשמר רק במסד."""
     return f"…{phone[-3:]}" if phone else ""
+
+
+# מה שהטלפון מדווח ב-heartbeat. רק הסוגים והשדות האלה נשמרים (בלי פרטים אישיים).
+_HB_BOOL = ("device_owner", "device_admin", "battery_unrestricted", "background_restricted", "ca_installed",
+            "notifications")
+_HB_SECTIONS = {
+    "vpn": {"state": str, "handshake_age_s": int, "always_on": bool, "lockdown": bool, "last_health_ok": int,
+            "reconnects": int, "error": str},
+    "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool},
+    "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
+    "dpc": {"applied": list, "failed": list, "always_on_vpn": str, "lockdown": bool, "frp": bool},
+    "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int},
+}
+# מעברים שנרשמים ביומן המכשיר
+_LOG_TRANSITIONS = (
+    (("vpn", "state"), "UP", "vpn_up", "vpn_down"),
+    (("accessibility", "enabled"), True, "accessibility_on", "accessibility_off"),
+    (("device_owner",), True, "management_on", "management_removed"),
+    (("battery_unrestricted",), True, "battery_unrestricted", "battery_restricted"),
+)
+
+
+def _clip(v, typ):
+    if typ is bool:
+        return v if isinstance(v, bool) else None
+    if typ is int:
+        return int(v) if isinstance(v, int | float) and not isinstance(v, bool) and abs(v) < 10**12 else None
+    if typ is str:
+        return security.clean_text(str(v), 80) if isinstance(v, str) else None
+    if typ is list:
+        return [security.clean_text(str(x), 40) for x in v[:30]] if isinstance(v, list) else None
+    return None
+
+
+def sanitize_heartbeat(hb: dict) -> dict:
+    out: dict = {}
+    for k in _HB_BOOL:
+        if isinstance(hb.get(k), bool):
+            out[k] = hb[k]
+    for k in ("app_version", "private_dns", "policy_error"):
+        if isinstance(hb.get(k), str) and hb[k]:
+            out[k] = security.clean_text(hb[k], 80)
+    for k in ("sdk", "policy_version", "last_policy_sync", "ts"):
+        v = _clip(hb.get(k), int)
+        if v is not None:
+            out[k] = v
+    for section, fields in _HB_SECTIONS.items():
+        raw = hb.get(section)
+        if isinstance(raw, dict):
+            sec = {f: v for f, t in fields.items() if (v := _clip(raw.get(f), t)) is not None}
+            if sec:
+                out[section] = sec
+    return out
+
+
+def _dig(d: dict, path: tuple[str, ...]):
+    for k in path:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(k)
+    return d
 
 STATUS_MESSAGES = {
     "pending": "הבקשה התקבלה ומחכה לאישור. נעדכן ברגע שהחיבור ייפתח.",
@@ -100,6 +170,10 @@ class Services:
         if self.adguard is None:
             self.adguard = AdGuard(self.cfg.adguard_url, self.cfg.adguard_user, self.cfg.adguard_password)
         self.pool = db.Pool(self.cfg.db_path, size=self.cfg.db_pool_size)
+        try:
+            self.backfill_policy_checksums()
+        except sqlite3.Error as e:            # מסד ישן שעוד לא עבר הגירה (כלי שורת פקודה) — לא עוצרים
+            log.warning("policy checksum backfill skipped: %s", e)
 
     def db(self):
         """חיבור מהמאגר: with self.db() as c: ..."""
@@ -138,6 +212,54 @@ class Services:
         with self.db() as c:
             rows = c.execute("SELECT * FROM audit ORDER BY id DESC LIMIT ?", (max(1, min(limit, 500)),))
             return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------ גרסאות מדיניות
+
+    @staticmethod
+    def _next_revision(c: sqlite3.Connection) -> int:
+        c.execute("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'policy_revision'")
+        return int(c.execute("SELECT value FROM meta WHERE key = 'policy_revision'").fetchone()[0])
+
+    def bump_policy(self, c: sqlite3.Connection, device_id: int) -> int:
+        """בתוך טרנזקציה, אחרי שינוי: אם מה שהטלפון צריך לאכוף השתנה — גרסה חדשה. מחזיר את הגרסה."""
+        row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        checksum = policy_checksum(row["level"], self.compiled(row))
+        if checksum == row["policy_checksum"]:
+            return row["policy_version"]
+        version = row["policy_version"] + (1 if row["policy_checksum"] else 0)
+        c.execute("UPDATE devices SET policy_version = ?, policy_checksum = ?, policy_updated_at = ?,"
+                  " policy_revision = ? WHERE id = ?",
+                  (version, checksum, db.now(), self._next_revision(c), device_id))
+        return version
+
+    def backfill_policy_checksums(self) -> int:
+        """מכשירים מלפני ההגירה (בלי טביעה): מחשבים טביעה בלי להעלות גרסה."""
+        with self.db() as c:
+            rows = c.execute("SELECT * FROM devices WHERE policy_checksum = ''").fetchall()
+            for r in rows:
+                c.execute("UPDATE devices SET policy_checksum = ?, policy_updated_at = COALESCE(policy_updated_at, ?)"
+                          " WHERE id = ? AND policy_checksum = ''",
+                          (policy_checksum(r["level"], self.compiled(r)), db.now(), r["id"]))
+        return len(rows)
+
+    def device_policy(self, row: sqlite3.Row) -> dict:
+        """המדיניות לטלפון, עם גרסה וטביעה (הטלפון מאשר את הגרסה שהחיל)."""
+        return {**self.compiled(row).device_json(), "version": row["policy_version"],
+                "updated_at": row["policy_updated_at"], "checksum": row["policy_checksum"],
+                "revision": row["policy_revision"]}
+
+    # ------------------------------------------------------------ יומן מכשיר
+
+    @staticmethod
+    def log_device(c: sqlite3.Connection, device_id: int, kind: str, detail: str = "") -> None:
+        c.execute("INSERT INTO device_log (device_id, ts, kind, detail) VALUES (?,?,?,?)",
+                  (device_id, db.now(), kind[:40], detail[:200]))
+
+    def device_log(self, device_id: int, limit: int = 50) -> list[dict]:
+        with self.db() as c:
+            rows = c.execute("SELECT ts, kind, detail FROM device_log WHERE device_id = ? ORDER BY id DESC LIMIT ?",
+                             (device_id, max(1, min(limit, 500)))).fetchall()
+        return [dict(r) for r in rows]
 
     # ------------------------------------------------------------ מדיניות → Redis / AdGuard
 
@@ -205,6 +327,7 @@ class Services:
 
     def sync_all(self) -> None:
         """מיישר WireGuard, Redis ו-AdGuard לפי מסד הנתונים. כל אחד בנפרד — כשל באחד לא עוצר אחר."""
+        self.backfill_policy_checksums()
         errors = []
         for step in (self.sync_wireguard, self.sync_redis, self.sync_adguard):
             try:
@@ -262,6 +385,7 @@ class Services:
                  security.token_hash(token), row["id"], t, t))
             c.execute("UPDATE codes SET uses_left = uses_left - 1 WHERE id = ?", (row["id"],))
             device_id, level = cur.lastrowid, row["level"]
+            self.bump_policy(c, device_id)
             self.audit(f"code:…{row['hint']}", "enroll", f"device:{device_id}", name, c)
             # אם WireGuard נכשל — הטרנזקציה מתבטלת, הקוד לא נשרף
             self.wg.add_peer(public_key, psk, ip)
@@ -327,6 +451,7 @@ class Services:
                 "INSERT INTO requests (kind, device_id, customer_id, level, options, note, created_at)"
                 " VALUES ('join',?,?,?,?,?,?)",
                 (device_id, customer_id, level, json.dumps(opts), note, t)).lastrowid
+            self.bump_policy(c, device_id)
             self.audit(f"device:{device_id}", "register", f"request:{request_id}", f"{name} {phone_n}", c)
         log.info("registration request %s from %s (device %s)", request_id, mask_phone(phone_n), device_id)
         return {"device_id": device_id, "token": token, "status": "pending", "request_id": request_id,
@@ -372,9 +497,55 @@ class Services:
             "today": {"blocked": today.get("block", 0), "painted": today.get("replace", 0),
                       "sites": today.get("site", 0)},
             "blocks": summary(settings),
-            "device_policy": comp.device_json(),
+            "device_policy": {**comp.device_json(), "version": row["policy_version"],
+                              "updated_at": row["policy_updated_at"], "checksum": row["policy_checksum"],
+                              "revision": row["policy_revision"]},
             "apps_report_needed": not row["apps_at"] or db.now() - row["apps_at"] > 86400,
+            "heartbeat_interval_s": self.cfg.heartbeat_interval_s,
         })
+        return out
+
+    # ------------------------------------------------------------ דיווח תקופתי (heartbeat)
+
+    def heartbeat(self, row: sqlite3.Row, raw: dict, client_ip: str = "") -> dict:
+        """הטלפון מדווח כל ~15 דקות (גם כשהאפליקציה סגורה): מצב ה-VPN, הנגישות, מנהל המכשיר,
+        הסוללה וגרסת המדיניות שהוחלה. התשובה: הגרסה העדכנית — והמדיניות עצמה אם הטלפון מאחור."""
+        t = db.now()
+        hb = sanitize_heartbeat(raw)
+        if row["vpn_ip"]:
+            hb["via_vpn"] = client_ip == row["vpn_ip"]
+        prev = _json_dict(row["heartbeat"])
+        acked = hb.get("policy_version")
+        with self.db() as c, db.transaction(c):
+            cur = c.execute("SELECT policy_version, managed_at FROM devices WHERE id = ?", (row["id"],)).fetchone()
+            if cur is None:
+                raise ApiError(401, "המכשיר לא מזוהה")
+            sets = {"heartbeat": json.dumps(hb, ensure_ascii=False), "heartbeat_at": t, "last_seen_at": t}
+            if isinstance(hb.get("app_version"), str):
+                sets["app_version"] = hb["app_version"][:20]
+            if isinstance(acked, int):
+                sets["device_policy_version"] = min(acked, cur["policy_version"])
+                if acked >= cur["policy_version"]:
+                    sets["policy_ack_at"] = t
+            if hb.get("device_owner") is True and not cur["managed_at"]:
+                sets["managed_at"] = t
+            c.execute(f"UPDATE devices SET {', '.join(f'{k} = ?' for k in sets)} WHERE id = ?",
+                      (*sets.values(), row["id"]))
+            if prev:
+                for path, good, up, down in _LOG_TRANSITIONS:
+                    before, after = _dig(prev, path), _dig(hb, path)
+                    if after is None or before is None or (before == good) == (after == good):
+                        continue
+                    self.log_device(c, row["id"], up if after == good else down)
+            if prev.get("via_vpn") is not False and hb.get("via_vpn") is False:
+                self.log_device(c, row["id"], "outside_vpn", "דיווח שהגיע שלא דרך המנהרה")
+            if hb.get("policy_error") and hb.get("policy_error") != prev.get("policy_error"):
+                self.log_device(c, row["id"], "policy_error", hb["policy_error"])
+            fresh = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
+        out = {"server_time": t, "status": fresh["status"], "policy_version": fresh["policy_version"],
+               "interval_s": self.cfg.heartbeat_interval_s, "message": STATUS_MESSAGES.get(fresh["status"], "")}
+        if fresh["status"] == "active" and (acked != fresh["policy_version"] or raw.get("want_policy")):
+            out["policy"] = self.device_policy(fresh)
         return out
 
     def device_vpn(self, row: sqlite3.Row) -> dict:
@@ -511,8 +682,10 @@ class Services:
                       (t, security.clean_text(decision.get("admin_note") or "", 500), request_id))
             if req["customer_id"]:
                 self._update_customer(c, req["customer_id"], decision)
+            version = self.bump_policy(c, dev["id"])
             self.audit(admin, "approve", f"request:{request_id}",
-                       f"{req['kind']} device:{dev['id']} level:{level} options:{','.join(settings.options)}", c)
+                       f"{req['kind']} device:{dev['id']} level:{level} options:{','.join(settings.options)}"
+                       f" policy:v{version}", c)
             new = c.execute("SELECT * FROM devices WHERE id = ?", (dev["id"],)).fetchone()
             if req["kind"] == "join":
                 # אם WireGuard נכשל — הכול מתבטל, והבקשה נשארת ממתינה
@@ -586,12 +759,25 @@ class Services:
 
     # ------------------------------------------------------------ מכשירים (מנהל)
 
+    def compliance_of(self, r: sqlite3.Row, handshake: int, t: int | None = None) -> compliance.Compliance:
+        comp = self.compiled(r)
+        return compliance.evaluate(
+            r, _json_dict(r["heartbeat"]), _json_dict(r["guard"]), handshake,
+            needs_device_block=bool(comp.apps), needs_accessibility=comp.needs_accessibility,
+            now=t or db.now(), offline_after_s=self.cfg.offline_after_s, lost_after_s=self.cfg.lost_after_s,
+            sync_grace_s=self.cfg.sync_grace_s)
+
     def _device_row_out(self, r: sqlite3.Row, peers: dict, stats: dict, t: int) -> dict:
         p = peers.get(r["public_key"])
         hs = p.latest_handshake if p else 0
         settings = DeviceSettings.load(r["policy"])
         guard = _json_dict(r["guard"])
+        hb = _json_dict(r["heartbeat"])
         return {
+            "compliance": self.compliance_of(r, hs, t).as_dict(),
+            "policy_version": r["policy_version"], "device_policy_version": r["device_policy_version"],
+            "policy_updated_at": r["policy_updated_at"], "policy_ack_at": r["policy_ack_at"],
+            "heartbeat": hb, "heartbeat_at": r["heartbeat_at"], "managed_at": r["managed_at"],
             "id": r["id"], "name": r["name"], "label": r["label"], "platform": r["platform"],
             "app_version": r["app_version"], "vpn_ip": r["vpn_ip"], "level": r["level"],
             "status": r["status"], "legacy": bool(r["legacy"]), "created_at": r["created_at"],
@@ -649,15 +835,24 @@ class Services:
         blocked = set(comp.apps)
         out.update({
             "settings": settings.as_dict(),
+            "known_app_hosts": {p: list(KNOWN_APP_HOSTS.get(p, ())) for p in
+                                {a["package"] for a in _json_list(r["apps"])} | set(settings.app_rules)
+                                if p in KNOWN_APP_HOSTS},
             "compiled": {"hosts": len(comp.hosts), "apps": len(comp.apps), "images": comp.images,
                          "video": comp.video, "app_images": comp.app_images,
-                         "needs_guard": any(CATALOG[o].needs_guard for o in settings.options)},
+                         "needs_guard": any(CATALOG[o].needs_guard for o in settings.options)
+                         or any(r["mode"] != "network" for r in settings.app_rules.values()),
+                         "protections": list(comp.protections), "dpc": comp.dpc},
             "customer": dict(cust) if cust else None,
             "requests": [{**dict(q), "options": _json_list(q["options"])} for q in reqs],
             "apps": [{**a, "blocked": a["package"] in blocked} for a in _json_list(r["apps"])],
             "apps_at": r["apps_at"],
             "history": self.stats_range(7, r["vpn_ip"]) if r["vpn_ip"] else [],
             "events": self.recent_events(50, ip=r["vpn_ip"]) if r["vpn_ip"] else [],
+            "device_log": self.device_log(device_id, 40),
+            "policy": self.device_policy(r),
+            "network_only_unknown": list(comp.network_only_unknown),
+            "app_rules": [{"package": p, **rule} for p, rule in settings.app_rules.items()],
         })
         return out
 
@@ -667,7 +862,7 @@ class Services:
             raise ApiError(400, "רמה לא חוקית")
         if "status" in allowed and allowed["status"] not in ("active", "disabled"):
             raise ApiError(400, "סטטוס לא חוקי")
-        policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_images")
+        policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
@@ -684,6 +879,7 @@ class Services:
             if allowed:
                 sets = ", ".join(f"{k} = ?" for k in allowed)
                 c.execute(f"UPDATE devices SET {sets} WHERE id = ?", (*allowed.values(), device_id))
+            self.bump_policy(c, device_id)
             new = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
             if new["status"] != row["status"]:
                 if new["status"] == "active":
@@ -766,6 +962,63 @@ class Services:
             if c.execute("DELETE FROM codes WHERE id = ?", (code_id,)).rowcount == 0:
                 raise ApiError(404, "קוד לא נמצא")
 
+    # ------------------------------------------------------------ הקמת Device Owner ב-QR
+
+    _apk_cache: tuple[tuple, str] = ((), "")
+
+    def _apk_checksum(self, path: Path) -> str:
+        """SHA-256 של קובץ ה-APK, ב-base64 בטוח לכתובות (כמו שאנדרואיד מצפה). נשמר לפי זמן שינוי."""
+        st = path.stat()
+        key = (str(path), st.st_mtime_ns, st.st_size)
+        if self._apk_cache[0] == key:
+            return self._apk_cache[1]
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        value = base64.urlsafe_b64encode(h.digest()).decode().rstrip("=")
+        self._apk_cache = (key, value)
+        return value
+
+    def provisioning(self, level: int, label: str, wifi_ssid: str = "", wifi_password: str = "",
+                     wifi_security: str = "WPA") -> dict:
+        """קוד QR להקמת טלפון מאופס כ"מנהל מכשיר" (Android Enterprise, fully managed).
+
+        הטלפון מוריד את ה-APK מדף ההורדה, בודק את הטביעה, מתקין ומגדיר את FilterPhone כמנהל המכשיר,
+        ומקבל קוד הפעלה חד-פעמי (בתוך ה-QR) — כך שהוא מתחבר לסינון לבד, בלי הקלדה."""
+        if level not in LEVEL_NAMES or level == 0:
+            raise ApiError(400, "רמה לא חוקית")
+        apk = Path(self.cfg.apk_dir) / "FilterPhone-universal.apk"
+        if not apk.is_file():
+            raise ApiError(409, "קובץ האפליקציה עוד לא פורסם בשרת (FilterPhone-universal.apk בדף ההורדה)")
+        code = self.create_code(security.clean_text(label, 60) or "Device Owner (QR)", level, 1, 2)
+        base = f"https://{self.cfg.public_host}"
+        extras = {"fp_api": base, "fp_code": code["code"]}
+        payload: dict = {
+            "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "com.filterphone.app/.DeviceAdmin",
+            "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION":
+                f"{base}/download/FilterPhone-universal.apk",
+            "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM": self._apk_checksum(apk),
+            "android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED": True,
+            "android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE": extras,
+        }
+        sig = self.cfg.apk_signature_sha256.replace(":", "").strip().lower()
+        if len(sig) == 64:
+            payload["android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM"] = \
+                base64.urlsafe_b64encode(bytes.fromhex(sig)).decode().rstrip("=")
+        if wifi_ssid:
+            payload["android.app.extra.PROVISIONING_WIFI_SSID"] = security.clean_text(wifi_ssid, 32)
+            payload["android.app.extra.PROVISIONING_WIFI_SECURITY_TYPE"] = \
+                wifi_security if wifi_security in ("WPA", "WEP", "NONE") else "WPA"
+            if wifi_password:
+                payload["android.app.extra.PROVISIONING_WIFI_PASSWORD"] = wifi_password[:63]
+        import segno
+
+        text = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+        qr = segno.make(text, error="m")
+        return {"payload": payload, "qr": qr.svg_data_uri(scale=5, border=4), "code": code,
+                "apk_sha256": payload["android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM"]}
+
     # ------------------------------------------------------------ אירועים וסטטיסטיקה
 
     def device_stats(self, ip: str, day: str | None = None) -> dict[str, int]:
@@ -836,9 +1089,14 @@ class Services:
             expiring = c.execute("SELECT count(*) FROM customers WHERE payment = 'paid' AND paid_until IS NOT NULL"
                                  " AND paid_until < ?", (t + 7 * 86400,)).fetchone()[0]
         assert self.adguard is not None
+        states: dict[str, int] = {}
+        for d in devices:
+            st = d["compliance"]["state"]
+            states[st] = states.get(st, 0) + 1
         return {
             "devices": len(devices), "online": sum(d["online"] for d in devices),
             "active": sum(d["status"] == "active" for d in devices),
+            "compliance": states,
             "pending": {r["kind"]: r["n"] for r in pending}, "expiring": expiring,
             "today": totals, "week": self.stats_range(7),
             "levels": LEVEL_NAMES, "adguard": self.adguard.state(),
@@ -922,10 +1180,48 @@ class Services:
         out["online"] = sum(1 for p in peers.values() if p.latest_handshake and t - p.latest_handshake < ONLINE_WINDOW_S)
         return out
 
+    _fleet_cache: tuple[float, dict | None] = (0.0, None)
+
+    def fleet_summary(self, max_age_s: float = 30.0) -> dict:
+        """מצב כל המכשירים (תאימות, תקלות ב-24 שעות) — למדדים ולממשק. מחושב לכל היותר פעם ב-30 שניות."""
+        at, cached = self._fleet_cache
+        if cached is not None and time.monotonic() - at < max_age_s:
+            return cached
+        try:
+            peers = self.wg.peers()
+        except WireGuardError:
+            peers = {}
+        t = db.now()
+        states: dict[str, int] = {}
+        issues: dict[str, int] = {}
+        with self.db() as c:
+            rows = c.execute("SELECT * FROM devices").fetchall()
+            events = c.execute("SELECT kind, count(*) AS n FROM device_log WHERE ts > ? GROUP BY kind",
+                               (t - 86400,)).fetchall()
+        for r in rows:
+            p = peers.get(r["public_key"])
+            comp = self.compliance_of(r, p.latest_handshake if p else 0, t)
+            states[comp.state] = states.get(comp.state, 0) + 1
+            for i in comp.issues:
+                issues[i["code"]] = issues.get(i["code"], 0) + 1
+        summary_ = {"states": states, "issues": issues, "events_24h": {e["kind"]: e["n"] for e in events},
+                    "total": len(rows)}
+        self._fleet_cache = (time.monotonic(), summary_)
+        return summary_
+
     def device_metrics_text(self) -> str:
         counts = self.device_counts()
+        fleet = self.fleet_summary()
         lines = ["# HELP fp_devices מכשירים לפי סטטוס", "# TYPE fp_devices gauge"]
         lines += [f'fp_devices{{status="{k}"}} {v}' for k, v in sorted(counts.items())]
+        lines += ["# HELP fp_devices_compliance מכשירים לפי מצב תאימות (green/yellow/red/inactive)",
+                  "# TYPE fp_devices_compliance gauge"]
+        lines += [f'fp_devices_compliance{{state="{k}"}} {v}' for k, v in sorted(fleet["states"].items())]
+        lines += ["# HELP fp_device_issues מכשירים עם כל סוג תקלה", "# TYPE fp_device_issues gauge"]
+        lines += [f'fp_device_issues{{issue="{k}"}} {v}' for k, v in sorted(fleet["issues"].items())]
+        lines += ["# HELP fp_device_events_24h אירועי מכשירים ב-24 השעות האחרונות (כיבוי VPN / מגן...)",
+                  "# TYPE fp_device_events_24h gauge"]
+        lines += [f'fp_device_events_24h{{kind="{k}"}} {v}' for k, v in sorted(fleet["events_24h"].items())]
         return "\n".join(lines) + "\n"
 
     def system_status(self) -> dict:
@@ -935,6 +1231,7 @@ class Services:
         return {
             "checks": self.readiness(),
             "devices": self.device_counts(),
+            "fleet": self.fleet_summary(),
             "engine": engine["metrics"] if engine else None,
             "proxy": proxy,
             "api": observe_snapshot(),

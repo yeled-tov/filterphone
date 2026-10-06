@@ -65,6 +65,8 @@ class Settings:
     offline_after_s: int = 1800         # בלי דיווח ובלי handshake יותר מזה — "לא מחובר"
     lost_after_s: int = 172_800         # בלי שום קשר יומיים — אדום ("אין קשר")
     sync_grace_s: int = 1500            # מדיניות שלא אושרה ע"י הטלפון יותר מזה — "סנכרון מתעכב"
+    apk_dir: str = "/var/www/filterphone"   # דף ההורדה — שם נמצא ה-APK להקמת Device Owner ב-QR
+    apk_signature_sha256: str = ""      # טביעת תעודת החתימה (hex) — אופציונלי, מחזק את בדיקת ה-QR
 
     # --- AdGuard (שכבת ה-DNS של החסימות לפי מכשיר). בלי משתמש/סיסמה — רק הפרוקסי אוכף ---
     adguard_url: str = "http://127.0.0.1:3002"

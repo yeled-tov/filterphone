@@ -9,6 +9,8 @@
     GET  /v1/device/vpn         — הגדרות ה-VPN + התעודה (רק למכשיר פעיל)
     POST /v1/device/requests    — בקשת שינוי (רמה / חסימות) — רק המנהל מבצע
     POST /v1/device/report      — דיווח: אפליקציות מותקנות + מצב ההגנה בטלפון
+    POST /v1/device/heartbeat   — דיווח תקופתי (גם מהרקע): VPN, נגישות, מנהל מכשיר, סוללה,
+                                  גרסת המדיניות שהוחלה. התשובה: המדיניות העדכנית אם הטלפון מאחור
     GET  /v1/ca.crt             — תעודת הסינון להתקנה בטלפון
 ניהול (טוקן מנהל): /v1/admin/...      ממשק הניהול: /admin
 ניטור: /health (התהליך חי), /ready (מסד, Redis, מנוע, WireGuard, AdGuard), /metrics (Prometheus —
@@ -53,6 +55,7 @@ enroll_limiter = RateLimiter(limit=10, window_s=600)
 register_limiter = RateLimiter(limit=5, window_s=3600)
 login_limiter = RateLimiter(limit=8, window_s=600)
 device_limiter = RateLimiter(limit=30, window_s=600)       # בקשות שינוי / דיווחים מהטלפון
+heartbeat_limiter = RateLimiter(limit=40, window_s=600)    # דיווח תקופתי: כל 15 דקות + רענון ידני
 
 
 def build_services() -> Services:
@@ -204,6 +207,16 @@ AdminRow = Annotated[Any, Depends(admin_dep)]
 AuthHeader = Annotated[str | None, Header()]
 
 
+def _state_matches(d: dict, state: str) -> bool:
+    c = d["compliance"]
+    return {
+        "offline": d["status"] == "active" and not c["online"],
+        "vpn_inactive": d["status"] == "active" and c["vpn"] != "up",
+        "accessibility_off": c["accessibility"] == "off",
+        "unmanaged": d["status"] == "active" and c["management"] != "device_owner",
+    }.get(state, c["state"] == state)
+
+
 def client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 
@@ -253,6 +266,21 @@ class ReportIn(BaseModel):
     guard: dict[str, bool | str | int] | None = None
 
 
+class HeartbeatIn(BaseModel):
+    """שדות לא מוכרים נזרקים; סוגים לא נכונים — מתעלמים מהם (sanitize_heartbeat)."""
+    model_config = {"extra": "allow"}
+    policy_version: int | None = Field(default=None, ge=0, le=10**9)
+    want_policy: bool = False
+
+
+class ProvisionIn(BaseModel):
+    level: int = 1
+    label: str = Field(default="", max_length=80)
+    wifi_ssid: str = Field(default="", max_length=32)
+    wifi_password: str = Field(default="", max_length=63)
+    wifi_security: str = Field(default="WPA", max_length=8)
+
+
 class LoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=1, max_length=200)
@@ -267,7 +295,9 @@ class DevicePatch(BaseModel):
     custom_hosts: list[str] | None = Field(default=None, max_length=500)
     allow_hosts: list[str] | None = Field(default=None, max_length=500)
     custom_apps: list[str] | None = Field(default=None, max_length=500)
+    app_rules: list[dict] | None = Field(default=None, max_length=500)
     app_images: str | None = None
+    dpc: dict | None = None
 
 
 class Decision(BaseModel):
@@ -382,6 +412,14 @@ def _routes(app: FastAPI) -> None:
         apps = [a.model_dump() for a in body.apps] if body.apps is not None else None
         return svc.report_device(row, apps, body.guard)
 
+    @app.post("/v1/device/heartbeat")
+    def device_heartbeat(body: HeartbeatIn, request: Request, svc: SvcDep, row: DeviceRow):
+        _limit(heartbeat_limiter, f"hb:{row['id']}")
+        raw = body.model_dump()
+        if len(str(raw)) > 20_000:
+            raise ApiError(413, "הדיווח גדול מדי")
+        return svc.heartbeat(row, raw, client_ip(request))
+
     @app.get("/v1/ca.crt")
     def ca(svc: SvcDep):
         return PlainTextResponse(svc.ca_pem(), media_type="application/x-x509-ca-cert",
@@ -423,8 +461,12 @@ def _routes(app: FastAPI) -> None:
     # --- ניהול: מכשירים ---
 
     @app.get("/v1/admin/devices")
-    def devices(svc: SvcDep, _: AdminRow):
-        return svc.list_devices()
+    def devices(svc: SvcDep, _: AdminRow, state: str | None = None):
+        """state: green / yellow / red / inactive / offline / vpn_inactive / accessibility_off / unmanaged."""
+        out = svc.list_devices()
+        if state:
+            out = [d for d in out if _state_matches(d, state)]
+        return out
 
     @app.get("/v1/admin/devices/{device_id}")
     def device_detail(device_id: int, svc: SvcDep, _: AdminRow):
@@ -523,6 +565,16 @@ def _routes(app: FastAPI) -> None:
     @app.get("/v1/admin/levels")
     def levels(_: AdminRow):
         return LEVEL_NAMES
+
+    @app.post("/v1/admin/provisioning")
+    def provisioning(body: ProvisionIn, svc: SvcDep, admin: AdminRow):
+        r = svc.provisioning(body.level, body.label, body.wifi_ssid, body.wifi_password, body.wifi_security)
+        svc.audit(admin["username"], "provisioning_qr", f"code:{r['code']['id']}", f"level:{body.level}")
+        return r
+
+    @app.get("/v1/admin/fleet")
+    def fleet(svc: SvcDep, _: AdminRow):
+        return svc.fleet_summary(max_age_s=5)
 
     @app.get("/v1/admin/system")
     def system(svc: SvcDep, _: AdminRow):

@@ -111,6 +111,21 @@ def seed(svc: Services) -> None:
             for what, base in (("scanned", 900), ("block", 60), ("replace", 15), ("site", 25)):
                 svc.redis.hset(f"fp:stats:{day}", f"{d['vpn_ip']}|{what}", int(base * random.uniform(.3, 1.4)))
     svc.redis.hset("fp:pt", f"{galaxy['vpn_ip']}|api.someapp.com", now + 86400)
+    # דיווחים תקופתיים (heartbeat) — כדי לראות את מצבי התאימות בממשק
+    good = {"app_version": "2.0.0", "sdk": 34, "ca_installed": True, "battery_unrestricted": True,
+            "vpn": {"state": "UP", "always_on": True, "lockdown": True, "last_health_ok": now - 120},
+            "accessibility": {"enabled": True, "running": True}, "private_dns": "off",
+            "protections": {"apps_blocked": 12, "screens_blocked": 3, "wa_profile_photo": 2}}
+    variants = [
+        {**good, "device_owner": True, "dpc": {"applied": ["block_uninstall", "always_on_vpn", "disallow_safe_boot"]}},
+        {**good, "accessibility": {"enabled": False}},                      # אדום: המגן כובה
+        {**good, "battery_unrestricted": False},                            # צהוב: סוללה
+        {**good, "vpn": {"state": "UP", "always_on": False}},               # צהוב: בלי תמיד-מופעל
+    ]
+    for d, hb in zip(active, variants, strict=False):
+        row = svc.device_row(d["id"])
+        svc.heartbeat(row, {**hb, "policy_version": row["policy_version"]}, d["vpn_ip"])
+        svc.heartbeat(svc.device_row(d["id"]), {**hb, "policy_version": row["policy_version"]}, d["vpn_ip"])
     print(f"נתוני דוגמה: {len(svc.list_devices())} מכשירים, {len(svc.list_requests())} בקשות ממתינות")
     json.dumps(tokens)
 
@@ -118,7 +133,8 @@ def seed(svc: Services) -> None:
 def main() -> None:
     tmp = Path(tempfile.mkdtemp(prefix="fp-dev-"))
     (tmp / "ca.pem").write_text(CA)
-    cfg = Settings(data_dir=str(tmp), mitm_ca_cert=str(tmp / "ca.pem"),
+    (tmp / "FilterPhone-universal.apk").write_bytes(b"PK\x03\x04 demo apk")      # ל-QR של Device Owner
+    cfg = Settings(data_dir=str(tmp), mitm_ca_cert=str(tmp / "ca.pem"), apk_dir=str(tmp),
                    run_dir=os.environ.get("FP_RUN_DIR", str(tmp)))
     db.init(cfg.db_path)
     svc = Services(cfg, FakeWG(), fakeredis.FakeRedis(decode_responses=True))

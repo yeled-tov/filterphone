@@ -1,4 +1,4 @@
-"""הגירת מסד קיים (גרסה 0 — מה שרץ היום בשרת) לגרסה 1, בלי לאבד אף מכשיר, קוד או מנהל."""
+"""הגירת מסד קיים (גרסה 0 — מה שרץ היום בשרת) לגרסה האחרונה, בלי לאבד אף מכשיר, קוד או מנהל."""
 import json
 import sqlite3
 
@@ -59,7 +59,7 @@ def _services(tmp_path) -> Services:
 def test_migration_keeps_every_device_code_and_admin(tmp_path):
     svc = _services(tmp_path)
     with db.closing(db.connect(svc.cfg.db_path)) as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == db.VERSION == 1
+        assert c.execute("PRAGMA user_version").fetchone()[0] == db.VERSION == 2
         assert c.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert c.execute("PRAGMA foreign_key_check").fetchall() == []
         rows = c.execute("SELECT * FROM devices ORDER BY id").fetchall()
@@ -73,6 +73,11 @@ def test_migration_keeps_every_device_code_and_admin(tmp_path):
             assert row["token_hash"] == (security.token_hash(token) if token else None)
             assert row["approved_at"] == created          # מכשיר קיים = אושר כשנוצר
             assert row["policy"] == "{}" and row["customer_id"] is None and row["apps"] is None
+            # גרסה 2: גרסת מדיניות התחלתית, בלי דיווח עדיין
+            assert row["policy_version"] == 1 and row["device_policy_version"] is None
+            assert row["heartbeat"] is None and row["managed_at"] is None
+        assert c.execute("SELECT value FROM meta WHERE key = 'policy_revision'").fetchone()[0] == "0"
+        assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
         assert c.execute("SELECT count(*) FROM codes").fetchone()[0] == 2
         assert c.execute("SELECT uses_left FROM codes WHERE id = 2").fetchone()[0] == 2
         assert c.execute("SELECT count(*) FROM admin_sessions").fetchone()[0] == 1
@@ -82,7 +87,7 @@ def test_migration_keeps_every_device_code_and_admin(tmp_path):
     # הרצה חוזרת (אתחול נוסף של ה-API) לא משנה כלום
     db.init(svc.cfg.db_path)
     with db.closing(db.connect(svc.cfg.db_path)) as c:
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 2
         assert c.execute("SELECT count(*) FROM devices").fetchone()[0] == len(DEVICES)
 
 

@@ -9,6 +9,40 @@ const KINDS = { image: "תמונה", inline: "תמונה מוטמעת", host: "�
 const STATUS = { active: ["on", "פעיל"], disabled: ["off", "מושבת"], pending: ["wait", "ממתין לאישור"], rejected: ["off", "נדחה"] };
 const PAYMENT = { unpaid: ["bad", "לא שולם"], paid: ["ok", "שולם"], free: ["accent", "חינם"] };
 const MECH = { network: ["accent", "רשת"], device: ["violet", "בטלפון"], proxy: ["accent", "סינון"] };
+// מצב תאימות (מחושב בשרת מהדיווח של הטלפון ומ-WireGuard)
+const COMPLIANCE = {
+  green: ["ok", "מוגן"], yellow: ["warn", "חלקי"], red: ["bad", "ההגנה לא פועלת"], inactive: ["", "לא פעיל"],
+};
+const DEVICE_FILTERS = {
+  "": "כל המכשירים", green: "מוגנים (ירוק)", yellow: "חלקי (צהוב)", red: "ההגנה לא פועלת (אדום)",
+  offline: "לא מחוברים", vpn_inactive: "VPN לא פעיל", accessibility_off: "מגן FilterPhone כבוי",
+  unmanaged: "בלי מנהל מכשיר", sync: "מדיניות לא סונכרנה",
+};
+const APP_MODES = {
+  "": ["", "פתוח"], network: ["accent", "רשת"], accessibility: ["violet", "בטלפון"], both: ["bad", "רשת + טלפון"],
+};
+const DPC_LABELS = {
+  block_uninstall: ["מניעת הסרה של FilterPhone", "אי אפשר להסיר את האפליקציה מהטלפון."],
+  always_on_vpn: ["VPN תמיד מופעל + חסימה בלי VPN", "הסינון קבוע; בלי VPN אין אינטרנט בכלל."],
+  disallow_config_vpn: ["חסימת הגדרות VPN", "אי אפשר לנתק או להחליף VPN."],
+  disallow_factory_reset: ["חסימת איפוס מההגדרות", "איפוס יצרן מתוך מסך ההגדרות חסום. איפוס בכפתורי החומרה (מצב שחזור) — אפשרי תמיד; ראו FRP."],
+  disallow_safe_boot: ["חסימת מצב בטוח", "מצב בטוח עוקף אפליקציות — חסום."],
+  disallow_add_user: ["חסימת משתמשים נוספים", "אי אפשר ליצור משתמש / אורח (שבהם אין סינון)."],
+  disallow_unknown_sources: ["חסימת התקנת APK", "אי אפשר להתקין אפליקציות מקבצים."],
+  disallow_private_dns: ["חסימת DNS פרטי", "אי אפשר להגדיר DNS שעוקף את הסינון."],
+  disallow_debugging: ["חסימת ניפוי באגים (ADB)", "מומלץ אחרי שהמכשיר עובד. כשזה פעיל קשה יותר לתקן תקלות מרחוק."],
+  disallow_install_apps: ["חסימת התקנת אפליקציות", "גם מהחנות — רק המנהל מוסיף אפליקציות."],
+  disallow_modify_accounts: ["חסימת הוספת חשבונות", "אי אפשר להוסיף / להסיר חשבון Google ואחרים."],
+  hide_blocked_apps: ["הסתרת אפליקציות חסומות", "אפליקציה חסומה נעלמת מהטלפון (במקום חסימה בנגישות)."],
+};
+const ANDROID = { 26: "8.0", 27: "8.1", 28: "9", 29: "10", 30: "11", 31: "12", 32: "12L", 33: "13", 34: "14", 35: "15", 36: "16" };
+const LOG_KINDS = {
+  vpn_up: ["ok", "VPN חזר"], vpn_down: ["bad", "VPN כבה"], accessibility_on: ["ok", "המגן הופעל"],
+  accessibility_off: ["bad", "המגן כובה"], management_on: ["ok", "מנהל מכשיר פעיל"],
+  management_removed: ["bad", "מנהל המכשיר הוסר"], battery_unrestricted: ["ok", "סוללה: ללא הגבלה"],
+  battery_restricted: ["warn", "סוללה: מוגבלת"], outside_vpn: ["bad", "דיווח מחוץ למנהרה"], policy_error: ["warn", "שגיאת מדיניות"],
+};
+
 const APP_IMAGES = {
   auto: ["לפי הרמה", "ברמות 1–2 חסום, ברמה 3 מותר"],
   block: ["חסום", "תמונות באפליקציות שאי אפשר לסנן (אינסטגרם, אליאקספרס, גוגל...) לא נטענות"],
@@ -91,6 +125,22 @@ function statusChip(status) {
   return el("span", { class: "row gap nowrap" }, el("span", { class: `dot ${k}` }), t);
 }
 function paymentChip(p) { const [k, t] = PAYMENT[p] || ["", p || "—"]; return chip(t, k); }
+function complianceChip(c) {
+  const [k, t] = COMPLIANCE[c?.state] || ["", "—"];
+  return el("span", { class: "row gap nowrap" }, el("span", { class: `dot ${k === "ok" ? "on" : k === "bad" ? "off" : k === "warn" ? "wait" : ""}` }), t);
+}
+function matchesFilter(d, f) {
+  const c = d.compliance || {};
+  switch (f) {
+    case "": return true;
+    case "offline": return d.status === "active" && !c.online;
+    case "vpn_inactive": return d.status === "active" && c.vpn !== "up";
+    case "accessibility_off": return c.accessibility === "off";
+    case "unmanaged": return d.status === "active" && c.management !== "device_owner";
+    case "sync": return c.policy_sync === "pending" || c.policy_sync === "syncing";
+    default: return c.state === f;
+  }
+}
 function levelBadge(lv) { return el("span", { class: `level-badge lv${lv}` }, `${lv} · ${levelName(lv)}`); }
 function card(title, sub, ...children) {
   return el("section", { class: "card" },
@@ -347,6 +397,8 @@ async function viewOverview() {
       tile(pendingN, "בקשות ממתינות", pendingN ? "alert" : "", "#/requests"),
       tile(o.active, "מכשירים פעילים", "accent", "#/devices"),
       tile(o.online, "מחוברים עכשיו"),
+      tile(o.compliance?.red || 0, "ההגנה לא פועלת", o.compliance?.red ? "alert" : "", "#/devices?state=red"),
+      tile(o.compliance?.yellow || 0, "הגנה חלקית", "", "#/devices?state=yellow"),
       tile(t.scanned || 0, "תמונות נבדקו היום"),
       tile(t.block || 0, "נחסמו היום", "", "#/events?action=block"),
       tile(t.replace || 0, "נצבעו היום", "", "#/events?action=replace"),
@@ -473,16 +525,23 @@ async function viewDevices(arg, query) {
     Object.entries(STATUS).map(([k, [, t]]) => el("option", { value: k }, t)));
   const level = el("select", {}, el("option", { value: "" }, "כל הרמות"),
     catalog.levels.map((l) => el("option", { value: l.level }, `${l.level} · ${l.name}`)));
+  const health = el("select", { "aria-label": "מצב הגנה" }, Object.entries(DEVICE_FILTERS).map(([k, t]) =>
+    el("option", { value: k, selected: k === (query.get("state") || "") }, t)));
   const body = el("tbody");
+  const rank = { red: 0, yellow: 1, green: 2, inactive: 3 };
   const draw = () => {
     const q = search.value.trim().toLowerCase();
     const rows = list.filter((d) => (!customerFilter || String(d.customer_id) === customerFilter)
       && (!status.value || d.status === status.value) && (!level.value || String(d.level) === level.value)
-      && (!q || [d.name, d.label, d.vpn_ip, d.customer?.name, d.customer?.phone].some((x) => (x || "").toLowerCase().includes(q))));
+      && matchesFilter(d, health.value)
+      && (!q || [d.name, d.label, d.vpn_ip, d.customer?.name, d.customer?.phone].some((x) => (x || "").toLowerCase().includes(q))))
+      .sort((a, b) => (rank[a.compliance?.state] ?? 9) - (rank[b.compliance?.state] ?? 9));
     body.replaceChildren(...rows.map((d) => el("tr", { class: "click", onclick: () => { location.hash = `#/devices/${d.id}`; } },
       el("td", {}, el("b", {}, d.name), el("small", {}, [d.customer?.name, d.customer?.phone, d.vpn_ip].filter(Boolean).join(" · "))),
-      el("td", {}, d.status === "active" ? el("span", { class: "row gap nowrap" }, el("span", { class: `dot ${d.online ? "on" : ""}` }),
-        d.online ? "מחובר" : "לא מחובר") : statusChip(d.status)),
+      el("td", {}, d.status === "active" ? el("div", { class: "stack tight" }, complianceChip(d.compliance),
+        el("small", {}, [d.compliance.online ? "מחובר" : "לא מחובר",
+          d.compliance.issues.length ? d.compliance.issues[0].text : null].filter(Boolean).join(" · ")))
+        : statusChip(d.status)),
       el("td", {}, levelBadge(d.level)),
       el("td", {}, d.blocks.length ? el("div", { class: "chips" }, d.blocks.slice(0, 4).map((b) => chip(b.title)),
         d.blocks.length > 4 ? chip(`+${d.blocks.length - 4}`) : null) : el("span", { class: "muted" }, "—")),
@@ -491,15 +550,19 @@ async function viewDevices(arg, query) {
       el("td", {}, d.customer ? paymentChip(d.customer.payment) : null))));
     if (!rows.length) body.replaceChildren(el("tr", {}, el("td", { colspan: 7 }, empty("לא נמצאו מכשירים."))));
   };
-  [search, status, level].forEach((x) => x.addEventListener("input", draw));
+  [search, status, level, health].forEach((x) => x.addEventListener("input", draw));
   draw();
   autoRefresh(async () => { const fresh = await api("/v1/admin/devices"); list.splice(0, list.length, ...fresh); draw(); }, 20000);
   topAction("רענון", render);
+  const counts = list.reduce((m, d) => { m[d.compliance?.state] = (m[d.compliance?.state] || 0) + 1; return m; }, {});
   return [
-    el("div", { class: "row gap" }, el("div", { class: "grow" }, search), status, level,
+    el("div", { class: "row gap" }, ["red", "yellow", "green"].map((k) => el("button", {
+      class: `ghost small${health.value === k ? " selected" : ""}`, onclick: () => { health.value = k; draw(); },
+    }, complianceChip({ state: k }), ` ${counts[k] || 0}`))),
+    el("div", { class: "row gap" }, el("div", { class: "grow" }, search), health, status, level,
       customerFilter ? el("a", { href: "#/devices" }, el("button", { class: "ghost small" }, "הצג את כל הלקוחות")) : null),
     el("section", { class: "card" }, el("div", { class: "table-wrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, el("th", {}, "מכשיר"), el("th", {}, "מצב"), el("th", {}, "רמה"), el("th", {}, "חסימות"),
+      el("thead", {}, el("tr", {}, el("th", {}, "מכשיר"), el("th", {}, "הגנה"), el("th", {}, "רמה"), el("th", {}, "חסימות"),
         el("th", {}, "היום"), el("th", {}, "נראה לאחרונה"), el("th", {}, "תשלום"))), body))),
   ];
 }
@@ -521,8 +584,9 @@ async function viewDevice(id) {
       el("span", { class: "avatar" }, d.name.slice(0, 1)),
       el("div", { class: "grow stack tight" },
         el("div", { class: "row gap" }, el("h2", {}, d.name), statusChip(d.status),
-          active ? el("span", { class: "row gap nowrap small" }, el("span", { class: `dot ${d.online ? "on" : ""}` }),
-            d.online ? "מחובר עכשיו" : `לא מחובר · ${ago(d.last_handshake || d.last_seen_at)}`) : null),
+          active ? complianceChip(d.compliance) : null,
+          active ? el("span", { class: "row gap nowrap small" }, el("span", { class: `dot ${d.compliance.online ? "on" : ""}` }),
+            d.compliance.online ? "מחובר עכשיו" : `לא מחובר · ${ago(d.compliance.last_contact)}`) : null),
         el("p", { class: "muted small" }, [d.platform, d.app_version && `גרסה ${d.app_version}`, d.vpn_ip, `נרשם ${date(d.created_at)}`].filter(Boolean).join(" · "))),
       el("div", { class: "actions" },
         el("button", { class: "ghost small", onclick: async () => {
@@ -595,31 +659,22 @@ async function viewDevice(id) {
   const ta = (key, ph) => el("textarea", { class: "ltr", rows: 4, placeholder: ph, value: (d.settings[key] || []).join("\n") });
   const hosts = ta("custom_hosts", "example.co.il");
   const allow = ta("allow_hosts", "kosher-site.co.il");
-  const apps = ta("custom_apps", "com.example.game");
-  const customCard = card("אתרים ואפליקציות — ידני", "חסימה של כל אתר או אפליקציה שלא ברשימה, ורשימת היתר (מסירה חסימה מאתר מסוים).",
-    el("div", { class: "grid three" },
+  const customCard = card("אתרים — ידני", "חסימה של כל אתר שלא ברשימה, ורשימת היתר (מסירה חסימה מאתר מסוים). אפליקציות — בכרטיס 'האפליקציות בטלפון'.",
+    el("div", { class: "grid two" },
       el("label", {}, "אתרים לחסימה", hosts),
-      el("label", {}, "אתרים מותרים (חריגים)", allow),
-      el("label", {}, "אפליקציות לחסימה (שם חבילה)", apps)),
+      el("label", {}, "אתרים מותרים (חריגים)", allow)),
     el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
-      await patch({ custom_hosts: lines(hosts.value), allow_hosts: lines(allow.value), custom_apps: lines(apps.value) });
+      await patch({ custom_hosts: lines(hosts.value), allow_hosts: lines(allow.value) });
       render();
     } }, "שמירה")));
 
   // --- האפליקציות בטלפון
   const appsCard = phoneAppsCard(d, patch);
 
-  // --- מצב ההגנה בטלפון
-  const g = d.guard || {};
-  const yesNo = (v, good = true) => v === undefined ? chip("לא דווח") : chip(v ? "כן" : "לא", v === good ? "ok" : "bad");
-  const guardCard = card("ההגנה בטלפון", d.guard_at ? `דיווח אחרון ${ago(d.guard_at)}` : "הטלפון עוד לא דיווח (גרסת אפליקציה ישנה?)", kv([
-    ["מגן FilterPhone (נגישות)", yesNo(g.accessibility)],
-    ["מנהל מכשיר (Device Owner)", yesNo(g.device_owner)],
-    ["VPN תמיד מופעל", yesNo(g.always_on)],
-    ["חסימת חיבורים בלי VPN", yesNo(g.lockdown)],
-    ["תעודת סינון מותקנת", yesNo(g.ca_installed)],
-    ["DNS פרטי (עוקף)", g.private_dns === undefined ? chip("לא דווח") : chip(g.private_dns === "hostname" ? "מופעל — עוקף!" : "כבוי", g.private_dns === "hostname" ? "bad" : "ok")],
-  ]));
+  // --- מצב ההגנה בטלפון (תאימות)
+  const complianceCardEl = complianceCard(d);
+  const logCard = deviceLogCard(d);
+  const dpcCardEl = dpcCard(d, patch);
 
   // --- סטטיסטיקה ואירועים
   const statsCard = card("7 הימים האחרונים", null, statsBars(d.history));
@@ -641,44 +696,146 @@ async function viewDevice(id) {
       el("td", {}, r.note || ""))))))) : null;
 
   return [back, header,
-    el("div", { class: "grid two" }, customerCard, guardCard),
-    levelCard, policyCard, appImagesCard, customCard, appsCard,
+    complianceCardEl,
+    el("div", { class: "grid two" }, customerCard, logCard),
+    levelCard, policyCard, appsCard, appImagesCard, customCard, dpcCardEl,
     el("div", { class: "grid two" }, statsCard, learnedCard),
     eventsCard, historyCard];
 }
 
+function yesNo(v, good = true, unknown = "לא דווח") {
+  return v === undefined || v === null ? chip(unknown) : chip(v ? "כן" : "לא", v === good ? "ok" : "bad");
+}
+
+function complianceCard(d) {
+  const c = d.compliance;
+  const hb = d.heartbeat || {};
+  const g = d.guard || {};
+  const vpn = hb.vpn || {};
+  const acc = hb.accessibility || {};
+  const tamper = hb.tamper || {};
+  const pick = (a, b) => (a === undefined ? b : a);
+  const syncText = d.device_policy_version === null || d.device_policy_version === undefined
+    ? chip("הטלפון עוד לא אישר גרסה", "warn")
+    : d.device_policy_version >= d.policy_version ? chip("מסונכרן", "ok")
+      : chip("Policy synchronization pending — ממתין לטלפון", c.policy_sync === "pending" ? "bad" : "warn");
+  const issues = c.issues.length ? el("ul", { class: "issues" }, c.issues.map((i) =>
+    el("li", { class: i.severity === "red" ? "bad" : "warn" }, i.text))) : el("p", { class: "ok-text" }, "✓ כל רכיבי ההגנה פועלים.");
+  return card("מצב ההגנה בטלפון", d.heartbeat_at ? `דיווח אחרון מהטלפון ${ago(d.heartbeat_at)}` : "הטלפון עוד לא שלח דיווח תקופתי (גרסת אפליקציה ישנה?)",
+    el("div", { class: "row gap" }, el("span", { class: `state-badge ${c.state}` }, COMPLIANCE[c.state]?.[1] || c.state)),
+    issues,
+    el("div", { class: "grid two" },
+      kv([
+        ["VPN (סינון)", c.vpn === "up" ? chip("פעיל", "ok") : c.vpn === "down" ? chip("כבוי", "bad") : chip("לא ידוע")],
+        ["VPN — נראה לאחרונה", ago(d.last_handshake)],
+        ["סינון רשת (הדיווח עבר דרך המנהרה)", yesNo(hb.via_vpn)],
+        ["VPN תמיד מופעל", yesNo(pick(vpn.always_on, g.always_on))],
+        ["חסימת חיבורים בלי VPN", yesNo(pick(vpn.lockdown, g.lockdown))],
+        ["בדיקת VPN אחרונה שעברה", ago(vpn.last_health_ok)],
+        ["מגן FilterPhone (נגישות)", c.accessibility === "not_required" ? chip("לא נדרש") : c.accessibility === "on"
+          ? chip(acc.running === false ? "מופעל אבל לא רץ" : "פעיל", acc.running === false ? "warn" : "ok")
+          : c.accessibility === "off" ? chip("כבוי", "bad") : chip("לא דווח")],
+        ["חסימות שבוצעו בטלפון", hb.protections ? `${num(hb.protections.apps_blocked)} אפליקציות · ${num(hb.protections.screens_blocked)} מסכים · ${num(hb.protections.wa_profile_photo)} תמונות פרופיל` : "—"],
+      ]),
+      kv([
+        ["מנהל מכשיר (Device Owner)", yesNo(pick(hb.device_owner, g.device_owner))],
+        ["מנהל מכשיר רגיל (Device Admin)", yesNo(pick(hb.device_admin, g.device_admin), true, "לא דווח")],
+        ["ניהול / שיבוש", d.managed_at && hb.device_owner === false ? chip("הניהול הוסר!", "bad")
+          : tamper.adb ? chip("ADB פעיל", "warn") : tamper.dev_options ? chip("אפשרויות מפתחים פעילות", "warn") : chip("תקין", "ok")],
+        ["אופטימיזציית סוללה", pick(hb.battery_unrestricted, g.battery_unrestricted) === undefined ? chip("לא דווח")
+          : pick(hb.battery_unrestricted, g.battery_unrestricted) ? chip("ללא הגבלה", "ok") : chip("מוגבלת", "warn")],
+        ["תעודת סינון", yesNo(pick(hb.ca_installed, g.ca_installed))],
+        ["גרסת אפליקציה", d.app_version || hb.app_version || "—"],
+        ["אנדרואיד", hb.sdk ? `${ANDROID[hb.sdk] || "?"} (API ${hb.sdk})` : "—"],
+        ["גרסת מדיניות בשרת / בטלפון", el("span", { class: "row gap" }, `${d.policy_version} / ${d.device_policy_version ?? "—"}`, syncText)],
+        ["סנכרון מדיניות אחרון", ago(d.policy_ack_at || hb.last_policy_sync)],
+      ])));
+}
+
+function deviceLogCard(d) {
+  const list = d.device_log || [];
+  return card("יומן הטלפון", "שינויים במצב ההגנה כפי שדווחו (כיבוי VPN, כיבוי המגן, הסרת ניהול...)",
+    list.length ? el("div", { class: "table-wrap" }, el("table", {}, el("tbody", {}, list.map((e) => el("tr", {},
+      el("td", { class: "nowrap" }, dateTime(e.ts)),
+      el("td", {}, chip((LOG_KINDS[e.kind] || ["", e.kind])[1], (LOG_KINDS[e.kind] || [""])[0])),
+      el("td", { class: "small" }, e.detail || "")))))) : empty("אין אירועים."));
+}
+
+function dpcCard(d, patch) {
+  const eff = d.settings.dpc_effective || {};
+  const isDo = d.compliance?.management === "device_owner";
+  const applied = new Set(d.heartbeat?.dpc?.applied || []);
+  const failed = new Set(d.heartbeat?.dpc?.failed || []);
+  const rows = Object.entries(DPC_LABELS).map(([k, [t, sub]]) => {
+    const input = el("input", { type: "checkbox", checked: Boolean(eff[k]), "aria-label": t, onchange: async (e) => {
+      try { await patch({ dpc: { [k]: e.target.checked } }); } catch (_) { e.target.checked = !e.target.checked; }
+    } });
+    return el("div", { class: "app-row" }, el("label", { class: "switch" }, input, el("span")),
+      el("div", { class: "grow" }, el("b", {}, t), el("small", {}, sub)),
+      isDo ? (failed.has(k) ? chip("נכשל בטלפון", "bad") : applied.has(k) ? chip("הוחל", "ok") : null) : null);
+  });
+  const frp = el("textarea", { class: "ltr", rows: 2, placeholder: "118237465029384756123", value: (eff.frp_accounts || []).join("\n") });
+  return card("מנהל מכשיר (Device Owner)", isDo
+    ? "המכשיר מנוהל — ההגדרות כאן נאכפות בו ע\"י אנדרואיד עצמו."
+    : "ההגדרות נשמרות, אבל נאכפות רק בטלפון שהוקם כמנהל מכשיר (QR בעמוד 'קודי הפעלה'). בטלפון רגיל אין להן השפעה.",
+    el("div", { class: "dpc-list" }, rows),
+    el("label", {}, "הגנת איפוס (FRP) — מזהי חשבון Google שיכולים לשחרר טלפון שאופס (מספר, לא מייל). ריק = ללא שינוי",
+      frp),
+    el("p", { class: "muted small" }, "חשוב: אף הגדרה כאן לא הופכת איפוס ליצרן ל'בלתי אפשרי'. איפוס בכפתורי החומרה תמיד אפשרי; אחריו FRP דורש את החשבון שהוגדר. להקמה מחדש אוטומטית אחרי איפוס — זירו-טאץ' / Knox (ראו docs/DEVICE_OWNER.md)."),
+    el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
+      await patch({ dpc: { frp_accounts: lines(frp.value) } });
+    } }, "שמירת FRP")));
+}
+
 function phoneAppsCard(d, patch) {
-  if (!d.apps.length) {
-    return card("האפליקציות בטלפון", null, empty("הטלפון עוד לא שלח את רשימת האפליקציות. היא נשלחת אוטומטית מהאפליקציה (גרסה חדשה)."));
-  }
-  const custom = new Set(d.settings.custom_apps);
+  const rules = new Map((d.app_rules || []).map((r) => [r.package, r]));
+  const known = d.known_app_hosts || {};
+  const unknownNet = new Set(d.network_only_unknown || []);
   const search = el("input", { type: "search", placeholder: "חיפוש אפליקציה..." });
+  const manual = el("input", { class: "ltr", placeholder: "com.example.app" });
   const list = el("div", { class: "apps" });
+  const apps = [...d.apps];
+  for (const p of rules.keys()) if (!apps.some((a) => a.package === p)) apps.push({ package: p, label: p, system: false, blocked: false, manual: true });
+  const save = async (pkg, mode, label) => {
+    const before = rules.get(pkg);
+    if (mode) rules.set(pkg, { ...(before || {}), package: pkg, mode }); else rules.delete(pkg);
+    try {
+      const fresh = await patch({ app_rules: [...rules.values()] }, mode ? `${label}: ${APP_MODES[mode][1]}` : `${label} שוחררה`);
+      (d.network_only_unknown = fresh?.network_only_unknown || d.network_only_unknown);
+    } catch (_) {
+      if (before) rules.set(pkg, before); else rules.delete(pkg);
+      draw();
+    }
+  };
   const draw = () => {
     const q = search.value.trim().toLowerCase();
-    list.replaceChildren(...d.apps.filter((a) => !q || a.label.toLowerCase().includes(q) || a.package.includes(q)).map((a) => {
-      const viaOption = a.blocked && !custom.has(a.package);
-      const input = el("input", { type: "checkbox", checked: a.blocked, disabled: viaOption, "aria-label": a.label,
-        onchange: async (e) => {
-          const on = e.target.checked;
-          if (on) custom.add(a.package); else custom.delete(a.package);
-          try {
-            await patch({ custom_apps: [...custom] }, on ? `${a.label} נחסמה` : `${a.label} שוחררה`);
-            a.blocked = on;
-          } catch (_) {
-            e.target.checked = !on;
-            if (on) custom.delete(a.package); else custom.add(a.package);
-          }
-        } });
+    list.replaceChildren(...apps.filter((a) => !q || (a.label || "").toLowerCase().includes(q) || a.package.includes(q)).map((a) => {
+      const rule = rules.get(a.package);
+      const viaOption = a.blocked && !rule;
+      const select = el("select", { "aria-label": `מצב חסימה — ${a.label || a.package}`, disabled: viaOption,
+        onchange: (e) => save(a.package, e.target.value, a.label || a.package) },
+        Object.entries(APP_MODES).map(([k, [, t]]) => el("option", { value: k, selected: (rule?.mode || "") === k }, t)));
+      const netInfo = rule && rule.mode !== "accessibility"
+        ? (known[a.package]?.length || rule.hosts?.length ? chip(`${(known[a.package] || []).length + (rule.hosts || []).length} שרתים`, "accent")
+          : chip("אין שרתים ידועים — חסימה ברשת לא תשפיע", "warn")) : null;
       return el("div", { class: "app-row" },
-        el("label", { class: "switch" }, input, el("span")),
         el("div", { class: "grow" }, el("b", {}, a.label || a.package), el("small", {}, a.package)),
-        viaOption ? chip("חסום דרך אפשרות", "violet") : a.system ? chip("מערכת") : null);
+        viaOption ? chip("חסום דרך אפשרות", "violet") : netInfo, a.system ? chip("מערכת") : null, select);
     }));
   };
   search.addEventListener("input", draw);
   draw();
-  return card("האפליקציות בטלפון", `${d.apps.length} אפליקציות · עודכן ${ago(d.apps_at)} · מתג = חסימה בטלפון (דורש מגן FilterPhone)`, search, list);
+  const add = el("div", { class: "row gap" }, manual, el("button", { class: "ghost small", onclick: () => {
+    const pkg = manual.value.trim();
+    if (!/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(pkg)) { toast("שם חבילה לא תקין", true); return; }
+    if (!apps.some((a) => a.package === pkg)) apps.unshift({ package: pkg, label: pkg, system: false, blocked: false, manual: true });
+    manual.value = "";
+    save(pkg, "accessibility", pkg).then(draw);
+  } }, "הוספה (חסימה בטלפון)"));
+  return card("האפליקציות בטלפון",
+    `${d.apps.length} אפליקציות${d.apps_at ? ` · עודכן ${ago(d.apps_at)}` : ""}. לכל אפליקציה: 'רשת' = השרתים שלה חסומים (נפתחת אבל לא מתחברת), 'בטלפון' = לא נפתחת (מגן FilterPhone / מנהל מכשיר), 'רשת + טלפון' = שניהם.`,
+    d.apps.length ? null : el("p", { class: "muted small" }, "הטלפון עוד לא שלח את רשימת האפליקציות — אפשר להוסיף שם חבילה ידנית."),
+    el("div", { class: "row gap" }, el("div", { class: "grow" }, search), add), list);
 }
 
 async function editCustomer(c) {
@@ -839,8 +996,32 @@ async function viewCodes() {
       el("button", { type: "button", class: "ghost", onclick: () => navigator.clipboard.writeText(r.code).then(() => toast("הועתק")) }, "העתקה")), "סגירה");
     render();
   });
+  const qrForm = el("form", { class: "grid three" },
+    el("label", {}, "שם הלקוח", el("input", { name: "label", placeholder: "למשל: משפחת כהן" })),
+    el("label", {}, "רמה", el("select", { name: "level" }, catalog.levels.filter((l) => l.level > 0).map((l) => el("option", { value: l.level }, `${l.level} · ${l.name}`)))),
+    el("label", {}, "Wi-Fi (לא חובה)", el("input", { name: "wifi_ssid", placeholder: "שם הרשת" })),
+    el("label", {}, "סיסמת Wi-Fi", el("input", { name: "wifi_password", type: "password", autocomplete: "off" })),
+    el("div", { class: "row end" }, el("button", { class: "primary", type: "submit" }, "צור QR")));
+  qrForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = new FormData(qrForm);
+    const r = await attempt(() => api("/v1/admin/provisioning", { method: "POST", body: {
+      label: f.get("label"), level: Number(f.get("level")), wifi_ssid: f.get("wifi_ssid"), wifi_password: f.get("wifi_password"),
+    } }));
+    await dialog("הקמת מכשיר מנוהל (Device Owner)", el("div", { class: "stack" },
+      el("img", { src: r.qr, alt: "QR להקמה", class: "qr" }),
+      el("ol", { class: "small" },
+        el("li", {}, "טלפון מאופס להגדרות יצרן (חדש, או אחרי איפוס). אין להוסיף חשבון Google לפני ההקמה."),
+        el("li", {}, "במסך הפתיחה הראשון: הקשה 6 פעמים באותו מקום → נפתח סורק QR (באנדרואיד 7–8 צריך להתחבר קודם ל-Wi-Fi)."),
+        el("li", {}, "סורקים את הקוד. הטלפון מוריד את FilterPhone, מאמת את הטביעה, ומגדיר אותה כמנהלת המכשיר."),
+        el("li", {}, "בסיום FilterPhone נפתחת ומתחברת לבד (הקוד החד-פעמי שבתוך ה-QR). מאשרים חיבור VPN ומתקינים תעודה אם מתבקש.")),
+      el("p", { class: "muted small" }, `קוד חד-פעמי, תקף יומיים: ${r.code.code}. טביעת ה-APK: ${r.apk_sha256.slice(0, 16)}…`),
+      el("p", { class: "muted small" }, "ה-QR מכיל את הקוד ואת סיסמת ה-Wi-Fi — לא לשלוח בקבוצות.")), "סגירה");
+    render();
+  });
   return [
     card("קוד הפעלה חדש", "הדרך המהירה בלי טופס הרשמה: הלקוח מזין קוד באפליקציה ומתחבר מיד ברמה שבחרת.", form),
+    card("הקמת מכשיר מנוהל ב-QR (Device Owner)", "לטלפון מאופס בלבד. FilterPhone הופכת למנהלת המכשיר: אי אפשר להסיר אותה, ה-VPN קבוע, והגדרות המנהל נאכפות ע\"י אנדרואיד.", qrForm),
     card("קודים קיימים", null, list.length ? el("div", { class: "table-wrap" }, el("table", {},
       el("thead", {}, el("tr", {}, el("th", {}, "לקוח"), el("th", {}, "מסתיים ב-"), el("th", {}, "רמה"), el("th", {}, "שימושים שנותרו"), el("th", {}, "תוקף"), el("th", {}))),
       el("tbody", {}, list.map((c) => el("tr", {},
@@ -876,7 +1057,25 @@ async function viewAudit() {
 
 async function viewSystem() {
   const o = await api("/v1/admin/overview");
+  const sys = await api("/v1/admin/system").catch(() => null);
   const ag = o.adguard;
+  const CHECKS = { db: "מסד נתונים", redis: "Redis", engine: "מנוע תמונות", wireguard: "WireGuard", adguard: "AdGuard" };
+  const m = (snap, key) => (snap && snap[key] !== undefined ? num(Math.round(snap[key])) : "—");
+  const healthCard = sys ? card("בריאות השרת", "מתעדכן בכל טעינה. ניטור חיצוני: curl http://127.0.0.1:8090/ready ו-/metrics (מתוך השרת).",
+    el("div", { class: "chips" }, Object.entries(sys.checks).map(([k, ok]) => chip(`${CHECKS[k] || k}: ${ok ? "תקין" : "תקלה"}`, ok ? "ok" : "bad"))),
+    el("div", { class: "grid two" },
+      kv([
+        ["תמונות במנוע (מאז ההפעלה)", m(sys.engine, 'fp_engine_jobs_total{action="pass"}') + " עברו · " + m(sys.engine, 'fp_engine_jobs_total{action="block"}') + " נחסמו"],
+        ["נכשלו בגלל עומס / זמן", `${m(sys.engine, 'fp_engine_jobs_failed_total{reason="timeout"}')} / ${m(sys.engine, 'fp_engine_jobs_failed_total{reason="overload"}')}`],
+        ["בעיבוד / בתור עכשיו", `${m(sys.engine, "fp_engine_active_jobs")} / ${m(sys.engine, "fp_engine_waiting_jobs")}`],
+        ["זיכרון המנוע", sys.engine ? `${Math.round((sys.engine.fp_engine_memory_bytes || 0) / 1e6)}MB` : "—"],
+      ]),
+      kv([
+        ["זיכרון הפרוקסי", sys.proxy ? `${Math.round((sys.proxy.fp_proxy_memory_bytes || 0) / 1e6)}MB` : "—"],
+        ["מפסק למנוע", sys.proxy ? (sys.proxy.fp_proxy_engine_circuit_open ? chip("פתוח — המנוע לא עונה", "bad") : chip("סגור", "ok")) : "—"],
+        ["מכשירים: ירוק / צהוב / אדום", `${sys.fleet.states.green || 0} / ${sys.fleet.states.yellow || 0} / ${sys.fleet.states.red || 0}`],
+        ["אירועים ב-24 שעות", Object.entries(sys.fleet.events_24h).map(([k, v]) => `${(LOG_KINDS[k] || ["", k])[1]}: ${v}`).join(" · ") || "—"],
+      ]))) : null;
   const agCard = card("חסימות DNS לפי מכשיר (AdGuard)", "כל חסימה של אתר/שירות נאכפת גם בפרוקסי (מיד) וגם ב-DNS — כדי לתפוס גם חיבורים שאינם HTTPS.",
     kv([
       ["מצב", !ag.enabled ? chip("לא מוגדר", "warn") : ag.error ? chip("שגיאה", "bad") : chip("פעיל", "ok")],
@@ -895,6 +1094,7 @@ async function viewSystem() {
     el("td", {}, x.apps.length || x.screens.length ? el("details", {}, el("summary", {}, `${x.apps.length} אפליקציות${x.screens.length ? ` · ${x.screens.length} מסכים` : ""}`),
       el("div", { class: "ltr mono small" }, [...x.apps, ...x.screens.map((s) => `${s.package}: ${s.match.join("/")}`)].join(" · "))) : "—")));
   return [
+    healthCard,
     el("div", { class: "grid two" }, agCard,
       card("מנוע הסינון", null, kv([["מצב", o.engine ? chip("פעיל", "ok") : chip("לא זמין", "bad")],
         ["תמונות שנבדקו היום", num(o.today.scanned)], ["נחסמו / נצבעו היום", `${num(o.today.block)} / ${num(o.today.replace)}`]]),
