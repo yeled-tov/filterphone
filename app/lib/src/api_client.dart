@@ -355,11 +355,6 @@ class ApiClient {
   Future<DeviceStatus> device(String token) async =>
       DeviceStatus.fromJson(await _send('GET', '/v1/device', token: token));
 
-  /// ביטול השהיה מהטלפון עצמו. אם אין שרת, הקוד המקומי עדיין משחרר את נעילת החירום.
-  Future<void> resumeProtection(String token) async {
-    await _send('POST', '/v1/device/resume', token: token, body: const {});
-  }
-
   Future<VpnBundle> vpnConfig(String token) async =>
       VpnBundle.fromJson(await _send('GET', '/v1/device/vpn', token: token));
 
