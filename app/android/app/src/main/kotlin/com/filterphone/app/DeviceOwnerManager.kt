@@ -197,6 +197,10 @@ object DeviceOwnerManager {
         if (!isDeviceOwner(context)) return true
         val dpm = dpm(context) ?: return false
         val admin = DeviceAdmin.component(context)
+        // לפני clearDeviceOwnerApp צריך לבטל גם אפליקציות שהוחבאו על ידי DPC; אחרי ההסרה
+        // כבר לא ניתן לשנות את מצב ההסתרה שלהן באמצעות DevicePolicyManager.
+        runCatching { hideApps(context, dpm, GuardPolicy.get(context), false) }
+            .onFailure { Log.w(TAG, "unhide apps before removing management failed", it) }
         runCatching {
             RESTRICTIONS.values.flatten().forEach { dpm.clearUserRestriction(admin, it) }
             if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) dpm.setAlwaysOnVpnPackage(admin, null, false)
