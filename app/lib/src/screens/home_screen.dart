@@ -64,7 +64,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.block,
                 text: 'המכשיר הושבת על ידי המנהל. פנו ל-FilterPhone.',
               ),
-              if (!c.deviceOwner) _RootProvisionCard(controller: c),
               _StatusHero(controller: c),
               const SizedBox(height: 4),
               if (c.protection.updateAvailable != null) ...[
@@ -85,6 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
               const SizedBox(height: 16),
               _ServerProof(controller: c),
+              if (!c.deviceOwner) ...[
+                const SizedBox(height: 16),
+                _RootProvisionCard(controller: c),
+              ],
             ],
           ),
         ),
