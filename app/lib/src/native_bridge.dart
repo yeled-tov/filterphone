@@ -136,6 +136,10 @@ abstract class NativeBridge {
   Future<String> privateDnsMode();
   Future<bool> isDeviceOwner();
   Future<void> reset();
+  Future<Map<String, Object?>> adminPauseStatus();
+  Future<bool> resumeProtectionLocally();
+  Future<bool> removeManagementLocally();
+  Future<Map<String, Object?>> provisionRoot();
 
   // --- מגן FilterPhone: חסימת אפליקציות ומסכים בטלפון עצמו ---
 
@@ -241,6 +245,20 @@ class ChannelNativeBridge implements NativeBridge {
 
   @override
   Future<void> reset() => _call<bool>('reset');
+
+  @override
+  Future<Map<String, Object?>> adminPauseStatus() async =>
+      Map<String, Object?>.from(await _call<Map<Object?, Object?>>('adminPauseStatus'));
+
+  @override
+  Future<bool> resumeProtectionLocally() => _call<bool>('resumeProtectionLocally');
+
+  @override
+  Future<bool> removeManagementLocally() => _call<bool>('removeManagementLocally');
+
+  @override
+  Future<Map<String, Object?>> provisionRoot() async =>
+      Map<String, Object?>.from(await _call<Map<Object?, Object?>>('provisionRoot'));
 
   @override
   Future<List<Map<String, Object?>>> installedApps() async {
