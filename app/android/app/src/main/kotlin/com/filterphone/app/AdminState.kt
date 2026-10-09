@@ -14,6 +14,7 @@ object AdminState {
     private const val PREFS = "fp_admin"
     private const val K_PAUSE_UNTIL = "pause_until"      // מתי מסתיימת ההשהיה (אפוק מילישניות מקומי)
     private const val K_PAUSE_NONCE = "pause_nonce"
+    private const val K_DISMISSED_NONCE = "dismissed_pause_nonce"
 
     /** תוצאת החלת פקודה — כדי ש-Sync ידע אם לבצע פעולה (למשל הסרת ניהול). */
     enum class Action { NONE, PAUSED, UNMANAGE }
@@ -32,6 +33,8 @@ object AdminState {
             "unmanage" -> Action.UNMANAGE
             "pause" -> {
                 val nonce = admin.optString("nonce")
+                // בחירת משתמש מקומית תקפה לאותו nonce בלבד; פקודת השהיה חדשה תוצג מחדש.
+                if (shouldIgnorePause(nonce, p.getString(K_DISMISSED_NONCE, null))) return Action.NONE
                 // תוקף מקומי = עכשיו + (until − זמן השרת). כך אין תלות בשעון המכשיר.
                 val remainMs = remainMs(admin.optLong("until", 0), serverTimeS)
                 p.edit().putLong(K_PAUSE_UNTIL, System.currentTimeMillis() + remainMs)
@@ -55,9 +58,22 @@ object AdminState {
 
     fun pauseUntil(context: Context): Long = prefs(context).getLong(K_PAUSE_UNTIL, 0)
 
+    /** בחירת חירום מקומית: זכור את פקודת ההשהיה הנוכחית, כדי שסנכרון חוזר לא יבטל אותה. */
+    fun dismissCurrentPause(context: Context) {
+        val p = prefs(context)
+        val nonce = p.getString(K_PAUSE_NONCE, null)
+        val edit = p.edit().remove(K_PAUSE_UNTIL).remove(K_PAUSE_NONCE)
+        if (!nonce.isNullOrBlank()) edit.putString(K_DISMISSED_NONCE, nonce)
+        edit.apply()
+    }
+
     fun clear(context: Context) = prefs(context).edit().remove(K_PAUSE_UNTIL).remove(K_PAUSE_NONCE).apply()
 
-    /** כמה מילישניות נשארו להשהיה, לפי זמן השרת (בלי תלות בשעון המכשיר). טהור — נבדק ביחידה. */
+    /** טהור — נבדק ביחידה. */
+    fun shouldIgnorePause(serverNonce: String?, dismissedNonce: String?): Boolean =
+        !serverNonce.isNullOrBlank() && serverNonce == dismissedNonce
+
+    /** כמה מילישניות נשארו להשהיה (לפי זמן השרת, בלי תלות בשעון המכשיר). טהור — נבדק ביחידה. */
     fun remainMs(untilServerS: Long, serverNowS: Long): Long =
         (untilServerS - serverNowS).coerceAtLeast(0) * 1000
 
