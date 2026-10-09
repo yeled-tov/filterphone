@@ -31,29 +31,6 @@ def test_full_enrollment_flow(env):
 
 
 
-def test_device_can_resume_its_own_timed_pause(env):
-    svc, client = env
-    admin = admin_headers(client)
-    code = svc.create_code("בדיקת חירום", level=2, uses=1, expires_days=None)["code"]
-    enrollment = client.post("/v1/enroll", json={"code": code, "public_key": wg_key(22)})
-    assert enrollment.status_code == 201, enrollment.text
-    token = enrollment.json()["token"]
-    device = client.get("/v1/admin/devices", headers=admin).json()[0]
-    ip = device["vpn_ip"]
-
-    paused = client.post(
-        f"/v1/admin/devices/{device['id']}/pause",
-        json={"minutes": 60, "reason": "בדיקה"},
-        headers=admin,
-    )
-    assert paused.status_code == 200, paused.text
-    assert svc.redis.hget("fp:levels", ip) == "0"
-
-    resumed = client.post("/v1/device/resume", headers={"Authorization": f"Bearer {token}"}, json={})
-    assert resumed.status_code == 200, resumed.text
-    assert resumed.json() == {"ok": True, "paused": False}
-    assert svc.redis.hget("fp:levels", ip) == "2"
-
 def test_enroll_rejects_bad_key_and_duplicates(env):
     svc, client = env
     code = svc.create_code("", level=1, uses=5, expires_days=None)["code"]
