@@ -1,0 +1,54 @@
+name: ניקוי תוצרי CI ישנים
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/cleanup-old-artifacts.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    name: פינוי אחסון לתוצרי הבנייה החדשים
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Remove old test reports and retain the two newest APK artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          artifacts="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" | jq '[.[].artifacts[]]')"
+          total="$(jq 'length' <<< "$artifacts")"
+          echo "Found $total artifacts."
+
+          keep_ids="$(jq -c '[.[] | select(.name == "FilterPhone-APK" and .expired == false) | .] | sort_by(.created_at) | reverse | .[:2] | map(.id)' <<< "$artifacts")"
+          echo "Keeping the two newest APK artifact IDs: $keep_ids"
+
+          delete_ids="$(jq -r --argjson keep "$keep_ids" '
+            .[]
+            | select(
+                .expired == false
+                and (
+                  .name == "android-test-reports"
+                  or (
+                    .name == "FilterPhone-APK"
+                    and ((.id as $id | ($keep | index($id))) == null)
+                  )
+                )
+              )
+            | .id
+          ' <<< "$artifacts")"
+
+          while IFS= read -r artifact_id; do
+            [ -n "$artifact_id" ] || continue
+            echo "Deleting obsolete artifact $artifact_id"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id"
+          done <<< "$delete_ids"
+
+          echo "Artifact cleanup finished."
