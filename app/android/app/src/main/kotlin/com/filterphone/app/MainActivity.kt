@@ -121,9 +121,33 @@ class MainActivity : FlutterActivity() {
             }
             "privateDnsMode" -> result.success(Settings.Global.getString(contentResolver, "private_dns_mode") ?: "off")
             "isDeviceOwner" -> result.success(DeviceOwnerManager.isDeviceOwner(this))
+            "adminPauseStatus" -> result.success(mapOf(
+                "active" to AdminState.isPaused(this),
+                "until" to AdminState.pauseUntil(this),
+            ))
+            "resumeProtectionLocally" -> background(result) {
+                AdminState.dismissCurrentPause(this)
+                DeviceOwnerManager.applyBaseline(this)
+                GuardService.onPolicyChanged()
+                Recovery.syncSoon(this)
+                true
+            }
+            "removeManagementLocally" -> background(result) {
+                val removed = DeviceOwnerManager.clearManagement(this)
+                if (removed) {
+                    AdminState.dismissCurrentPause(this)
+                    runCatching { TunnelManager.reset() }
+                    GuardPolicy.clear(this)
+                    Recovery.cancelAll(this)
+                    stopService(Intent(this, ProtectionService::class.java))
+                    GuardService.onPolicyChanged()
+                }
+                removed
+            }
             "preflight" -> background(result) { Preflight.report(this) }
-            "provisionRoot" -> background(result) { RootProvisioner.provision(this) }
+            "provisionRoot" -> background(result) { RootProvisioner.provision(this).toMap() }
             "reset" -> background(result) {
+                AdminState.clear(this)
                 TunnelManager.reset()
                 GuardPolicy.clear(this)
                 Recovery.cancelAll(this)
