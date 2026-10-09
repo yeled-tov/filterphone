@@ -656,7 +656,6 @@ void main() {
     ));
     await tester.pump();
     expect(find.text('גרסה חדשה של FilterPhone (1.0.8)'), findsOneWidget);
-    await tester.ensureVisible(find.text('להורדה'));
     await tester.tap(find.text('להורדה'));
     await tester.pump();
     expect(native.updatePageOpens, 1);
