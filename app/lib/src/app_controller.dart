@@ -66,6 +66,8 @@ class AppController extends ChangeNotifier {
   bool guardEnabled = false;
   bool serverReachable = true;
   bool deviceRemoved = false;
+  bool adminPauseActive = false;
+  bool rootProvisioning = false;
 
   /// סוללה, מנהל מכשיר, סנכרון אחרון, בדיקת VPN אחרונה — מהקוד הנייטיבי.
   ProtectionStatus protection = ProtectionStatus.unknown;
@@ -476,6 +478,7 @@ class AppController extends ChangeNotifier {
     device = null;
     pendingSummary = null;
     deviceRemoved = false;
+    adminPauseActive = false;
     form = RegistrationForm();
     vpn = VpnStatus.down;
     phase = Phase.welcome;
@@ -484,7 +487,7 @@ class AppController extends ChangeNotifier {
 
   // ------------------------------------------------------------------ רענון
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool forceSync = false}) async {
     try {
       vpn = await native.vpnStatus();
       privateDns = await native.privateDnsMode();
@@ -497,9 +500,19 @@ class AppController extends ChangeNotifier {
     }
     // דיווח לשרת (ואישור גרסת המדיניות) — לכל היותר פעם בדקה כשהאפליקציה פתוחה
     final now = DateTime.now();
-    if (_token != null && (_lastSync == null || now.difference(_lastSync!) > const Duration(minutes: 1))) {
+    if (_token != null && (forceSync || _lastSync == null || now.difference(_lastSync!) > const Duration(minutes: 1))) {
       _lastSync = now;
-      unawaited(native.syncNow().then((_) {}, onError: (Object e) => debugPrint('sync failed: $e')));
+      try {
+        await native.syncNow();
+      } on PlatformException catch (e) {
+        debugPrint('sync failed: $e');
+      }
+    }
+    try {
+      final pauseState = await native.adminPauseStatus();
+      adminPauseActive = pauseState['active'] == true;
+    } on PlatformException catch (e) {
+      debugPrint('pause status failed: $e');
     }
     final token = _token;
     if (token != null) {
@@ -515,6 +528,61 @@ class AppController extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  /// מחזיר את ההגנה מקומית, גם אם השרת לא זמין. nonce ההשהיה נדחה מקומית כדי שלא
+  /// יופעל שוב בסנכרון הבא; השהיה חדשה מהשרת תקבל nonce אחר ותוצג מחדש.
+  Future<bool> resumeProtectionLocally() async {
+    try {
+      final ok = await native.resumeProtectionLocally();
+      if (!ok) throw StateError('הטלפון לא הצליח לשחזר את ההגנה');
+      adminPauseActive = false;
+      error = null;
+      notice = 'ההגנה שוחזרה מקומית בטלפון.';
+      await refresh(forceSync: true);
+      return !adminPauseActive;
+    } catch (e) {
+      error = 'לא ניתן לשחזר את ההגנה: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// מסלול חירום מקומי: משחרר Device Owner, מסיר את מדיניות החסימה המקומית ומפסיק VPN.
+  /// לאחר מכן האפליקציה חוזרת למסך הפעלה וניתן להסיר אותה דרך הגדרות Android.
+  Future<bool> removeManagementLocally() async {
+    try {
+      final ok = await native.removeManagementLocally();
+      if (!ok) throw StateError('Android לא אפשר להסיר את ניהול המכשיר');
+      adminPauseActive = false;
+      await resetDevice();
+      return true;
+    } catch (e) {
+      error = 'הסרת הניהול לא הושלמה: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// ניסיון ההקמה התקני דרך su במכשיר שכבר יש בו Root; לא עוקף מגבלות Android.
+  Future<Map<String, Object?>> provisionRoot() async {
+    rootProvisioning = true;
+    notifyListeners();
+    try {
+      final result = await native.provisionRoot();
+      if (result['ok'] == true) {
+        error = null;
+        notice = 'ניהול המכשיר הוגדר בהצלחה.';
+        await refresh(forceSync: true);
+      }
+      return result;
+    } catch (e) {
+      error = 'הקמת מנהל המכשיר נכשלה: $e';
+      return {'ok': false, 'code': 'ENROLL-ROOT-003', 'result': 'error', 'technical': e.toString()};
+    } finally {
+      rootProvisioning = false;
+      notifyListeners();
+    }
   }
 
   /// רשימת האפליקציות והמסכים החסומים — לשירות שבטלפון. רק כשהשתנתה.
