@@ -67,6 +67,17 @@ class FakeNative implements NativeBridge {
     state = 'DOWN';
   }
 
+  @override
+  Future<Map<String, Object?>> adminPauseStatus() async => {'active': false, 'until': 0};
+  @override
+  Future<bool> resumeProtectionLocally() async => true;
+  @override
+  Future<bool> removeManagementLocally() async => true;
+  @override
+  Future<Map<String, Object?>> provisionRoot() async => {
+        'ok': false, 'code': 'ENROLL-ROOT-001', 'result': 'no_root', 'technical': ''
+      };
+
   bool guard = false;
   Map<String, Object?>? guardPolicy;
   String? guardToken;
