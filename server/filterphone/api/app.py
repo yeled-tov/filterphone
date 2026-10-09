@@ -31,6 +31,7 @@ from typing import Annotated, Any
 
 import redis
 from fastapi import Depends, FastAPI, Header, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -126,6 +127,15 @@ def create_app(svc: Services | None = None) -> FastAPI:
     logs.setup(os.environ.get("FP_LOG_LEVEL", "INFO"))
     app = FastAPI(title="FilterPhone API", version="2.2", lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
+    # Allow the first-party FilterSmart CRM to call this API from the browser.
+    # Keep the origin allowlist explicit; no wildcard origins for authenticated admin endpoints.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["https://www.filterphone.com", "https://filterphone.com"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
     app.state.svc = svc or build_services()
     cfg = app.state.svc.cfg
 
