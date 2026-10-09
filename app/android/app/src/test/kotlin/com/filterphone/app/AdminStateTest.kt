@@ -1,6 +1,8 @@
 package com.filterphone.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AdminStateTest {
@@ -14,5 +16,13 @@ class AdminStateTest {
     fun expiredOrPastPauseIsZeroNotNegative() {
         assertEquals(0L, AdminState.remainMs(untilServerS = 100L, serverNowS = 500L))
         assertEquals(0L, AdminState.remainMs(untilServerS = 0L, serverNowS = 0L))
+    }
+
+    @Test
+    fun dismissedPauseIsIgnoredButNewPauseNonceIsAccepted() {
+        assertTrue(AdminState.shouldIgnorePause("pause-a", "pause-a"))
+        assertFalse(AdminState.shouldIgnorePause("pause-b", "pause-a"))
+        assertFalse(AdminState.shouldIgnorePause(null, "pause-a"))
+        assertFalse(AdminState.shouldIgnorePause("", ""))
     }
 }
