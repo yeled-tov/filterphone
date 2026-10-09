@@ -1,7 +1,6 @@
 name: העלאה לשרת
 
-# הפעלה ידנית בלבד (Actions → "העלאה לשרת" → Run). דורש הגדרה חד-פעמית של מפתח העלאה —
-# ראו docs/DEPLOY_PROMPT.md, שלב 7. המפתח מוגבל בשרת לפקודות של deploy/ci_deploy.sh בלבד.
+# הפעלה ידנית בלבד: בנה ופרסם את הגרסה שאומתה ל-main. אינו תלוי ב-Action Artifacts.
 on:
   workflow_dispatch:
     inputs:
@@ -31,7 +30,7 @@ jobs:
   deploy:
     name: ${{ inputs.what }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: מפתח ההעלאה
         env:
@@ -48,10 +47,99 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
 
       - uses: actions/checkout@v4
-        if: inputs.what == 'both' || inputs.what == 'server'
+        if: inputs.what == 'both' || inputs.what == 'server' || inputs.what == 'apk'
 
       - name: לפני
         run: ssh -o BatchMode=yes "$SERVER" status
+
+      # חייבת להיות בניית app.yml מוצלחת לאותו commit. משתמשים במספר הבנייה שלה,
+      # כדי ש-versionCode יהיה גדול מספיק לעדכון APK קיים בטלפון.
+      - name: אימות בניית האפליקציה ל-commit הנוכחי
+        if: inputs.what == 'both' || inputs.what == 'apk'
+        id: app_version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          row=$(gh run list -R "$GITHUB_REPOSITORY" --workflow app.yml --branch main --status success \
+                  --limit 1 --json number,headSha,url)
+          sha=$(jq -r '.[0].headSha // empty' <<< "$row")
+          number=$(jq -r '.[0].number // empty' <<< "$row")
+          url=$(jq -r '.[0].url // empty' <<< "$row")
+          if [ -z "$number" ] || [ "$sha" != "$GITHUB_SHA" ]; then
+            echo "::error::אין בדיקות אפליקציה מוצלחות ל-commit הנוכחי. המתן לסיום app.yml ב-main ואז נסה שוב."
+            echo "Current: $GITHUB_SHA; latest successful app build: ${sha:-none} ($url)"
+            exit 1
+          fi
+          echo "build_number=$number" >> "$GITHUB_OUTPUT"
+          echo "version=1.0.$number" >> "$GITHUB_OUTPUT"
+          echo "Verified app build $number for $sha"
+
+      - uses: actions/setup-java@v4
+        if: inputs.what == 'both' || inputs.what == 'apk'
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        if: inputs.what == 'both' || inputs.what == 'apk'
+        with:
+          flutter-version: "3.44.2"
+          channel: stable
+          cache: true
+
+      - name: תלויות Flutter
+        if: inputs.what == 'both' || inputs.what == 'apk'
+        run: cd app && flutter pub get --enforce-lockfile
+
+      - name: בניית APK חתום
+        if: inputs.what == 'both' || inputs.what == 'apk'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          BUILD_NUMBER: ${{ steps.app_version.outputs.build_number }}
+          VERSION_NAME: ${{ steps.app_version.outputs.version }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::חסרים סודות חתימת Android (ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS)"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > app/android/upload.jks
+          {
+            echo "storeFile=upload.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+          } > app/android/key.properties
+
+          cd app
+          mkdir -p dist
+          ARGS="--release --build-number=$BUILD_NUMBER --build-name=$VERSION_NAME"
+          flutter build apk $ARGS
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/FilterPhone-$VERSION_NAME-universal.apk"
+          flutter build apk $ARGS --split-per-abi --target-platform android-arm64
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/FilterPhone-$VERSION_NAME-arm64.apk"
+
+      - name: בדיקות ו-lint (Kotlin)
+        if: inputs.what == 'both' || inputs.what == 'apk'
+        run: cd app/android && ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug
+
+      - name: בדיקת APK ויצירת FilterPhone.json
+        if: inputs.what == 'both' || inputs.what == 'apk'
+        run: |
+          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          cd app
+          python3 ../tools/apk_release.py --aapt2 "$AAPT2" dist
+
+      - name: אימות חתימת APK
+        if: inputs.what == 'both' || inputs.what == 'apk'
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          for apk in app/dist/*.apk; do
+            out=$("$APKSIGNER" verify --verbose --print-certs "$apk" 2>&1) || { echo "$out"; exit 1; }
+            echo "$out" | grep -q "CN=FilterPhone" || { echo "$apk לא חתום במפתח של FilterPhone"; exit 1; }
+            echo "✓ $(basename "$apk") — חתימה תקינה"
+          done
 
       - name: העלאת השרת
         if: inputs.what == 'both' || inputs.what == 'server'
@@ -67,20 +155,12 @@ jobs:
 
       - name: פרסום האפליקציה
         if: inputs.what == 'both' || inputs.what == 'apk'
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          run_id=$(gh run list -R "$GITHUB_REPOSITORY" --workflow app.yml --branch "$GITHUB_REF_NAME" --status success \
-                     --limit 1 --json databaseId -q '.[0].databaseId')
-          [ -n "$run_id" ] || { echo "::error::אין בנייה מוצלחת של האפליקציה בענף $GITHUB_REF_NAME"; exit 1; }
-          gh run download "$run_id" -R "$GITHUB_REPOSITORY" -n FilterPhone-APK -D apk
-          cp apk/*-arm64.apk FilterPhone.apk
-          cp apk/*-universal.apk FilterPhone-universal.apk
-          files="FilterPhone.apk FilterPhone-universal.apk"
-          # הגרסה והטביעות — מהן השרת מציע עדכון לטלפונים (בבניות ישנות אין את הקובץ)
-          if [ -f apk/FilterPhone.json ]; then cp apk/FilterPhone.json .; files="$files FilterPhone.json"; fi
-          echo "מפרסם את הבנייה $run_id: $(ls apk)"
-          tar -cf - $files | ssh -o BatchMode=yes "$SERVER" apk
+          cp app/dist/*-arm64.apk FilterPhone.apk
+          cp app/dist/*-universal.apk FilterPhone-universal.apk
+          cp app/dist/FilterPhone.json .
+          echo "מפרסם את הגרסה ${{ steps.app_version.outputs.version }} שנבנתה ונחתמה ב-workflow הזה"
+          tar -cf - FilterPhone.apk FilterPhone-universal.apk FilterPhone.json | ssh -o BatchMode=yes "$SERVER" apk
           curl -fsSI "$PUBLIC/download/FilterPhone.apk" | head -1
 
       - name: חזרה לגרסה הקודמת
@@ -89,10 +169,14 @@ jobs:
           BACKUP: ${{ inputs.backup }}
         run: ssh -o BatchMode=yes -o ServerAliveInterval=30 "$SERVER" "rollback $BACKUP"
 
+      - name: ניקוי מפתח החתימה
+        if: always()
+        run: rm -f app/android/upload.jks app/android/key.properties
+
       - name: אחרי
         if: always()
         run: ssh -o BatchMode=yes "$SERVER" status || true
 
-      - name: ניקוי המפתח
+      - name: ניקוי מפתח ההעלאה
         if: always()
         run: rm -f ~/.ssh/id_ed25519
