@@ -5,13 +5,28 @@ import '../theme.dart';
 import 'change_request_screen.dart';
 
 /// המסך הראשי: האם הטלפון מוגן, ומה עוד צריך לעשות.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.controller});
   final AppController controller;
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _pausePromptShowing = false;
+
+  @override
   Widget build(BuildContext context) {
-    final c = controller;
+    final c = widget.controller;
+    if (c.adminPauseActive && !_pausePromptShowing) {
+      _pausePromptShowing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _showPausePrompt(c);
+      });
+    } else if (!c.adminPauseActive) {
+      _pausePromptShowing = false;
+    }
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -33,14 +48,14 @@ class HomeScreen extends StatelessWidget {
         actions: [
           IconButton(
             tooltip: 'רענון',
-            onPressed: c.busy ? null : c.refresh,
+            onPressed: c.busy ? null : () => c.refresh(forceSync: true),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
       ),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: c.refresh,
+          onRefresh: () => c.refresh(forceSync: true),
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -49,6 +64,7 @@ class HomeScreen extends StatelessWidget {
                 icon: Icons.block,
                 text: 'המכשיר הושבת על ידי המנהל. פנו ל-FilterPhone.',
               ),
+              if (!c.deviceOwner) _RootProvisionCard(controller: c),
               _StatusHero(controller: c),
               const SizedBox(height: 4),
               if (c.protection.updateAvailable != null) ...[
@@ -75,6 +91,142 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _showPausePrompt(AppController c) async {
+    if (!mounted || !c.adminPauseActive) {
+      _pausePromptShowing = false;
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        bool working = false;
+        String? actionError;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) => PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: const Text('החסימה הושהתה'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('בחר מה לעשות בטלפון הזה. הבחירה פועלת מקומית ואינה תלויה בכך שהשרת זמין.'),
+                  if (actionError != null) ...[
+                    const SizedBox(height: 12),
+                    Text(actionError!, style: TextStyle(color: Theme.of(dialogContext).colorScheme.error)),
+                  ],
+                  if (working) ...[
+                    const SizedBox(height: 12),
+                    const Center(child: CircularProgressIndicator()),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: working ? null : () async {
+                    setDialogState(() { working = true; actionError = null; });
+                    final ok = await c.resumeProtectionLocally();
+                    if (!mounted || !dialogContext.mounted) return;
+                    if (ok) {
+                      Navigator.of(dialogContext).pop();
+                    } else {
+                      setDialogState(() { working = false; actionError = c.error ?? 'השחזור נכשל.'; });
+                    }
+                  },
+                  child: const Text('החזר חסימה'),
+                ),
+                FilledButton.tonal(
+                  onPressed: working ? null : () async {
+                    final confirmed = await showDialog<bool>(
+                      context: dialogContext,
+                      barrierDismissible: false,
+                      builder: (confirmContext) => AlertDialog(
+                        title: const Text('הסרת ניהול מהמכשיר'),
+                        content: const Text('פעולה זו משחררת את מגבלות Device Owner, מפסיקה את ה-VPN ומסירה את מדיניות החסימה המקומית. לאחר מכן ניתן להסיר את FilterPhone דרך הגדרות Android. ההגנה תיפסק.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.of(confirmContext).pop(false), child: const Text('ביטול')),
+                          FilledButton(onPressed: () => Navigator.of(confirmContext).pop(true), child: const Text('אשר הסרה')),
+                        ],
+                      ),
+                    );
+                    if (confirmed != true || !mounted || !dialogContext.mounted) return;
+                    setDialogState(() { working = true; actionError = null; });
+                    final ok = await c.removeManagementLocally();
+                    if (!mounted || !dialogContext.mounted) return;
+                    if (ok) {
+                      Navigator.of(dialogContext).pop();
+                    } else {
+                      setDialogState(() { working = false; actionError = c.error ?? 'הסרת הניהול נכשלה.'; });
+                    }
+                  },
+                  child: const Text('הסר ניהול'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    _pausePromptShowing = false;
+    if (mounted) setState(() {});
+  }
+}
+
+class _RootProvisionCard extends StatelessWidget {
+  const _RootProvisionCard({required this.controller});
+  final AppController controller;
+
+  String _message(Map<String, Object?> result) {
+    switch (result['result']) {
+      case 'device_owner_set': return 'ההקמה הצליחה. המכשיר הוגדר כמנוהל.';
+      case 'already_managed': return 'ניהול המכשיר כבר פעיל.';
+      case 'no_root': return 'לא נמצא Root מאושר במכשיר. לא בוצע שינוי.';
+      case 'root_denied': return 'בקשת Root נדחתה או לא קיבלה הרשאת מנהל. אפשר לאשר את בקשת su ואז לנסות שוב.';
+      case 'requires_factory_reset': return 'Android אינו מאפשר להגדיר Device Owner במצב הנוכחי. אין כאן מעקף בטוח; בדרך התקנית נדרשת בדרך כלל הקמה בזמן ההתקנה הראשונית או לאחר איפוס. לא בוצע איפוס.';
+      case 'accounts_present': return 'יש חשבונות במכשיר שמונעים את ההקמה דרך Root. לא בוצע שינוי.';
+      case 'already_has_device_owner': return 'כבר מוגדר מנהל מכשיר אחר. FilterPhone לא החליף אותו.';
+      default: return 'ההקמה לא הושלמה (${result['code'] ?? 'שגיאה'}). לא נעשה מעקף אבטחה.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('הקמה מתקדמת — Root / מנהל מכשיר', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                const Text('ניסיון דרך Root יעבוד רק במכשיר שיש בו Root מאושר, ורק אם Android מאפשר להגדיר Device Owner. לא מבוצע איפוס אוטומטי.'),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: controller.rootProvisioning ? null : () async {
+                    final result = await controller.provisionRoot();
+                    if (!context.mounted) return;
+                    await showDialog<void>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text(result['ok'] == true ? 'ההקמה הצליחה' : 'תוצאת בדיקת Root'),
+                        content: Text(_message(result)),
+                        actions: [FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('סגירה'))],
+                      ),
+                    );
+                  },
+                  icon: controller.rootProvisioning
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.admin_panel_settings_rounded),
+                  label: Text(controller.rootProvisioning ? 'בודק ומנסה להקים...' : 'בדוק Root והקם בלחיצה'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 class _StatusHero extends StatelessWidget {
