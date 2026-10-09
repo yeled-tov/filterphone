@@ -101,19 +101,14 @@ jobs:
         if: always()
         run: rm -f android/upload.jks android/key.properties
 
+      # תוצר ה-APK הוא מטמון נוחות בלבד. פריסת production בונה APK חתום מחדש
+      # ישירות ב-deploy.yml, כדי שכשל במכסת Artifacts לא ימנע עדכון לשרת.
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
         with:
           name: FilterPhone-APK
           path: |
             dist/*.apk
             dist/FilterPhone.json
-          retention-days: 30
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: android-test-reports
-          path: |
-            app/build/app/reports/
-            app/build/app/test-results/
           retention-days: 14
