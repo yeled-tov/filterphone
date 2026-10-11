@@ -2,62 +2,70 @@ package com.filterphone.app
 
 import android.content.Context
 import android.util.Log
-import java.io.BufferedReader
+import java.io.IOException
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
 /**
- * הקמה בלחיצה אחת במכשיר עם root: הופך את FilterPhone למנהל המכשיר (Device Owner) בלי שהמשתמש
- * יקליד פקודות. משתמש אך ורק בפקודה הרשמית של אנדרואיד:
- *
- *     dpm set-device-owner com.filterphone.app/.DeviceAdmin
- *
- * דרך su (מנגנון ה-root הרגיל — המשתמש מאשר בחלון של אפליקציית ה-root). זה לא exploit ולא מעקף:
- * זו אותה פקודה שטכנאי מריץ ב-adb, רק עם הרשאת root מקומית במקום מחשב.
- *
- * כשירות נבדקת לפני הכול (Preflight.isProvisioningAllowed הרשמי): אם המכשיר כבר מאותחל, יש בו
- * חשבונות, או יש כבר מנהל מכשיר — לא מנסים (אנדרואיד ידחה), אלא מחזירים סיבה מדויקת לאיפוס/הקמה אחרת.
- *
- * אין כאן שום מעקף אבטחה, FRP-bypass או שינוי מצב לא מתועד. מה שאנדרואיד לא מתיר — מדווח ככשל.
+ * הקמה דרך הפקודה הרשמית dpm set-device-owner. root מתבקש בפועל דרך su;
+ * אין חסימה מוקדמת לפי isProvisioningAllowed, כי הפקודה עצמה מחזירה את סיבת הסירוב המדויקת.
+ * אין הסרה אוטומטית של חשבונות, איפוס, או מעקף FRP.
  */
 object RootProvisioner {
     private const val TAG = "FilterPhone"
     private const val ADMIN = "com.filterphone.app/.DeviceAdmin"
 
-    data class Outcome(val ok: Boolean, val code: String, val resultKey: String, val technical: String = "") {
-        fun toMap(): Map<String, Any> = mapOf("ok" to ok, "code" to code, "result" to resultKey, "technical" to technical)
+    data class Outcome(
+        val ok: Boolean,
+        val code: String,
+        val resultKey: String,
+        val technical: String = "",
+        val accounts: List<String> = emptyList(),
+    ) {
+        fun toMap(): Map<String, Any> = mapOf(
+            "ok" to ok, "code" to code, "result" to resultKey,
+            "technical" to technical, "accounts" to accounts,
+        )
     }
 
-    /** מריץ את ההקמה. חוסם (I/O) — להריץ בחוט רקע. */
     fun provision(context: Context): Outcome {
-        val caps = Preflight.capabilities(context)
-        if (caps.deviceOwner) return Outcome(true, "ENROLL-ROOT-000", "already_managed")
-        if (!caps.provisioningAllowed) {
-            return Outcome(false, "ENROLL-ROOT-002", "requires_factory_reset",
-                "isProvisioningAllowed(PROVISION_MANAGED_DEVICE)=false")
-        }
-        if (!caps.rootAvailable) return Outcome(false, "ENROLL-ROOT-001", "no_root", "su not found")
+        val before = Preflight.capabilities(context)
+        if (before.deviceOwner) return Outcome(true, "ENROLL-ROOT-000", "already_managed")
 
-        val idRes = runSu("id", 15)
+        // אין לבדוק קיום קובץ su או provisioningAllowed לפני ההרצה:
+        // זה מנע בחלק מהמכשירים את הופעת בקשת root עצמה.
+        val idRes = runSu("id", 20)
         if (idRes.code != 0 || !idRes.out.contains("uid=0")) {
-            return Outcome(false, "ENROLL-ROOT-001", "root_denied", "id: ${trim(idRes.out + idRes.err)}")
+            val combined = trim(idRes.out + "\n" + idRes.err)
+            val absent = idRes.err.contains("error=2", true) ||
+                idRes.err.contains("not found", true) ||
+                idRes.err.contains("no such file", true)
+            return Outcome(false, "ENROLL-ROOT-001",
+                if (absent) "no_root" else "root_denied", combined)
         }
 
+        // אחרי שהמשתמש אישר root אפשר להציג שמות/סוגים ש-dumpsys מדווח.
+        val accountDump = runSu("dumpsys account", 12)
+        val accounts = parseAccounts(accountDump.out + "\n" + accountDump.err)
         val dpm = runSu("dpm set-device-owner $ADMIN", 30)
-        val combined = (dpm.out + "\n" + dpm.err).trim()
-        // לוודא בפועל (גם אם ה-exit code לא אמין בחלק מה-ROMים)
+        val combined = trim(dpm.out + "\n" + dpm.err)
+
         if (Preflight.capabilities(context).deviceOwner) {
             runCatching { DeviceOwnerManager.applyBaseline(context) }
                 .onFailure { Log.w(TAG, "baseline after root provision failed", it) }
             Recovery.schedulePeriodic(context)
-            return Outcome(true, "ENROLL-ROOT-000", "device_owner_set", trim(combined))
+            return Outcome(true, "ENROLL-ROOT-000", "device_owner_set", combined, accounts)
         }
+
         val reason = classifyDpmFailure(combined)
-        Log.w(TAG, "root provision failed: $reason")
-        return Outcome(false, "ENROLL-ROOT-003", reason, trim(combined))
+        val finalReason = if (reason == "provisioning_blocked" && accounts.isNotEmpty()) {
+            "accounts_present"
+        } else reason
+        Log.w(TAG, "root provision failed: $finalReason")
+        return Outcome(false, "ENROLL-ROOT-003", finalReason, combined, accounts)
     }
 
-    /** מיפוי פלט הפקודה לסיבה (מפתח לתרגום). טהור — נבדק ביחידה. הסדר חשוב: הודעת "חשבונות"
-     * מכילה גם "device owner", לכן בודקים אותה לפני. */
+    /** מיפוי פלט DPM לסיבה שאפשר להציג ב-UI ולבדוק ביחידה. */
     fun classifyDpmFailure(output: String): String {
         val o = output.lowercase()
         return when {
@@ -73,24 +81,47 @@ object RootProvisioner {
         }
     }
 
+    /** מחזיר רק שם וסוג חשבון; לעולם לא סיסמאות או אסימונים. */
+    fun parseAccounts(output: String): List<String> {
+        val pattern = Regex("Account \\{name=([^,}]+),\\s*type=([^,}]+)\\}", RegexOption.IGNORE_CASE)
+        return pattern.findAll(output).map { match ->
+            val name = match.groupValues[1].trim().take(120)
+            val type = match.groupValues[2].trim().take(80)
+            "$name ($type)"
+        }.distinct().take(20).toList()
+    }
+
     private data class Shell(val code: Int, val out: String, val err: String)
 
+    /** קורא stdout/stderr במקביל כדי ש-readText לא יעקוף את מגבלת הזמן. */
     private fun runSu(cmd: String, timeoutS: Long): Shell {
+        var process: Process? = null
         return try {
-            val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(false).start()
-            val out = p.inputStream.bufferedReader().use(BufferedReader::readText)
-            val err = p.errorStream.bufferedReader().use(BufferedReader::readText)
+            process = ProcessBuilder("su", "-c", cmd).redirectErrorStream(false).start()
+            val p = process
+            val outFuture = CompletableFuture.supplyAsync {
+                p.inputStream.bufferedReader().use { it.readText() }
+            }
+            val errFuture = CompletableFuture.supplyAsync {
+                p.errorStream.bufferedReader().use { it.readText() }
+            }
             val finished = p.waitFor(timeoutS, TimeUnit.SECONDS)
             if (!finished) {
                 p.destroyForcibly()
-                Shell(-2, out, "timeout")
+                Shell(-2, readQuietly(outFuture), "timeout אחרי ${timeoutS} שניות")
             } else {
-                Shell(p.exitValue(), out, err)
+                Shell(p.exitValue(), readQuietly(outFuture), readQuietly(errFuture))
             }
         } catch (e: Exception) {
-            Shell(-1, "", e.javaClass.simpleName + ": " + (e.message ?: ""))
+            process?.destroyForcibly()
+            val absent = e is IOException && (e.message?.contains("error=2") == true ||
+                e.message?.contains("No such file", true) == true)
+            Shell(-1, "", if (absent) "su אינו מותקן" else e.javaClass.simpleName + ": " + (e.message ?: ""))
         }
     }
 
-    private fun trim(s: String): String = s.trim().take(300)
+    private fun readQuietly(future: CompletableFuture<String>): String =
+        runCatching { future.get(2, TimeUnit.SECONDS) }.getOrDefault("")
+
+    private fun trim(s: String): String = s.trim().take(1200)
 }
