@@ -438,9 +438,12 @@ class Services:
 
     # ------------------------------------------------------------ הפעלה בקוד
 
-    def enroll(self, code: str, public_key: str, name: str, platform: str, app_version: str) -> dict:
+    def enroll(self, code: str, public_key: str, name: str, platform: str, app_version: str,
+               device_fingerprint: str = "") -> dict:
         if not security.is_wg_key(public_key):
             raise ApiError(400, "מפתח ציבורי לא תקין")
+        if device_fingerprint and not security.is_device_fingerprint(device_fingerprint):
+            raise ApiError(400, "מזהה המכשיר אינו תקין")
         name = (name or "").strip()[:60] or "מכשיר"
         token = security.new_token()
         psk = security.new_preshared_key()
@@ -454,9 +457,10 @@ class Services:
             t = db.now()
             cur = c.execute(
                 "INSERT INTO devices (name, label, platform, app_version, public_key, preshared_key, vpn_ip,"
-                " level, token_hash, code_id, created_at, approved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                " level, token_hash, code_id, created_at, approved_at, device_fingerprint) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (name, row["label"], platform[:20], app_version[:20], public_key, psk, ip, row["level"],
-                 security.token_hash(token), row["id"], t, t))
+                 security.token_hash(token), row["id"], t, t, device_fingerprint))
             c.execute("UPDATE codes SET uses_left = uses_left - 1 WHERE id = ?", (row["id"],))
             device_id, level = cur.lastrowid, row["level"]
             self.bump_policy(c, device_id)
@@ -495,11 +499,14 @@ class Services:
             self.audit(admin, "transfer_start", f"device:{device_id}", "", c)
         return {"token": token, "expires_at": db.now() + self.TRANSFER_TTL_S}
 
-    def transfer_enroll(self, token: str, public_key: str, name: str, platform: str, app_version: str) -> dict:
+    def transfer_enroll(self, token: str, public_key: str, name: str, platform: str, app_version: str,
+                        device_fingerprint: str = "") -> dict:
         """הטלפון החדש נרשם עם טוקן ההחלפה: מקבל כתובת ומפתחות חדשים, יורש לקוח/רמה/מדיניות מהישן,
         והישן מושבת (anti-replay: הטוקן חד-פעמי ונמחק, ובדיקת תוקף)."""
         if not security.is_wg_key(public_key):
             raise ApiError(400, "מפתח ציבורי לא תקין")
+        if device_fingerprint and not security.is_device_fingerprint(device_fingerprint):
+            raise ApiError(400, "מזהה המכשיר אינו תקין")
         name = (name or "").strip()[:60] or "מכשיר"
         new_token = security.new_token()
         psk = security.new_preshared_key()
@@ -514,10 +521,11 @@ class Services:
             t = db.now()
             cur = c.execute(
                 "INSERT INTO devices (name, label, platform, app_version, public_key, preshared_key, vpn_ip,"
-                " level, policy, customer_id, token_hash, code_id, created_at, approved_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " level, policy, customer_id, token_hash, code_id, created_at, approved_at, device_fingerprint) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (name, old["label"], platform[:20], app_version[:20], public_key, psk, ip, old["level"],
-                 old["policy"], old["customer_id"], security.token_hash(new_token), old["code_id"], t, t))
+                 old["policy"], old["customer_id"], security.token_hash(new_token), old["code_id"], t, t,
+                 device_fingerprint))
             new_id = cur.lastrowid
             # הישן: מושבת, הטוקן נשרף (חד-פעמי), והחיבור שלו מוסר
             c.execute("UPDATE devices SET status = 'disabled', transfer_token = '', transfer_expires = NULL "
@@ -568,6 +576,8 @@ class Services:
             raise ApiError(400, "מזהה המכשיר אינו תקין")
         if not security.is_wg_key(public_key):
             raise ApiError(400, "מפתח ציבורי לא תקין")
+        if device_fingerprint and not security.is_device_fingerprint(device_fingerprint):
+            raise ApiError(400, "מזהה המכשיר אינו תקין")
         name = security.clean_text(name, 60) or "מכשיר"
         token, psk = security.new_token(), security.new_preshared_key()
         old_key, old_ip, peer_added = "", "", False
@@ -706,7 +716,8 @@ class Services:
     # ------------------------------------------------------------ הרשמה מהאפליקציה
 
     def register(self, *, name: str, phone: str, email: str, level: int, options: list[str], note: str,
-                 public_key: str, device_name: str, platform: str, app_version: str) -> dict:
+                 public_key: str, device_name: str, platform: str, app_version: str,
+                 device_fingerprint: str = "") -> dict:
         """בקשת הצטרפות: לקוח + מכשיר "ממתין" (בלי VPN). המנהל מאשר אחרי תשלום."""
         if not self.cfg.register_enabled:
             raise ApiError(403, "ההרשמה סגורה כרגע. פנו אלינו לקבלת קוד הפעלה.")
@@ -734,6 +745,12 @@ class Services:
                 raise ApiError(409, "המכשיר כבר רשום")
             t = db.now()
             cust = c.execute("SELECT id FROM customers WHERE phone = ? ORDER BY id LIMIT 1", (phone_n,)).fetchone()
+            if cust is not None:
+                existing_device = c.execute(
+                    "SELECT status FROM devices WHERE customer_id = ? AND status IN ('active', 'pending') LIMIT 1",
+                    (cust["id"],)).fetchone()
+                if existing_device:
+                    raise ApiError(409, "למספר הטלפון הזה כבר משויך מכשיר פעיל או בקשה ממתינה. בחרו 'שחזור/החלפת מכשיר' כדי להמשיך בלי ליצור רישום כפול.")
             if cust is None:
                 customer_id = c.execute(
                     "INSERT INTO customers (name, phone, email, created_at) VALUES (?,?,?,?)",
@@ -745,9 +762,9 @@ class Services:
             dev_name = security.clean_text(device_name, 60) or name
             device_id = c.execute(
                 "INSERT INTO devices (name, label, platform, app_version, public_key, level, status, token_hash,"
-                " customer_id, policy, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " customer_id, policy, created_at, device_fingerprint) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (dev_name, name, platform[:20], app_version[:20], public_key, level, "pending",
-                 security.token_hash(token), customer_id, DeviceSettings(options=opts).dump(), t)).lastrowid
+                 security.token_hash(token), customer_id, DeviceSettings(options=opts).dump(), t, device_fingerprint)).lastrowid
             request_id = c.execute(
                 "INSERT INTO requests (kind, device_id, customer_id, level, options, note, created_at)"
                 " VALUES ('join',?,?,?,?,?,?)",
@@ -993,6 +1010,7 @@ class Services:
         decision: level, options, custom_hosts, allow_hosts, custom_apps, app_images, payment, paid_until,
                   admin_note — מה שהמנהל קבע בפועל (ברירת מחדל: מה שהלקוח ביקש).
         """
+        old_to_retire = None
         with self.db() as c, db.transaction(c):
             req = c.execute("SELECT * FROM requests WHERE id = ?", (request_id,)).fetchone()
             if req is None:
@@ -1023,6 +1041,14 @@ class Services:
                 c.execute("UPDATE devices SET status = 'active', vpn_ip = ?, preshared_key = ?, level = ?,"
                           " policy = ?, approved_at = ? WHERE id = ?",
                           (ip, psk, level, settings.dump(), t, dev["id"]))
+                if dev["replacement_of"]:
+                    old_candidate = c.execute("SELECT * FROM devices WHERE id = ? AND customer_id = ? AND status = 'active'",
+                                              (dev["replacement_of"], req["customer_id"])).fetchone()
+                    if old_candidate is not None:
+                        c.execute("UPDATE devices SET status = 'disabled', transfer_token = '', transfer_expires = NULL "
+                                  "WHERE id = ?", (old_candidate["id"],))
+                        self.log_device(c, old_candidate["id"], "device_replaced", f"הוחלף במכשיר {dev['id']}")
+                        old_to_retire = c.execute("SELECT * FROM devices WHERE id = ?", (old_candidate["id"],)).fetchone()
             else:
                 c.execute("UPDATE devices SET level = ?, policy = ? WHERE id = ?",
                           (level, settings.dump(), dev["id"]))
@@ -1038,6 +1064,12 @@ class Services:
             if req["kind"] == "join":
                 # אם WireGuard נכשל — הכול מתבטל, והבקשה נשארת ממתינה
                 self.wg.add_peer(new["public_key"], new["preshared_key"], new["vpn_ip"])
+        if old_to_retire is not None:
+            try:
+                self.wg.remove_peer(old_to_retire["public_key"])
+            except WireGuardError as e:
+                log.warning("old replacement peer cleanup will be reconciled: %s", e)
+            self.push_device(old_to_retire)
         self.push_device(new)
         log.info("request %s approved by %s (device %s, level %s)", request_id, admin, new["id"], level)
         return {"device_id": new["id"], "status": new["status"], "vpn_ip": new["vpn_ip"]}
