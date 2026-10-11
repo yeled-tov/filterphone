@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import java.security.MessageDigest
 import android.util.Log
 import com.wireguard.android.backend.Tunnel
 import io.flutter.embedding.android.FlutterActivity
@@ -67,6 +68,15 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
+    /** Stable app-scoped identity across reinstall; never expose the raw Android ID to the API. */
+    private fun deviceFingerprint(): String {
+        val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+            ?.takeIf { it.isNotBlank() } ?: return ""
+        val input = "FilterPhone:$androidId".toByteArray(Charsets.UTF_8)
+        return MessageDigest.getInstance("SHA-256").digest(input)
+            .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    }
+
     private fun onCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "deviceInfo" -> result.success(mapOf(
@@ -74,6 +84,7 @@ class MainActivity : FlutterActivity() {
                 "manufacturer" to Build.MANUFACTURER,
                 "sdk" to Build.VERSION.SDK_INT,
                 "appVersion" to packageManager.getPackageInfo(packageName, 0).versionName,
+                "deviceFingerprint" to deviceFingerprint(),
             ))
             "generateKeyPair" -> background(result) { TunnelManager.newKeyPair() }
             "publicKey" -> background(result) { TunnelManager.publicKey() }
