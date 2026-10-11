@@ -184,7 +184,14 @@ CREATE TABLE profiles (
 );
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4]
+# גרסה 5 — זיהוי התקנה חוזרת והחלפה מאושרת בלי ליצור לקוח כפול
+_V5 = """
+ALTER TABLE devices ADD COLUMN device_fingerprint TEXT NOT NULL DEFAULT '';
+ALTER TABLE devices ADD COLUMN replacement_of INTEGER REFERENCES devices(id) ON DELETE SET NULL;
+CREATE INDEX devices_fingerprint ON devices(device_fingerprint, status);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5]
 VERSION = len(MIGRATIONS)
 
 
