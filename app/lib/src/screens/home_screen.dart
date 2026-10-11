@@ -183,7 +183,12 @@ class _RootProvisionCard extends StatelessWidget {
 
   String _message(Map<String, Object?> result) {
     switch (result['result']) {
-      case 'device_owner_set': return 'ההקמה הצליחה. המכשיר הוגדר כמנוהל.';
+      case 'device_owner_set':
+        final technical = result['technical'] as String? ?? '';
+        if (technical.contains('WRITE_SECURE_SETTINGS grant failed')) {
+          return 'Device Owner הוגדר, אבל Android לא אישר את WRITE_SECURE_SETTINGS. צריך לבדוק את Root ולנסות שוב.';
+        }
+        return 'ההקמה הצליחה. המכשיר הוגדר כמנוהל.';
       case 'already_managed': return 'ניהול המכשיר כבר פעיל.';
       case 'no_root': return 'לא נמצא Root מאושר במכשיר. לא בוצע שינוי.';
       case 'root_denied': return 'בקשת Root נדחתה או לא קיבלה הרשאת מנהל. אפשר לאשר את בקשת su ואז לנסות שוב.';
@@ -215,7 +220,17 @@ class _RootProvisionCard extends StatelessWidget {
                       context: context,
                       builder: (context) => AlertDialog(
                         title: Text(result['ok'] == true ? 'ההקמה הצליחה' : 'תוצאת בדיקת Root'),
-                        content: Text(_message(result)),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_message(result)),
+                            if ((result['technical'] as String? ?? '').trim().isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              SelectableText((result['technical'] as String).trim()),
+                            ],
+                          ],
+                        ),
                         actions: [FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('סגירה'))],
                       ),
                     );
