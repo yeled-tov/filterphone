@@ -303,6 +303,7 @@ class ApiClient {
     required String publicKey,
     required String platform,
     required String appVersion,
+    String deviceFingerprint = '',
   }) async =>
       Registration.fromJson(await _send('POST', '/v1/register', body: {
         'name': form.name.trim(),
@@ -315,6 +316,7 @@ class ApiClient {
         'public_key': publicKey,
         'platform': platform,
         'app_version': appVersion,
+        'device_fingerprint': deviceFingerprint,
       }));
 
   Future<Enrollment> enroll({
@@ -323,6 +325,7 @@ class ApiClient {
     required String name,
     required String platform,
     required String appVersion,
+    String deviceFingerprint = '',
   }) async {
     final j = await _send('POST', '/v1/enroll', body: {
       'code': code,
@@ -330,6 +333,7 @@ class ApiClient {
       'name': name,
       'platform': platform,
       'app_version': appVersion,
+      'device_fingerprint': deviceFingerprint,
     });
     return Enrollment.fromJson(j);
   }
@@ -341,6 +345,7 @@ class ApiClient {
     required String name,
     required String platform,
     required String appVersion,
+    String deviceFingerprint = '',
   }) async {
     final j = await _send('POST', '/v1/transfer', body: {
       'token': token,
@@ -348,9 +353,52 @@ class ApiClient {
       'name': name,
       'platform': platform,
       'app_version': appVersion,
+      'device_fingerprint': deviceFingerprint,
     });
     return Enrollment.fromJson(j);
   }
+
+  Future<Enrollment> restoreDevice({
+    required String deviceFingerprint,
+    required String publicKey,
+    required String name,
+    required String platform,
+    required String appVersion,
+  }) async {
+    final j = await _send('POST', '/v1/device/restore', body: {
+      'device_fingerprint': deviceFingerprint,
+      'public_key': publicKey,
+      'name': name,
+      'platform': platform,
+      'app_version': appVersion,
+    });
+    return Enrollment.fromJson(j);
+  }
+
+  Future<void> bindDeviceIdentity(String token, String deviceFingerprint) =>
+      _send('POST', '/v1/device/identity', token: token, body: {
+        'device_fingerprint': deviceFingerprint,
+      });
+
+  Future<bool> recoveryLookup(String phone) async =>
+      (await _send('POST', '/v1/device/recovery-lookup', body: {'phone': phone}))['found'] == true;
+
+  Future<Registration> recoveryRequest({
+    required String phone,
+    required String deviceFingerprint,
+    required String publicKey,
+    required String name,
+    required String platform,
+    required String appVersion,
+  }) async =>
+      Registration.fromJson(await _send('POST', '/v1/device/recovery-request', body: {
+        'phone': phone,
+        'device_fingerprint': deviceFingerprint,
+        'public_key': publicKey,
+        'name': name,
+        'platform': platform,
+        'app_version': appVersion,
+      }));
 
   Future<DeviceStatus> device(String token) async =>
       DeviceStatus.fromJson(await _send('GET', '/v1/device', token: token));
