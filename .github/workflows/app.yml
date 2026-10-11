@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: app-${{ github.ref }}
@@ -96,6 +96,17 @@ jobs:
             echo "✓ $(basename "$apk") — $(echo "$out" | grep -m1 'certificate SHA-256')"
           done
           ls -lh ../dist
+
+      - name: פרסום APK לבדיקה ב-GitHub Releases
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[test-release]')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="test-v1.0.${{ github.run_number }}"
+          gh release create "$TAG" ../dist/*.apk ../dist/FilterPhone.json \
+            --title "FilterPhone Test ${{ github.run_number }}" \
+            --notes "בדיקת APK חתום. נבנה מ-commit ${GITHUB_SHA}. אין כאן פריסת שרת." \
+            --prerelease --target "$GITHUB_SHA"
 
       - name: ניקוי סודות
         if: always()
