@@ -31,17 +31,25 @@ object RootProvisioner {
     fun provision(context: Context): Outcome {
         val caps = Preflight.capabilities(context)
         if (caps.deviceOwner) return Outcome(true, "ENROLL-ROOT-000", "already_managed")
-        if (!caps.provisioningAllowed) {
-            return Outcome(false, "ENROLL-ROOT-002", "requires_factory_reset",
-                "isProvisioningAllowed(PROVISION_MANAGED_DEVICE)=false")
-        }
-        if (!caps.rootAvailable) return Outcome(false, "ENROLL-ROOT-001", "no_root", "su not found")
-
-        val idRes = runSu("id", 15)
+        // Do not trust filesystem-based su detection or isProvisioningAllowed as an early exit:
+        // Magisk may expose su through a different path, and the user must get the real root prompt.
+        // The official dpm command remains the final authority and will reject unsupported states.
+        val idRes = runSu("id", 20)
         if (idRes.code != 0 || !idRes.out.contains("uid=0")) {
-            return Outcome(false, "ENROLL-ROOT-001", "root_denied", "id: ${trim(idRes.out + idRes.err)}")
+            val details = trim(idRes.out + " " + idRes.err)
+            val noSu = idRes.code == -1 &&
+                (details.contains("no such file", ignoreCase = true) ||
+                 details.contains("cannot run program", ignoreCase = true) ||
+                 details.contains("error=2", ignoreCase = true))
+            return if (noSu) {
+                Outcome(false, "ENROLL-ROOT-001", "no_root", details.ifBlank { "su executable not found" })
+            } else {
+                Outcome(false, "ENROLL-ROOT-001", "root_denied", details.ifBlank { "su did not return uid=0" })
+            }
         }
 
+        // Attempt the official command even if the framework preflight says no. This does not bypass
+        // Android restrictions: dpm itself validates provisioning state and returns the actual reason.
         val dpm = runSu("dpm set-device-owner $ADMIN", 30)
         val combined = (dpm.out + "\n" + dpm.err).trim()
         // לוודא בפועל (גם אם ה-exit code לא אמין בחלק מה-ROMים)
@@ -77,15 +85,14 @@ object RootProvisioner {
 
     private fun runSu(cmd: String, timeoutS: Long): Shell {
         return try {
-            val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(false).start()
-            val out = p.inputStream.bufferedReader().use(BufferedReader::readText)
-            val err = p.errorStream.bufferedReader().use(BufferedReader::readText)
+            val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
             val finished = p.waitFor(timeoutS, TimeUnit.SECONDS)
             if (!finished) {
                 p.destroyForcibly()
-                Shell(-2, out, "timeout")
+                Shell(-2, "", "timeout after ${timeoutS}s")
             } else {
-                Shell(p.exitValue(), out, err)
+                val output = p.inputStream.bufferedReader().use(BufferedReader::readText)
+                Shell(p.exitValue(), output, "")
             }
         } catch (e: Exception) {
             Shell(-1, "", e.javaClass.simpleName + ": " + (e.message ?: ""))
