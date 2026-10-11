@@ -49,6 +49,13 @@ def is_wg_key(key: str) -> bool:
     """מפתח ציבורי של WireGuard: 32 בתים ב-base64 (44 תווים, '=' בסוף)."""
     return bool(_WG_KEY.match(key or ""))
 
+_DEVICE_FINGERPRINT = re.compile(r"^[0-9a-f]{64}$")
+
+
+def is_device_fingerprint(value: str | None) -> bool:
+    """טביעת התקן אטומה: SHA-256 hex של Android ID, לא מספר סידורי גולמי."""
+    return bool(_DEVICE_FINGERPRINT.fullmatch(value or ""))
+
 
 _EMAIL = re.compile(r"^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,24}$")
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069]")
