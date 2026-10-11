@@ -55,6 +55,7 @@ FIELD_NAMES = {"name": "שם", "phone": "טלפון", "email": "מייל", "leve
 
 enroll_limiter = RateLimiter(limit=10, window_s=600)
 register_limiter = RateLimiter(limit=5, window_s=3600)
+recovery_limiter = RateLimiter(limit=8, window_s=3600)
 login_limiter = RateLimiter(limit=8, window_s=600)
 device_limiter = RateLimiter(limit=30, window_s=600)       # בקשות שינוי / דיווחים מהטלפון
 heartbeat_limiter = RateLimiter(limit=40, window_s=600)    # דיווח תקופתי: כל 15 דקות + רענון ידני
@@ -246,6 +247,7 @@ class EnrollIn(BaseModel):
     name: str = Field(default="", max_length=60)
     platform: str = Field(default="", max_length=20)
     app_version: str = Field(default="", max_length=20)
+    device_fingerprint: str = Field(default="", max_length=64)
 
 
 class ProfileIn(BaseModel):
@@ -264,6 +266,32 @@ class TransferIn(BaseModel):
     name: str = Field(default="", max_length=60)
     platform: str = Field(default="", max_length=20)
     app_version: str = Field(default="", max_length=20)
+    device_fingerprint: str = Field(default="", max_length=64)
+
+
+class IdentityIn(BaseModel):
+    device_fingerprint: str = Field(min_length=64, max_length=64)
+
+
+class RestoreIn(BaseModel):
+    device_fingerprint: str = Field(min_length=64, max_length=64)
+    public_key: str = Field(min_length=44, max_length=44)
+    name: str = Field(default="", max_length=60)
+    platform: str = Field(default="android", max_length=20)
+    app_version: str = Field(default="", max_length=20)
+
+
+class RecoveryLookupIn(BaseModel):
+    phone: str = Field(min_length=1, max_length=30)
+
+
+class RecoveryRequestIn(BaseModel):
+    phone: str = Field(min_length=1, max_length=30)
+    device_fingerprint: str = Field(min_length=64, max_length=64)
+    public_key: str = Field(min_length=44, max_length=44)
+    name: str = Field(default="", max_length=60)
+    platform: str = Field(default="android", max_length=20)
+    app_version: str = Field(default="", max_length=20)
 
 
 class RegisterIn(BaseModel):
@@ -277,6 +305,7 @@ class RegisterIn(BaseModel):
     device_name: str = Field(default="", max_length=60)
     platform: str = Field(default="", max_length=20)
     app_version: str = Field(default="", max_length=20)
+    device_fingerprint: str = Field(default="", max_length=64)
 
 
 class ChangeIn(BaseModel):
@@ -422,17 +451,42 @@ def _routes(app: FastAPI) -> None:
         _limit(register_limiter, client_ip(request))
         return svc.register(name=body.name, phone=body.phone, email=body.email, level=body.level,
                             options=body.options, note=body.note, public_key=body.public_key,
-                            device_name=body.device_name, platform=body.platform, app_version=body.app_version)
+                            device_name=body.device_name, platform=body.platform, app_version=body.app_version,
+                            device_fingerprint=body.device_fingerprint)
 
     @app.post("/v1/enroll", status_code=201)
     def enroll(body: EnrollIn, request: Request, svc: SvcDep):
         _limit(enroll_limiter, client_ip(request))
-        return svc.enroll(body.code, body.public_key, body.name, body.platform, body.app_version)
+        return svc.enroll(body.code, body.public_key, body.name, body.platform, body.app_version,
+                           body.device_fingerprint)
 
     @app.post("/v1/transfer", status_code=201)
     def transfer(body: TransferIn, request: Request, svc: SvcDep):
         _limit(enroll_limiter, client_ip(request))
-        return svc.transfer_enroll(body.token, body.public_key, body.name, body.platform, body.app_version)
+        return svc.transfer_enroll(body.token, body.public_key, body.name, body.platform, body.app_version,
+                                   body.device_fingerprint)
+
+    @app.post("/v1/device/identity")
+    def bind_device_identity(body: IdentityIn, svc: SvcDep, row: DeviceRow):
+        return svc.bind_device_identity(row, body.device_fingerprint)
+
+    @app.post("/v1/device/restore")
+    def restore_device(body: RestoreIn, request: Request, svc: SvcDep):
+        _limit(recovery_limiter, "restore:" + client_ip(request))
+        return svc.restore_device(body.device_fingerprint, body.public_key, body.name, body.platform,
+                                  body.app_version)
+
+    @app.post("/v1/device/recovery-lookup")
+    def recovery_lookup(body: RecoveryLookupIn, request: Request, svc: SvcDep):
+        _limit(recovery_limiter, "lookup:" + client_ip(request))
+        return svc.recovery_lookup(body.phone)
+
+    @app.post("/v1/device/recovery-request", status_code=201)
+    def recovery_request(body: RecoveryRequestIn, request: Request, svc: SvcDep):
+        _limit(recovery_limiter, "request:" + client_ip(request))
+        return svc.recovery_request(phone=body.phone, device_fingerprint=body.device_fingerprint,
+                                    public_key=body.public_key, name=body.name, platform=body.platform,
+                                    app_version=body.app_version)
 
     @app.get("/v1/device")
     def device(request: Request, svc: SvcDep, row: DeviceRow):
