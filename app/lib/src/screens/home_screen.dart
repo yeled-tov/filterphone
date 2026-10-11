@@ -182,16 +182,30 @@ class _RootProvisionCard extends StatelessWidget {
   final AppController controller;
 
   String _message(Map<String, Object?> result) {
+    String message;
     switch (result['result']) {
-      case 'device_owner_set': return 'ההקמה הצליחה. המכשיר הוגדר כמנוהל.';
-      case 'already_managed': return 'ניהול המכשיר כבר פעיל.';
-      case 'no_root': return 'לא נמצא Root מאושר במכשיר. לא בוצע שינוי.';
-      case 'root_denied': return 'בקשת Root נדחתה או לא קיבלה הרשאת מנהל. אפשר לאשר את בקשת su ואז לנסות שוב.';
-      case 'requires_factory_reset': return 'Android אינו מאפשר להגדיר Device Owner במצב הנוכחי. אין כאן מעקף בטוח; בדרך התקנית נדרשת בדרך כלל הקמה בזמן ההתקנה הראשונית או לאחר איפוס. לא בוצע איפוס.';
-      case 'accounts_present': return 'יש חשבונות במכשיר שמונעים את ההקמה דרך Root. לא בוצע שינוי.';
-      case 'already_has_device_owner': return 'כבר מוגדר מנהל מכשיר אחר. FilterPhone לא החליף אותו.';
-      default: return 'ההקמה לא הושלמה (${result['code'] ?? 'שגיאה'}). לא נעשה מעקף אבטחה.';
+      case 'device_owner_set': message = 'ההקמה הצליחה. המכשיר הוגדר כמנוהל.';
+      case 'already_managed': message = 'ניהול המכשיר כבר פעיל.';
+      case 'no_root': message = 'לא נמצא su במכשיר. לא בוצע שינוי; אפשר לנסות מסלול ADB/Wireless debugging.';
+      case 'root_denied': message = 'בקשת Root לא אושרה או פגה. נסו שוב ואשרו את בקשת su אם היא מופיעה.';
+      case 'requires_factory_reset': message = 'Android דחה את הגדרת Device Owner במצב הנוכחי. לא בוצע איפוס ולא שונו חשבונות.';
+      case 'accounts_present': message = 'Android דיווח שחשבונות מונעים את ההקמה. הסירו רק את החשבונות המוצגים למטה דרך הגדרות המכשיר, ואז בדקו שוב.';
+      case 'already_has_device_owner': message = 'כבר מוגדר מנהל מכשיר אחר. FilterPhone לא החליף אותו.';
+      case 'multiple_users': message = 'במכשיר מוגדרים כמה משתמשים. יש לבדוק זאת בהגדרות Android לפני ההקמה.';
+      case 'provisioning_blocked': message = 'Android דחה את הפקודה. בדרך כלל נדרשת הקמה דרך אשף ההגדרה או איפוס; לא נעשה מעקף.';
+      default: message = 'ההקמה לא הושלמה (${result['code'] ?? 'שגיאה'}). לא נעשה מעקף אבטחה.';
     }
+    final accounts = (result['accounts'] as List? ?? const [])
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .take(20)
+        .toList();
+    if (accounts.isNotEmpty) {
+      message += '\n\nחשבונות שזוהו לפי Android:\n' +
+          accounts.map((account) => '• $account').join('\n');
+    }
+    return message;
   }
 
   @override
