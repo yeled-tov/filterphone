@@ -2,6 +2,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Granted only through the explicit root provisioning flow; not a normal runtime permission. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- השירות הקדמי ששומר על הסינון (התראה קבועה) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -150,3 +152,4 @@
         </intent>
     </queries>
 </manifest>
+

@@ -1,8 +1,9 @@
 package com.filterphone.app
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
-import java.io.BufferedReader
 import java.util.concurrent.TimeUnit
 
 /**
@@ -14,8 +15,8 @@ import java.util.concurrent.TimeUnit
  * דרך su (מנגנון ה-root הרגיל — המשתמש מאשר בחלון של אפליקציית ה-root). זה לא exploit ולא מעקף:
  * זו אותה פקודה שטכנאי מריץ ב-adb, רק עם הרשאת root מקומית במקום מחשב.
  *
- * כשירות נבדקת לפני הכול (Preflight.isProvisioningAllowed הרשמי): אם המכשיר כבר מאותחל, יש בו
- * חשבונות, או יש כבר מנהל מכשיר — לא מנסים (אנדרואיד ידחה), אלא מחזירים סיבה מדויקת לאיפוס/הקמה אחרת.
+ * Preflight מציג אבחון מוקדם בממשק. במסלול Root לא עוצרים לפי האבחון הזה: מבקשים su, ואז
+ * מריצים dpm כדי ש-Android יחזיר את סיבת הסירוב בפועל. Root לא מבטל את דרישות ההקמה של Android.
  *
  * אין כאן שום מעקף אבטחה, FRP-bypass או שינוי מצב לא מתועד. מה שאנדרואיד לא מתיר — מדווח ככשל.
  */
@@ -54,10 +55,25 @@ object RootProvisioner {
         val combined = (dpm.out + "\n" + dpm.err).trim()
         // לוודא בפועל (גם אם ה-exit code לא אמין בחלק מה-ROMים)
         if (Preflight.capabilities(context).deviceOwner) {
+            // Optional high-privilege settings access used only on the explicitly root-enrolled,
+            // fully managed device. Accessibility still requires the user's explicit system UI action.
+            val secureSettings = runSu(
+                "pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS",
+                20,
+            )
+            val secureSettingsOutput = (secureSettings.out + "\n" + secureSettings.err).trim()
+            val secureSettingsGranted = secureSettings.code == 0 &&
+                context.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) ==
+                PackageManager.PERMISSION_GRANTED
             runCatching { DeviceOwnerManager.applyBaseline(context) }
                 .onFailure { Log.w(TAG, "baseline after root provision failed", it) }
             Recovery.schedulePeriodic(context)
-            return Outcome(true, "ENROLL-ROOT-000", "device_owner_set", trim(combined))
+            val technical = listOfNotNull(
+                combined.takeIf(String::isNotBlank),
+                if (secureSettingsGranted) "WRITE_SECURE_SETTINGS granted"
+                else "WRITE_SECURE_SETTINGS grant failed: ${trim(secureSettingsOutput)}",
+            ).joinToString("\n")
+            return Outcome(true, "ENROLL-ROOT-000", "device_owner_set", trim(technical))
         }
         val reason = classifyDpmFailure(combined)
         Log.w(TAG, "root provision failed: $reason")
@@ -86,13 +102,30 @@ object RootProvisioner {
     private fun runSu(cmd: String, timeoutS: Long): Shell {
         return try {
             val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
+            // Drain output while su is running. Waiting before reading can fill the process pipe
+            // (or hide a useful dpm error behind a timeout), especially on vendor Android builds.
+            val output = StringBuilder()
+            val reader = Thread({
+                runCatching {
+                    p.inputStream.bufferedReader().useLines { lines ->
+                        lines.forEach { line ->
+                            synchronized(output) {
+                                if (output.length < 4096) output.append(line).append('\n')
+                            }
+                        }
+                    }
+                }.onFailure { Log.w(TAG, "could not read su output", it) }
+            }, "filterphone-su-output").apply { isDaemon = true }
+            reader.start()
             val finished = p.waitFor(timeoutS, TimeUnit.SECONDS)
             if (!finished) {
                 p.destroyForcibly()
-                Shell(-2, "", "timeout after ${timeoutS}s")
+                p.waitFor(2, TimeUnit.SECONDS)
+                reader.join(1_000)
+                Shell(-2, synchronized(output) { output.toString() }, "timeout after ${timeoutS}s")
             } else {
-                val output = p.inputStream.bufferedReader().use(BufferedReader::readText)
-                Shell(p.exitValue(), output, "")
+                reader.join(2_000)
+                Shell(p.exitValue(), synchronized(output) { output.toString() }, "")
             }
         } catch (e: Exception) {
             Shell(-1, "", e.javaClass.simpleName + ": " + (e.message ?: ""))
@@ -101,3 +134,4 @@ object RootProvisioner {
 
     private fun trim(s: String): String = s.trim().take(300)
 }
+
