@@ -538,6 +538,171 @@ class Services:
                 "level_name": LEVEL_NAMES.get(old["level"], str(old["level"])),
                 "vpn": self.vpn_config(ip, psk), "ca": self.ca_info()}
 
+
+    # ------------------------------------------------------------ זיהוי והתקנה חוזרת
+
+    def bind_device_identity(self, row: sqlite3.Row, fingerprint: str) -> dict:
+        if not security.is_device_fingerprint(fingerprint):
+            raise ApiError(400, "מזהה המכשיר אינו תקין")
+        with self.db() as c, db.transaction(c):
+            current = c.execute("SELECT id, device_fingerprint FROM devices WHERE id = ?", (row["id"],)).fetchone()
+            if current is None:
+                raise ApiError(404, "המכשיר לא נמצא")
+            existing = current["device_fingerprint"] or ""
+            if existing and existing != fingerprint:
+                raise ApiError(409, "מזהה המכשיר השתנה. נדרש שחזור דרך המנהל.")
+            conflict = c.execute("SELECT id FROM devices WHERE device_fingerprint = ? AND status = 'active' "
+                                 "AND id != ? LIMIT 1", (fingerprint, row["id"])).fetchone()
+            if conflict:
+                raise ApiError(409, "מזהה המכשיר כבר משויך למכשיר אחר. פנו לתמיכה.")
+            if not existing:
+                c.execute("UPDATE devices SET device_fingerprint = ? WHERE id = ?", (fingerprint, row["id"]))
+                self.log_device(c, row["id"], "identity_bound")
+                self.audit(f"device:{row['id']}", "identity_bound", f"device:{row['id']}", "fingerprint bound", c)
+        return {"ok": True}
+
+    def restore_device(self, fingerprint: str, public_key: str, name: str, platform: str,
+                       app_version: str) -> dict:
+        """אותו Android ID משחזר את אותו לקוח ומדיניות, עם token ומפתחות VPN חדשים."""
+        if not security.is_device_fingerprint(fingerprint):
+            raise ApiError(400, "מזהה המכשיר אינו תקין")
+        if not security.is_wg_key(public_key):
+            raise ApiError(400, "מפתח ציבורי לא תקין")
+        name = security.clean_text(name, 60) or "מכשיר"
+        token, psk = security.new_token(), security.new_preshared_key()
+        old_key, old_ip, peer_added = "", "", False
+        try:
+            with self.db() as c, db.transaction(c):
+                rows = c.execute("SELECT * FROM devices WHERE device_fingerprint = ? AND status = 'active' "
+                                 "ORDER BY last_seen_at DESC, id DESC", (fingerprint,)).fetchall()
+                if not rows:
+                    raise ApiError(404, "לא נמצאה הגנה פעילה למזהה המכשיר הזה")
+                if len(rows) > 1:
+                    raise ApiError(409, "נמצאו כמה מכשירים עם אותו מזהה. פנו לתמיכה.")
+                old = rows[0]
+                if c.execute("SELECT 1 FROM devices WHERE public_key = ? AND id != ?",
+                             (public_key, old["id"])).fetchone():
+                    raise ApiError(409, "מפתח האבטחה כבר משויך למכשיר אחר")
+                old_key, old_ip = old["public_key"], old["vpn_ip"]
+                new_ip = self._allocate_ip(c)
+                self.wg.add_peer(public_key, psk, new_ip)
+                peer_added = True
+                c.execute("UPDATE devices SET public_key = ?, preshared_key = ?, vpn_ip = ?, token_hash = ?, "
+                          "name = ?, platform = ?, app_version = ?, last_seen_at = ? WHERE id = ?",
+                          (public_key, psk, new_ip, security.token_hash(token), name, platform[:20],
+                           app_version[:20], db.now(), old["id"]))
+                self.log_device(c, old["id"], "app_restored", "התקנה שוחזרה לפי מזהה המכשיר")
+                self.audit(f"device:{old['id']}", "device_restore", f"device:{old['id']}", "same device fingerprint", c)
+                fresh = c.execute("SELECT * FROM devices WHERE id = ?", (old["id"],)).fetchone()
+        except Exception:
+            if peer_added:
+                try:
+                    self.wg.remove_peer(public_key)
+                except Exception:
+                    log.exception("failed to clean up uncommitted restore peer")
+            raise
+        if old_key and old_key != public_key:
+            try:
+                self.wg.remove_peer(old_key)
+            except WireGuardError as e:
+                log.warning("old WireGuard peer cleanup after restore will be reconciled: %s", e)
+        if old_ip:
+            try:
+                pipe = self.redis.pipeline()
+                pipe.hdel(LEVELS_KEY, old_ip)
+                pipe.hdel(POLICY_KEY, old_ip)
+                pipe.incr(POLICY_REV_KEY)
+                pipe.execute()
+            except redis.RedisError as e:
+                log.warning("old IP cleanup after restore will be repaired by sync: %s", e)
+                self.redis_stale = True
+        self.push_device(fresh)
+        return {"device_id": fresh["id"], "token": token, "status": fresh["status"],
+                "level": fresh["level"], "level_name": LEVEL_NAMES.get(fresh["level"], str(fresh["level"])),
+                "vpn": self.vpn_config(fresh["vpn_ip"], fresh["preshared_key"]), "ca": self.ca_info()}
+
+    def recovery_lookup(self, phone: str) -> dict:
+        phone_n = security.normalize_phone(phone)
+        if not phone_n:
+            raise ApiError(400, "מספר הטלפון לא תקין")
+        with self.db() as c:
+            found = c.execute("SELECT 1 FROM customers WHERE phone = ? LIMIT 1", (phone_n,)).fetchone() is not None
+        return {"found": found}
+
+    def recovery_request(self, *, phone: str, device_fingerprint: str, public_key: str, name: str,
+                         platform: str, app_version: str) -> dict:
+        phone_n = security.normalize_phone(phone)
+        if not phone_n:
+            raise ApiError(400, "מספר הטלפון לא תקין")
+        if not security.is_device_fingerprint(device_fingerprint):
+            raise ApiError(400, "מזהה המכשיר אינו תקין")
+        if not security.is_wg_key(public_key):
+            raise ApiError(400, "מפתח ציבורי לא תקין")
+        name = security.clean_text(name, 60) or "מכשיר חדש"
+        token = security.new_token()
+        with self.db() as c, db.transaction(c):
+            customer = c.execute("SELECT * FROM customers WHERE phone = ? ORDER BY id LIMIT 1", (phone_n,)).fetchone()
+            if customer is None:
+                raise ApiError(404, "לא נמצא חשבון עם מספר הטלפון הזה. בדקו את המספר או פנו לתמיכה.")
+            collision = c.execute("SELECT id FROM devices WHERE device_fingerprint = ? AND customer_id IS NOT NULL "
+                                  "AND customer_id != ? LIMIT 1", (device_fingerprint, customer["id"])).fetchone()
+            if collision:
+                raise ApiError(409, "מזהה המכשיר כבר משויך לחשבון אחר. פנו לתמיכה.")
+            same_pending = c.execute("SELECT * FROM devices WHERE device_fingerprint = ? AND customer_id = ? "
+                                     "AND status = 'pending' ORDER BY id DESC LIMIT 1",
+                                     (device_fingerprint, customer["id"])).fetchone()
+            if same_pending is None:
+                pending_rows = c.execute("SELECT * FROM devices WHERE customer_id = ? AND status = 'pending' "
+                                         "ORDER BY id DESC", (customer["id"],)).fetchall()
+                if len(pending_rows) == 1 and not (pending_rows[0]["device_fingerprint"] or ""):
+                    same_pending = pending_rows[0]
+            if same_pending:
+                previous_fp = same_pending["device_fingerprint"] or ""
+                if previous_fp and previous_fp != device_fingerprint:
+                    raise ApiError(409, "כבר קיימת בקשה ממכשיר אחר לחשבון הזה. פנו לתמיכה.")
+                if c.execute("SELECT 1 FROM devices WHERE public_key = ? AND id != ?",
+                             (public_key, same_pending["id"])).fetchone():
+                    raise ApiError(409, "מפתח האבטחה כבר בשימוש")
+                c.execute("UPDATE devices SET token_hash = ?, public_key = ?, name = ?, platform = ?, app_version = ?, "
+                          "device_fingerprint = ? WHERE id = ?",
+                          (security.token_hash(token), public_key, name, platform[:20], app_version[:20],
+                           device_fingerprint, same_pending["id"]))
+                req = c.execute("SELECT id FROM requests WHERE device_id = ? AND kind = 'join' AND status = 'pending' "
+                                "ORDER BY id DESC LIMIT 1", (same_pending["id"],)).fetchone()
+                if req is None:
+                    raise ApiError(409, "בקשה קודמת לא עקבית. פנו לתמיכה.")
+                self.log_device(c, same_pending["id"], "recovery_retry", "הותקן מחדש לפני אישור")
+                return {"device_id": same_pending["id"], "token": token, "status": "pending",
+                        "request_id": req["id"],
+                        "message": "בקשת השחזור הקודמת עוד ממתינה לאישור. עודכנה ההתקנה הקיימת בלי ליצור לקוח נוסף."}
+            old_devices = c.execute("SELECT * FROM devices WHERE customer_id = ? AND status = 'active' "
+                                    "ORDER BY last_seen_at DESC, id DESC", (customer["id"],)).fetchall()
+            if len(old_devices) > 1:
+                raise ApiError(409, "לחשבון יש יותר ממכשיר פעיל אחד. נדרש לבחור מול התמיכה איזה מכשיר להחליף.")
+            old = old_devices[0] if old_devices else c.execute(
+                "SELECT * FROM devices WHERE customer_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+                (customer["id"],)).fetchone()
+            level = old["level"] if old else 1
+            policy = old["policy"] if old else DeviceSettings().dump()
+            replacement_of = old["id"] if old else None
+            t = db.now()
+            device_id = c.execute(
+                "INSERT INTO devices (name, label, platform, app_version, public_key, level, status, token_hash, "
+                "customer_id, policy, created_at, device_fingerprint, replacement_of) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (name, customer["name"], platform[:20], app_version[:20], public_key, level, "pending",
+                 security.token_hash(token), customer["id"], policy, t, device_fingerprint, replacement_of)).lastrowid
+            opts = DeviceSettings.load(policy).options
+            note = "בקשת החלפת מכשיר/התקנה מחדש; יש לאשר ידנית לפני שהמכשיר הישן מושבת."
+            request_id = c.execute(
+                "INSERT INTO requests (kind, device_id, customer_id, level, options, note, created_at) "
+                "VALUES ('join',?,?,?,?,?,?)", (device_id, customer["id"], level, json.dumps(opts), note, t)).lastrowid
+            self.bump_policy(c, device_id)
+            self.log_device(c, device_id, "recovery_requested", "בקשת שחזור/החלפת מכשיר")
+            self.audit(f"device:{device_id}", "recovery_request", f"request:{request_id}", f"customer:{customer['id']}", c)
+        return {"device_id": device_id, "token": token, "status": "pending", "request_id": request_id,
+                "message": "בקשת החלפת המכשיר נשלחה לאישור. ההגנה הישנה תוחלף רק לאחר האישור."}
+
     # ------------------------------------------------------------ הרשמה מהאפליקציה
 
     def register(self, *, name: str, phone: str, email: str, level: int, options: list[str], note: str,
