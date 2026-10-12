@@ -205,7 +205,49 @@ def _disable_youtube_safe_search(base_url: str, user: str, password: str) -> dic
         raise RuntimeError(
             f"AdGuard still has YouTube SafeSearch rewriting enabled: {after!r}"
         )
-    print("YouTube SafeSearch rewrite: disabled and verified; other engines unchanged.")
+    # AdGuard can override the global setting per configured DNS client/device.
+    clients_response = _request(base_url, user, password, "GET", "/clients") or {}
+    clients = clients_response.get("clients") if isinstance(clients_response, dict) else None
+    if not isinstance(clients, list):
+        raise RuntimeError("AdGuard clients API did not return a clients list; cannot verify per-device YouTube settings.")
+
+    changed_clients = 0
+    for client in clients:
+        if not isinstance(client, dict) or not isinstance(client.get("name"), str):
+            continue
+        client_safe_search = client.get("safe_search")
+        if not isinstance(client_safe_search, dict) or client_safe_search.get("youtube") is not True:
+            continue
+        updated_client = {
+            **client,
+            "safe_search": {**client_safe_search, "youtube": False},
+        }
+        _request(
+            base_url, user, password, "POST", "/clients/update",
+            {"name": client["name"], "data": updated_client},
+        )
+        changed_clients += 1
+
+    verify_response = _request(base_url, user, password, "GET", "/clients") or {}
+    verified_clients = verify_response.get("clients") if isinstance(verify_response, dict) else None
+    if not isinstance(verified_clients, list):
+        raise RuntimeError("Could not verify per-device YouTube SafeSearch settings.")
+    still_enabled = [
+        str(client.get("name", "<unnamed>"))
+        for client in verified_clients
+        if isinstance(client, dict)
+        and isinstance(client.get("safe_search"), dict)
+        and client["safe_search"].get("youtube") is True
+    ]
+    if still_enabled:
+        raise RuntimeError(
+            "YouTube SafeSearch rewrite remains enabled for AdGuard clients: "
+            + ", ".join(still_enabled)
+        )
+    print(
+        "YouTube SafeSearch rewrite: disabled globally and verified; "
+        f"per-client overrides changed: {changed_clients}; other engines unchanged."
+    )
     return after
 
 
