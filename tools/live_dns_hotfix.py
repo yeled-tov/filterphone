@@ -200,7 +200,7 @@ def _dns_a_query(host: str) -> dict[str, Any]:
     """Query the local AdGuard DNS listener directly, without an external DNS library."""
     transaction_id = int.from_bytes(os.urandom(2), "big")
     labels = host.rstrip(".").split(".")
-    qname = b"".join(bytes([len(label.encode("ascii"))]) + label.encode("ascii") for label in labels) + b"\\x00"
+    qname = b"".join(bytes([len(label.encode("ascii"))]) + label.encode("ascii") for label in labels) + b"\x00"
     packet = struct.pack("!HHHHHH", transaction_id, 0x0100, 1, 0, 0, 0) + qname + struct.pack("!HH", 1, 1)
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.settimeout(3)
