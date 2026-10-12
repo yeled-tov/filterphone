@@ -94,7 +94,7 @@ object TunnelManager {
     fun saveConfig(vpnJson: String) {
         val privateKey = store.get(K_PRIVATE_KEY) ?: throw IllegalStateException("no private key")
         val vpn = JSONObject(vpnJson)
-        VpnConfigFactory.build(vpn, privateKey)
+        VpnConfigFactory.build(vpn, privateKey, appContext)
         store.put(K_VPN_JSON, vpn.toString())
         store.put(K_CONFIG, null)
     }
@@ -107,7 +107,7 @@ object TunnelManager {
         val json = store.get(K_VPN_JSON)
         val privateKey = store.get(K_PRIVATE_KEY)
         if (json != null && privateKey != null) {
-            return VpnConfigFactory.build(JSONObject(json), privateKey, useFallback)
+            return VpnConfigFactory.build(JSONObject(json), privateKey, appContext, useFallback)
         }
         return store.get(K_CONFIG)?.let { Config.parse(BufferedReader(StringReader(it))) }
     }
