@@ -33,7 +33,7 @@ jobs:
           from pathlib import Path
           p = Path("ops/dns-hotfix/trigger.json")
           d = json.loads(p.read_text(encoding="utf-8"))
-          assert d.get("action") == "repair-youtube-and-block-spotify-image-cdns", "Unexpected hotfix action"
+          assert d.get("action") == "remove-youtube-blocks-globally", "Unexpected hotfix action"
           print("Verified the fixed DNS hotfix request.")
           PY
 
