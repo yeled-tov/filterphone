@@ -39,8 +39,11 @@ def main(path: str, api_user: str = "", api_hash: str = "") -> None:
     holder = find_key(doc, "safe_search")
     if holder is not None and isinstance(holder["safe_search"], dict):
         holder["safe_search"]["enabled"] = True
-        for engine in ("bing", "duckduckgo", "ecosia", "google", "pixabay", "yandex", "youtube"):
+        # YouTube must pass through normally during testing; do not rewrite its
+        # internal API requests to SafeSearch, which can interfere with playback.
+        for engine in ("bing", "duckduckgo", "ecosia", "google", "pixabay", "yandex"):
             holder["safe_search"][engine] = True
+        holder["safe_search"]["youtube"] = False
 
     filters = doc.setdefault("filters", []) or []
     if not any(f.get("url") == BYPASS_LIST for f in filters):
