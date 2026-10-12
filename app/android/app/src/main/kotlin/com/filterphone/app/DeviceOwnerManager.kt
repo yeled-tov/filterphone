@@ -117,7 +117,7 @@ object DeviceOwnerManager {
         }
 
         step("block_uninstall") { dpm.setUninstallBlocked(admin, context.packageName, want.getValue("block_uninstall")) }
-        // lockdown: בלי VPN אין רשת בכלל (חוץ מ-FilterPhone עצמה, שאנדרואיד פוטר — כדי שתוכל להתחבר).
+        // lockdown: אין חיבור ישיר מחוץ ל-VPN, מלבד FilterPhone ו-FilterTube שהוחרגו במפורש.
         // לפני שיש הגדרות VPN (מיד אחרי ההקמה, לפני ההפעלה בקוד) לא נועלים — ממתינים להגדרות.
         val vpnReady = TunnelManager.isInitialized && TunnelManager.hasConfig()
         if (want.getValue("always_on_vpn") && !vpnReady) {
@@ -127,7 +127,24 @@ object DeviceOwnerManager {
                 // דורש ששירות ה-VPN של האפליקציה תומך ב"תמיד מופעל" (WireGuard תומך).
                 // בהשהיה (מצב תחזוקה) משאירים VPN תמיד-מופעל אבל בלי נעילה (lockdown=false), כדי שיהיה
                 // אינטרנט גם אם מכבים את ה-VPN לרגע. בפקיעת ההשהיה החלה חוזרת ומחזירה את הנעילה.
-                if (want.getValue("always_on_vpn")) dpm.setAlwaysOnVpnPackage(admin, context.packageName, !paused)
+                if (want.getValue("always_on_vpn")) {
+                    val lockdownEnabled = !paused
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        // Android 10+: גם במצב lockdown, אפשר ל-FilterTube לצאת ישירות מה-VPN.
+                        // הרשימה מכילה רק חבילות FilterTube שמותקנות, כדי לא לשבור הקמה.
+                        val directNetworkPackages = if (lockdownEnabled) {
+                            VpnConfigFactory.installedFilterTubePackages(context)
+                        } else {
+                            emptySet()
+                        }
+                        dpm.setAlwaysOnVpnPackage(
+                            admin, context.packageName, lockdownEnabled, directNetworkPackages
+                        )
+                    } else {
+                        // Android 9 ומטה לא תומך ברשימת bypass ל-lockdown.
+                        dpm.setAlwaysOnVpnPackage(admin, context.packageName, lockdownEnabled)
+                    }
+                }
                 else if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) dpm.setAlwaysOnVpnPackage(admin, null, false)
             }
         }
