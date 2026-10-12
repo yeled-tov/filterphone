@@ -1,6 +1,6 @@
 {
-  "action": "repair-youtube-and-block-spotify-image-cdns",
-  "requested_at": "2026-10-12T06:20:00Z",
-  "scope": "allow-youtube-host-families; retain-per-device-policy; allow-github-dns-exceptions; bypass-github-tls-inspection; verify-spotify-ad-blocks-by-live-dns",
-  "safety": "backup-before-write; preserve-device-scoped-rules; verify-live-dns-answers"
+  "action": "remove-youtube-blocks-globally",
+  "requested_at": "2026-10-12T10:55:00Z",
+  "scope": "remove-all-youtube-domain-block-rules-including-client-scoped; globally-allow-youtube-domains; remove-youtube-app-and-host-blocks-from-all-device-policies; remove-youtube-option-from-catalog; preserve-spotify-image-and-ad-blocks; preserve-github-exceptions",
+  "safety": "backup-adguard-rules-and-device-database-before-write; validate-health-ready-and-direct-dns"
 }
