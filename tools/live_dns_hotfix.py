@@ -216,12 +216,23 @@ def _disable_youtube_safe_search(base_url: str, user: str, password: str) -> dic
         if not isinstance(client, dict) or not isinstance(client.get("name"), str):
             continue
         client_safe_search = client.get("safe_search")
-        if not isinstance(client_safe_search, dict) or client_safe_search.get("youtube") is not True:
+        if not isinstance(client_safe_search, dict):
+            client_safe_search = {}
+        legacy_enabled = client.get("safesearch_enabled") is True
+        youtube_override = client_safe_search.get("youtube") is True
+        if not legacy_enabled and not youtube_override:
             continue
+
+        # Older AdGuard client records use one SafeSearch boolean for all engines.
+        # Migrate that behavior to the per-engine object before disabling only YouTube.
+        if legacy_enabled and not client_safe_search:
+            client_safe_search = {**after, "enabled": True}
         updated_client = {
             **client,
             "safe_search": {**client_safe_search, "youtube": False},
         }
+        if legacy_enabled:
+            updated_client["safesearch_enabled"] = False
         _request(
             base_url, user, password, "POST", "/clients/update",
             {"name": client["name"], "data": updated_client},
@@ -236,8 +247,11 @@ def _disable_youtube_safe_search(base_url: str, user: str, password: str) -> dic
         str(client.get("name", "<unnamed>"))
         for client in verified_clients
         if isinstance(client, dict)
-        and isinstance(client.get("safe_search"), dict)
-        and client["safe_search"].get("youtube") is True
+        and (
+            isinstance(client.get("safe_search"), dict)
+            and client["safe_search"].get("youtube") is True
+            or client.get("safesearch_enabled") is True
+        )
     ]
     if still_enabled:
         raise RuntimeError(
