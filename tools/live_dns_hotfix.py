@@ -199,7 +199,7 @@ def _remove_youtube_policy_everywhere() -> tuple[list[int], int]:
     with sqlite3.connect(DB_PATH, timeout=30) as connection:
         connection.row_factory = sqlite3.Row
         columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(devices)")}
-        required = {"id", "policy", "policy_version", "policy_checksum", "policy_revision"}
+        required = {"id", "policy", "policy_version", "policy_checksum", "policy_revision", "policy_updated_at"}
         missing = sorted(required - columns)
         if missing:
             raise RuntimeError(
