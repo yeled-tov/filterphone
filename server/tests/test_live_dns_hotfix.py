@@ -120,5 +120,26 @@ def test_remove_youtube_policy_supports_real_devices_schema(tmp_path, monkeypatc
 
 
 
-def test_youtube_dns_check_uses_real_thumbnail_hostname():
+def test_youtube_dns_check_covers_video_and_thumbnail_families():
     assert hotfix.YOUTUBE_DNS_CHECK_HOSTS["ytimg.com"] == "i.ytimg.com"
+    assert hotfix.YOUTUBE_DNS_CHECK_HOSTS["ggpht.com"] == "yt3.ggpht.com"
+    assert "youtubeembeddedplayer.googleapis.com" in hotfix.YOUTUBE_ALLOW_HOSTS
+    assert "yt3.googleusercontent.com" in hotfix.YOUTUBE_ALLOW_HOSTS
+
+
+def test_update_user_rules_removes_youtube_blocks_and_preserves_other_rules():
+    current = [
+        "||youtube.com^",
+        "||i.ytimg.com^",
+        "||ggpht.com^",
+        "||googlevideo.com^",
+        "||instagram.com^",
+    ]
+    merged, removed, _, _, added_youtube = hotfix.update_user_rules(current)
+
+    assert "||youtube.com^" in removed
+    assert "||i.ytimg.com^" in removed
+    assert "||ggpht.com^" in removed
+    assert "||googlevideo.com^" in removed
+    assert "||instagram.com^" in merged
+    assert all(rule.startswith("@@||") and "$important" in rule for rule in added_youtube)
