@@ -225,7 +225,15 @@ def _disable_youtube_safe_search(base_url: str, user: str, password: str) -> dic
                     for name, item in raw_clients.items()
                     if isinstance(item, dict)
                 ]
+            if raw_clients is None and isinstance(payload.get("auto_clients"), list):
+                # Some versions return null for persistent clients when none exist.
+                return []
             return None
+        for wrapper in ("data", "result"):
+            if wrapper in payload:
+                nested = parse_clients(payload[wrapper])
+                if nested is not None:
+                    return nested
         if not payload or ("auto_clients" in payload and len(payload) == 1):
             return []
         # Compatibility with older name/IP-keyed responses.
@@ -239,9 +247,19 @@ def _disable_youtube_safe_search(base_url: str, user: str, password: str) -> dic
     clients_response = _request(base_url, user, password, "GET", "/clients")
     clients = parse_clients(clients_response)
     if clients is None:
+        if clients_response is None:
+            shape = "null"
+        elif isinstance(clients_response, dict):
+            shape = "object keys=" + ",".join(sorted(str(key) for key in clients_response.keys()))
+        elif isinstance(clients_response, list):
+            first = clients_response[0] if clients_response else None
+            shape = f"list length={len(clients_response)} first-item-type={type(first).__name__}"
+        else:
+            shape = type(clients_response).__name__
         print(
-            "Warning: AdGuard /clients response shape is unsupported; "
-            "global YouTube SafeSearch is verified, per-client overrides could not be inspected."
+            "Warning: AdGuard /clients response shape is unsupported "
+            f"({shape}); global YouTube SafeSearch is verified, "
+            "per-client overrides could not be inspected."
         )
         return after
 
