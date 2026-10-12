@@ -84,6 +84,26 @@ object DeviceOwnerManager {
         return runCatching { dpm(context)?.isAlwaysOnVpnLockdownEnabled(DeviceAdmin.component(context)) }.getOrNull()
     }
 
+    /**
+     * מרענן את רשימת החריגים של lockdown לפני חיבור WireGuard.
+     * Android חוסם תעבורה שאינה ב-VPN במצב lockdown, אלא אם החבילה ברשימת החריגים.
+     * לכן צריך לעדכן את הרשימה גם אחרי עדכון APK/התקנת FilterTube, לפני הקמת המנהרה.
+     */
+    fun refreshFilterTubeLockdownBypass(context: Context) {
+        if (!isDeviceOwner(context) || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val dpm = dpm(context) ?: return
+        val admin = DeviceAdmin.component(context)
+        if (runCatching { dpm.getAlwaysOnVpnPackage(admin) }.getOrNull() != context.packageName) return
+
+        val lockdown = runCatching { dpm.isAlwaysOnVpnLockdownEnabled(admin) }.getOrNull() ?: return
+        val bypassPackages = if (lockdown) {
+            VpnConfigFactory.installedFilterTubePackages(context)
+        } else {
+            emptySet()
+        }
+        dpm.setAlwaysOnVpnPackage(admin, context.packageName, lockdown, bypassPackages)
+    }
+
     data class Result(val applied: List<String>, val failed: List<String>, val pending: List<String> = emptyList()) {
         fun toJson(): JSONObject = JSONObject().put("applied", JSONArray(applied)).put("failed", JSONArray(failed))
             .put("pending", JSONArray(pending))
