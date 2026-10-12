@@ -43,6 +43,19 @@ YOUTUBE_HOST_SUFFIXES = (
     "yt3.ggpht.com",
 )
 YOUTUBE_ALLOW_HOSTS = YOUTUBE_HOST_SUFFIXES
+# Some parent zones (notably ytimg.com) have no A record of their own.
+# Resolve a real YouTube service hostname from each allowed family instead.
+YOUTUBE_DNS_CHECK_HOSTS = {
+    "youtube.com": "youtube.com",
+    "youtube-nocookie.com": "youtube-nocookie.com",
+    "youtu.be": "youtu.be",
+    "googlevideo.com": "googlevideo.com",
+    "ytimg.com": "i.ytimg.com",
+    "youtubei.googleapis.com": "youtubei.googleapis.com",
+    "youtube.googleapis.com": "youtube.googleapis.com",
+    "youtube.co.il": "youtube.co.il",
+    "yt3.ggpht.com": "yt3.ggpht.com",
+}
 YOUTUBE_APP_PACKAGES = {
     "com.google.android.youtube",
     "com.google.android.apps.youtube.kids",
@@ -460,15 +473,18 @@ def main() -> int:
     # test for Spotify CDN blocking and verifies that YouTube still resolves.
     dns_checks = {
         host: _dns_a_query(host)
-        for host in (*YOUTUBE_ALLOW_HOSTS, "i.scdn.co", *SPOTIFY_AD_HOSTS,
+        for host in (*YOUTUBE_DNS_CHECK_HOSTS.values(), "i.scdn.co", *SPOTIFY_AD_HOSTS,
                      "github.com", "api.github.com", "raw.githubusercontent.com",
                      "avatars.githubusercontent.com")
     }
     print("Direct DNS query results from the live server:")
     print(json.dumps(dns_checks, ensure_ascii=False, indent=2))
-    for host in YOUTUBE_ALLOW_HOSTS:
-        if dns_checks[host]["blocked"] or not dns_checks[host]["a_records"]:
-            raise RuntimeError(f"YouTube DNS still blocked or not resolving for {host}: {dns_checks[host]}")
+    for service_domain, query_host in YOUTUBE_DNS_CHECK_HOSTS.items():
+        if dns_checks[query_host]["blocked"] or not dns_checks[query_host]["a_records"]:
+            raise RuntimeError(
+                f"YouTube DNS blocked or not resolving for {service_domain} "
+                f"(checked {query_host}): {dns_checks[query_host]}"
+            )
     if not dns_checks["i.scdn.co"]["blocked"]:
         raise RuntimeError(
             "The live DNS server still resolves i.scdn.co; its rule appears in user_rules "
