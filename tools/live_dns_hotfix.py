@@ -28,20 +28,18 @@ ENV_PATH = Path("/etc/filterphone/filterphone.env")
 DB_PATH = Path("/var/lib/filterphone/filterphone.db")
 BACKUP_DIR = Path("/root/fp-backups")
 
-# These are service endpoints, not image CDNs. Their unscoped blocks can
-# make YouTube entirely unavailable. Deliberately do NOT include ytimg.com:
-# that host is retained as a thumbnail-only block.
-YOUTUBE_SERVICE_HOSTS = {
+# The user requested YouTube to work normally, including thumbnails and video
+# delivery. Remove block rules for any YouTube-owned host families, but do not
+# touch unrelated Google APIs or per-device choices made by individual customers.
+YOUTUBE_HOST_SUFFIXES = (
     "youtube.com",
+    "youtube-nocookie.com",
     "youtu.be",
     "googlevideo.com",
+    "ytimg.com",
     "youtubei.googleapis.com",
     "youtube.googleapis.com",
-    "youtube-nocookie.com",
-    "youtube.co.il",
-    "shorts.youtube.com",
-    "charts.youtube.com",
-}
+)
 
 # Specific image hosts only. Do not block scdn.co / spotifycdn.com wholesale,
 # because those parent domains may also serve non-image app resources.
@@ -65,6 +63,15 @@ SPOTIFY_IMAGE_HOSTS = (
     "concerts.spotifycdn.com",
     "merch-img.scdn.co",
 )
+
+# Spotify-owned ad endpoints only. Avoid broad third-party ad networks and
+# audio delivery edges, which could break unrelated apps or interrupt playback.
+SPOTIFY_AD_HOSTS = (
+    "ads.spotify.com",
+    "ads-fa.spotify.com",
+    "adeventtracker.spotify.com",
+    "audio-ads.spotify.com",
+)
 RULE_HOST = re.compile(r"^\|\|([a-z0-9.*-]+)\^", re.IGNORECASE)
 
 
@@ -76,27 +83,31 @@ def _host_from_rule(rule: str) -> str | None:
 
 
 def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[str]]:
-    """Return merged rules, removed YouTube blocks, and newly added Spotify rules."""
+    """Remove YouTube block rules and add specific Spotify image/ad host rules."""
     kept: list[str] = []
     removed: list[str] = []
     for rule in current:
         host = _host_from_rule(rule)
-        is_unscoped_block = rule.strip().startswith("||") and "$client=" not in rule.lower()
-        if is_unscoped_block and host in YOUTUBE_SERVICE_HOSTS:
-            removed.append(rule)
-        else:
-            kept.append(rule)
+        is_block_rule = rule.strip().startswith("||")
+        if is_block_rule and host:
+            youtube_host = any(
+                host == suffix or host.endswith("." + suffix)
+                for suffix in YOUTUBE_HOST_SUFFIXES
+            )
+            if youtube_host:
+                removed.append(rule)
+                continue
+        kept.append(rule)
 
     existing = {line.strip().lower() for line in kept}
     added: list[str] = []
-    for host in SPOTIFY_IMAGE_HOSTS:
+    for host in (*SPOTIFY_IMAGE_HOSTS, *SPOTIFY_AD_HOSTS):
         rule = f"||{host}^"
         if rule.lower() not in existing:
             kept.append(rule)
             existing.add(rule.lower())
             added.append(rule)
     return kept, removed, added
-
 
 def _request(
     base_url: str, user: str, password: str, method: str, path: str,
