@@ -209,12 +209,7 @@ OPTIONS: tuple[Option, ...] = (
            apps=("com.android.chrome", *BROWSERS_OTHER), needs_guard=True),
 
     # ------------------------------------------------------------ וידאו, מוזיקה ובידור
-    Option("youtube", "video", "יוטיוב", "האפליקציה, האתר והסרטונים המוטמעים באתרים אחרים.",
-           hosts=("youtube.com", "youtu.be", "ytimg.com", "googlevideo.com", "youtube-nocookie.com",
-                  "youtubei.googleapis.com", "youtube.googleapis.com", "yt3.ggpht.com", "youtube.co.il"),
-           apps=("com.google.android.youtube", "com.google.android.apps.youtube.kids",
-                 "com.google.android.apps.youtube.music", "app.revanced.android.youtube",
-                 "com.vanced.android.youtube"), popular=True),
+    # YouTube blocking was globally retired during testing; it is intentionally absent.
     Option("netflix", "video", "נטפליקס", "",
            hosts=("netflix.com", "netflix.net", "nflxvideo.net", "nflximg.net", "nflximg.com", "nflxext.com",
                   "nflxso.net"), apps=("com.netflix.mediaclient",)),
