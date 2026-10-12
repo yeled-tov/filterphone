@@ -132,14 +132,35 @@ def test_disable_youtube_safe_search_preserves_other_engines(monkeypatch):
         "youtube": True,
     }
     calls = []
+    clients = [
+        {
+            "name": "device-with-youtube-rewrite",
+            "ids": ["10.8.0.2"],
+            "safe_search": {"enabled": True, "google": True, "youtube": True},
+        },
+        {
+            "name": "device-already-open",
+            "ids": ["10.8.0.3"],
+            "safe_search": {"enabled": True, "google": True, "youtube": False},
+        },
+    ]
 
     def fake_request(base_url, user, password, method, path, body=None):
         calls.append((method, path, body))
-        if method == "GET":
+        if method == "GET" and path == "/safesearch/status":
             return dict(state)
-        assert method == "PUT" and path == "/safesearch/settings"
-        state.update(body)
-        return {}
+        if method == "PUT" and path == "/safesearch/settings":
+            state.update(body)
+            return {}
+        if method == "GET" and path == "/clients":
+            return {"clients": [dict(c) for c in clients], "auto_clients": []}
+        if method == "POST" and path == "/clients/update":
+            for index, client in enumerate(clients):
+                if client["name"] == body["name"]:
+                    clients[index] = dict(body["data"])
+                    return {}
+            raise AssertionError(f"unexpected client update: {body['name']}")
+        raise AssertionError(f"unexpected AdGuard request: {method} {path}")
 
     monkeypatch.setattr(hotfix, "_request", fake_request)
     result = hotfix._disable_youtube_safe_search("http://adguard", "admin", "secret")
@@ -148,9 +169,20 @@ def test_disable_youtube_safe_search_preserves_other_engines(monkeypatch):
     assert all(result[name] is True for name in (
         "enabled", "bing", "duckduckgo", "ecosia", "google", "pixabay", "yandex"
     ))
+    assert clients[0]["safe_search"]["youtube"] is False
+    assert clients[0]["safe_search"]["google"] is True
+    assert clients[1]["safe_search"]["youtube"] is False
     assert calls[0][:2] == ("GET", "/safesearch/status")
     assert calls[1][0:2] == ("PUT", "/safesearch/settings")
     assert calls[1][2]["youtube"] is False
+    assert ("POST", "/clients/update", {
+        "name": "device-with-youtube-rewrite",
+        "data": {
+            "name": "device-with-youtube-rewrite",
+            "ids": ["10.8.0.2"],
+            "safe_search": {"enabled": True, "google": True, "youtube": False},
+        },
+    }) in calls
 
 
 def test_youtube_dns_check_covers_video_and_thumbnail_families():
