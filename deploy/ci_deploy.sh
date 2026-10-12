@@ -75,7 +75,11 @@ rollback)
     [[ "${arg:-}" =~ ^[0-9]{8}-[0-9]{6}$ ]] || { echo "שם גיבוי לא חוקי (למשל 20261005-213000)"; exit 2; }
     exec sudo -n bash "$A/src/deploy/rollback_version.sh" "/root/fp-backups/$arg"
     ;;
-*)
+dns-hotfix)
+    # פעולה מוגבלת נוספת: תיקון DNS אידמפוטנטי עם גיבוי, בלי shell כללי.
+    exec sudo -n bash -c 'set -euo pipefail; set -a; . /etc/filterphone/filterphone.env; set +a; exec /opt/filterphone/venv/bin/python /opt/filterphone/src/tools/live_dns_hotfix.py'
+    ;;
+*) 
     echo "פקודה לא מוכרת"
     exit 2
     ;;
