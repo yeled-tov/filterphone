@@ -120,6 +120,39 @@ def test_remove_youtube_policy_supports_real_devices_schema(tmp_path, monkeypatc
 
 
 
+def test_disable_youtube_safe_search_preserves_other_engines(monkeypatch):
+    state = {
+        "enabled": True,
+        "bing": True,
+        "duckduckgo": True,
+        "ecosia": True,
+        "google": True,
+        "pixabay": True,
+        "yandex": True,
+        "youtube": True,
+    }
+    calls = []
+
+    def fake_request(base_url, user, password, method, path, body=None):
+        calls.append((method, path, body))
+        if method == "GET":
+            return dict(state)
+        assert method == "PUT" and path == "/safesearch/settings"
+        state.update(body)
+        return {}
+
+    monkeypatch.setattr(hotfix, "_request", fake_request)
+    result = hotfix._disable_youtube_safe_search("http://adguard", "admin", "secret")
+
+    assert result["youtube"] is False
+    assert all(result[name] is True for name in (
+        "enabled", "bing", "duckduckgo", "ecosia", "google", "pixabay", "yandex"
+    ))
+    assert calls[0][:2] == ("GET", "/safesearch/status")
+    assert calls[1][0:2] == ("PUT", "/safesearch/settings")
+    assert calls[1][2]["youtube"] is False
+
+
 def test_youtube_dns_check_covers_video_and_thumbnail_families():
     assert hotfix.YOUTUBE_DNS_CHECK_HOSTS["ytimg.com"] == "i.ytimg.com"
     assert hotfix.YOUTUBE_DNS_CHECK_HOSTS["ggpht.com"] == "yt3.ggpht.com"
