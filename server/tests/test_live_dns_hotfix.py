@@ -1,7 +1,13 @@
+import importlib.util
 import json
 import sqlite3
+from pathlib import Path
 
-from tools import live_dns_hotfix as hotfix
+SCRIPT = Path(__file__).resolve().parents[2] / "tools" / "live_dns_hotfix.py"
+SPEC = importlib.util.spec_from_file_location("live_dns_hotfix", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+hotfix = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(hotfix)
 
 
 def _database(path):
