@@ -9,17 +9,27 @@ import org.json.JSONObject
 /** בונה הגדרת WireGuard מהתשובה של השרת (vpn) ומהמפתח הפרטי שנשמר במכשיר. */
 object VpnConfigFactory {
 
+    /** Both FilterTube package IDs must bypass the VPN tunnel. */
+    internal val FILTERTUBE_PACKAGES = setOf(
+        "com.filtertube.app",
+        "com.filtertube.filtertube",
+    )
+
+
     /**
      * useFallback: להתחבר לכתובת ה-IP של השרת (endpoint_fallback) במקום לשם —
      * כשה-DNS עוד לא זמין (מיד אחרי אתחול) או במצב "חסימה בלי VPN" כשהמנהרה למטה.
      */
     fun build(vpn: JSONObject, privateKey: String, useFallback: Boolean = false): Config {
-        val iface = Interface.Builder()
+        val ifaceBuilder = Interface.Builder()
             .parsePrivateKey(privateKey)
             .parseAddresses(vpn.getString("address"))
             .parseDnsServers(vpn.getJSONArray("dns").joined())
             .setMtu(vpn.optInt("mtu", 1280))
-            .build()
+
+        // FilterTube bypasses the WireGuard tunnel; its traffic uses the normal network.
+        FILTERTUBE_PACKAGES.forEach { ifaceBuilder.addExcludedApplication(it) }
+        val iface = ifaceBuilder.build()
 
         val fallback = vpn.optString("endpoint_fallback", "")
         val endpoint = if (useFallback && fallback.isNotEmpty()) fallback else vpn.getString("endpoint")
