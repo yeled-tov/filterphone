@@ -79,7 +79,7 @@ jobs:
       - name: בדיקות אחרי התיקון
         run: |
           curl -fsS --retry 5 --retry-delay 3 "$PUBLIC/health"
-          curl -fsS "$PUBLIC/v1/catalog" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["levels"] and d["options"]; print("catalog:", len(d["options"]), "options")'
+          curl -fsS "$PUBLIC/v1/catalog" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["levels"] and d["options"]; assert not any(o.get("id") == "youtube" for o in d["options"]), "YouTube must not be offered as a block option"; print("catalog:", len(d["options"]), "options; YouTube block option absent")'
 
       - name: מצב סופי
         if: always()
