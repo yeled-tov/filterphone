@@ -72,6 +72,15 @@ SPOTIFY_AD_HOSTS = (
     "adeventtracker.spotify.com",
     "audio-ads.spotify.com",
 )
+
+# GitHub app/API/repository assets. These exceptions keep core GitHub access
+# working even if an upstream DNS blocklist accidentally matches one of them.
+GITHUB_ALLOW_HOSTS = (
+    "github.com",
+    "githubusercontent.com",
+    "githubassets.com",
+    "githubapp.com",
+)
 RULE_HOST = re.compile(r"^\|\|([a-z0-9.*-]+)\^", re.IGNORECASE)
 
 
@@ -83,7 +92,7 @@ def _host_from_rule(rule: str) -> str | None:
 
 
 def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[str]]:
-    """Remove YouTube block rules and add specific Spotify image/ad host rules."""
+    """Allow YouTube/GitHub service domains while blocking specific Spotify image/ad hosts."""
     kept: list[str] = []
     removed: list[str] = []
     for rule in current:
@@ -94,20 +103,33 @@ def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[st
                 host == suffix or host.endswith("." + suffix)
                 for suffix in YOUTUBE_HOST_SUFFIXES
             )
-            if youtube_host:
+            github_host = any(
+                host == suffix or host.endswith("." + suffix)
+                for suffix in GITHUB_ALLOW_HOSTS
+            )
+            if youtube_host or github_host:
                 removed.append(rule)
                 continue
         kept.append(rule)
 
     existing = {line.strip().lower() for line in kept}
-    added: list[str] = []
+    added_spotify: list[str] = []
+    added_github: list[str] = []
     for host in (*SPOTIFY_IMAGE_HOSTS, *SPOTIFY_AD_HOSTS):
         rule = f"||{host}^"
         if rule.lower() not in existing:
             kept.append(rule)
             existing.add(rule.lower())
-            added.append(rule)
-    return kept, removed, added
+            added_spotify.append(rule)
+
+    # $important makes the DNS exception take precedence over matching blocklists.
+    for host in GITHUB_ALLOW_HOSTS:
+        rule = f"@@||{host}^$important"
+        if rule.lower() not in existing:
+            kept.append(rule)
+            existing.add(rule.lower())
+            added_github.append(rule)
+    return kept, removed, added_spotify, added_github
 
 def _request(
     base_url: str, user: str, password: str, method: str, path: str,
@@ -266,7 +288,7 @@ def main() -> int:
 
     status = _request(base_url, user, password, "GET", "/filtering/status") or {}
     current = [str(x) for x in (status.get("user_rules") or [])]
-    merged, removed, added = update_user_rules(current)
+    merged, removed, added_spotify, added_github = update_user_rules(current)
 
     # Save the exact prior custom-rule set before writing anything.
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -298,19 +320,29 @@ def main() -> int:
     status = _request(base_url, user, password, "GET", "/filtering/status") or {}
     final_rules = [str(x) for x in (status.get("user_rules") or [])]
     final_lower = {x.lower() for x in final_rules}
-    missing = [f"||{host}^" for host in SPOTIFY_IMAGE_HOSTS if f"||{host}^".lower() not in final_lower]
-    if missing:
-        raise RuntimeError(f"Spotify image rules missing after write: {missing}")
+    missing = [f"||{host}^" for host in (*SPOTIFY_IMAGE_HOSTS, *SPOTIFY_AD_HOSTS)
+               if f"||{host}^".lower() not in final_lower]
+    missing_github = [f"@@||{host}^$important" for host in GITHUB_ALLOW_HOSTS
+                      if f"@@||{host}^$important".lower() not in final_lower]
+    if missing or missing_github:
+        raise RuntimeError(
+            f"DNS rules missing after write: Spotify={missing}; GitHub exceptions={missing_github}"
+        )
 
     checks = {
         host: _check_host(base_url, user, password, host)
-        for host in ("youtube.com", "googlevideo.com", "youtubei.googleapis.com", "i.scdn.co", *SPOTIFY_AD_HOSTS)
+        for host in ("youtube.com", "googlevideo.com", "youtubei.googleapis.com", "i.scdn.co",
+                     *SPOTIFY_AD_HOSTS, "github.com", "api.github.com",
+                     "raw.githubusercontent.com", "avatars.githubusercontent.com")
     }
     print("DNS hotfix applied.")
     print(f"Unscoped YouTube service-block rules removed: {len(removed)}")
     for rule in removed:
         print(f"  removed: {rule}")
-    print(f"Spotify image rules added: {len(added)}; verified present: {len(SPOTIFY_IMAGE_HOSTS)}")
+    print(f"Spotify image/ad block rules added: {len(added_spotify)}; verified present: {len(SPOTIFY_IMAGE_HOSTS) + len(SPOTIFY_AD_HOSTS)}")
+    print(f"GitHub allow exceptions added: {len(added_github)}; verified present: {len(GITHUB_ALLOW_HOSTS)}")
+    for rule in added_github:
+        print(f"  allowed: {rule}")
     print(f"Previous AdGuard rules backup: {rules_backup}")
     print(f"Active devices selecting full-YouTube block: {candidate_count}; updated IDs: {changed_ids}")
     print("AdGuard check_host results:")
@@ -333,7 +365,9 @@ def main() -> int:
     # test for Spotify CDN blocking and verifies that YouTube still resolves.
     dns_checks = {
         host: _dns_a_query(host)
-        for host in ("youtube.com", "i.scdn.co", *SPOTIFY_AD_HOSTS)
+        for host in ("youtube.com", "i.scdn.co", *SPOTIFY_AD_HOSTS,
+                     "github.com", "api.github.com", "raw.githubusercontent.com",
+                     "avatars.githubusercontent.com")
     }
     print("Direct DNS query results from the live server:")
     print(json.dumps(dns_checks, ensure_ascii=False, indent=2))
@@ -345,13 +379,22 @@ def main() -> int:
             "but is not taking effect. Do not treat Spotify image blocking as verified."
         )
     for host in SPOTIFY_AD_HOSTS:
-        result = checks[host]
-        if "error" in result or not result.get("reason", "").startswith("Filtered"):
+        # Direct DNS is the authoritative check. AdGuard's check_host endpoint
+        # can report NotFilteredNotFound for a just-written user rule even when
+        # the running DNS server correctly returns 0.0.0.0 (seen with ads-fa).
+        if not dns_checks[host]["blocked"]:
             raise RuntimeError(
-                f"Spotify ad host {host} was not confirmed filtered by AdGuard: {result}"
+                f"Spotify ad host {host} is not blocked by live DNS: {dns_checks[host]}"
             )
 
-    print("Verified: YouTube resolves on the live server; Spotify image CDN and Spotify-owned ad endpoints are filtered.")
+    for host in ("github.com", "api.github.com", "raw.githubusercontent.com",
+                 "avatars.githubusercontent.com"):
+        if dns_checks[host]["blocked"] or not dns_checks[host]["a_records"]:
+            raise RuntimeError(
+                f"GitHub domain {host} is still blocked or has no IPv4 answer: {dns_checks[host]}"
+            )
+
+    print("Verified: YouTube and GitHub domains resolve on the live server; Spotify image CDN and Spotify ad endpoints are blocked.")
     return 0
 
 
