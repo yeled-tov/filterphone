@@ -190,61 +190,122 @@ def _remove_youtube_policy_everywhere() -> tuple[list[int], int]:
     if not DB_PATH.is_file():
         print("Device policy: database not found; left device policies unchanged.")
         return [], 0
+
+    def yt_host(host: Any) -> bool:
+        value = str(host).strip().lower().removeprefix("*.").rstrip(".")
+        return any(value == suffix or value.endswith("." + suffix)
+                   for suffix in YOUTUBE_HOST_SUFFIXES)
+
     with sqlite3.connect(DB_PATH, timeout=30) as connection:
         connection.row_factory = sqlite3.Row
-        rows = connection.execute("SELECT id, policy, custom_apps FROM devices").fetchall()
-        changed: list[tuple[int, dict[str, Any], list[str]]] = []
-        def yt_host(host: Any) -> bool:
-            value = str(host).strip().lower().removeprefix("*.").rstrip(".")
-            return any(value == suffix or value.endswith("." + suffix)
-                       for suffix in YOUTUBE_HOST_SUFFIXES)
+        columns = {str(row["name"]) for row in connection.execute("PRAGMA table_info(devices)")}
+        required = {"id", "policy", "policy_version", "policy_checksum", "policy_revision"}
+        missing = sorted(required - columns)
+        if missing:
+            raise RuntimeError(
+                "Device database schema is missing required policy columns: " + ", ".join(missing)
+            )
+
+        rows = connection.execute("SELECT id, policy FROM devices").fetchall()
+        changed: list[tuple[int, dict[str, Any]]] = []
         for row in rows:
             try:
                 policy = json.loads(row["policy"] or "{}")
             except (TypeError, ValueError):
-                policy = {}
+                raise RuntimeError(f"Device {row['id']} has invalid policy JSON; refusing to overwrite it.")
             if not isinstance(policy, dict):
-                policy = {}
+                raise RuntimeError(f"Device {row['id']} policy is not a JSON object; refusing to overwrite it.")
+
             before = json.dumps(policy, sort_keys=True, ensure_ascii=False)
-            policy["options"] = [x for x in policy.get("options", []) if x != "youtube"]
-            policy["custom_hosts"] = [h for h in policy.get("custom_hosts", []) if not yt_host(h)]
-            app_rules = policy.get("app_rules") or {}
-            if isinstance(app_rules, dict):
-                policy["app_rules"] = {
-                    pkg: rule for pkg, rule in app_rules.items()
-                    if str(pkg).lower() not in YOUTUBE_APP_PACKAGES
-                    and not (isinstance(rule, dict) and any(yt_host(h) for h in rule.get("hosts", [])))
-                }
-            elif isinstance(app_rules, list):
-                policy["app_rules"] = [
-                    rule for rule in app_rules if isinstance(rule, dict)
-                    and str(rule.get("package", "")).lower() not in YOUTUBE_APP_PACKAGES
-                    and not any(yt_host(h) for h in rule.get("hosts", []))
+            options = policy.get("options")
+            if isinstance(options, list):
+                policy["options"] = [item for item in options if item != "youtube"]
+
+            custom_hosts = policy.get("custom_hosts")
+            if isinstance(custom_hosts, list):
+                policy["custom_hosts"] = [host for host in custom_hosts if not yt_host(host)]
+
+            # custom_apps is a compatibility field inside policy JSON, not a DB column.
+            custom_apps = policy.get("custom_apps")
+            if isinstance(custom_apps, list):
+                policy["custom_apps"] = [
+                    pkg for pkg in custom_apps
+                    if str(pkg).strip().lower() not in YOUTUBE_APP_PACKAGES
                 ]
-            policy["custom_apps"] = [p for p in policy.get("custom_apps", [])
-                                     if str(p).lower() not in YOUTUBE_APP_PACKAGES]
-            old_custom_apps = json.loads(row["custom_apps"] or "[]") if row["custom_apps"] else []
-            new_custom_apps = [p for p in old_custom_apps if str(p).lower() not in YOUTUBE_APP_PACKAGES]
-            if before != json.dumps(policy, sort_keys=True, ensure_ascii=False) or old_custom_apps != new_custom_apps:
-                changed.append((int(row["id"]), policy, new_custom_apps))
+
+            app_rules = policy.get("app_rules")
+            if isinstance(app_rules, dict):
+                cleaned_rules: dict[str, Any] = {}
+                for pkg, rule in app_rules.items():
+                    if str(pkg).strip().lower() in YOUTUBE_APP_PACKAGES:
+                        continue
+                    if isinstance(rule, dict) and isinstance(rule.get("hosts"), list):
+                        rule = {**rule, "hosts": [host for host in rule["hosts"] if not yt_host(host)]}
+                    cleaned_rules[pkg] = rule
+                policy["app_rules"] = cleaned_rules
+            elif isinstance(app_rules, list):
+                cleaned_rules = []
+                for rule in app_rules:
+                    if not isinstance(rule, dict):
+                        cleaned_rules.append(rule)
+                        continue
+                    if str(rule.get("package", "")).strip().lower() in YOUTUBE_APP_PACKAGES:
+                        continue
+                    if isinstance(rule.get("hosts"), list):
+                        rule = {**rule, "hosts": [host for host in rule["hosts"] if not yt_host(host)]}
+                    cleaned_rules.append(rule)
+                policy["app_rules"] = cleaned_rules
+
+            if before != json.dumps(policy, sort_keys=True, ensure_ascii=False):
+                changed.append((int(row["id"]), policy))
+
         if not changed:
             print("Device policy: no stored YouTube blocks found.")
             return [], 0
-        backup = _backup_database()
-        if backup is None:
-            raise RuntimeError("Could not back up the database before changing device policies.")
-        for device_id, policy, custom_apps in changed:
-            connection.execute(
-                "UPDATE devices SET policy = ?, custom_apps = ?, policy_version = policy_version + 1, policy_checksum = '' WHERE id = ?",
-                (json.dumps(policy, ensure_ascii=False, separators=(",", ":")),
-                 json.dumps(custom_apps, ensure_ascii=False, separators=(",", ":")), device_id),
-            )
-        connection.execute("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'policy_revision'")
-        connection.commit()
-        print(f"Device policy: removed YouTube blocks from {len(changed)} stored device records.")
-        print(f"Database backup: {backup}")
-        return [item[0] for item in changed], len(changed)
 
+        # Require a successful SQLite backup before changing any stored policy.
+        backup = _backup_database()
+        if backup is None or not backup.is_file():
+            raise RuntimeError("Could not back up the database before changing device policies.")
+
+        has_meta = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='meta'"
+        ).fetchone() is not None
+        meta_columns = {
+            str(row["name"]) for row in connection.execute("PRAGMA table_info(meta)")
+        } if has_meta else set()
+        has_revision_meta = {"key", "value"} <= meta_columns and connection.execute(
+            "SELECT 1 FROM meta WHERE key = 'policy_revision'"
+        ).fetchone() is not None
+        revision = int(connection.execute(
+            "SELECT value FROM meta WHERE key = 'policy_revision'"
+        ).fetchone()["value"]) if has_revision_meta else 0
+        updated_at = int(time.time())
+        changed_ids: list[int] = []
+
+        with connection:
+            for device_id, policy in changed:
+                if has_revision_meta:
+                    connection.execute(
+                        "UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'policy_revision'"
+                    )
+                    revision = int(connection.execute(
+                        "SELECT value FROM meta WHERE key = 'policy_revision'"
+                    ).fetchone()["value"])
+                else:
+                    revision += 1
+
+                connection.execute(
+                    "UPDATE devices SET policy = ?, policy_version = policy_version + 1, "
+                    "policy_checksum = '', policy_updated_at = ?, policy_revision = ? WHERE id = ?",
+                    (json.dumps(policy, ensure_ascii=False, separators=(",", ":")),
+                     updated_at, revision, device_id),
+                )
+                changed_ids.append(device_id)
+
+        print(f"Device policy: removed YouTube blocks from {len(changed_ids)} stored device records.")
+        print(f"Database backup: {backup}")
+        return changed_ids, len(changed_ids)
 
 def _skip_dns_name(packet: bytes, offset: int) -> int:
     """Skip one DNS name, including compressed names, and return the next offset."""
