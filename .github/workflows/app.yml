@@ -112,6 +112,7 @@ jobs:
         if: always()
         run: rm -f android/upload.jks android/key.properties
 
+      # פרסום בדיקה מופעל רק באמצעות [test-release] בהודעת commit; אינו פורס שרת.
       # תוצר ה-APK הוא מטמון נוחות בלבד. פריסת production בונה APK חתום מחדש
       # ישירות ב-deploy.yml, כדי שכשל במכסת Artifacts לא ימנע עדכון לשרת.
       - uses: actions/upload-artifact@v4
