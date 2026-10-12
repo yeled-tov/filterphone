@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import sqlite3
+import struct
 import subprocess
 import time
 import urllib.error
@@ -177,6 +179,59 @@ def _remove_youtube_option_if_unambiguous() -> tuple[list[int], int]:
         return [device_id], 1
 
 
+def _skip_dns_name(packet: bytes, offset: int) -> int:
+    """Skip one DNS name, including compressed names, and return the next offset."""
+    while True:
+        if offset >= len(packet):
+            raise ValueError("truncated DNS name")
+        length = packet[offset]
+        if length == 0:
+            return offset + 1
+        if length & 0xC0 == 0xC0:
+            if offset + 1 >= len(packet):
+                raise ValueError("truncated DNS compression pointer")
+            return offset + 2
+        if length & 0xC0:
+            raise ValueError("invalid DNS label")
+        offset += 1 + length
+
+
+def _dns_a_query(host: str) -> dict[str, Any]:
+    """Query the local AdGuard DNS listener directly, without an external DNS library."""
+    transaction_id = int.from_bytes(os.urandom(2), "big")
+    labels = host.rstrip(".").split(".")
+    qname = b"".join(bytes([len(label.encode("ascii"))]) + label.encode("ascii") for label in labels) + b"\\x00"
+    packet = struct.pack("!HHHHHH", transaction_id, 0x0100, 1, 0, 0, 0) + qname + struct.pack("!HH", 1, 1)
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(3)
+        sock.sendto(packet, ("127.0.0.1", 53))
+        response, _ = sock.recvfrom(8192)
+    if len(response) < 12:
+        raise RuntimeError(f"short DNS response for {host}")
+    ident, flags, qdcount, ancount, _, _ = struct.unpack("!HHHHHH", response[:12])
+    if ident != transaction_id:
+        raise RuntimeError(f"DNS transaction ID mismatch for {host}")
+    rcode = flags & 0x000F
+    offset = 12
+    for _ in range(qdcount):
+        offset = _skip_dns_name(response, offset) + 4
+    ips: list[str] = []
+    for _ in range(ancount):
+        offset = _skip_dns_name(response, offset)
+        if offset + 10 > len(response):
+            raise RuntimeError(f"truncated DNS answer for {host}")
+        rtype, rclass, _, rdlength = struct.unpack("!HHIH", response[offset:offset + 10])
+        offset += 10
+        rdata = response[offset:offset + rdlength]
+        if len(rdata) != rdlength:
+            raise RuntimeError(f"truncated DNS record for {host}")
+        if rclass == 1 and rtype == 1 and rdlength == 4:
+            ips.append(socket.inet_ntop(socket.AF_INET, rdata))
+        offset += rdlength
+    blocked = rcode == 3 or bool(ips) and all(ip == "0.0.0.0" for ip in ips)
+    return {"rcode": rcode, "a_records": ips, "blocked": blocked}
+
+
 def _check_host(base_url: str, user: str, password: str, host: str) -> dict[str, str]:
     query = urllib.parse.urlencode({"name": host})
     try:
@@ -250,29 +305,36 @@ def main() -> int:
     print("AdGuard check_host results:")
     print(json.dumps(checks, ensure_ascii=False, indent=2))
 
-    # Don't report success just because rules were written: verify that core
-    # YouTube service hosts are not blocked by remaining filters/rules and that
-    # the Spotify image CDN is actually blocked. The client-specific policy is
-    # handled separately and is deliberately not relaxed for multiple devices.
+    # SafeSearch is a policy rewrite, not a full service block. AdGuard
+    # check_host may report FilteredSafeSearch for YouTube's internal API host.
     for host in ("youtube.com", "googlevideo.com", "youtubei.googleapis.com"):
         result = checks[host]
         if "error" in result:
             raise RuntimeError(f"Could not verify YouTube DNS for {host}: {result['error']}")
-        if result.get("reason", "").startswith("Filtered"):
+        if result.get("reason", "").startswith("Filtered") and result.get("reason") != "FilteredSafeSearch":
             raise RuntimeError(
-                f"YouTube still appears DNS-filtered for {host}: "
-                f"{result.get('reason')} {result.get('rule', '')}. "
-                "See check_host output and active per-device policies."
+                f"YouTube still appears blocked for {host}: "
+                f"{result.get('reason')} {result.get('rule', '')}."
             )
-    spotify = checks["i.scdn.co"]
-    if "error" in spotify:
-        raise RuntimeError(f"Could not verify Spotify image DNS block: {spotify['error']}")
-    if not spotify.get("reason", "").startswith("Filtered"):
+
+    # check_host can miss a just-written user rule or report SafeSearch behavior;
+    # query the actual local DNS service after the write. This is the decisive
+    # test for Spotify CDN blocking and verifies that YouTube still resolves.
+    dns_checks = {
+        host: _dns_a_query(host)
+        for host in ("youtube.com", "i.scdn.co")
+    }
+    print("Direct DNS query results from the live server:")
+    print(json.dumps(dns_checks, ensure_ascii=False, indent=2))
+    if dns_checks["youtube.com"]["blocked"] or not dns_checks["youtube.com"]["a_records"]:
+        raise RuntimeError("YouTube DNS did not return an IPv4 address on the live server.")
+    if not dns_checks["i.scdn.co"]["blocked"]:
         raise RuntimeError(
-            "Spotify image host i.scdn.co is not reported blocked by AdGuard; "
-            f"reason={spotify.get('reason', 'unknown')}, rule={spotify.get('rule', '')}"
+            "The live DNS server still resolves i.scdn.co; its rule appears in user_rules "
+            "but is not taking effect. Do not treat Spotify image blocking as verified."
         )
-    print("Verified: YouTube service hosts are not DNS-filtered globally; Spotify image CDN is blocked.")
+
+    print("Verified: YouTube resolves on the live server; Spotify image CDN is blocked by live DNS.")
     return 0
 
 
