@@ -22,6 +22,27 @@ def test_static_passthrough_matches_domain_and_subdomains(policy):
     assert not policy.should_passthrough("10.8.0.10", "notwhatsapp.com")
 
 
+def test_youtube_hosts_bypass_image_filtering(policy):
+    # YouTube pages, video delivery, thumbnails, and channel artwork must not
+    # go through the image classifier, even for devices with strict image rules.
+    for host in (
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube-nocookie.com",
+        "youtu.be",
+        "youtube.co.il",
+        "i.ytimg.com",
+        "yt3.ggpht.com",
+        "rr1.googlevideo.com",
+        "youtubei.googleapis.com",
+        "yt3.googleusercontent.com",
+    ):
+        assert policy.should_passthrough("10.8.0.10", host), host
+
+    assert not policy.is_inspect_only("i.ytimg.com")
+    assert not policy.is_inspect_only("yt3.ggpht.com")
+
+
 def test_missing_sni_passes_through(policy):
     assert policy.should_passthrough("10.8.0.10", None)
     assert policy.should_passthrough("10.8.0.10", "")
