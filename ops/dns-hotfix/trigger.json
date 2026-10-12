@@ -1,6 +1,6 @@
 {
   "action": "remove-youtube-blocks-globally",
-  "requested_at": "2026-10-12T12:00:00Z",
-  "scope": "remove-all-youtube-domain-block-rules-including-client-scoped; globally-allow-youtube-domains; remove-youtube-app-and-host-blocks-from-all-device-policies; remove-youtube-option-from-catalog; preserve-spotify-image-and-ad-blocks; preserve-github-exceptions",
-  "safety": "backup-adguard-rules-and-device-database-before-write; validate-actual-device-schema; validate-real-youtube-service-dns; validate-health-ready-and-direct-dns"
+  "requested_at": "2026-10-12T17:26:06.349Z",
+  "scope": "remove-all-youtube-domain-block-rules-including-client-scoped; globally-allow-all-youtube-service-video-thumbnail-and-embedded-player-domains; remove-youtube-app-and-host-blocks-from-all-device-policies; keep-youtube-out-of-filter-options; bypass-image-classification-and-tls-inspection-for-youtube-pages-thumbnails-video-and-channel-art; preserve-spotify-image-and-ad-blocks; preserve-github-exceptions",
+  "safety": "backup-adguard-rules-and-device-database-before-write; validate-actual-device-schema; validate-real-youtube-service-dns; validate-health-ready-and-direct-dns; never-remove-unrelated-blocking-rules"
 }
