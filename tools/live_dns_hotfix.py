@@ -212,7 +212,7 @@ def _remove_youtube_policy_everywhere() -> tuple[list[int], int]:
             try:
                 policy = json.loads(row["policy"] or "{}")
             except (TypeError, ValueError):
-                raise RuntimeError(f"Device {row['id']} has invalid policy JSON; refusing to overwrite it.")
+                raise RuntimeError(f"Device {row['id']} has invalid policy JSON; refusing to overwrite it.") from None
             if not isinstance(policy, dict):
                 raise RuntimeError(f"Device {row['id']} policy is not a JSON object; refusing to overwrite it.")
 
