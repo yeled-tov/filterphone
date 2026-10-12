@@ -159,7 +159,8 @@ def test_disable_youtube_safe_search_preserves_other_engines(monkeypatch):
             state.update(body)
             return {}
         if method == "GET" and path == "/clients":
-            return {"clients": [dict(c) for c in clients], "auto_clients": []}
+            # Older AdGuard releases return configured clients as a bare list.
+            return [dict(c) for c in clients]
         if method == "POST" and path == "/clients/update":
             for index, client in enumerate(clients):
                 if client["name"] == body["name"]:
