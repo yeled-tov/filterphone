@@ -140,6 +140,9 @@
     </application>
 
     <queries>
+        <!-- נדרשת נראות חבילות כדי לזהות רק התקנות FilterTube קיימות לחריגה מה-VPN. -->
+        <package android:name="com.filtertube.app" />
+        <package android:name="com.filtertube.filtertube" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
