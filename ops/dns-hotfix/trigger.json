@@ -1,0 +1,6 @@
+{
+  "action": "repair-youtube-and-block-spotify-image-cdns",
+  "requested_at": "2026-10-12",
+  "scope": "remove-broad-global-YouTube-DNS-blocks; retain-thumbnail-blocks; add-specific-Spotify-image-CDN-blocks",
+  "safety": "backup-before-write; do-not-change-ambiguous-multi-device-YouTube-policies"
+}
