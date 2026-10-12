@@ -78,6 +78,13 @@ login.live.com
 *.meuhedet.co.il
 *.leumit.co.il
 
+# --- כלים למפתחים: GitHub (האפליקציה משתמשת ב-API, הורדות ונכסי CDN) ---
+# מעבירים HTTPS בלי יירוט TLS כדי לא לשבור certificate pinning באפליקציה.
+*.github.com
+*.githubusercontent.com
+*.githubassets.com
+*.githubapp.com
+
 # --- כלים (מהמערכת הקודמת) ---
 claude.ai
 *.claude.ai
