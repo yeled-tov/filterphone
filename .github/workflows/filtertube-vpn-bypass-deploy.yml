@@ -1,0 +1,189 @@
+name: Deploy FilterTube VPN bypass to FilterPhone APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/vpn-bypass/trigger.json"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: filtertube-vpn-bypass-deploy
+  cancel-in-progress: false
+
+env:
+  SERVER: ubuntu@151.145.88.42
+  PUBLIC: https://api.filterphone.com
+
+jobs:
+  deploy:
+    name: Test, build, and publish FilterPhone APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate explicit deployment request
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("ops/vpn-bypass/trigger.json")
+          d = json.loads(p.read_text(encoding="utf-8"))
+          assert d.get("action") == "deploy-filtertube-vpn-bypass", "Unexpected deployment action"
+          assert d.get("scope") == "filterphone-apk-only", "Unexpected deployment scope"
+          print("Verified: FilterPhone APK only; no server code deployment.")
+          PY
+
+      - name: Wait for successful app.yml build of this exact main commit
+        id: app_version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 30); do
+            rows=$(gh run list -R "$GITHUB_REPOSITORY" --workflow app.yml --branch main --status success --limit 30 --json number,headSha,url)
+            match=$(jq --arg sha "$GITHUB_SHA" '[.[] | select(.headSha == $sha)][0] // empty' <<< "$rows")
+            if [ -n "$match" ]; then
+              number=$(jq -r '.number' <<< "$match")
+              url=$(jq -r '.url' <<< "$match")
+              echo "build_number=$number" >> "$GITHUB_OUTPUT"
+              echo "version=1.0.$number" >> "$GITHUB_OUTPUT"
+              echo "Confirmed successful app build $number for $GITHUB_SHA ($url)"
+              exit 0
+            fi
+            echo "Waiting for app.yml successful run on $GITHUB_SHA ($attempt/30)"
+            sleep 10
+          done
+          echo "::error::No successful app.yml build for this exact commit; refusing to publish."
+          exit 1
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.44.2"
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        working-directory: app
+        run: flutter pub get --enforce-lockfile
+
+      - name: Flutter static analysis
+        working-directory: app
+        run: flutter analyze
+
+      - name: Flutter tests
+        working-directory: app
+        run: flutter test
+
+      - name: Validate signing secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::Android release-signing secrets are missing; APK was not published."
+            exit 1
+          fi
+
+      - name: Configure release signing
+        working-directory: app
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > android/upload.jks
+          {
+            echo "storeFile=upload.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+          } > android/key.properties
+
+      - name: Build signed FilterPhone APKs
+        working-directory: app
+        env:
+          BUILD_NUMBER: ${{ steps.app_version.outputs.build_number }}
+          VERSION_NAME: ${{ steps.app_version.outputs.version }}
+        run: |
+          mkdir -p dist
+          ARGS="--release --build-number=$BUILD_NUMBER --build-name=$VERSION_NAME"
+          flutter build apk $ARGS
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/FilterPhone-$VERSION_NAME-universal.apk"
+          flutter build apk $ARGS --split-per-abi --target-platform android-arm64
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/FilterPhone-$VERSION_NAME-arm64.apk"
+
+      - name: Kotlin unit tests and Android lint
+        working-directory: app/android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug
+
+      - name: Validate APKs and produce update metadata
+        working-directory: app
+        run: |
+          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          python3 ../tools/apk_release.py --aapt2 "$AAPT2" dist
+
+      - name: Verify APK release signatures
+        working-directory: app
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          for apk in dist/*.apk; do
+            out=$("$APKSIGNER" verify --verbose --print-certs "$apk" 2>&1) || { echo "$out"; exit 1; }
+            echo "$out" | grep -q "CN=FilterPhone" || { echo "$apk is not signed with the FilterPhone key"; exit 1; }
+            echo "Verified signature: $apk"
+          done
+
+      - name: Configure restricted server SSH access
+        env:
+          KEY: ${{ secrets.FP_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.FP_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$KEY" ] || [ -z "$KNOWN_HOSTS" ]; then
+            echo "::error::Missing FP_DEPLOY_KEY or FP_DEPLOY_KNOWN_HOSTS; live server was not changed."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Record live server status before APK upload
+        run: ssh -o BatchMode=yes "$SERVER" status
+
+      - name: Publish only the signed APK and update metadata
+        working-directory: app
+        run: |
+          cp "dist/FilterPhone-${{ steps.app_version.outputs.version }}-arm64.apk" ../FilterPhone.apk
+          cp "dist/FilterPhone-${{ steps.app_version.outputs.version }}-universal.apk" ../FilterPhone-universal.apk
+          cp dist/FilterPhone.json ../FilterPhone.json
+          cd ..
+          tar -cf - FilterPhone.apk FilterPhone-universal.apk FilterPhone.json | ssh -o BatchMode=yes -o ServerAliveInterval=30 "$SERVER" apk
+
+      - name: Verify live service and download URL
+        run: |
+          curl -fsS --retry 5 --retry-delay 3 "$PUBLIC/health" >/dev/null
+          curl -fsSI "$PUBLIC/download/FilterPhone.apk" | head -1
+          echo "FilterPhone APK deployment verified: $PUBLIC/download/FilterPhone.apk"
+
+      - name: Final server status
+        if: always()
+        run: ssh -o BatchMode=yes "$SERVER" status || true
+
+      - name: Clean up signing material
+        if: always()
+        run: |
+          rm -f app/android/upload.jks app/android/key.properties
+          rm -f ~/.ssh/id_ed25519
+          rm -f FilterPhone.apk FilterPhone-universal.apk FilterPhone.json
