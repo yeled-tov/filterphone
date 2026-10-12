@@ -206,14 +206,48 @@ def _disable_youtube_safe_search(base_url: str, user: str, password: str) -> dic
             f"AdGuard still has YouTube SafeSearch rewriting enabled: {after!r}"
         )
     # AdGuard can override the global setting per configured DNS client/device.
-    clients_response = _request(base_url, user, password, "GET", "/clients") or {}
-    clients = clients_response.get("clients") if isinstance(clients_response, dict) else None
-    if not isinstance(clients, list):
-        raise RuntimeError("AdGuard clients API did not return a clients list; cannot verify per-device YouTube settings.")
+    def parse_clients(payload: Any) -> list[dict[str, Any]] | None:
+        # AdGuard versions differ: some return a list, newer ones return
+        # {"clients": [...], "auto_clients": [...]}. Preserve an empty list too.
+        if payload is None:
+            return []
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if not isinstance(payload, dict):
+            return None
+        if "clients" in payload:
+            raw_clients = payload.get("clients")
+            if isinstance(raw_clients, list):
+                return [item for item in raw_clients if isinstance(item, dict)]
+            if isinstance(raw_clients, dict):
+                return [
+                    {"name": str(name), **item}
+                    for name, item in raw_clients.items()
+                    if isinstance(item, dict)
+                ]
+            return None
+        if not payload or ("auto_clients" in payload and len(payload) == 1):
+            return []
+        # Compatibility with older name/IP-keyed responses.
+        if all(isinstance(item, dict) for item in payload.values()):
+            return [
+                {"name": str(name), **item}
+                for name, item in payload.items()
+            ]
+        return None
+
+    clients_response = _request(base_url, user, password, "GET", "/clients")
+    clients = parse_clients(clients_response)
+    if clients is None:
+        print(
+            "Warning: AdGuard /clients response shape is unsupported; "
+            "global YouTube SafeSearch is verified, per-client overrides could not be inspected."
+        )
+        return after
 
     changed_clients = 0
     for client in clients:
-        if not isinstance(client, dict) or not isinstance(client.get("name"), str):
+        if not isinstance(client.get("name"), str):
             continue
         client_safe_search = client.get("safe_search")
         if not isinstance(client_safe_search, dict):
@@ -239,19 +273,21 @@ def _disable_youtube_safe_search(base_url: str, user: str, password: str) -> dic
         )
         changed_clients += 1
 
-    verify_response = _request(base_url, user, password, "GET", "/clients") or {}
-    verified_clients = verify_response.get("clients") if isinstance(verify_response, dict) else None
-    if not isinstance(verified_clients, list):
-        raise RuntimeError("Could not verify per-device YouTube SafeSearch settings.")
+    verify_response = _request(base_url, user, password, "GET", "/clients")
+    verified_clients = parse_clients(verify_response)
+    if verified_clients is None:
+        print(
+            "Warning: AdGuard /clients verification response is unsupported; "
+            "global YouTube SafeSearch is verified, per-client verification unavailable."
+        )
+        return after
     still_enabled = [
         str(client.get("name", "<unnamed>"))
         for client in verified_clients
-        if isinstance(client, dict)
-        and (
+        if (
             isinstance(client.get("safe_search"), dict)
             and client["safe_search"].get("youtube") is True
-            or client.get("safesearch_enabled") is True
-        )
+        ) or client.get("safesearch_enabled") is True
     ]
     if still_enabled:
         raise RuntimeError(
