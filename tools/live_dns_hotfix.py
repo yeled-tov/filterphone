@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-"""One-time, idempotent DNS repair for the live FilterPhone server.
+"""One-time, idempotent global YouTube unblock for the live FilterPhone server.
 
-Keeps user rules intact, removes only unscoped broad YouTube service blocks,
-retains YouTube thumbnail blocks, and adds specific Spotify image CDN hosts.
-If exactly one active device explicitly has the catalog's full-YouTube block
-selected, removes that option only for that device. If multiple devices have
-it selected, no per-device policy is changed automatically.
+Preserves unrelated user rules, removes YouTube block rules and YouTube-specific
+entries from every stored device policy, adds DNS exceptions for YouTube service
+domains, and preserves Spotify image/ad blocks plus GitHub access exceptions.
 """
 from __future__ import annotations
 
@@ -28,9 +26,8 @@ ENV_PATH = Path("/etc/filterphone/filterphone.env")
 DB_PATH = Path("/var/lib/filterphone/filterphone.db")
 BACKUP_DIR = Path("/root/fp-backups")
 
-# The user requested YouTube to work normally, including thumbnails and video
-# delivery. Remove block rules for any YouTube-owned host families, but do not
-# touch unrelated Google APIs or per-device choices made by individual customers.
+# Remove YouTube-related blocks globally, including thumbnails and video delivery.
+# Keep unrelated Google APIs and all other non-YouTube policy choices unchanged.
 YOUTUBE_HOST_SUFFIXES = (
     "youtube.com",
     "youtube-nocookie.com",
@@ -39,8 +36,10 @@ YOUTUBE_HOST_SUFFIXES = (
     "ytimg.com",
     "youtubei.googleapis.com",
     "youtube.googleapis.com",
+    "youtubeembeddedplayer.googleapis.com",
     "youtube.co.il",
-    "yt3.ggpht.com",
+    "ggpht.com",
+    "yt3.googleusercontent.com",
 )
 YOUTUBE_ALLOW_HOSTS = YOUTUBE_HOST_SUFFIXES
 # Some parent zones (notably ytimg.com) have no A record of their own.
@@ -53,8 +52,10 @@ YOUTUBE_DNS_CHECK_HOSTS = {
     "ytimg.com": "i.ytimg.com",
     "youtubei.googleapis.com": "youtubei.googleapis.com",
     "youtube.googleapis.com": "youtube.googleapis.com",
+    "youtubeembeddedplayer.googleapis.com": "youtubeembeddedplayer.googleapis.com",
     "youtube.co.il": "youtube.co.il",
-    "yt3.ggpht.com": "yt3.ggpht.com",
+    "ggpht.com": "yt3.ggpht.com",
+    "yt3.googleusercontent.com": "yt3.googleusercontent.com",
 }
 YOUTUBE_APP_PACKAGES = {
     "com.google.android.youtube",
