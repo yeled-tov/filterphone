@@ -143,6 +143,12 @@ def test_disable_youtube_safe_search_preserves_other_engines(monkeypatch):
             "ids": ["10.8.0.3"],
             "safe_search": {"enabled": True, "google": True, "youtube": False},
         },
+        {
+            "name": "legacy-device",
+            "ids": ["10.8.0.4"],
+            "safesearch_enabled": True,
+            "safe_search": {},
+        },
     ]
 
     def fake_request(base_url, user, password, method, path, body=None):
@@ -172,6 +178,16 @@ def test_disable_youtube_safe_search_preserves_other_engines(monkeypatch):
     assert clients[0]["safe_search"]["youtube"] is False
     assert clients[0]["safe_search"]["google"] is True
     assert clients[1]["safe_search"]["youtube"] is False
+    assert clients[2]["safesearch_enabled"] is False
+    assert clients[2]["safe_search"]["youtube"] is False
+    assert clients[2]["safe_search"]["google"] is True
+    assert any(
+        method == "POST" and path == "/clients/update"
+        and body["name"] == "legacy-device"
+        and body["data"]["safesearch_enabled"] is False
+        and body["data"]["safe_search"]["youtube"] is False
+        for method, path, body in calls
+    )
     assert calls[0][:2] == ("GET", "/safesearch/status")
     assert calls[1][0:2] == ("PUT", "/safesearch/settings")
     assert calls[1][2]["youtube"] is False
