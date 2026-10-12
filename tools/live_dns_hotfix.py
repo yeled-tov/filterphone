@@ -89,7 +89,7 @@ def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[st
     for rule in current:
         host = _host_from_rule(rule)
         is_block_rule = rule.strip().startswith("||")
-        if is_block_rule and host:
+        if is_block_rule and host and "$client=" not in rule.lower():
             youtube_host = any(
                 host == suffix or host.endswith("." + suffix)
                 for suffix in YOUTUBE_HOST_SUFFIXES
@@ -304,7 +304,7 @@ def main() -> int:
 
     checks = {
         host: _check_host(base_url, user, password, host)
-        for host in ("youtube.com", "googlevideo.com", "youtubei.googleapis.com", "i.scdn.co")
+        for host in ("youtube.com", "googlevideo.com", "youtubei.googleapis.com", "i.scdn.co", *SPOTIFY_AD_HOSTS)
     }
     print("DNS hotfix applied.")
     print(f"Unscoped YouTube service-block rules removed: {len(removed)}")
@@ -333,7 +333,7 @@ def main() -> int:
     # test for Spotify CDN blocking and verifies that YouTube still resolves.
     dns_checks = {
         host: _dns_a_query(host)
-        for host in ("youtube.com", "i.scdn.co")
+        for host in ("youtube.com", "i.scdn.co", *SPOTIFY_AD_HOSTS)
     }
     print("Direct DNS query results from the live server:")
     print(json.dumps(dns_checks, ensure_ascii=False, indent=2))
@@ -344,8 +344,14 @@ def main() -> int:
             "The live DNS server still resolves i.scdn.co; its rule appears in user_rules "
             "but is not taking effect. Do not treat Spotify image blocking as verified."
         )
+    for host in SPOTIFY_AD_HOSTS:
+        result = checks[host]
+        if "error" in result or not result.get("reason", "").startswith("Filtered"):
+            raise RuntimeError(
+                f"Spotify ad host {host} was not confirmed filtered by AdGuard: {result}"
+            )
 
-    print("Verified: YouTube resolves on the live server; Spotify image CDN is blocked by live DNS.")
+    print("Verified: YouTube resolves on the live server; Spotify image CDN and Spotify-owned ad endpoints are filtered.")
     return 0
 
 
