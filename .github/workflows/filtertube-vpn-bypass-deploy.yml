@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for attempt in $(seq 1 30); do
+          for attempt in $(seq 1 60); do
             rows=$(gh run list -R "$GITHUB_REPOSITORY" --workflow app.yml --branch main --status success --limit 30 --json number,headSha,url)
             match=$(jq --arg sha "$GITHUB_SHA" '[.[] | select(.headSha == $sha)][0] // empty' <<< "$rows")
             if [ -n "$match" ]; then
@@ -55,8 +55,8 @@ jobs:
               echo "Confirmed successful app build $number for $GITHUB_SHA ($url)"
               exit 0
             fi
-            echo "Waiting for app.yml successful run on $GITHUB_SHA ($attempt/30)"
-            sleep 10
+            echo "Waiting for app.yml successful run on $GITHUB_SHA ($attempt/60)"
+            sleep 15
           done
           echo "::error::No successful app.yml build for this exact commit; refusing to publish."
           exit 1
