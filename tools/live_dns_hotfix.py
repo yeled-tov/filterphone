@@ -249,6 +249,30 @@ def main() -> int:
     print(f"Active devices selecting full-YouTube block: {candidate_count}; updated IDs: {changed_ids}")
     print("AdGuard check_host results:")
     print(json.dumps(checks, ensure_ascii=False, indent=2))
+
+    # Don't report success just because rules were written: verify that core
+    # YouTube service hosts are not blocked by remaining filters/rules and that
+    # the Spotify image CDN is actually blocked. The client-specific policy is
+    # handled separately and is deliberately not relaxed for multiple devices.
+    for host in ("youtube.com", "googlevideo.com", "youtubei.googleapis.com"):
+        result = checks[host]
+        if "error" in result:
+            raise RuntimeError(f"Could not verify YouTube DNS for {host}: {result['error']}")
+        if result.get("reason", "").startswith("Filtered"):
+            raise RuntimeError(
+                f"YouTube still appears DNS-filtered for {host}: "
+                f"{result.get('reason')} {result.get('rule', '')}. "
+                "See check_host output and active per-device policies."
+            )
+    spotify = checks["i.scdn.co"]
+    if "error" in spotify:
+        raise RuntimeError(f"Could not verify Spotify image DNS block: {spotify['error']}")
+    if not spotify.get("reason", "").startswith("Filtered"):
+        raise RuntimeError(
+            "Spotify image host i.scdn.co is not reported blocked by AdGuard; "
+            f"reason={spotify.get('reason', 'unknown')}, rule={spotify.get('rule', '')}"
+        )
+    print("Verified: YouTube service hosts are not DNS-filtered globally; Spotify image CDN is blocked.")
     return 0
 
 
