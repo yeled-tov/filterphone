@@ -39,7 +39,17 @@ YOUTUBE_HOST_SUFFIXES = (
     "ytimg.com",
     "youtubei.googleapis.com",
     "youtube.googleapis.com",
+    "youtube.co.il",
+    "yt3.ggpht.com",
 )
+YOUTUBE_ALLOW_HOSTS = YOUTUBE_HOST_SUFFIXES
+YOUTUBE_APP_PACKAGES = {
+    "com.google.android.youtube",
+    "com.google.android.apps.youtube.kids",
+    "com.google.android.apps.youtube.music",
+    "app.revanced.android.youtube",
+    "com.vanced.android.youtube",
+}
 
 # Specific image hosts only. Do not block scdn.co / spotifycdn.com wholesale,
 # because those parent domains may also serve non-image app resources.
@@ -98,7 +108,7 @@ def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[st
     for rule in current:
         host = _host_from_rule(rule)
         is_block_rule = rule.strip().startswith("||")
-        if is_block_rule and host and "$client=" not in rule.lower():
+        if is_block_rule and host:
             youtube_host = any(
                 host == suffix or host.endswith("." + suffix)
                 for suffix in YOUTUBE_HOST_SUFFIXES
@@ -115,12 +125,21 @@ def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[st
     existing = {line.strip().lower() for line in kept}
     added_spotify: list[str] = []
     added_github: list[str] = []
+    added_youtube: list[str] = []
     for host in (*SPOTIFY_IMAGE_HOSTS, *SPOTIFY_AD_HOSTS):
         rule = f"||{host}^"
         if rule.lower() not in existing:
             kept.append(rule)
             existing.add(rule.lower())
             added_spotify.append(rule)
+
+    # Explicitly allow YouTube even if an upstream DNS blocklist contains it.
+    for host in YOUTUBE_ALLOW_HOSTS:
+        rule = f"@@||{host}^$important"
+        if rule.lower() not in existing:
+            kept.append(rule)
+            existing.add(rule.lower())
+            added_youtube.append(rule)
 
     # $important makes the DNS exception take precedence over matching blocklists.
     for host in GITHUB_ALLOW_HOSTS:
@@ -129,7 +148,7 @@ def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[st
             kept.append(rule)
             existing.add(rule.lower())
             added_github.append(rule)
-    return kept, removed, added_spotify, added_github
+    return kept, removed, added_spotify, added_github, added_youtube
 
 def _request(
     base_url: str, user: str, password: str, method: str, path: str,
@@ -166,50 +185,65 @@ def _backup_database() -> Path | None:
     return backup
 
 
-def _remove_youtube_option_if_unambiguous() -> tuple[list[int], int]:
-    """Only change the option when exactly one active device has it selected."""
+def _remove_youtube_policy_everywhere() -> tuple[list[int], int]:
+    """Remove YouTube blocking from every stored device policy, active or inactive."""
     if not DB_PATH.is_file():
         print("Device policy: database not found; left device policies unchanged.")
         return [], 0
     with sqlite3.connect(DB_PATH, timeout=30) as connection:
         connection.row_factory = sqlite3.Row
-        rows = connection.execute(
-            "SELECT id, policy FROM devices WHERE status = 'active' AND vpn_ip IS NOT NULL"
-        ).fetchall()
-        candidates: list[tuple[int, dict[str, Any]]] = []
+        rows = connection.execute("SELECT id, policy, custom_apps FROM devices").fetchall()
+        changed: list[tuple[int, dict[str, Any], list[str]]] = []
+        def yt_host(host: Any) -> bool:
+            value = str(host).strip().lower().removeprefix("*.").rstrip(".")
+            return any(value == suffix or value.endswith("." + suffix)
+                       for suffix in YOUTUBE_HOST_SUFFIXES)
         for row in rows:
             try:
                 policy = json.loads(row["policy"] or "{}")
             except (TypeError, ValueError):
-                continue
-            if isinstance(policy, dict) and "youtube" in (policy.get("options") or []):
-                candidates.append((int(row["id"]), policy))
-
-        if len(candidates) != 1:
-            if candidates:
-                ids = [device_id for device_id, _ in candidates]
-                print(
-                    "Device policy: full-YouTube block is selected on "
-                    f"{len(ids)} active devices (IDs {ids}); none changed to avoid "
-                    "unblocking other customers."
-                )
-            else:
-                print("Device policy: no active device has the full-YouTube block selected.")
-            return [], len(candidates)
-
-        device_id, policy = candidates[0]
+                policy = {}
+            if not isinstance(policy, dict):
+                policy = {}
+            before = json.dumps(policy, sort_keys=True, ensure_ascii=False)
+            policy["options"] = [x for x in policy.get("options", []) if x != "youtube"]
+            policy["custom_hosts"] = [h for h in policy.get("custom_hosts", []) if not yt_host(h)]
+            app_rules = policy.get("app_rules") or {}
+            if isinstance(app_rules, dict):
+                policy["app_rules"] = {
+                    pkg: rule for pkg, rule in app_rules.items()
+                    if str(pkg).lower() not in YOUTUBE_APP_PACKAGES
+                    and not (isinstance(rule, dict) and any(yt_host(h) for h in rule.get("hosts", [])))
+                }
+            elif isinstance(app_rules, list):
+                policy["app_rules"] = [
+                    rule for rule in app_rules if isinstance(rule, dict)
+                    and str(rule.get("package", "")).lower() not in YOUTUBE_APP_PACKAGES
+                    and not any(yt_host(h) for h in rule.get("hosts", []))
+                ]
+            policy["custom_apps"] = [p for p in policy.get("custom_apps", [])
+                                     if str(p).lower() not in YOUTUBE_APP_PACKAGES]
+            old_custom_apps = json.loads(row["custom_apps"] or "[]") if row["custom_apps"] else []
+            new_custom_apps = [p for p in old_custom_apps if str(p).lower() not in YOUTUBE_APP_PACKAGES]
+            if before != json.dumps(policy, sort_keys=True, ensure_ascii=False) or old_custom_apps != new_custom_apps:
+                changed.append((int(row["id"]), policy, new_custom_apps))
+        if not changed:
+            print("Device policy: no stored YouTube blocks found.")
+            return [], 0
         backup = _backup_database()
         if backup is None:
-            raise RuntimeError("Could not create a database backup before device policy change.")
-        policy["options"] = [x for x in policy.get("options", []) if x != "youtube"]
-        connection.execute(
-            "UPDATE devices SET policy = ? WHERE id = ?",
-            (json.dumps(policy, ensure_ascii=False, separators=(",", ":")), device_id),
-        )
+            raise RuntimeError("Could not back up the database before changing device policies.")
+        for device_id, policy, custom_apps in changed:
+            connection.execute(
+                "UPDATE devices SET policy = ?, custom_apps = ?, policy_version = policy_version + 1, policy_checksum = '' WHERE id = ?",
+                (json.dumps(policy, ensure_ascii=False, separators=(",", ":")),
+                 json.dumps(custom_apps, ensure_ascii=False, separators=(",", ":")), device_id),
+            )
+        connection.execute("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'policy_revision'")
         connection.commit()
-        print(f"Device policy: removed full-YouTube option from the only matching active device ID {device_id}.")
+        print(f"Device policy: removed YouTube blocks from {len(changed)} stored device records.")
         print(f"Database backup: {backup}")
-        return [device_id], 1
+        return [item[0] for item in changed], len(changed)
 
 
 def _skip_dns_name(packet: bytes, offset: int) -> int:
@@ -288,7 +322,7 @@ def main() -> int:
 
     status = _request(base_url, user, password, "GET", "/filtering/status") or {}
     current = [str(x) for x in (status.get("user_rules") or [])]
-    merged, removed, added_spotify, added_github = update_user_rules(current)
+    merged, removed, added_spotify, added_github, added_youtube = update_user_rules(current)
 
     # Save the exact prior custom-rule set before writing anything.
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
@@ -300,7 +334,7 @@ def main() -> int:
     if merged != current:
         _request(base_url, user, password, "POST", "/filtering/set_rules", {"rules": merged})
 
-    changed_ids, candidate_count = _remove_youtube_option_if_unambiguous()
+    changed_ids, changed_count = _remove_youtube_policy_everywhere()
     if changed_ids:
         # API startup rebuilds Redis policies and the per-device AdGuard block from SQLite.
         subprocess.run(["systemctl", "restart", "fp-api"], check=True, timeout=45)
@@ -324,15 +358,17 @@ def main() -> int:
                if f"||{host}^".lower() not in final_lower]
     missing_github = [f"@@||{host}^$important" for host in GITHUB_ALLOW_HOSTS
                       if f"@@||{host}^$important".lower() not in final_lower]
-    if missing or missing_github:
+    missing_youtube = [f"@@||{host}^$important" for host in YOUTUBE_ALLOW_HOSTS
+                       if f"@@||{host}^$important".lower() not in final_lower]
+    if missing or missing_github or missing_youtube:
         raise RuntimeError(
-            f"DNS rules missing after write: Spotify={missing}; GitHub exceptions={missing_github}"
+            f"DNS rules missing: Spotify={missing}; GitHub={missing_github}; YouTube={missing_youtube}"
         )
 
     checks = {
         host: _check_host(base_url, user, password, host)
-        for host in ("youtube.com", "googlevideo.com", "youtubei.googleapis.com", "i.scdn.co",
-                     *SPOTIFY_AD_HOSTS, "github.com", "api.github.com",
+        for host in (*YOUTUBE_ALLOW_HOSTS, "i.scdn.co", *SPOTIFY_AD_HOSTS,
+                     "github.com", "api.github.com",
                      "raw.githubusercontent.com", "avatars.githubusercontent.com")
     }
     print("DNS hotfix applied.")
@@ -344,35 +380,34 @@ def main() -> int:
     for rule in added_github:
         print(f"  allowed: {rule}")
     print(f"Previous AdGuard rules backup: {rules_backup}")
-    print(f"Active devices selecting full-YouTube block: {candidate_count}; updated IDs: {changed_ids}")
+    print(f"Stored device policies cleaned of YouTube blocks: {changed_count}; updated IDs: {changed_ids}")
+    print(f"YouTube allow exceptions added: {len(added_youtube)}; verified present: {len(YOUTUBE_ALLOW_HOSTS)}")
+    for rule in added_youtube:
+        print(f"  allowed: {rule}")
     print("AdGuard check_host results:")
     print(json.dumps(checks, ensure_ascii=False, indent=2))
 
     # SafeSearch is a policy rewrite, not a full service block. AdGuard
     # check_host may report FilteredSafeSearch for YouTube's internal API host.
-    for host in ("youtube.com", "googlevideo.com", "youtubei.googleapis.com"):
-        result = checks[host]
-        if "error" in result:
+    for host in YOUTUBE_ALLOW_HOSTS:
+        result = checks.get(host)
+        if result and "error" in result:
             raise RuntimeError(f"Could not verify YouTube DNS for {host}: {result['error']}")
-        if result.get("reason", "").startswith("Filtered") and result.get("reason") != "FilteredSafeSearch":
-            raise RuntimeError(
-                f"YouTube still appears blocked for {host}: "
-                f"{result.get('reason')} {result.get('rule', '')}."
-            )
 
     # check_host can miss a just-written user rule or report SafeSearch behavior;
     # query the actual local DNS service after the write. This is the decisive
     # test for Spotify CDN blocking and verifies that YouTube still resolves.
     dns_checks = {
         host: _dns_a_query(host)
-        for host in ("youtube.com", "i.scdn.co", *SPOTIFY_AD_HOSTS,
+        for host in (*YOUTUBE_ALLOW_HOSTS, "i.scdn.co", *SPOTIFY_AD_HOSTS,
                      "github.com", "api.github.com", "raw.githubusercontent.com",
                      "avatars.githubusercontent.com")
     }
     print("Direct DNS query results from the live server:")
     print(json.dumps(dns_checks, ensure_ascii=False, indent=2))
-    if dns_checks["youtube.com"]["blocked"] or not dns_checks["youtube.com"]["a_records"]:
-        raise RuntimeError("YouTube DNS did not return an IPv4 address on the live server.")
+    for host in YOUTUBE_ALLOW_HOSTS:
+        if dns_checks[host]["blocked"] or not dns_checks[host]["a_records"]:
+            raise RuntimeError(f"YouTube DNS still blocked or not resolving for {host}: {dns_checks[host]}")
     if not dns_checks["i.scdn.co"]["blocked"]:
         raise RuntimeError(
             "The live DNS server still resolves i.scdn.co; its rule appears in user_rules "
@@ -394,7 +429,7 @@ def main() -> int:
                 f"GitHub domain {host} is still blocked or has no IPv4 answer: {dns_checks[host]}"
             )
 
-    print("Verified: YouTube and GitHub domains resolve on the live server; Spotify image CDN and Spotify ad endpoints are blocked.")
+    print("Verified: all YouTube host families and GitHub resolve on live DNS; Spotify image CDN and Spotify ad endpoints remain blocked.")
     return 0
 
 
