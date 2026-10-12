@@ -1,6 +1,6 @@
 {
   "action": "remove-youtube-blocks-globally",
-  "requested_at": "2026-10-12T11:07:00Z",
+  "requested_at": "2026-10-12T11:10:00Z",
   "scope": "remove-all-youtube-domain-block-rules-including-client-scoped; globally-allow-youtube-domains; remove-youtube-app-and-host-blocks-from-all-device-policies; remove-youtube-option-from-catalog; preserve-spotify-image-and-ad-blocks; preserve-github-exceptions",
   "safety": "backup-adguard-rules-and-device-database-before-write; validate-health-ready-and-direct-dns"
 }
