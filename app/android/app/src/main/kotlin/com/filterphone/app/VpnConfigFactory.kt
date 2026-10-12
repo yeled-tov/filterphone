@@ -69,5 +69,39 @@ object VpnConfigFactory {
         return Config.Builder().setInterface(iface).addPeer(peer).build()
     }
 
+    /**
+     * תאימות למכשירים ישנים ששמרו הגדרת WireGuard בפורמט טקסט.
+     * מוסיף את אותה החרגת אפליקציה גם להגדרות הישנות, בלי לשנות שרתים, כתובות או מפתחות.
+     */
+    fun buildLegacy(rawConfig: String, context: Context): Config {
+        val packages = installedFilterTubePackages(context)
+        if (packages.isEmpty()) {
+            return Config.parse(java.io.BufferedReader(java.io.StringReader(rawConfig)))
+        }
+
+        val lines = rawConfig.lines().toMutableList()
+        val excludedLine = lines.indexOfFirst {
+            it.substringBefore("#").trim().startsWith("ExcludedApplications", ignoreCase = true)
+        }
+        if (excludedLine >= 0) {
+            val existing = lines[excludedLine]
+                .substringAfter("=", "")
+                .substringBefore("#")
+                .split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            lines[excludedLine] = "ExcludedApplications = " + (existing + packages).distinct().joinToString(", ")
+        } else {
+            val interfaceHeader = lines.indexOfFirst { it.trim().equals("[Interface]", ignoreCase = true) }
+            // הגדרת K_CONFIG הישנה אמורה להיות WireGuard config תקני עם [Interface].
+            // אם היא לא כזו, נשאיר אותה כפי שהיא במקום לסכן את חיבור ה-VPN.
+            if (interfaceHeader < 0) {
+                return Config.parse(java.io.BufferedReader(java.io.StringReader(rawConfig)))
+            }
+            lines.add(interfaceHeader + 1, "ExcludedApplications = " + packages.joinToString(", "))
+        }
+        return Config.parse(java.io.BufferedReader(java.io.StringReader(lines.joinToString("\n"))))
+    }
+
     private fun JSONArray.joined(): String = (0 until length()).joinToString(",") { getString(it) }
 }
