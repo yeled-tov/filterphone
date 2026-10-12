@@ -109,7 +109,7 @@ object TunnelManager {
         if (json != null && privateKey != null) {
             return VpnConfigFactory.build(JSONObject(json), privateKey, appContext, useFallback)
         }
-        return store.get(K_CONFIG)?.let { Config.parse(BufferedReader(StringReader(it))) }
+        return store.get(K_CONFIG)?.let { VpnConfigFactory.buildLegacy(it, appContext) }
     }
 
     private fun hasFallback(): Boolean =
