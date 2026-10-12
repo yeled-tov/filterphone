@@ -101,7 +101,7 @@ def _host_from_rule(rule: str) -> str | None:
     return match.group(1).lower().removeprefix("*.")
 
 
-def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[str], list[str]]:
+def update_user_rules(current: list[str]) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
     """Allow YouTube/GitHub service domains while blocking specific Spotify image/ad hosts."""
     kept: list[str] = []
     removed: list[str] = []
