@@ -187,6 +187,28 @@ def _request(
     return json.loads(raw) if raw.strip() else None
 
 
+def _disable_youtube_safe_search(base_url: str, user: str, password: str) -> dict[str, Any]:
+    """Disable only AdGuard's YouTube SafeSearch rewrite, preserving other engines."""
+    before = _request(base_url, user, password, "GET", "/safesearch/status") or {}
+    if not isinstance(before, dict) or "youtube" not in before:
+        raise RuntimeError(
+            "AdGuard SafeSearch status did not expose the YouTube setting; "
+            "refusing to claim YouTube is fully unblocked."
+        )
+
+    if before.get("youtube") is not False:
+        updated = {**before, "youtube": False}
+        _request(base_url, user, password, "PUT", "/safesearch/settings", updated)
+
+    after = _request(base_url, user, password, "GET", "/safesearch/status") or {}
+    if not isinstance(after, dict) or after.get("youtube") is not False:
+        raise RuntimeError(
+            f"AdGuard still has YouTube SafeSearch rewriting enabled: {after!r}"
+        )
+    print("YouTube SafeSearch rewrite: disabled and verified; other engines unchanged.")
+    return after
+
+
 def _backup_database() -> Path | None:
     if not DB_PATH.is_file():
         return None
@@ -394,6 +416,10 @@ def main() -> int:
     password = os.environ.get("FP_ADGUARD_PASSWORD", "")
     if not (base_url and user and password):
         raise SystemExit("AdGuard API settings are missing; no changes applied.")
+
+    # SafeSearch rewriting is separate from block rules and can alter YouTube API hosts.
+    # Disable YouTube's rewrite only; leave other search-engine settings unchanged.
+    _disable_youtube_safe_search(base_url, user, password)
 
     status = _request(base_url, user, password, "GET", "/filtering/status") or {}
     current = [str(x) for x in (status.get("user_rules") or [])]
