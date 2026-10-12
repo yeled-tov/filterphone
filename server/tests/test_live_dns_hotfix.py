@@ -117,3 +117,8 @@ def test_remove_youtube_policy_supports_real_devices_schema(tmp_path, monkeypatc
     ]
 
     assert hotfix._remove_youtube_policy_everywhere() == ([], 0)
+
+
+
+def test_youtube_dns_check_uses_real_thumbnail_hostname():
+    assert hotfix.YOUTUBE_DNS_CHECK_HOSTS["ytimg.com"] == "i.ytimg.com"
