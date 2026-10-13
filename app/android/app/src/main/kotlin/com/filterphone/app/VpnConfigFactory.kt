@@ -73,7 +73,7 @@ object VpnConfigFactory {
      * מוסיף את אותה החרגת YouTube גם להגדרות הישנות, בלי לשנות שרתים, כתובות או מפתחות.
      */
     fun buildLegacy(rawConfig: String, context: Context): Config {
-        val packages = installedFilterTubePackages(context)
+        val packages = installedYouTubePackages(context)
         if (packages.isEmpty()) {
             return Config.parse(java.io.BufferedReader(java.io.StringReader(rawConfig)))
         }
