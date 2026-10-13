@@ -87,9 +87,9 @@ object DeviceOwnerManager {
     /**
      * מרענן את רשימת החריגים של lockdown לפני חיבור WireGuard.
      * Android חוסם תעבורה שאינה ב-VPN במצב lockdown, אלא אם החבילה ברשימת החריגים.
-     * לכן צריך לעדכן את הרשימה גם אחרי עדכון APK/התקנת FilterTube, לפני הקמת המנהרה.
+     * לכן צריך לעדכן את הרשימה גם אחרי עדכון APK/התקנת YouTube, לפני הקמת המנהרה.
      */
-    fun refreshFilterTubeLockdownBypass(context: Context) {
+    fun refreshYouTubeLockdownBypass(context: Context) {
         if (!isDeviceOwner(context) || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         val dpm = dpm(context) ?: return
         val admin = DeviceAdmin.component(context)
@@ -97,7 +97,7 @@ object DeviceOwnerManager {
 
         val lockdown = runCatching { dpm.isAlwaysOnVpnLockdownEnabled(admin) }.getOrNull() ?: return
         val bypassPackages = if (lockdown) {
-            VpnConfigFactory.installedFilterTubePackages(context)
+            VpnConfigFactory.installedYouTubePackages(context)
         } else {
             emptySet()
         }
@@ -137,7 +137,7 @@ object DeviceOwnerManager {
         }
 
         step("block_uninstall") { dpm.setUninstallBlocked(admin, context.packageName, want.getValue("block_uninstall")) }
-        // lockdown: אין חיבור ישיר מחוץ ל-VPN, מלבד FilterPhone ו-FilterTube שהוחרגו במפורש.
+        // lockdown: אין חיבור ישיר מחוץ ל-VPN, מלבד FilterPhone ו-YouTube שהוחרגו במפורש.
         // לפני שיש הגדרות VPN (מיד אחרי ההקמה, לפני ההפעלה בקוד) לא נועלים — ממתינים להגדרות.
         val vpnReady = TunnelManager.isInitialized && TunnelManager.hasConfig()
         if (want.getValue("always_on_vpn") && !vpnReady) {
@@ -150,10 +150,10 @@ object DeviceOwnerManager {
                 if (want.getValue("always_on_vpn")) {
                     val lockdownEnabled = !paused
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        // Android 10+: גם במצב lockdown, אפשר ל-FilterTube לצאת ישירות מה-VPN.
-                        // הרשימה מכילה רק חבילות FilterTube שמותקנות, כדי לא לשבור הקמה.
+                        // Android 10+: גם במצב lockdown, אפשר ל-YouTube הרשמית לצאת ישירות מה-VPN.
+                        // הרשימה מכילה רק את YouTube הרשמית אם היא מותקנת, כדי לא לשבור הקמה.
                         val directNetworkPackages = if (lockdownEnabled) {
-                            VpnConfigFactory.installedFilterTubePackages(context)
+                            VpnConfigFactory.installedYouTubePackages(context)
                         } else {
                             emptySet()
                         }
