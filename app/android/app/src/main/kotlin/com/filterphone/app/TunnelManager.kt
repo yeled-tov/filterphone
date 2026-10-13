@@ -135,8 +135,8 @@ object TunnelManager {
     private fun bringUp(): Tunnel.State {
         // Must refresh the Device Owner lockdown allowlist before reconnecting the full-tunnel VPN.
         // Failure to update this optional bypass must not prevent the VPN itself from connecting.
-        runCatching { DeviceOwnerManager.refreshFilterTubeLockdownBypass(appContext) }
-            .onFailure { Log.w(TAG, "FilterTube lockdown bypass refresh failed", it) }
+        runCatching { DeviceOwnerManager.refreshYouTubeLockdownBypass(appContext) }
+            .onFailure { Log.w(TAG, "YouTube lockdown bypass refresh failed", it) }
         val config = loadConfig(useFallback = false) ?: throw IllegalStateException("no vpn config")
         try {
             val s = backend.setState(tunnel, Tunnel.State.UP, config)
