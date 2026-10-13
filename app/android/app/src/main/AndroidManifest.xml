@@ -140,9 +140,8 @@
     </application>
 
     <queries>
-        <!-- נדרשת נראות חבילות כדי לזהות רק התקנות FilterTube קיימות לחריגה מה-VPN. -->
-        <package android:name="com.filtertube.app" />
-        <package android:name="com.filtertube.filtertube" />
+        <!-- נראות חבילה נדרשת כדי להחריג רק את אפליקציית YouTube הרשמית מה-VPN. FilterTube נשארת בתוך ה-VPN. -->
+        <package android:name="com.google.android.youtube" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
