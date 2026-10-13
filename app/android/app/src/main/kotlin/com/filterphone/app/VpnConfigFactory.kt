@@ -10,25 +10,24 @@ import org.json.JSONObject
 /**
  * בונה הגדרת WireGuard מהתשובה של השרת ומהמפתח הפרטי שנשמר במכשיר.
  *
- * FilterTube מוחרגת ברמת האפליקציה של Android (לא ברמת DNS):
- * בקשות הניגון יוצאות דרך חיבור המכשיר ולא דרך כתובת ה-IP של שרת FilterPhone.
+ * האפליקציה הרשמית של YouTube מוחרגת ברמת Android (לא ברמת DNS):
+ * תעבורת YouTube יוצאת דרך חיבור המכשיר ולא דרך כתובת ה-IP של שרת FilterPhone.
  * אין דרך אמינה להחריג רק דומיינים של YouTube ב-WireGuard לפי שם; כתובות ה-IP
- * של YouTube דינמיות ומשותפות לשירותי Google. לכן החרגת החבילה היא המסלול היציב.
+ * של YouTube דינמיות ומשותפות לשירותי Google. לכן החרגת החבילה הרשמית היא המסלול היציב.
  */
 object VpnConfigFactory {
     // החבילה הנוכחית וה-package הישן שהיה בשימוש בבניית בדיקה נפרדת.
-    private val FILTERTUBE_PACKAGES = listOf(
-        "com.filtertube.app",
-        "com.filtertube.filtertube",
-    )
+    private const val YOUTUBE_PACKAGE = "com.google.android.youtube"
 
     /**
-     * מחזיר רק גרסאות FilterTube שמותקנות בפועל.
+     * מחזיר את YouTube הרשמית רק אם היא מותקנת בפועל.
      * אסור להעביר חבילה חסרה ל-WireGuard — Android ייכשל בהקמת כל ה-VPN.
      */
-    fun installedFilterTubePackages(context: Context): Set<String> =
-        FILTERTUBE_PACKAGES.filterTo(linkedSetOf()) { packageName ->
-            runCatching { context.packageManager.getApplicationInfo(packageName, 0) }.isSuccess
+    fun installedYouTubePackages(context: Context): Set<String> =
+        if (runCatching { context.packageManager.getApplicationInfo(YOUTUBE_PACKAGE, 0) }.isSuccess) {
+            setOf(YOUTUBE_PACKAGE)
+        } else {
+            emptySet()
         }
 
     /**
@@ -48,8 +47,8 @@ object VpnConfigFactory {
             .setMtu(vpn.optInt("mtu", 1280))
 
         // ExcludedApplications מתורגם על ידי GoBackend ל-VpnService.Builder.addDisallowedApplication.
-        // רק FilterTube (אם מותקנת) יוצאת ישירות; שאר האפליקציות נשארות בתוך ה-VPN.
-        ifaceBuilder.excludeApplications(installedFilterTubePackages(context))
+        // רק YouTube הרשמית (אם מותקנת) יוצאת ישירות; FilterTube וכל שאר האפליקציות נשארות בתוך ה-VPN.
+        ifaceBuilder.excludeApplications(installedYouTubePackages(context))
         val iface = ifaceBuilder.build()
 
         val fallback = vpn.optString("endpoint_fallback", "")
@@ -71,7 +70,7 @@ object VpnConfigFactory {
 
     /**
      * תאימות למכשירים ישנים ששמרו הגדרת WireGuard בפורמט טקסט.
-     * מוסיף את אותה החרגת אפליקציה גם להגדרות הישנות, בלי לשנות שרתים, כתובות או מפתחות.
+     * מוסיף את אותה החרגת YouTube גם להגדרות הישנות, בלי לשנות שרתים, כתובות או מפתחות.
      */
     fun buildLegacy(rawConfig: String, context: Context): Config {
         val packages = installedFilterTubePackages(context)
