@@ -94,7 +94,7 @@ object TunnelManager {
     fun saveConfig(vpnJson: String) {
         val privateKey = store.get(K_PRIVATE_KEY) ?: throw IllegalStateException("no private key")
         val vpn = JSONObject(vpnJson)
-        VpnConfigFactory.build(vpn, privateKey)
+        VpnConfigFactory.build(vpn, privateKey, appContext)
         store.put(K_VPN_JSON, vpn.toString())
         store.put(K_CONFIG, null)
     }
@@ -107,9 +107,9 @@ object TunnelManager {
         val json = store.get(K_VPN_JSON)
         val privateKey = store.get(K_PRIVATE_KEY)
         if (json != null && privateKey != null) {
-            return VpnConfigFactory.build(JSONObject(json), privateKey, useFallback)
+            return VpnConfigFactory.build(JSONObject(json), privateKey, appContext, useFallback)
         }
-        return store.get(K_CONFIG)?.let { Config.parse(BufferedReader(StringReader(it))) }
+        return store.get(K_CONFIG)?.let { VpnConfigFactory.buildLegacy(it, appContext) }
     }
 
     private fun hasFallback(): Boolean =
@@ -133,6 +133,10 @@ object TunnelManager {
     }
 
     private fun bringUp(): Tunnel.State {
+        // Must refresh the Device Owner lockdown allowlist before reconnecting the full-tunnel VPN.
+        // Failure to update this optional bypass must not prevent the VPN itself from connecting.
+        runCatching { DeviceOwnerManager.refreshYouTubeLockdownBypass(appContext) }
+            .onFailure { Log.w(TAG, "YouTube lockdown bypass refresh failed", it) }
         val config = loadConfig(useFallback = false) ?: throw IllegalStateException("no vpn config")
         try {
             val s = backend.setState(tunnel, Tunnel.State.UP, config)
