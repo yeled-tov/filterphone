@@ -1,4 +1,4 @@
-name: Deploy FilterTube VPN bypass to FilterPhone APK
+name: Deploy official YouTube VPN bypass to FilterPhone APK
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: filtertube-vpn-bypass-deploy
+  group: youtube-vpn-bypass-deploy
   cancel-in-progress: false
 
 env:
@@ -34,9 +34,9 @@ jobs:
           from pathlib import Path
           p = Path("ops/vpn-bypass/trigger.json")
           d = json.loads(p.read_text(encoding="utf-8"))
-          assert d.get("action") == "deploy-filtertube-vpn-bypass", "Unexpected deployment action"
+          assert d.get("action") == "deploy-youtube-vpn-bypass", "Unexpected deployment action"
           assert d.get("scope") == "filterphone-apk-only", "Unexpected deployment scope"
-          print("Verified: FilterPhone APK only; no server code deployment.")
+          print("Verified: FilterPhone APK only; no server code deployment or FilterTube code change.")
           PY
 
       - name: Wait for successful app.yml build of this exact main commit
@@ -175,7 +175,7 @@ jobs:
         run: |
           curl -fsS --retry 5 --retry-delay 3 "$PUBLIC/health" >/dev/null
           curl -fsSI "$PUBLIC/download/FilterPhone.apk" | head -1
-          echo "FilterPhone APK deployment verified: $PUBLIC/download/FilterPhone.apk"
+          echo "YouTube-exclusion FilterPhone APK deployment verified: $PUBLIC/download/FilterPhone.apk"
 
       - name: Final server status
         if: always()
