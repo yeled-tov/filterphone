@@ -153,6 +153,12 @@ abstract class NativeBridge {
 
   Future<Map<String, Object?>> provisionRoot();
 
+  /// טאב העדכונים: כל האפליקציות בטלפון (גרסה, מתי עודכנה, אייקון).
+  Future<List<InstalledApp>> installedForUpdates();
+
+  /// התקדמות התקנות בטלפון בזמן אמת (גם של Google Play, כשאנדרואיד חושף אותה).
+  Stream<InstallProgress> installProgress();
+
   /// מצב Shizuku (ניפוי אלחוטי / adb): {available, permitted, version}.
   Future<Map<String, Object?>> shizukuStatus();
 
@@ -239,6 +245,7 @@ abstract class NativeBridge {
 class ChannelNativeBridge implements NativeBridge {
   static const _channel = MethodChannel('filterphone/native');
   static const _events = EventChannel('filterphone/vpn_state');
+  static const _progressEvents = EventChannel('filterphone/install_progress');
 
   Future<T> _call<T>(String method, [Map<String, Object?>? args]) async {
     final result = await _channel.invokeMethod<T>(method, args);
@@ -275,6 +282,18 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Stream<String> vpnStateChanges() =>
       _events.receiveBroadcastStream().map((e) => e as String);
+
+  @override
+  Future<List<InstalledApp>> installedForUpdates() async {
+    final list = await _call<List<Object?>>('installedForUpdates');
+    return [for (final e in list) if (e is Map) InstalledApp.fromMap(Map<String, Object?>.from(e))];
+  }
+
+  @override
+  Stream<InstallProgress> installProgress() => _progressEvents
+      .receiveBroadcastStream()
+      .where((e) => e is Map)
+      .map((e) => InstallProgress.fromMap(Map<String, Object?>.from(e as Map)));
 
   @override
   Future<bool> isCaInstalled(String pem) => _call<bool>('isCaInstalled', {'pem': pem});
@@ -404,4 +423,48 @@ class ChannelNativeBridge implements NativeBridge {
 
   @override
   Future<bool> openApp(String package) => _call<bool>('openApp', {'package': package});
+}
+
+
+/// אפליקציה שמותקנת בטלפון (לטאב העדכונים).
+class InstalledApp {
+  const InstalledApp({
+    required this.package,
+    required this.label,
+    this.versionName = '',
+    this.versionCode = 0,
+    this.updatedMs = 0,
+    this.icon,
+  });
+
+  factory InstalledApp.fromMap(Map<String, Object?> m) => InstalledApp(
+        package: m['package'] as String? ?? '',
+        label: m['label'] as String? ?? '',
+        versionName: m['version_name'] as String? ?? '',
+        versionCode: (m['version_code'] as num?)?.toInt() ?? 0,
+        updatedMs: (m['updated_ms'] as num?)?.toInt() ?? 0,
+        icon: m['icon'] is String ? base64Decode(m['icon'] as String) : null,
+      );
+
+  final String package;
+  final String label;
+  final String versionName;
+  final int versionCode;
+  final int updatedMs;
+  final Uint8List? icon;
+
+  /// מה שנשלח לשרת לבדיקה מול Google Play (בלי האייקון).
+  Map<String, Object?> toServer() => {'package': package, 'version_name': versionName, 'updated_ms': updatedMs};
+}
+
+/// התקדמות התקנה: progress 0..1 (null = לא ידוע), state = running / done / failed.
+class InstallProgress {
+  const InstallProgress(this.package, this.progress, this.state);
+
+  factory InstallProgress.fromMap(Map<String, Object?> m) => InstallProgress(
+      m['package'] as String? ?? '', (m['progress'] as num?)?.toDouble(), m['state'] as String? ?? 'running');
+
+  final String package;
+  final double? progress;
+  final String state;
 }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../api_client.dart';
 import '../app_controller.dart';
+import '../native_bridge.dart';
 import '../support_bot.dart';
 import '../theme.dart';
 import 'change_request_screen.dart';

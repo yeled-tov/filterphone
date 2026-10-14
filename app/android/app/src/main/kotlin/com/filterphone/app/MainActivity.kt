@@ -34,6 +34,7 @@ class MainActivity : FlutterActivity() {
     private var pendingVpn: MethodChannel.Result? = null
     private var pendingCert: MethodChannel.Result? = null
     private var vpnListener: ((Tunnel.State) -> Unit)? = null
+    private var installProgress: InstalledApps.Progress? = null
     /** פתיחה מהתראה ("יש תשובה מהתמיכה") — ה-Flutter שואל פעם אחת ועובר ללשונית. */
     private var launchTarget: String? = null
 
@@ -63,6 +64,18 @@ class MainActivity : FlutterActivity() {
             }
             override fun onCancel(args: Any?) = detachVpnListener()
         })
+        // טאב העדכונים: התקדמות ההתקנה (גם של Google Play) בזמן אמת
+        EventChannel(messenger, "filterphone/install_progress").setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(args: Any?, sink: EventChannel.EventSink) {
+                installProgress?.unregister()
+                installProgress = InstalledApps.Progress(this@MainActivity) { e -> runCatching { sink.success(e) } }
+                    .also { it.register() }
+            }
+            override fun onCancel(args: Any?) {
+                installProgress?.unregister()
+                installProgress = null
+            }
+        })
     }
 
     /** המאזין מחזיק הפניה למסך — חייב לצאת כשהמסך נהרס (אחרת דליפת זיכרון). */
@@ -78,6 +91,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         detachVpnListener()
+        installProgress?.unregister()
+        installProgress = null
         super.onDestroy()
     }
 
@@ -181,6 +196,8 @@ class MainActivity : FlutterActivity() {
             }
             // מגן FilterPhone — חסימת אפליקציות ומסכים בטלפון
             "installedApps" -> background(result) { GuardPolicy.installedApps(this) }
+            // טאב העדכונים: כל האפליקציות בטלפון (גרסה, מתי עודכנה, אייקון)
+            "installedForUpdates" -> background(result) { InstalledApps.forUpdates(this) }
             // החנות: התקנה/עדכון דרך מנהל המכשיר, מצב לכל אפליקציה, ופתיחה
             "installStoreApp" -> background(result) {
                 ManagedApps.installNow(this, org.json.JSONObject(call.argument<String>("item") ?: "{}"))

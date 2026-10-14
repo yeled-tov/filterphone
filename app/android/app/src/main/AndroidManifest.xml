@@ -155,6 +155,8 @@
         <!-- אפליקציות שמחוץ ל-VPN כברירת מחדל (VpnBypass): שתי הגרסאות של FilterTube -->
         <package android:name="com.filtertube.app" />
         <package android:name="com.filtertube.filtertube" />
+        <!-- חנות: עמוד האפליקציה ב-Google Play, והתקדמות ההתקנות שלה (טאב העדכונים) -->
+        <package android:name="com.android.vending" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />

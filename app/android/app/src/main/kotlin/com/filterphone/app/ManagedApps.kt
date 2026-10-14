@@ -258,7 +258,7 @@ object ManagedApps {
     }
 
     @Suppress("DEPRECATION")
-    private fun versionCode(info: android.content.pm.PackageInfo): Long =
+    fun versionCode(info: android.content.pm.PackageInfo): Long =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else info.versionCode.toLong()
 
     fun installedVersion(context: Context, pkg: String): Long? = try {

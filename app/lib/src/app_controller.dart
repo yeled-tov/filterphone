@@ -726,6 +726,15 @@ class AppController extends ChangeNotifier {
     }
   }
 
+  // ------------------------------------------------------------------ טאב העדכונים
+
+  /// בדיקה מול Google Play (דרך השרת) — רק כשפותחים את הטאב, לא ברקע.
+  Future<Map<String, AppUpdateInfo>> appUpdates(List<InstalledApp> apps) async {
+    final token = _token;
+    if (token == null || apps.isEmpty) return const {};
+    return api.appUpdates(token, [for (final a in apps) a.toServer()]);
+  }
+
   // ------------------------------------------------------------------ תמיכה
 
   int get supportUnread => device?.supportUnread ?? 0;

@@ -11,12 +11,24 @@ class StoreController extends ChangeNotifier {
   Timer? _poll;
   bool _disposed = false;
 
+  // --- טאב העדכונים: כל האפליקציות בטלפון, מה ש-Play אומר עליהן, והתקדמות ההתקנה
+  List<InstalledApp>? phoneApps;
+  Map<String, AppUpdateInfo> updates = {};
+  bool checking = false;
+  String? updatesError;
+  DateTime? checkedAt;
+
+  /// חבילה → התקדמות (0..1, null = עוד לא ידוע). קיים = מתקין עכשיו.
+  final Map<String, double?> progress = {};
+  final List<String> _queue = [];
+  StreamSubscription<InstallProgress>? _progressSub;
+
   List<StoreApp> get apps => c.device?.storeApps ?? const [];
 
   int? installedVersion(StoreApp a) => (_states[a.package]?['installed_version'] as num?)?.toInt();
   String? state(StoreApp a) => _states[a.package]?['state'] as String?;
   bool installed(StoreApp a) => installedVersion(a) != null;
-  bool installing(StoreApp a) => state(a) == 'installing';
+  bool installing(StoreApp a) => state(a) == 'installing' || progress.containsKey(a.package);
   bool hasUpdate(StoreApp a) {
     final v = installedVersion(a);
     return v != null && a.versionCode != null && v < a.versionCode!;
@@ -32,7 +44,133 @@ class StoreController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _poll?.cancel();
+    _progressSub?.cancel();
     super.dispose();
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  /// מאזין להתקדמות ההתקנות (פעם אחת). אנדרואיד לא תמיד חושף התקנות של Play — אז הסיום מזוהה
+  /// גם לפי שינוי הגרסה כשחוזרים לאפליקציה (refreshPhoneApps).
+  void listenProgress() {
+    _progressSub ??= c.native.installProgress().listen((e) {
+      if (e.package.isEmpty) return;
+      if (e.state == 'running') {
+        progress[e.package] = e.progress;
+      } else {
+        _finished(e.package);
+      }
+      _notify();
+    }, onError: (Object e) => debugPrint('install progress: $e'));
+  }
+
+  void _finished(String pkg) {
+    progress.remove(pkg);
+    updates.remove(pkg);
+    _queue.remove(pkg);
+    if (_queue.isNotEmpty) unawaited(_openForUpdate(_queue.first));     // "עדכון הכול" — הבא בתור
+    unawaited(refreshPhoneApps());
+  }
+
+  /// סריקה + בדיקה מול Google Play. רק כשפותחים את הטאב (לא ברקע — חיסכון בסוללה).
+  Future<void> checkUpdates({bool force = false}) async {
+    if (checking) return;
+    if (!force && checkedAt != null && DateTime.now().difference(checkedAt!) < const Duration(minutes: 10)) return;
+    checking = true;
+    updatesError = null;
+    _notify();
+    try {
+      final list = await c.native.installedForUpdates();
+      phoneApps = list;
+      var info = await c.appUpdates(list);
+      if (info.values.any((i) => i.status == 'pending')) {
+        // השרת בודק ב-Play בתקציב זמן — מה שלא הספיק, נבדק בסבב נוסף
+        await Future<void>.delayed(const Duration(seconds: 1));
+        info = {...info, ...await c.appUpdates(list.where((a) => info[a.package]?.status == 'pending').toList())};
+      }
+      updates = info;
+      checkedAt = DateTime.now();
+    } catch (e) {
+      debugPrint('update check failed: $e');
+      updatesError = 'לא הצלחנו לבדוק עדכונים כרגע. נסו שוב בעוד רגע.';
+    } finally {
+      checking = false;
+      _notify();
+    }
+  }
+
+  /// אחרי שחוזרים מ-Play: מה שהגרסה שלו השתנתה — הסתיים.
+  Future<void> refreshPhoneApps() async {
+    final before = {for (final a in phoneApps ?? const <InstalledApp>[]) a.package: a.versionCode};
+    try {
+      final list = await c.native.installedForUpdates();
+      phoneApps = list;
+      for (final a in list) {
+        final old = before[a.package];
+        if (old != null && a.versionCode != old) {
+          updates.remove(a.package);
+          if (progress.remove(a.package) != null || _queue.remove(a.package)) {
+            if (_queue.isNotEmpty) unawaited(_openForUpdate(_queue.first));
+          }
+        }
+      }
+      // מה שלא התחיל להתקין בפועל (המשתמש חזר בלי לעדכן) — לא נשאר "ממתין" לנצח
+      progress.removeWhere((pkg, p) => p == null && !_queue.contains(pkg));
+      await loadStates();
+    } catch (e) {
+      debugPrint('refresh phone apps failed: $e');
+    }
+    _notify();
+  }
+
+  List<InstalledApp> get pendingUpdates =>
+      (phoneApps ?? const []).where((a) => updates[a.package]?.needsUpdate ?? false).toList();
+
+  StoreApp? catalogApp(String pkg) => apps.where((a) => a.package == pkg).firstOrNull;
+
+  /// עדכון אפליקציה מהטלפון: אם היא בחנות עם קובץ ויש מנהל מכשיר — בשקט; אחרת דרך Google Play
+  /// (חלון התקנה נעול לאפליקציה הזו).
+  Future<String> updateApp(InstalledApp a) async {
+    final cat = catalogApp(a.package);
+    if (cat != null && c.deviceOwner && cat.directInstall) return install(cat);
+    return _openForUpdate(a.package);
+  }
+
+  Future<String> _openForUpdate(String pkg) async {
+    final phone = (phoneApps ?? const <InstalledApp>[]).where((x) => x.package == pkg).firstOrNull;
+    final cat = catalogApp(pkg);
+    progress[pkg] = null;                                     // ממתין ל-Play
+    _notify();
+    final ok = await c.native.openPlay(pkg, cat?.playUrl,
+        titles: [...?cat?.playTitles, ?cat?.label, ?phone?.label]);
+    if (!ok) {
+      progress.remove(pkg);
+      _queue.remove(pkg);
+      _notify();
+      return 'לא ניתן לפתוח את Google Play';
+    }
+    return '';
+  }
+
+  /// "עדכון הכול": אחת אחרי השנייה (ב-Play כל עדכון דורש לחיצה) — הבאה נפתחת כשהקודמת מסתיימת.
+  Future<String> updateAll() async {
+    final list = pendingUpdates;
+    if (list.isEmpty) return 'הכול מעודכן ✓';
+    _queue
+      ..clear()
+      ..addAll(list.map((a) => a.package));
+    for (final a in list) {
+      final cat = catalogApp(a.package);
+      if (cat != null && c.deviceOwner && cat.directInstall) {
+        _queue.remove(a.package);
+        await install(cat);                                   // בשקט, בלי Play
+      }
+    }
+    if (_queue.isEmpty) return 'מעדכן…';
+    await _openForUpdate(_queue.first);
+    return 'בכל עמוד לוחצים "עדכון" — הבאה תיפתח לבד כשהקודמת מסתיימת';
   }
 
   Future<void> loadStates() async {
@@ -60,8 +198,9 @@ class StoreController extends ChangeNotifier {
   /// מתקין (ישיר דרך מנהל המכשיר, או דרך Google Play). מחזיר הודעה למשתמש.
   Future<String> install(StoreApp a) async {
     if (a.viaPlay && !(c.deviceOwner && a.directInstall)) {
-      final ok = await c.native.openPlay(a.package, a.playUrl, titles: [...a.playTitles, a.label]);
-      return ok ? 'נפתח ב-Google Play להתקנת ${a.label}' : 'לא ניתן לפתוח את Google Play';
+      listenProgress();
+      final msg = await _openForUpdate(a.package);
+      return msg.isEmpty ? 'נפתח ב-Google Play — לוחצים "התקנה"' : msg;
     }
     try {
       final r = await c.native.installStoreApp(a.raw);
@@ -162,9 +301,22 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
     super.dispose();
   }
 
-  void _onController() => _store.loadStates();
+  void _onController() {
+    _store.loadStates();
+    // חזרה מ-Play (האפליקציה חזרה לחזית): מה שהתעדכן — מסומן כמעודכן
+    if (_store.progress.isNotEmpty) unawaited(_store.refreshPhoneApps());
+  }
+
   void _onStore() {
     if (mounted) setState(() {});
+  }
+
+  void _setView(_StoreView v) {
+    setState(() => _view = v);
+    if (v == _StoreView.updates) {
+      _store.listenProgress();
+      unawaited(_store.checkUpdates());
+    }
   }
 
   Future<void> _toast(Future<String> action) async {
@@ -209,6 +361,78 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
     return [_allTab, ...order.where(present.contains), ...extra];
   }
 
+  /// טאב העדכונים: כל האפליקציות בטלפון — קודם מה שצריך עדכון, ואז המעודכנות.
+  List<Widget> _updatesSlivers(BuildContext context) {
+    final theme = Theme.of(context);
+    final phone = _store.phoneApps;
+    if (phone == null) {
+      return [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(40),
+            child: Column(children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 14),
+              Text(_store.updatesError ?? 'סורק את האפליקציות בטלפון ובודק ב-Google Play…', textAlign: TextAlign.center),
+            ]),
+          ),
+        ),
+      ];
+    }
+    final pending = _store.pendingUpdates;
+    final rest = phone.where((a) => !pending.contains(a)).toList();
+    return [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+          child: Row(children: [
+            Expanded(
+              child: Text(
+                _store.checking
+                    ? 'בודק עדכונים…'
+                    : pending.isEmpty
+                        ? 'כל ${phone.length} האפליקציות מעודכנות ✓'
+                        : '${pending.length} עדכונים זמינים',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            IconButton(
+              tooltip: 'בדיקה מחדש',
+              onPressed: _store.checking ? null : () => _store.checkUpdates(force: true),
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+            if (pending.isNotEmpty)
+              FilledButton.icon(
+                onPressed: () => _toast(_store.updateAll()),
+                icon: const Icon(Icons.system_update_alt_rounded, size: 18),
+                label: const Text('עדכון הכול'),
+              ),
+          ]),
+        ),
+      ),
+      if (_store.checking) const SliverToBoxAdapter(child: LinearProgressIndicator(minHeight: 2)),
+      if (_store.updatesError != null)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(_store.updatesError!, style: TextStyle(color: theme.colorScheme.error)),
+          ),
+        ),
+      SliverList.builder(
+        itemCount: pending.length,
+        itemBuilder: (_, i) => _PhoneAppRow(store: _store, app: pending[i], onUpdate: () => _toast(_store.updateApp(pending[i]))),
+      ),
+      if (rest.isNotEmpty)
+        SliverToBoxAdapter(
+          child: ExpansionTile(
+            title: Text('מעודכנות ואחרות (${rest.length})'),
+            children: [for (final a in rest) _PhoneAppRow(store: _store, app: a)],
+          ),
+        ),
+      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+    ];
+  }
+
   bool _matches(StoreApp a, String q) =>
       q.isEmpty ||
       a.label.toLowerCase().contains(q) ||
@@ -241,17 +465,20 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: SegmentedButton<_StoreView>(
                   showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: _StoreView.apps, label: Text('אפליקציות'), icon: Icon(Icons.apps_rounded)),
-                    ButtonSegment(value: _StoreView.updates, label: Text('עדכונים'), icon: Icon(Icons.system_update_rounded)),
+                  segments: [
+                    const ButtonSegment(value: _StoreView.apps, label: Text('אפליקציות'), icon: Icon(Icons.apps_rounded)),
+                    ButtonSegment(
+                        value: _StoreView.updates,
+                        label: Text(_store.pendingUpdates.isEmpty ? 'עדכונים' : 'עדכונים (${_store.pendingUpdates.length})'),
+                        icon: const Icon(Icons.system_update_rounded)),
                   ],
                   selected: {_view},
-                  onSelectionChanged: (v) => setState(() => _view = v.first),
+                  onSelectionChanged: (v) => _setView(v.first),
                 ),
               ),
             ),
             if (_view == _StoreView.updates)
-              ..._UpdatesView.slivers(context, _store, _openDetail, _toast)
+              ..._updatesSlivers(context)
             else ...[
               SliverToBoxAdapter(
                 child: Padding(
@@ -444,29 +671,55 @@ class _CategoryRow extends StatelessWidget {
   }
 }
 
-/// טאב העדכונים (מוחלף בגרסה המלאה בהמשך): אפליקציות מהחנות שיש להן גרסה חדשה.
-class _UpdatesView {
-  static List<Widget> slivers(BuildContext context, StoreController store, ValueChanged<StoreApp> onOpen,
-      Future<void> Function(Future<String>) toast) {
-    final updates = store.apps.where(store.hasUpdate).toList();
-    if (updates.isEmpty) {
-      return [
-        const SliverToBoxAdapter(
-          child: Padding(padding: EdgeInsets.all(32), child: Center(child: Text('כל האפליקציות מעודכנות ✓'))),
-        ),
-      ];
-    }
-    return [
-      SliverList.builder(
-        itemCount: updates.length,
-        itemBuilder: (_, i) => ListTile(
-          leading: _AppIcon(app: updates[i], size: 44, radius: 12),
-          title: Text(updates[i].label),
-          trailing: FilledButton.tonal(onPressed: () => toast(store.install(updates[i])), child: const Text('עדכון')),
-          onTap: () => onOpen(updates[i]),
-        ),
-      ),
-    ];
+/// שורה בטאב העדכונים: אייקון אמיתי מהטלפון, שם, מה השתנה — וכפתור "עדכון" או פס התקנה.
+class _PhoneAppRow extends StatelessWidget {
+  const _PhoneAppRow({required this.store, required this.app, this.onUpdate});
+  final StoreController store;
+  final InstalledApp app;
+  final VoidCallback? onUpdate;
+
+  String _ago(int seconds) {
+    final days = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(seconds * 1000)).inDays;
+    return days <= 0 ? 'היום' : days == 1 ? 'אתמול' : 'לפני $days ימים';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final info = store.updates[app.package];
+    final installing = store.progress.containsKey(app.package);
+    final p = store.progress[app.package];
+    final version = app.versionName.isEmpty ? '' : 'גרסה ${app.versionName}';
+    final sub = switch (info?.status) {
+      'update' => '$version · חדשה: ${info!.playVersion}',
+      'maybe' => [version, if (info!.playUpdated != null) 'עודכנה ב-Google Play ${_ago(info.playUpdated!)}']
+          .where((x) => x.isNotEmpty).join(' · '),
+      'current' => [version, 'מעודכנת'].where((x) => x.isNotEmpty).join(' · '),
+      'unknown' => [version, 'לא מ-Google Play'].where((x) => x.isNotEmpty).join(' · '),
+      _ => version,
+    };
+    final icon = app.icon != null
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.memory(app.icon!, width: 44, height: 44, gaplessPlayback: true),
+          )
+        : CircleAvatar(child: Text(app.label.characters.firstOrNull ?? '?'));
+    return ListTile(
+      leading: icon,
+      title: Text(app.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: installing
+          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const SizedBox(height: 6),
+              LinearProgressIndicator(value: p, minHeight: 6, borderRadius: BorderRadius.circular(3)),
+              const SizedBox(height: 4),
+              Text(p == null ? 'ממתין ל-Google Play…' : 'מתקין… ${(p * 100).round()}%',
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
+            ])
+          : Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
+      trailing: installing || onUpdate == null
+          ? null
+          : FilledButton.tonal(onPressed: onUpdate, child: const Text('עדכון')),
+    );
   }
 }
 
@@ -594,6 +847,7 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
   void initState() {
     super.initState();
     s.addListener(_onStore);
+    s.listenProgress();
     s.loadStates();
   }
 
@@ -714,10 +968,12 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
   Widget _primaryAction(_ActionKind kind, StoreApp a) {
     switch (kind) {
       case _ActionKind.installing:
-        return const FilledButton(
-          onPressed: null,
-          child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.4)),
-        );
+        final p = s.progress[a.package];
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          LinearProgressIndicator(value: p, minHeight: 8, borderRadius: BorderRadius.circular(4)),
+          const SizedBox(height: 6),
+          Text(p == null ? 'מתקין…' : 'מתקין… ${(p * 100).round()}%', textAlign: TextAlign.center),
+        ]);
       case _ActionKind.update:
         return FilledButton.icon(
             onPressed: () => _run(s.install(a)), icon: const Icon(Icons.system_update_rounded), label: const Text('עדכון'));

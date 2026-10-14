@@ -370,6 +370,25 @@ class SupportMessage {
 
 /// אפליקציה בחנות של FilterPhone. עם [raw] (url + sha256 + version_code) — ניתנת להתקנה ישירה
 /// דרך מנהל המכשיר; בלי — בקשה מהמנהל / התקנה מהחנות הרגילה.
+/// מה ש-Google Play אומר על אפליקציה: update / maybe / current / unknown / pending.
+class AppUpdateInfo {
+  const AppUpdateInfo(this.status, {this.playVersion, this.playUpdated});
+
+  factory AppUpdateInfo.fromJson(Map<String, Object?> j) => AppUpdateInfo(
+        j['status'] as String? ?? 'unknown',
+        playVersion: j['play_version'] as String?,
+        playUpdated: (j['play_updated'] as num?)?.toInt(),
+      );
+
+  final String status;
+  final String? playVersion;
+
+  /// מתי עודכנה ב-Play (שניות מאז 1970).
+  final int? playUpdated;
+
+  bool get needsUpdate => status == 'update' || status == 'maybe';
+}
+
 /// הקטגוריות (הטאבים בחנות) בסדר קבוע — כשהשרת לא שלח סדר משלו.
 const kStoreCategories = <String>[
   'תקשורת', 'בנקים ותשלומים', 'בריאות', 'תחבורה', 'רכב חשמלי', 'קניות ומשלוחים', 'יהדות',
@@ -571,6 +590,21 @@ class ApiClient {
       _send('POST', '/v1/device/report', token: token, body: {'apps': ?apps, 'guard': ?guard});
 
   Future<void> cancel(String token) => _send('DELETE', '/v1/device', token: token);
+
+  /// טאב העדכונים: לכל אפליקציה בטלפון — האם יש ב-Google Play גרסה חדשה.
+  Future<Map<String, AppUpdateInfo>> appUpdates(String token, List<Map<String, Object?>> apps) async {
+    final j = await _send('POST', '/v1/device/app-updates', token: token, body: {'apps': apps});
+    final out = <String, AppUpdateInfo>{};
+    final m = j['apps'];
+    if (m is Map) {
+      for (final e in m.entries) {
+        if (e.key is String && e.value is Map) {
+          out[e.key as String] = AppUpdateInfo.fromJson(Map<String, Object?>.from(e.value as Map));
+        }
+      }
+    }
+    return out;
+  }
 
   /// השיחה עם הנציג — הודעות אחרי [after] (0 = הכול). מסמן את התשובות כנקראו.
   Future<List<SupportMessage>> supportMessages(String token, {int after = 0}) async {

@@ -231,6 +231,13 @@ class FakeNative implements NativeBridge {
     return 'started';
   }
 
+  List<InstalledApp> phoneApps = const [];
+  final progressEvents = StreamController<InstallProgress>.broadcast();
+  @override
+  Future<List<InstalledApp>> installedForUpdates() async => phoneApps;
+  @override
+  Stream<InstallProgress> installProgress() => progressEvents.stream;
+
   final playOpens = <String>[];
   final playTitles = <List<String>>[];
   @override
@@ -888,10 +895,91 @@ void main() {
     await tester.tap(find.text('וייז'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('התקנה מ-Google Play'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));     // פס "מתקין…" מסתובב עד ש-Play מתחיל
     expect(native.playOpens, ['com.waze']);
+    expect(find.text('מתקין…'), findsOneWidget);
     // השמות שהמגן מזהה בחלון ההתקנה: מה שהשרת שלח מ-Play + השם בחנות
     expect(native.playTitles.single, ['Waze: ניווט ועדכוני תנועה', 'וייז']);
+  });
+
+  testWidgets('updates tab: all phone apps, Play status, progress bar, and update-all queue', (tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final native = FakeNative()
+      ..caInstalled = true
+      ..phoneApps = const [
+        InstalledApp(package: 'com.bnhp.payments.paymentsapp', label: 'ביט', versionName: '6.10', versionCode: 610),
+        InstalledApp(package: 'com.waze', label: 'Waze', versionName: '5.1', versionCode: 51, updatedMs: 1000),
+        InstalledApp(package: 'com.google.android.calculator', label: 'מחשבון', versionName: '9.0', versionCode: 90),
+      ];
+    final checked = <Object?>[];
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      if (req.url.path == '/v1/device') {
+        return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+            'via_vpn': true, 'managed_apps': [
+              {'package': 'com.waze', 'label': 'וייז', 'category': 'תחבורה',
+               'play_url': 'https://play.google.com/store/apps/details?id=com.waze', 'play_titles': ['Waze Navigation']},
+            ]}), 200, headers: json);
+      }
+      if (req.url.path == '/v1/device/app-updates') {
+        checked.add(jsonDecode(req.body));
+        final day = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 3 * 86400;
+        return http.Response(jsonEncode({'apps': {
+          'com.bnhp.payments.paymentsapp': {'status': 'update', 'play_version': '6.18', 'play_updated': day},
+          'com.waze': {'status': 'maybe', 'play_version': null, 'play_updated': day},
+          'com.google.android.calculator': {'status': 'current', 'play_version': null, 'play_updated': 1},
+        }}), 200, headers: json);
+      }
+      if (req.url.path == '/v1/device/vpn') return http.Response(jsonEncode(_vpn), 200, headers: json);
+      if (req.url.path == '/v1/enroll') {
+        return http.Response(jsonEncode({'token': 't', 'level': 1, 'level_name': 'מחמיר', 'vpn': _vpn,
+            'ca': {'pem': 'x'}}), 201, headers: json);
+      }
+      return http.Response('{}', 200, headers: json);
+    });
+    final c = makeController(native, server);
+    await tester.runAsync(() async {
+      await c.start();
+      await c.activate('ABCDE-FGHJK', '');
+      await c.refresh();
+    });
+    await tester.pumpWidget(MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
+        child: AppStoreScreen(controller: c))));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('עדכונים'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pumpAndSettle();
+    // נשלח לשרת: חבילה, גרסה ומתי עודכנה — בלי אייקונים
+    final sent = (checked.single as Map)['apps'] as List;
+    expect(sent.first, {'package': 'com.bnhp.payments.paymentsapp', 'version_name': '6.10', 'updated_ms': 0});
+    expect(find.text('2 עדכונים זמינים'), findsOneWidget);
+    expect(find.text('גרסה 6.10 · חדשה: 6.18'), findsOneWidget);
+    expect(find.textContaining('עודכנה ב-Google Play לפני 3 ימים'), findsOneWidget);
+    expect(find.text('מעודכנות ואחרות (1)'), findsOneWidget);
+
+    // "עדכון" לביט → נפתח עמוד Play נעול; פס "ממתין" (מסתובב — לכן pump ולא pumpAndSettle)
+    await tester.tap(find.text('עדכון').first);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(native.playOpens, ['com.bnhp.payments.paymentsapp']);
+    expect(find.text('ממתין ל-Google Play…'), findsOneWidget);
+    native.progressEvents.add(const InstallProgress('com.bnhp.payments.paymentsapp', .45, 'running'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('מתקין… 45%'), findsOneWidget);
+    native.progressEvents.add(const InstallProgress('com.bnhp.payments.paymentsapp', 1, 'done'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('1 עדכונים זמינים'), findsOneWidget);
+    expect(find.text('מתקין… 45%'), findsNothing);
+
+    // "עדכון הכול" — וייז נפתחת עם השם שלה ב-Play (לחלון הנעול)
+    await tester.tap(find.text('עדכון הכול'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(native.playOpens.last, 'com.waze');
+    expect(native.playTitles.last, containsAll(['Waze Navigation', 'וייז', 'Waze']));
   });
 
   testWidgets('device owner installs directly from the store detail page', (tester) async {

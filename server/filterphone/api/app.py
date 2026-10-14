@@ -45,6 +45,7 @@ from . import db, gpu, observe, security
 from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
+from .playinfo import PlayInfo
 from .security import RateLimiter
 from .service import LEVEL_NAMES, ApiError, Services, store_seed
 from .support import SupportDesk
@@ -66,6 +67,7 @@ rekey_limiter = RateLimiter(limit=3, window_s=86400)       # החלפת מפתח
 restore_limiter = RateLimiter(limit=8, window_s=3600)      # שחזור לפי מספר טלפון — לכל כתובת ולכל מספר
 support_limiter = RateLimiter(limit=20, window_s=600)     # הודעות לתמיכה מטלפון אחד
 media_limiter = RateLimiter(limit=600, window_s=600)      # תמונות החנות (אייקונים / צילומי מסך) לכל כתובת
+updates_limiter = RateLimiter(limit=12, window_s=600)     # בדיקת עדכונים מול Google Play (בפתיחת הטאב)
 MAX_APK_UPLOAD = 300 * 1024 * 1024
 _APK_FILE = re.compile(r"^[A-Za-z][A-Za-z0-9_.]{2,199}-\d{1,10}\.apk$")
 
@@ -155,6 +157,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
     )
     app.state.svc = svc or build_services()
     app.state.support = SupportDesk(app.state.svc)
+    app.state.playinfo = PlayInfo(app.state.svc.redis)
     cfg = app.state.svc.cfg
 
     @app.exception_handler(ApiError)
@@ -426,6 +429,16 @@ class BrandingIn(BaseModel):
     org_name: str = Field(min_length=1, max_length=60)
 
 
+class InstalledAppIn(BaseModel):
+    package: str = Field(max_length=200)
+    version_name: str = Field(default="", max_length=80)
+    updated_ms: int = Field(default=0, ge=0)
+
+
+class AppUpdatesIn(BaseModel):
+    apps: list[InstalledAppIn] = Field(default_factory=list, max_length=250)
+
+
 class GpuIn(BaseModel):
     url: str | None = Field(default=None, max_length=300)
     key: str | None = Field(default=None, max_length=200)
@@ -623,6 +636,12 @@ def _routes(app: FastAPI) -> None:
         if unread["unread"]:
             out["support"] = unread          # הטלפון מציג התראה "יש תשובה מהתמיכה"
         return out
+
+    @app.post("/v1/device/app-updates")
+    def device_app_updates(body: AppUpdatesIn, request: Request, row: DeviceRow):
+        """טאב העדכונים: לכל אפליקציה בטלפון — האם יש ב-Google Play גרסה חדשה (ראו playinfo.py)."""
+        _limit(updates_limiter, f"au:{row['id']}")
+        return {"apps": request.app.state.playinfo.check([a.model_dump() for a in body.apps])}
 
     @app.get("/v1/store/media/{app_id}/{slot}")
     def store_media(app_id: int, slot: str, request: Request, svc: SvcDep):
