@@ -54,6 +54,7 @@ from .wg import WireGuard, WireGuardError
 
 log = logging.getLogger("filterphone.api")
 
+ORG_NAME_DEFAULT = "פילטר פון"     # מוצג בטלפון: "המכשיר הזה שייך ל-פילטר פון"
 LEVEL_NAMES = {k: v["name"] for k, v in LEVELS.items()}
 ONLINE_WINDOW_S = 180           # WireGuard מחדש handshake כל 2 דקות בערך
 EVENTS_KEY = "fp:events"
@@ -330,6 +331,24 @@ class Services:
         if bumped:
             log.info("policy refreshed for %d devices after a catalog change", bumped)
         return bumped
+
+    # ------------------------------------------------------------ שם הארגון במכשירים
+
+    def org_name(self) -> str:
+        """השם שאנדרואיד מציג במסך הנעילה ובפס ההתראות: "המכשיר הזה שייך ל-…" (מנהל מכשיר בלבד)."""
+        with self.db() as c:
+            r = c.execute("SELECT value FROM meta WHERE key = 'org_name'").fetchone()
+        return r["value"] if r and r["value"] else ORG_NAME_DEFAULT
+
+    def set_org_name(self, admin: str, name: str) -> str:
+        name = " ".join((name or "").split())
+        if not 1 <= len(name) <= 60 or any(ord(ch) < 32 for ch in name):
+            raise ApiError(400, "שם הארגון: 1–60 תווים")
+        with self.db() as c, db.transaction(c):
+            c.execute("INSERT INTO meta (key, value) VALUES ('org_name', ?)"
+                      " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (name,))
+        self.audit(admin, "org_name", "branding", name)
+        return name
 
     def device_policy(self, row: sqlite3.Row) -> dict:
         """המדיניות לטלפון, עם גרסה וטביעה (הטלפון מאשר את הגרסה שהחיל)."""

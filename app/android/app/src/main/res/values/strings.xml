@@ -19,6 +19,8 @@
     <string name="support_title">FilterPhone — תמיכה</string>
     <string name="support_reply">יש תשובה חדשה מהתמיכה. לחצו לקריאה.</string>
     <string name="support_replies">יש %1$d תשובות חדשות מהתמיכה. לחצו לקריאה.</string>
+    <!-- מנהל מכשיר: אנדרואיד מציג "המכשיר הזה שייך ל-…" במסך הנעילה ובפס ההתראות. השרת יכול לשנות. -->
+    <string name="organization_name">פילטר פון</string>
     <string name="admin_support_short">חסום על ידי מנהל הסינון (FilterPhone). לבקשת שינוי — באפליקציית FilterPhone.</string>
     <string name="admin_support_long">הטלפון מנוהל על ידי FilterPhone. אפליקציות והגדרות מסוימות חסומות לפי המדיניות שנקבעה עם מנהל הסינון. כדי לבקש שינוי, פתחו את אפליקציית FilterPhone ובחרו "בקשת שינוי" או "תמיכה".</string>
     <string name="admin_add_explanation">מקשה על הסרת FilterPhone: כדי להסיר צריך קודם לבטל כאן את מנהל המכשיר, והמנהל מקבל על כך הודעה. (זה לא נועל את הטלפון — לנעילה מלאה יש הקמה כמנהל מכשיר מלא.)</string>

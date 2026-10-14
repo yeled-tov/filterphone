@@ -122,6 +122,10 @@ object Sync {
             runCatching { ManagedApps.sync(context, first.optJSONArray("managed_apps")) }
                 .onFailure { Log.w(TAG, "managed apps sync failed", it) }
         }
+        // שם הארגון שאנדרואיד מציג (מסך נעילה / פס ההתראות) — מוחל ב-DeviceOwnerManager.apply למטה
+        first.optString("org_name").trim().takeIf { it.isNotEmpty() && it.length <= 60 }?.let {
+            ProtectionState.setString(context, ProtectionState.ORG_NAME, it)
+        }
         // פקודת מנהל: השהיית הגנה (הטלפון פתוח עד סוף התוקף) או הסרת ניהול — מהערוץ המאומת בלבד
         runCatching {
             val wasPaused = AdminState.isPaused(context)

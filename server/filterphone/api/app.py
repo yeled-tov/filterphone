@@ -421,6 +421,10 @@ class WhatsAppIn(BaseModel):
     clear_secrets: bool = False
 
 
+class BrandingIn(BaseModel):
+    org_name: str = Field(min_length=1, max_length=60)
+
+
 class GpuIn(BaseModel):
     url: str | None = Field(default=None, max_length=300)
     key: str | None = Field(default=None, max_length=200)
@@ -613,6 +617,7 @@ def _routes(app: FastAPI) -> None:
         if len(str(raw)) > 20_000:
             raise ApiError(413, "הדיווח גדול מדי")
         out = svc.heartbeat(row, raw, client_ip(request))
+        out["org_name"] = svc.org_name()     # מנהל מכשיר: "המכשיר הזה שייך ל-…" (מסך נעילה / פס ההתראות)
         unread = request.app.state.support.device_unread(row["id"])
         if unread["unread"]:
             out["support"] = unread          # הטלפון מציג התראה "יש תשובה מהתמיכה"
@@ -687,6 +692,16 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/admin/whatsapp/test")
     def whatsapp_test(desk: DeskDep, _: AdminRow):
         return desk.send_test()
+
+    # --- שם הארגון שמוצג בטלפונים (מסך נעילה / פס ההתראות) ---
+
+    @app.get("/v1/admin/branding")
+    def branding(svc: SvcDep, _: AdminRow):
+        return {"org_name": svc.org_name()}
+
+    @app.put("/v1/admin/branding")
+    def branding_save(body: BrandingIn, svc: SvcDep, admin: AdminRow):
+        return {"org_name": svc.set_org_name(admin["username"], body.org_name)}
 
     # --- שרת GPU (Modal) לניתוח תמונות ---
 

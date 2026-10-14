@@ -799,3 +799,18 @@ def test_store_app_description_and_screenshots_round_trip(env):
     # קישור Play לא תקין נדחה
     assert client.post("/v1/admin/apps", headers=h, json={"package": "com.x.bad",
                                                           "play_url": "https://evil.com/x"}).status_code == 400
+
+
+def test_org_name_reaches_the_phone_and_is_editable(env):
+    svc, client = env
+    h = admin_headers(client)
+    _, dh, _ = enroll(svc, client)
+    r = client.post("/v1/device/heartbeat", headers=dh, json={"policy_version": 1}).json()
+    assert r["org_name"] == "פילטר פון"                       # ברירת המחדל
+    assert client.get("/v1/admin/branding", headers=h).json() == {"org_name": "פילטר פון"}
+    assert client.put("/v1/admin/branding", headers=h, json={"org_name": "  פילטר   טיוב "}).json() == {
+        "org_name": "פילטר טיוב"}
+    r = client.post("/v1/device/heartbeat", headers=dh, json={"policy_version": 1}).json()
+    assert r["org_name"] == "פילטר טיוב"
+    assert client.put("/v1/admin/branding", headers=h, json={"org_name": ""}).status_code == 400
+    assert client.put("/v1/admin/branding", json={"org_name": "x"}).status_code == 401

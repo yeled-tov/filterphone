@@ -23,6 +23,7 @@ object ProtectionState {
     const val WA_PHOTOS_BLOCKED = "wa_photos_blocked"
     const val KEYWORDS_BLOCKED = "keywords_blocked"      // חיפושים שנחסמו לפי מילה
     const val CA_PEM = "ca_pem"                       // תעודת הסינון (ציבורית) — לבדיקה אם מותקנת
+    const val ORG_NAME = "org_name"                   // שם הארגון מהשרת ("המכשיר הזה שייך ל-…")
 
     fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

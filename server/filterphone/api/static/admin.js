@@ -1585,6 +1585,17 @@ function whatsappCard(wa) {
       el("button", { class: "primary", onclick: save }, "שמירה")));
 }
 
+function brandingCard(b) {
+  if (!b) return null;
+  const name = el("input", { value: b.org_name || "", maxlength: 60 });
+  return card("שם הארגון בטלפונים", "בטלפון שמנוהל במלואו (מנהל מכשיר), אנדרואיד כותב במסך הנעילה ובפס ההתראות: \"המכשיר הזה שייך ל-…\". כאן קובעים מה יופיע במקום \"הארגון שלך\". הטלפונים מתעדכנים בסנכרון הבא.",
+    el("div", { class: "row gap end" }, el("label", { class: "grow" }, "שם הארגון", name),
+      el("button", { class: "primary", onclick: async () => {
+        await attempt(() => api("/v1/admin/branding", { method: "PUT", body: { org_name: name.value } }), "נשמר");
+        render();
+      } }, "שמירה")));
+}
+
 function gpuCard(g) {
   if (!g) return null;
   const fromEnv = g.source === "env";
@@ -1646,6 +1657,7 @@ async function viewSystem() {
   const sys = await api("/v1/admin/system").catch(() => null);
   const wa = await api("/v1/admin/whatsapp").catch(() => null);
   const gpu = await api("/v1/admin/gpu").catch(() => null);
+  const branding = await api("/v1/admin/branding").catch(() => null);
   const ag = o.adguard;
   const CHECKS = { db: "מסד נתונים", redis: "Redis", engine: "מנוע תמונות", wireguard: "WireGuard", adguard: "AdGuard" };
   const m = (snap, key) => (snap && snap[key] !== undefined ? num(Math.round(snap[key])) : "—");
@@ -1684,6 +1696,7 @@ async function viewSystem() {
       el("div", { class: "ltr mono small" }, [...x.apps, ...x.screens.map((s) => `${s.package}: ${s.match.join("/")}`)].join(" · "))) : "—")));
   return [
     healthCard,
+    brandingCard(branding),
     gpuCard(gpu),
     whatsappCard(wa),
     el("div", { class: "grid two" }, agCard,

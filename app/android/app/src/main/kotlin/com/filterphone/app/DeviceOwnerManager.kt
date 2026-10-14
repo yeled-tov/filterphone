@@ -210,6 +210,8 @@ object DeviceOwnerManager {
             dpm.setShortSupportMessage(admin, context.getString(R.string.admin_support_short))
             dpm.setLongSupportMessage(admin, context.getString(R.string.admin_support_long))
         }
+        // במקום "המכשיר הזה שייך לארגון שלך" — "המכשיר הזה שייך ל-פילטר פון" (מסך הנעילה ופס ההתראות)
+        step("organization_name") { dpm.setOrganizationName(admin, organizationName(context)) }
         step("lock_task_packages") {
             val pk = policy.dpc?.optJSONArray("lock_task_packages")?.let { a -> (0 until a.length()).map { a.optString(it) } }
                 ?: emptyList()
@@ -274,6 +276,11 @@ object DeviceOwnerManager {
         p.edit().putStringSet(K_HIDDEN, hidden).putStringSet(K_SUSPENDED, wantSuspended - notSuspended).apply()
     }
 
+    /** מה שהשרת קבע (דשבורד → מערכת → שם הארגון), ואם עוד לא הגיע — ברירת המחדל. */
+    fun organizationName(context: Context): String =
+        ProtectionState.string(context, ProtectionState.ORG_NAME)?.takeIf { it.isNotBlank() }
+            ?: context.getString(R.string.organization_name)
+
     /** ברירת המחדל מיד בסיום ההקמה (לפני שיש מדיניות מהשרת). */
     fun applyBaseline(context: Context): Result? = apply(context, GuardPolicy.get(context))
 
@@ -296,6 +303,7 @@ object DeviceOwnerManager {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) dpm.setUserControlDisabledPackages(admin, emptyList())
             dpm.setShortSupportMessage(admin, null)
             dpm.setLongSupportMessage(admin, null)
+            dpm.setOrganizationName(admin, null)
         }
         return try {
             @Suppress("DEPRECATION")
