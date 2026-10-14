@@ -122,9 +122,12 @@ _ActionKind _actionFor(StoreController s, StoreApp a) {
   return canInstall ? _ActionKind.install : _ActionKind.request;
 }
 
-enum _StoreTab { all, updates, fresh }
+const _allTab = 'הכול';
 
-/// חנות FilterPhone: אריחים מרובעים כמו חנות אמיתית. לחיצה פותחת עמוד אפליקציה.
+enum _StoreView { apps, updates }
+
+/// חנות FilterPhone — כמו חנות אמיתית: טאבים של קטגוריות מוצמדים למעלה, אריחים מרובעים,
+/// ולחיצה פותחת עמוד אפליקציה. בטאב "הכול" — שורה לכל קטגוריה.
 class AppStoreScreen extends StatefulWidget {
   const AppStoreScreen({super.key, required this.controller});
   final AppController controller;
@@ -135,8 +138,8 @@ class AppStoreScreen extends StatefulWidget {
 
 class _AppStoreScreenState extends State<AppStoreScreen> {
   late final StoreController _store = StoreController(widget.controller);
-  _StoreTab _tab = _StoreTab.all;
-  String _category = 'הכול';
+  _StoreView _view = _StoreView.apps;
+  String _category = _allTab;
   String _query = '';
   final _search = TextEditingController();
 
@@ -198,21 +201,29 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
     ));
   }
 
+  /// הטאבים: "הכול", ואחריו הקטגוריות בסדר מהשרת — רק כאלה שיש בהן אפליקציות.
+  List<String> _tabs(List<StoreApp> apps) {
+    final present = {for (final a in apps) if (a.category.isNotEmpty) a.category};
+    final order = c.device?.storeCategories ?? kStoreCategories;
+    final extra = present.where((x) => !order.contains(x)).toList()..sort();
+    return [_allTab, ...order.where(present.contains), ...extra];
+  }
+
+  bool _matches(StoreApp a, String q) =>
+      q.isEmpty ||
+      a.label.toLowerCase().contains(q) ||
+      a.package.contains(q) ||
+      a.note.toLowerCase().contains(q) ||
+      a.category.contains(q);
+
   @override
   Widget build(BuildContext context) {
     final apps = _store.apps;
-    final updates = apps.where(_store.hasUpdate).length;
-    final categories = ['הכול', ...{for (final a in apps) if (a.category.isNotEmpty) a.category}];
+    final tabs = _tabs(apps);
+    if (!tabs.contains(_category)) _category = _allTab;
     final q = _query.trim().toLowerCase();
-    final visible = apps.where((a) {
-      if (_tab == _StoreTab.updates && !_store.hasUpdate(a)) return false;
-      if (_tab == _StoreTab.fresh && !_store.isFresh(a)) return false;
-      if (_category != 'הכול' && a.category != _category) return false;
-      return q.isEmpty ||
-          a.label.toLowerCase().contains(q) ||
-          a.package.contains(q) ||
-          a.note.toLowerCase().contains(q);
-    }).toList();
+    final grouped = _category == _allTab && q.isEmpty;
+    final visible = apps.where((a) => (_category == _allTab || a.category == _category) && _matches(a, q)).toList();
 
     return _SectionScaffold(
       title: 'חנות אפליקציות',
@@ -226,99 +237,236 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(
-              child: Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 4), child: _StoreHero(controller: c)),
-            ),
-            SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: SegmentedButton<_StoreTab>(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: SegmentedButton<_StoreView>(
                   showSelectedIcon: false,
-                  segments: [
-                    const ButtonSegment(value: _StoreTab.all, label: Text('הכול'), icon: Icon(Icons.apps_rounded)),
-                    ButtonSegment(
-                        value: _StoreTab.updates,
-                        label: Text(updates > 0 ? 'עדכונים ($updates)' : 'עדכונים'),
-                        icon: const Icon(Icons.system_update_rounded)),
-                    const ButtonSegment(value: _StoreTab.fresh, label: Text('חדשות'), icon: Icon(Icons.fiber_new_rounded)),
+                  segments: const [
+                    ButtonSegment(value: _StoreView.apps, label: Text('אפליקציות'), icon: Icon(Icons.apps_rounded)),
+                    ButtonSegment(value: _StoreView.updates, label: Text('עדכונים'), icon: Icon(Icons.system_update_rounded)),
                   ],
-                  selected: {_tab},
-                  onSelectionChanged: (s) => setState(() => _tab = s.first),
+                  selected: {_view},
+                  onSelectionChanged: (v) => setState(() => _view = v.first),
                 ),
               ),
             ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
-                child: TextField(
-                  controller: _search,
-                  onChanged: (value) => setState(() => _query = value),
-                  decoration: const InputDecoration(hintText: 'חיפוש אפליקציות...', prefixIcon: Icon(Icons.search_rounded)),
-                ),
-              ),
-            ),
-            if (categories.length > 1)
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 58,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    scrollDirection: Axis.horizontal,
-                    itemBuilder: (context, index) => ChoiceChip(
-                      label: Text(categories[index]),
-                      selected: _category == categories[index],
-                      onSelected: (_) => setState(() => _category = categories[index]),
-                    ),
-                    separatorBuilder: (_, _) => const SizedBox(width: 8),
-                    itemCount: categories.length,
-                  ),
-                ),
-              ),
-            if (_tab == _StoreTab.updates && updates > 1 && c.deviceOwner)
+            if (_view == _StoreView.updates)
+              ..._UpdatesView.slivers(context, _store, _openDetail, _toast)
+            else ...[
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                  child: FilledButton.tonalIcon(
-                    onPressed: () async {
-                      for (final a in apps.where(_store.hasUpdate)) {
-                        await _store.install(a);
-                      }
-                    },
-                    icon: const Icon(Icons.update_rounded),
-                    label: const Text('עדכון הכול'),
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  child: TextField(
+                    controller: _search,
+                    onChanged: (value) => setState(() => _query = value),
+                    decoration: InputDecoration(
+                      hintText: 'חיפוש אפליקציות...',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'ניקוי',
+                              icon: const Icon(Icons.close_rounded),
+                              onPressed: () => setState(() {
+                                _search.clear();
+                                _query = '';
+                              }),
+                            ),
+                    ),
                   ),
                 ),
               ),
-            if (visible.isEmpty)
-              SliverToBoxAdapter(
-                child: _StoreEmpty(
-                  text: apps.isEmpty
-                      ? 'המנהל עוד לא הוסיף אפליקציות לחנות. אפשר לבקש אפליקציה בכפתור למעלה.'
-                      : _tab == _StoreTab.updates
-                          ? 'כל האפליקציות מעודכנות ✓'
-                          : 'לא נמצאה אפליקציה מתאימה.',
-                  onRequest: _requestCustom,
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 128,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 0.74,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) => _AppTile(store: _store, app: visible[i], onTap: () => _openDetail(visible[i])),
-                    childCount: visible.length,
+              if (tabs.length > 1)
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _CategoryTabsHeader(
+                    tabs: tabs,
+                    selected: _category,
+                    onSelect: (t) => setState(() => _category = t),
+                    background: Theme.of(context).colorScheme.surface,
                   ),
                 ),
-              ),
+              if (visible.isEmpty)
+                SliverToBoxAdapter(
+                  child: _StoreEmpty(
+                    text: apps.isEmpty
+                        ? 'המנהל עוד לא הוסיף אפליקציות לחנות. אפשר לבקש אפליקציה בכפתור למעלה.'
+                        : 'לא נמצאה אפליקציה מתאימה. אפשר לבקש אותה מהמנהל.',
+                    onRequest: _requestCustom,
+                  ),
+                )
+              else if (grouped)
+                for (final cat in tabs.skip(1))
+                  SliverToBoxAdapter(
+                    child: _CategoryRow(
+                      title: cat,
+                      apps: visible.where((a) => a.category == cat).toList(),
+                      store: _store,
+                      onOpen: _openDetail,
+                      onMore: () => setState(() => _category = cat),
+                    ),
+                  )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 112,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 0.72,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) => _AppTile(store: _store, app: visible[i], onTap: () => _openDetail(visible[i])),
+                      childCount: visible.length,
+                    ),
+                  ),
+                ),
+              if (grouped && apps.any((a) => a.category.isEmpty))
+                SliverToBoxAdapter(
+                  child: _CategoryRow(
+                    title: 'עוד',
+                    apps: apps.where((a) => a.category.isEmpty).toList(),
+                    store: _store,
+                    onOpen: _openDetail,
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ],
           ],
         ),
       ),
     );
+  }
+}
+
+/// הטאבים של הקטגוריות — נשארים למעלה בזמן גלילה (כמו בחנות של גוגל).
+class _CategoryTabsHeader extends SliverPersistentHeaderDelegate {
+  _CategoryTabsHeader({required this.tabs, required this.selected, required this.onSelect, required this.background});
+  final List<String> tabs;
+  final String selected;
+  final ValueChanged<String> onSelect;
+  final Color background;
+
+  static const _height = 50.0;
+
+  @override
+  double get minExtent => _height;
+  @override
+  double get maxExtent => _height;
+
+  @override
+  bool shouldRebuild(_CategoryTabsHeader old) =>
+      old.selected != selected || old.background != background || !listEquals(old.tabs, tabs);
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final theme = Theme.of(context);
+    return Material(
+      color: background,
+      elevation: overlapsContent ? 2 : 0,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        itemCount: tabs.length,
+        itemBuilder: (_, i) {
+          final t = tabs[i];
+          final on = t == selected;
+          return InkWell(
+            onTap: () => onSelect(t),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: on ? theme.colorScheme.primary : Colors.transparent, width: 3),
+                ),
+              ),
+              child: Text(
+                t,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: on ? FontWeight.w800 : FontWeight.w500,
+                  color: on ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// שורה של קטגוריה בטאב "הכול": כותרת, "עוד ›", ואריחים בגלילה אופקית.
+class _CategoryRow extends StatelessWidget {
+  const _CategoryRow({required this.title, required this.apps, required this.store, required this.onOpen, this.onMore});
+  final String title;
+  final List<StoreApp> apps;
+  final StoreController store;
+  final ValueChanged<StoreApp> onOpen;
+  final VoidCallback? onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    if (apps.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 8, 6),
+            child: Row(
+              children: [
+                Expanded(child: Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+                if (onMore != null)
+                  TextButton(onPressed: onMore, child: Text('הכול (${apps.length}) ›')),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 128,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: apps.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (_, i) => SizedBox(
+                width: 84,
+                child: _AppTile(store: store, app: apps[i], onTap: () => onOpen(apps[i])),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// טאב העדכונים (מוחלף בגרסה המלאה בהמשך): אפליקציות מהחנות שיש להן גרסה חדשה.
+class _UpdatesView {
+  static List<Widget> slivers(BuildContext context, StoreController store, ValueChanged<StoreApp> onOpen,
+      Future<void> Function(Future<String>) toast) {
+    final updates = store.apps.where(store.hasUpdate).toList();
+    if (updates.isEmpty) {
+      return [
+        const SliverToBoxAdapter(
+          child: Padding(padding: EdgeInsets.all(32), child: Center(child: Text('כל האפליקציות מעודכנות ✓'))),
+        ),
+      ];
+    }
+    return [
+      SliverList.builder(
+        itemCount: updates.length,
+        itemBuilder: (_, i) => ListTile(
+          leading: _AppIcon(app: updates[i], size: 44, radius: 12),
+          title: Text(updates[i].label),
+          trailing: FilledButton.tonal(onPressed: () => toast(store.install(updates[i])), child: const Text('עדכון')),
+          onTap: () => onOpen(updates[i]),
+        ),
+      ),
+    ];
   }
 }
 
@@ -424,57 +572,6 @@ class _StoreEmpty extends StatelessWidget {
         const SizedBox(height: 12),
         OutlinedButton.icon(onPressed: onRequest, icon: const Icon(Icons.add), label: const Text('בקשת אפליקציה')),
       ]),
-    );
-  }
-}
-
-class _StoreHero extends StatelessWidget {
-  const _StoreHero({required this.controller});
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final active = controller.device?.isActive ?? false;
-    final managed = controller.deviceOwner;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-          colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surface],
-        ),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
-            child: const Icon(Icons.verified_rounded, color: Colors.white, size: 25),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(active ? 'אפליקציות באישור FilterPhone' : 'האפליקציות זמינות לאחר אישור המכשיר',
-                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 3),
-                Text(
-                  managed
-                      ? 'התקנה ועדכונים ישירות מכאן — גם כשהתקנת אפליקציות חסומה בטלפון.'
-                      : 'בוחרים אפליקציה ושולחים בקשה — המנהל מאשר ומתקין.',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

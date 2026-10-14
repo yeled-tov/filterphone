@@ -1,0 +1,1868 @@
+{
+ "version": 2,
+ "categories": [
+  "תקשורת",
+  "בנקים ותשלומים",
+  "בריאות",
+  "תחבורה",
+  "רכב חשמלי",
+  "קניות ומשלוחים",
+  "יהדות",
+  "חדשות ופורומים",
+  "מדיה",
+  "כלים",
+  "ממשלה ושירותים",
+  "עבודה ולימודים"
+ ],
+ "filtertube_play": {
+  "package": "com.filtertube.app",
+  "icon_url": "https://play-lh.googleusercontent.com/XVPPxqVmGwndtaixaSsBFBZdsumMQKSeSZ3r4orfDTjuBEEfoQuzUqpAdmN8Uj-77v7ffzhy5AqeTvSxSb_Waw=s192",
+  "screenshots": [
+   "https://play-lh.googleusercontent.com/kNPNp-l9Q3UKI6OVjSI4OGhnlAtLF2LQW3XA56V8EviWADgF64LcK7gulM8hwSihVXbI6N7oYkr6S6iycI7A=h720",
+   "https://play-lh.googleusercontent.com/4mj4bOREG833X9Maxt_jfPHBn1sA6F2WMqXflvuwllPRzGyd3h3jY9Jhf4ArtUn4V5-Mu9H1RGH2yOrQSVL_=h720",
+   "https://play-lh.googleusercontent.com/6qQcsAxnOzglrXEoXYl5Xb3TZ8cCFZXN42Ojq_Uv__JXl1aAtOY-IQPgWAuj6-ePU0gnrCRIKqHK-s_ljhni=h720",
+   "https://play-lh.googleusercontent.com/NPbcAav-M2qOlPvdvNntiqYpzFBeQvosn6XWCdsk-MJX_V6kFwgtC-JiT21Nps9J-zkfEZc8ne5qWevANttB=h720"
+  ]
+ },
+ "apps": [
+  {
+   "package": "com.whatsapp",
+   "label": "וואטסאפ",
+   "category": "תקשורת",
+   "note": "הודעות ושיחות. תמונות הפרופיל והסטטוסים — לפי הגדרות הסינון.",
+   "description": "‏WhatsApp from Meta היא אפליקציה חינמית להתכתבות ולשיחות וידאו, עם יותר מ-2 מיליארד משתמשים ביותר מ-180 מדינות. היא פשוטה, אמינה ופרטית, כך שאפשר לשמור בקלות על קשר עם המשפחה והחברים. ל-‏WhatsApp יש גרסאות לנייד ולשולחן עבודה והיא פועלת גם כשהחיבור לאינטרנט איטי, ואין דמי מינוי*.\n \n \n התכתבות פרטית בכל העולם\n \n ההודעות האישיות והשיחות שלך עם המשפחה והחברים תמיד מוגנות באמצעות הצפנה מקצה לקצה. לאף אחד מחוץ לצ'אטים, אפילו לא ל-WhatsApp, אין אפשרות לקרוא אותן ולהאזין להן.\n \n \n יצירת קשר באופן מאובטח, מהיר ומיידי \n כל מה שצריך זה מספר טלפון, בלי שם משתמש ובלי להתחבר – אפשר לראות במהירות אילו אנשי קשר משתמשים ב-WhatsApp ולהתחיל להתכתב איתם. \n \n שיחות קוליות ושיחות וידאו באיכות גבוהה",
+   "icon_url": "https://play-lh.googleusercontent.com/Gqxk4T0uZsDwFp07DE-508hkyvcNmgFuRwPiwTEfF7D7OzGv1FdHDzEyMxNsSBZLOJlGpe3ULvVM2RgrRAlBqA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/7Picz2q1imqKL0lPMsCHEZqHCgw_ux-qFrFzLICKVryBhNoZ5Fe-ToR6MkuHmAQTT_HHHLL-l66nABYCWwXEmEw=h720",
+    "https://play-lh.googleusercontent.com/TXLTlDIXBTjVnOkoKhDH7yplvWnsiqu658YWrlOXumCkbIYIiXqBDNZJe1IFZRhu1cN3-4KQzQ8piyKnms3Z=h720",
+    "https://play-lh.googleusercontent.com/TpEt4B6aUBzpQv3O9U0_AE9yml6LhdG1E0hNhUN0WwQicaNLktaXOUh-xRRvkk7LIEQlTvMgG7GDu8USGff4kUI=h720",
+    "https://play-lh.googleusercontent.com/-4WrLXawEqzjRXJbL232o7M7JqDGo_doPLA78i_6nquCf2UIfW2hHf7MbngWJ-fVgT5KwC_bBNO7vgi-PNW5Qw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.whatsapp",
+   "sort": 100
+  },
+  {
+   "package": "com.whatsapp.w4b",
+   "label": "וואטסאפ עסקי",
+   "category": "תקשורת",
+   "note": "וואטסאפ לעסקים: קטלוג, תשובות מהירות ושעות פעילות.",
+   "description": "אודות האפליקציה\n\nכל מה שאתם אוהבים ב-WhatsApp בתוספת של כלים מובנים לעסקים\nאפליקציית WhatsApp Business זמינה להורדה בחינם' והיא כוללת כלים מובנים שיעזרו לכם לעבוד בצורה חכמה יותר, לבנות אמון ולהגדיל את העסק. \n\nתוכלו להתקשר בחינם*, לשלוח הודעות בינלאומיות בחינם*, ולקבל פיצ'רים עסקיים שיעזרו לכם להפיק יותר תועלת מהשיחות.\n\nהורידו את האפליקציה כדי ליהנות מיתרונות עסקיים כמו אלה:\n\nעבודה חכמה יותר. תנו לאפליקציה לעבוד בשבילכם כדי לחסוך זמן! שלחו ללקוחות תגובות מהירות אוטומטיות והודעות \"העסק סגור כרגע\" כדי לא להחמיץ אף הזדמנות. השתמשו בתוויות כדי לסדר, לסנן ולמצוא במהירות שיחות חשובות.",
+   "icon_url": "https://play-lh.googleusercontent.com/4LJ6f3U5wANt09KBlZ-F-YKooCQXTwHsa3vtTBFmsXWmNy-AdBEoHnWmyT0mGxh-1pQetlSoc9mIkRDJotQYbg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/QeLI154fFveHbWgpl_MomkOsWLG0-RdXz5UFVjeq6Ya7ffxmdCPp0nKn7zx7y3wuNaet5fO5la5QEjUkp95U=h720",
+    "https://play-lh.googleusercontent.com/5Gk6IyfTPLSSQqgYk7qycdnuKEt-tm9YoV9mD0Y525myoVoHFCrRrAIzMsz45g8U1RCSeZmE4QitJ3syAbOArw=h720",
+    "https://play-lh.googleusercontent.com/iBYudri7wl2N5EOzG8kLFsWXU1rKbQ7mkM_GjLjBH6wtqGQ3bIU-BZw2TUdU8RNy98dyTwKobsPnDOq-oLjJ=h720",
+    "https://play-lh.googleusercontent.com/WDPgOOgIc6KXbpLpbxboBxAjd19OJzAmnDJ6bcNO3vkWJtSG5LBYI8sjIMHNajSv1XouoT7htD_EPifYMETxrdA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.whatsapp.w4b",
+   "sort": 101
+  },
+  {
+   "package": "com.google.android.apps.messaging",
+   "label": "הודעות (SMS)",
+   "category": "תקשורת",
+   "note": "אפליקציית ההודעות של Google.",
+   "description": "Google Messages היא האפליקציה הרשמית של Google להעברת הודעות. Google Messages שינתה את הדרך שבה מיליארדי משתמשים מתקשרים באמצעות שירותי תקשורת מגוונים (RCS) – פרוטוקול התקשורת המקובל בתחום לשליחת הודעות טקסט, שהחליף את SMS ו-MMS. באמצעות RCS אפשר לשתף תמונות וסרטונים ברזולוציה גבוהה, ליהנות מצ'אטים קבוצתיים דינמיים ולתקשר עם החברים בצורה חלקה, כולל אנשים עם אייפון שמשתמשים ב-RCS.\n\n • תקשורת מגוונת ועשירה: אפשר לשתף תמונות וסרטונים ברזולוציה גבוהה, לדעת מתי החברים כותבים וליהנות מצ'אטים קבוצתיים דינמיים בצורה חלקה, כולל עם משתמשי אייפון.\n • טאץ' אישי: בזכות תכונות כמו בחירת צבעים לבועות הצ'אט ו-GIF סלפי, חוויית השיחה יכולה להיות אישית וייחודית לך.",
+   "icon_url": "https://play-lh.googleusercontent.com/Mgukz1fq2stUYX_lQf79gmMeDzNvRCu5eobmiJwNkXl4riNY6HZ3VB-HRW5QciwEuLnFyk_ZmHumvn8RJ5Um=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/dJC3zlDZiX3gIEhOxE59Zu52g-qonUqnQJOfjrDYdjwpqQc4tLREUrW7YaLIhEjg6uh8YUDNZqK1N133tZkaw4M=h720",
+    "https://play-lh.googleusercontent.com/XDlJOCEG_R_xQpjzRmCLrAALnhH9jyI7OHNYAvy5RiH94V_Nzt93c3flMhUiWXfibcDR64FxfLM6zNJjQVt34w=h720",
+    "https://play-lh.googleusercontent.com/Gi0iuQzdg5cTpAyoWGL1JI0os4pypLp1Ifad-OoiS0I7LvnQar3TsBIwR8s2XAUhspb3WlMTBEGDN-kY3tYp=h720",
+    "https://play-lh.googleusercontent.com/novmdUQroD2yKI2-3B5914l7PQvGqz0Y9QRnAU5y7zKSAETI4wlaPzRusjNgOi3FI_oe6K-1ByIntdeQI83w6w=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.messaging",
+   "sort": 102
+  },
+  {
+   "package": "com.google.android.gm",
+   "label": "Gmail",
+   "category": "תקשורת",
+   "note": "דואר אלקטרוני של Google.",
+   "description": "‏האפליקציה הרשמית של‏האפליקציה הרשמית של Gmail בטלפון או בטאבלט עם Android מספקת את המיטב של Gmail, עם אבטחה מתקדמת, התראות בזמן אמת, תמיכה בחשבונות מרובים וחיפוש בכל האימייל שלך. אפליקציית Gmail זמינה גם ב-Wear OS כדי לעזור בשמירה על פרודוקטיביות ובניהול אימיילים ישירות מפרק כף היד.\n\nבאפליקציית Gmail‏ אפשר:\n• לחסום אוטומטית יותר מ-99.9 אחוז מהספאם, הפישינג, התוכנות הזדוניות והקישורים המסוכנים, ולמנוע את ההגעה שלהם לתיבת הדואר הנכנס.\n• לבטל שליחה שנעשתה בטעות כדי למנוע מצבים מביכים.\n• להפעיל את Google Chat כדי לתקשר, ליצור ולשתף פעולה עם אחרים.\n• לעשות יותר כקבוצה במרחבים – מקום ייעודי לארגון אנשים, נושאים ופרויקטים.\n• ליהנות משיחות וידאו באיכות גבוהה באמצעות Google Meet.",
+   "icon_url": "https://play-lh.googleusercontent.com/c6KD_8-GvnGRJA4lRQ4y5YnUa3-LOeYAS7ubw1jWyB9bmr6Kj6zzRvh2A5WBB-Vd3e6zhElmhDv07fCJx2Fc=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/r4M0DxMFNhQdiGbESrXA2Zf9eS1vkP_V-tAaIFnFCX4_l1l4ZvCfGfwQAruLPwhxYnFEdq5SgoWtFAScnPYUXQ=h720",
+    "https://play-lh.googleusercontent.com/1pyy4P9-omvtF5qXUBOtjl-u6FAv7Dzp1_0yCJqcwfEqGB625YSyTKv_R3mnqSighzpl2sdiCwZfVMnBaz688g=h720",
+    "https://play-lh.googleusercontent.com/Tt0DWmpGb4MkEmT6L6WE-4PCLxLPcFaWdVGIkuJlq5SQY-thuKDsJpcpAwxx9D23g8X6OlsgoqmzgoX4nO_qgA=h720",
+    "https://play-lh.googleusercontent.com/zOtzmFuMzh9d_uvtNhAjWqg-gPXBH0tG3jkR737vZCj0IhwJYFqMxIAl14jYMdmYgLzXXqEACn3CrYWrO7PizA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.gm",
+   "sort": 103
+  },
+  {
+   "package": "com.microsoft.office.outlook",
+   "label": "Outlook",
+   "category": "תקשורת",
+   "note": "דואר, יומן ואנשי קשר של Microsoft.",
+   "description": "לשמור על הסדר עם תיבת דואר נכנס מאוחדת, סינון חכם ולוחות שנה מרובים במבט חטוף. ‏Outlook זמין ללא תשלום לשימוש אישי ותומך ב- Microsoft Exchange, Microsoft 365, ‏Outlook.com,‏ Gmail,‏ Yahoo Mail,‏ iCloud,‏ IMAP ו- POP3.\n\nכתבו הודעות דואר אלקטרוני איכותיות בעזרת כלים מובנים לדקדוק, איות והצעות הקלדה בזמן אמת. ניתן לצרף קבצים מ- OneDrive, מהמכשיר שלכם או מאחסון בענן אחר, ולפתוח קבצי Word, Excel ו- PowerPoint ישירות מתיבת הדואר הנכנס שלכם.\n\nעושים סדר בבלגן עם מחוות החלקה מהירה כדי למחוק, לאחסן בארכיון, להגדיר תזכורות או להעביר הודעות. הצמידו הודעות דואר אלקטרוני חשובות, סמנו הודעות בדגל להמשך טיפול, ומצאו כל דבר במהירות באמצעות הקשה פשוטה או חיפוש קולי.",
+   "icon_url": "https://play-lh.googleusercontent.com/cQ6W3fn_i56tK1PDQZlKvpuggupXR-kGyzwCtF1vYw-wK9FS3YDVUTnpfEvpbWXXuqH6aJ1JRD_t5bfAyCD4=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/rbdGD48-44huKTV1WFUM6eOoe7kUo_zv98jbE9Xa3th5Rc-NkmlgW3vRhX1LgwbZqBzg_aPsTMFfowyz74M6=h720",
+    "https://play-lh.googleusercontent.com/Pp-50yYlg5re5BI20XJgPg1xGKM4dz4TUWHGY5kiDiDFEhCOHM6gXh4TBxjQPm0Y2ds-ySfFj61HEuhPFXzU3w=h720",
+    "https://play-lh.googleusercontent.com/VAx6YmObVywJXh5apfAbkkpIqjO2A89tK6y3Y9kRGsTpVgf_EeWEFOixQm1s3tagccy-CE-P3td4GYnF4l2d=h720",
+    "https://play-lh.googleusercontent.com/8dRq1OlXX_hJXgylPqgunT-o52GXK8YnbRvmXpVVl2c17PTGMkXUm3Uz8TYskIsZlQFmBZqC5jpYawY5B46W-RU=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.office.outlook",
+   "sort": 104
+  },
+  {
+   "package": "us.zoom.videomeetings",
+   "label": "Zoom",
+   "category": "תקשורת",
+   "note": "שיחות וידאו ופגישות.",
+   "description": "Zoom Workplace היא פלטפורמת שיתוף הפעולה שלכם, המבוססת על בינה מלאכותית, לפגישות, צ'אט, שיחות טלפון, מסמכים, יומן, דואר, לוח לבן ועוד. בין אם אתם עובדים מרחוק, במשרד או בדרכים, Zoom Workplace עוזר לצוות שלכם להישאר מחוברים ולבצע את עבודתכם - הכל מאפליקציה אחת.\n\nעם תכונות ליבה מובנות של בינה מלאכותית, אתם מקבלים עזרה בהכנה לפגישות, רישום הערות פגישה עם 'ההערות שלי', השלמת הודעות שהחמצתם וניסוח תוכן מהר יותר.\n\nבצע יותר תוך כדי תנועה עם ZOOM AI*\nתוכנת הערות מובנית מבוססת בינה מלאכותית לסיכומי פגישות שנוצרו על ידי בינה מלאכותית\nצור טיוטות של הודעות ותוכן בעזרת בינה מלאכותית שיודעת את הקשר העבודה שלך\nהשג עדכונים על הודעות צ'אט שלא נקראו תוך שניות\n\nאפליקציה אחת לשיחות ועידה בווידאו, צ'אט ושיחות",
+   "icon_url": "https://play-lh.googleusercontent.com/-Ajlo-aDBHtpCez_yILc8Kepv_kNhbTJPw1WyvXgkh4O-hvUN-YD_v_0FlJmgRbZ2vn1OmZCmCBOY23h4kJYEA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/DZu-vgYd5bDA2ZGYOoVYk10aR3WxMJlnXSF0jzFgrw9sgESM-eZe6095kAUG6MkjZsdPClqPOpLfwuXjKncGLQ=h720",
+    "https://play-lh.googleusercontent.com/LPdKiKKtXLViwEbCaIzxa28VCBrqwVeOqUwSS7590QrA7nK6bbMrk3MYcG5dwTGXhyvDTZVUCg-t-Rzs_AwHUik=h720",
+    "https://play-lh.googleusercontent.com/r2rERCubgkopc8WgNyLR-4m1e5ruJBql6LdDYgK9EGSO7tZ4XzRXaERmwpMFGYk_0vgQiLX0hnT2Cd2gwan4=h720",
+    "https://play-lh.googleusercontent.com/UgRm-oZ4-8FBLKXFpW3gTUHR6jNtrHzt8GsSdxppZORXWg6JjeOTDgb2U3T7b7F2UGNQgoRG0hInLIGUcDLKYw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=us.zoom.videomeetings",
+   "sort": 105
+  },
+  {
+   "package": "com.google.android.apps.tachyon",
+   "label": "Google Meet",
+   "category": "תקשורת",
+   "note": "שיחות ופגישות וידאו של Google.",
+   "description": "Google Meet מציע שיחות וידאו מאובטחות ואיכותיות לכולם. בין אם אתה מתעדכן עם משפחה וחברים או משתף פעולה עם הצוות שלך, אתה יכול לסמוך על תכונות כמו כוונון אור אוטומטי, ביטול רעשים וכתוביות בזמן אמת כדי להבטיח שכולם ייראו וישמעו. הביעו את עצמכם עם אפקטים מהנים, פילטרים, תגובות ורקעים. תכונות פרימיום, כמו רישום הערות המופעל על ידי AI ותרגום דיבור לדיבור בזמן אמת, יכולות לעזור לכולם להתמקד בשיחה ולגשר על מחסומי שפה.\n\nלמידע נוסף על Google Meet: https://workspace.google.com/products/meet/\n\n• כמה תכונות כמו רישום הערות המופעל על ידי בינה מלאכותית, תרגום דיבור, הקלטת פגישות וביטול רעשים זמינות כתכונות פרימיום. ראה https://workspace.google.com/pricing.html לפרטים נוספים.",
+   "icon_url": "https://play-lh.googleusercontent.com/G7KKIhzS9ZKa5iCVAkt1P8vXvVWPbaV9JjkMsgb4BcEjqov0TysngtuJ4jE17DYhi4wblu4UXJDWjr7SYgnZ6A=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/v3xU30Z_flTS_PaGHq2by8FCk0Nn_FwycGjgr2apUJbFxgYls43zR2WT5eGCp4nECPGOfEqx3QwF_FX6o2AR5w=h720",
+    "https://play-lh.googleusercontent.com/jIu-8LzIBuBplC3mjaF_cEdmNYWrrJPDuOtL6sxHXpr8rT9G6jREPJ9HPkvtgCrLcuDaas0ES5qVxQqpMjpBOA=h720",
+    "https://play-lh.googleusercontent.com/bkG-27X9zfG2vzxuqnsnageIySzL8BLIKgWfU5TjnlX8FrsKtG0SnMA7EJ8jYLPP-dmXrVizmP1lesbTNDOebw=h720",
+    "https://play-lh.googleusercontent.com/svie8_dVeU9-6y4zQTZQCgKWYfPnUunZLkqVVnsEZ_DxZnxHqZgMb_9bxNoVdR_rXwwlRnu5PzPfGiPvpxJP9IY=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.tachyon",
+   "sort": 106
+  },
+  {
+   "package": "com.microsoft.teams",
+   "label": "Microsoft Teams",
+   "category": "תקשורת",
+   "note": "צ'אט ופגישות לעבודה וללימודים.",
+   "description": "בין אם אתה מתחבר לקהילה שלך לפעילות קרובה או עובד עם חברי צוות על פרויקט, Microsoft Teams עוזר לקרב אנשים כדי שיוכלו לבצע דברים. זוהי האפליקציה היחידה שיש בה קהילות, אירועים, צ'אטים, ערוצים, פגישות, אחסון, משימות ולוחות שנה במקום אחד - כך שתוכל להתחבר בקלות ולנהל גישה למידע. חבר את הקהילה, המשפחה, החברים או החברים לעבודה כדי לבצע משימות, לשתף רעיונות ולתכנן תוכניות. הצטרף לשיחות שמע ווידאו בסביבה מאובטחת, שתף פעולה במסמכים ואחסן קבצים ותמונות עם אחסון מובנה בענן. אתה יכול לעשות הכל ב-Microsoft Teams. \n\nהתחבר בקלות עם כל אחד: \n• Skype היא כעת חלק מ-Teams. המשך מהמקום שהפסקת עם הצ'אטים, השיחות ואנשי הקשר שלך ב-Microsoft Teams Free. \n• נפגש בצורה מאובטחת עם קהילות, חברי צוות, משפחה או חברים.",
+   "icon_url": "https://play-lh.googleusercontent.com/afnciqsoxrp8BYGFAS_BZtUBn2NvmxTVoKFproR5SljREfTBnueRjPxzxCXvIJNYTUdbtOWz-_GjVuOCMfi7fiU=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/4KqED9LDJu57K0b5_dQmGpw0b09x-5_IsWLOT92osybtkIQotH72uk97UNZFL7SOOGWjRknWdHSGMV1478Na=h720",
+    "https://play-lh.googleusercontent.com/4OPhlz2OSdkgd4WTS63C0_e6ZqII6gQdeTxkmWQQvrtKxtPSqZ8XWWQBpX-PKthRArwTbu-_2aVSCcfp-vn_oA=h720",
+    "https://play-lh.googleusercontent.com/0UkJ2PUaR1MOTfqMYh-zx-ZtMrU-v20FZVkKpai7cDS5dPOGhyMQs-Zqnr8lwvvvvtWcsu6ORt9ijRgympKCZg=h720",
+    "https://play-lh.googleusercontent.com/LVz44hqtivW4c978LAD7bJw0PM02aOycczjrOoeogfLFPXhXB_leq6rDxQdTXaCGVsnyKmNemOxZcJ8qnCAD=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.teams",
+   "sort": 107
+  },
+  {
+   "package": "com.bnhp.payments.paymentsapp",
+   "label": "ביט",
+   "category": "בנקים ותשלומים",
+   "note": "העברת כסף ותשלום מהטלפון.",
+   "description": "bit אפליקציית התשלומים המובילה בישראל, המאפשרת להעביר ולקבל כסף בקלות ובצורה בטוחה.\n\nניהול יתרה כספית- מקבלים כסף מחברים? הכסף מצטבר באפליקציה ואתם יכולים להחליט אם לשמור אותו או לעשות בו שימוש להעברות\nתשלום באתרי קניות ובאפליקציות – עושים שופינג אונליין ומשלמים ב-bit ללא צורך להקליד פרטי כרטיס אשראי.\nהזמנת מט\"ח מהטרמינל – מזמינים מראש את המט״ח ב-bit ואוספים בשדה תעופה.\nאיסוף כסף מקבוצות – מתארגנים לעל האש? קונים מתנה ביחד? כל מה שצריך זה לפתוח קבוצה ולהזמין חברים להצטרף. אנחנו כבר נזכיר להם להעביר את הסכום שצריך.\nשליחת בקשה לתשלום – מגיע לכם כסף ומישהו שכח מזה? תרגישו חופשי להזכיר לו על ידי שליחת בקשה לתשלום.",
+   "icon_url": "https://play-lh.googleusercontent.com/yLiYAO2BTwmHdMDaDaTXC_4OZlSTkCjAJ_FKwLi-mKH0kmMe9-5Z-i8V1OdtGRtkGDukrHGjOwbqpHYUhUM2qQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/_aEbN2wUc4iWjr7ZeUpwsS37Utr-tYTgs-WHxSWFIlsibJib7QBtNPMi_TROsFHA0gPRuobTWjAKDw0oyU8FSfw=h720",
+    "https://play-lh.googleusercontent.com/41PRWWEE76fDCeJcxb4F1OjlpsEoOV6x67jmUhFn_IhLzmkIFhwxenK81cUrWgM-VdCpAQzbUwRg0HFQeEEdoA=h720",
+    "https://play-lh.googleusercontent.com/XGiaE-9I1vH254zO5-FQQbmkYSFetTg4JX28fALQAFXUz6-Q8ne4wOFcTr3376SAGpXwnIkMMktmevOy8Y2i=h720",
+    "https://play-lh.googleusercontent.com/DOsdkBcm8_RUc9xEOWLEUfFBHToiE1JniA8eh-stQHU4ei8twyp4He02OYbO6Y5SvCkCGDy0mlXX9GsO9X4T=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.bnhp.payments.paymentsapp",
+   "sort": 108
+  },
+  {
+   "package": "com.payboxapp",
+   "label": "פייבוקס",
+   "category": "בנקים ותשלומים",
+   "note": "ארנק דיגיטלי, תשלומים והעברות.",
+   "description": "אפליקציה לניהול כסף מחוץ לבנק. ב-PayBox תוכלו לנהל את הכסף שלכם בצורה חכמה, נוחה ומשתלמת. להגדיר מטרות ולשלוט בהוצאות, להעביר כסף לחברים, לפתוח קבוצות, לבקש הלוואה או לתרום לעמותות.\n\nארנק דיגיטלי\nהארנק הדיגיטלי מאפשר העברת כסף בין אנשים. במקום לחכות שיעבירו לכם כסף, אפשר לשלוח בקשת תשלום. הארנק הדיגיטלי מאפשר לך לנהל יתרה נפרדת מחוץ לבנק שלך. כסף שהעבירו לך נשמר ביתרה באפליקציה. אפשר גם לטעון כסף ליתרה באמצעות כרטיס PayBox. היתרה נשמרת לשימושך למטרות שונות ואפילו צוברת ריבית.\nניתן לאסוף כסף קבוצתי באמצעות קבוצות תשלום משותפות שלא מוגבלות בזמן, בהן אפשר לראות מי כבר שילם ומי עדיין לא, ואפילו אפשר לשלוח למי שלא שילם תזכורת. והכל בצורה מאובטחת ושקופה.",
+   "icon_url": "https://play-lh.googleusercontent.com/6XVOiwqZT3MY0SfcOF9-pF4pJwe-xO6GxxvkbaatFiOqWbo4Q3xWv3faWW-YEOD8a9TZ8CmovrI9hHV3PvB59A=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/K_stU0CS1jr1xNi80dmzxqxHCzAP4bg3HowRivrsyTTfDUAdinEVzP-9NBN1D7Lx84j7KLEyuIoBdHYKm8ErQg=h720",
+    "https://play-lh.googleusercontent.com/YwGCI9PLFHjQz3KSi5hNHWdKZoo7GD2ItHhuoRGEmwPcNe-rGBpNBkw8DmzQ2_aQS8E3OtPp0FS4zG42BwD-=h720",
+    "https://play-lh.googleusercontent.com/lhdADGdsVvY3L0TVHpQ4O_1mivwFXAYZ3IzcSe-SUsmrVz4PGL3-6meuiYNK-pWg832IQDtBcKnaVJnZo2kvWTs=h720",
+    "https://play-lh.googleusercontent.com/N_FyZVem60wLGtVwsLLat9PcB679-_V9de83wkRcKG9jvpjAhKoYee20uKlvTguVk8VnYe2T6PkBcyt2BnRL2Q0=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.payboxapp",
+   "sort": 109
+  },
+  {
+   "package": "com.ideomobile.hapoalim",
+   "label": "בנק הפועלים",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק הפועלים.",
+   "description": "באפליקציית בנק הפועלים מחכה לך כל מה שצריך כדי לנהל את הכסף בצורה היעילה והחכמה ביותר. האפליקציה מאפשרת ניהול שוטף ויומיומי של החשבון עם כלים מתקדמים, תובנות והמלצות מותאמות אישית להתנהלות פיננסית נכונה.\n\n אז מה אפשר לעשות באפליקציה?\n* פועלים ג'וניור: לנהל בכיף דמי כיס וחסכונות עם הילדים\n* דנית בנקאית ה-AI: לשאול כל דבר בשפה חופשית, ולקבל הכוונה למידע ופעולות באפליקציה\n* להעביר כסף: למוטבים קבועים ומזדמנים, בקלות ובמהירות\n* לנהל פיקדונות: להפקיד ולמשוך כסף מתי שצריך\n* להזמין כרטיס אשראי: כולל מעקב נוח אחר הפעילות השוטפת\n* להפקיד צ'קים: לצלם את הצ'ק ישירות מהנייד \n* להזמין מט\"ח לטרמינל: לאיסוף מהיר בנתב״ג\n* לבקש הלוואה: לכל מטרה, בדיגיטל ובמהירות",
+   "icon_url": "https://play-lh.googleusercontent.com/XRZlkSAPDTjrqZ4KxaTjkRBNP7QTJOId0-eM2Nox7Z8pIVm4e_dsyIHu_h9KrzKNLVeFPoqu-9v1RgDwUHFAOw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/is3tgt5Vsqm_lFetOuDxe-NltSmOskfQVK05nhzw-zJMHJLGhzbZ5X-gE7CThMUMm8o-kSsFrIrfLDW4rbpZJA=h720",
+    "https://play-lh.googleusercontent.com/GwSo8-rENWglSzp0upQHGjZN8EVo19JL5GXpJnPiaYO3T1tZ1ehIRJJzhT2REWTZqzEyIW3RFDE4W_DVu85Wgw=h720",
+    "https://play-lh.googleusercontent.com/RktWOwQAqQz1Bee0nEHEq3FUpD0dCE1flqRJ9jK34rmRv5BA1GDKsVj90LdhyUZA5CLGrRad0EIQ9fcgnWk5vA=h720",
+    "https://play-lh.googleusercontent.com/g9ldvkwn-Wi6402T6JnpIZrLDMzPSAz7EC44pgw6HSJU_e9-ZZuD1WIophjBiYb5YVL0vcK2ZWYAA65fOzTw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.hapoalim",
+   "sort": 110
+  },
+  {
+   "package": "com.leumi.leumiwallet",
+   "label": "בנק לאומי",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק לאומי.",
+   "description": "רק מספר 1 יכול להביא לכם את אפליקציית הבנקאות המתקדמת בישראל: הכירו את אפליקציית לאומי.\n\nהאפליקציה מאפשרת לכם לפתוח חשבון בנק, לקבל שירות ולנהל את החשבון בקלות, מכל מקום ובכל זמן. באפליקציה תוכלו לצפות בתמונת מצב רחבה ועדכנית של החשבון שלכם, בסיוע של תובנות חכמות ומותאמות אישית המופיעות במסך הבית.\n \nאילו פעולות בנקאיות אפשר לבצע באפליקציה?\nהעברת כספים, הפקדת שיקים, הזמנת כרטיסי אשראי, פעולות בפיקדונות ובחסכונות, המרת מט”ח ועוד מגוון פעולות ושירותים - ישירות מהאפליקציה.\n\nאיך אפשר לקבל שירות באפליקציה? \nצ’אט ה-AI החכם שלנו יעזור לכם לקבל מידע ולבצע מגוון פעולות, במהירות ובפשטות. ואם צריך, אפשר גם לפנות לבנקאי האישי שלכם ישירות מתוך הצ'אט ולקבל שירות אישי ואנושי בכל מצב.",
+   "icon_url": "https://play-lh.googleusercontent.com/cHusKgkYy4iAkFcbyaVonzzyip7jH8dgoYDOH9Vw6pnRIi6U53TaXpkos8ksUPTl4fLKpjHA6qkP8tmnhlg7_Q=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/qgMrVp1K472viTU4kaTFwYL2YtALcBwzyHhv-n58BMDW63O1d3cWkCqTBuWEbvuIkxI5BlWZ4YR5bsiv-8v38X8=h720",
+    "https://play-lh.googleusercontent.com/Zo753bSFT-GHMrUOvoSuYzyeWT4yXGB3Wm_aNIvoPYhpRGQ2qbkBVN-jhTYmWxugDT0S9dX7UGupA_fsqOwzjQY=h720",
+    "https://play-lh.googleusercontent.com/uiKVm0dTPzpPSwvc_yephtUq17bz0K5k1FEjj08aOmD1jYbVqPxSGXA1pqrpEyyUsDXbl5egT3UHbqcO4vdQJA=h720",
+    "https://play-lh.googleusercontent.com/Fl8ys-JNyC_Xu2-rsL_GVG87xr6NYABFonM3cNxTS8QBhn2tKfJDxnsgR1iPb_YnGo0yvUCsWYajtOnFyt8_=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.leumi.leumiwallet",
+   "sort": 111
+  },
+  {
+   "package": "com.ideomobile.discount",
+   "label": "בנק דיסקונט",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק דיסקונט.",
+   "description": "האפליקציה של בנק דיסקונט, הרבה יותר ממה שהיית מצפה מאפליקציה בנקאית!\n\nיש בה את כל מה שיש לאחרים - ההזדהות קלה ונוחה, העברת מזומן למי ואיך שבוחרים (גם לאנשי קשר, גם באופן קבוע וגם במועד עתידי), המרות והעברות מט\"ח, הפקדת שיקים, הלוואה מיידית, הפקדה לפיקדון, פעולות בכרטיס אשראי, מידע על המשכנתא, פעילות בניירות ערך ועוד\n\nאבל גם עוד הרבה יותר....\n· דידי - נציגה דיגיטלית שזמינה 24/7 כדי לעזור לנווט באפליקציה, לקבל מידע ולבצע פעולות\n· תובנות מעניינות על מה קורה בחשבון, כמו חיוב כפול לבית עסק, ניתוח הוצאות והכנסות חודשי, סיכום ההוצאות בחו\"ל והתראות על שינוי בהרגלי ההוצאה\n· ביצוע מגוון פעולות באמצעות Siri\n· קביעת פגישה והתכתבות עם בנקאי\n· ועוד ועוד\n\nרגע רגע... עדיין אין לך חשבון?",
+   "icon_url": "https://play-lh.googleusercontent.com/CmNuEiCwyaSZcO1SeUquWBfkPfpFtzp-RqShWRw29xYohV_6EVDX8qYzKVZFGZ9HLFLaSM1yPyvDknCOxtXa=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/_T1nzbw8mqDGt90f6jMNC4KADJ2o_4nPkPD7cxX3rJP0PQhRaDm0HsE0T26syne4ppB7shDwFRUro5T-O87hxA=h720",
+    "https://play-lh.googleusercontent.com/4zhmwQVNTeVTPB1c-PwDULcxVZjTCRGng8yBeZrVbtpYACEyAHQ6LPpZN4yxX705FPVmmszyTbY2cku_XG5vOA=h720",
+    "https://play-lh.googleusercontent.com/OcX_S6BNd5kP8Md7Yi03SzB2OCI8wZw5LeY3sQesexF2rxUTmht1I203x2ZiC2QP0zUHGWDTv_IQBOKZoFmrEg=h720",
+    "https://play-lh.googleusercontent.com/R8Lubr7JSC-2WVN9xtbbvw1O031gVjtVWYFs3wj-m5UzE3H4ngwxAJEj3pgQLEByPT5iKQS9WtSOfAyaTYod=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.discount",
+   "sort": 112
+  },
+  {
+   "package": "com.idb.android.apps.authenticator",
+   "label": "דיסקוד",
+   "category": "בנקים ותשלומים",
+   "note": "קוד הזדהות לכניסה לבנק דיסקונט.",
+   "description": "אפליקציית \"דיסקוד\" מאפשרת לך להזין את הקוד האישי המתחלף, המוצג על המסך, כאמצעי \"הזדהות חזקה\" באתר עסקים+ של בנק דיסקונט.\n\nה\"דיסקוד\" הינו מחולל קודים (One Time Password) באופן אוטומטי, בכל פרק זמן.\nאת אפליקציית \"דיסקוד\" ניתן להתקין על מספר מכשירים במקביל (טלפונים חכמים וטאבלטים).\n\nהפעלת האפליקציה בכל מכשיר נעשית עם הזנת קוד ההתקנה שנמסר לכם מהבנק בעת ההצטרפות לשירות.\n\nאתר בנק דיסקונט מאפשר ביצוע העברות כספיות, תשלומים, סחר בשוק ההון, ניהול חשבון העו״ש ועוד,\n\nבנק דיסקונט.",
+   "icon_url": "https://play-lh.googleusercontent.com/1_G8967FBxHeo81iDwvQWIWVjorE8eQDBhND-1KXsfsdV9AnSg1jvrTJqOIHQY0T0xpsMt2MwuAS5ugEfoDZ8g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/nFedE9njCu7PonAy7bAv23NEWYkb9Uaw3M2wIhI8uhpDfp-gmY-yfLHMgLKl5njnLp7cAdml5qYBW1py-xWwuA=h720",
+    "https://play-lh.googleusercontent.com/Nc5PsCj9il_iD7MD6nRGNYYLZKawjRCgmWwticrNG6A45J0t2T2OrnPKo6P1cD0bO8FRdRuyWD4ecmSrCSL-UQY=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.idb.android.apps.authenticator",
+   "sort": 113
+  },
+  {
+   "package": "com.MizrahiTefahot.nh",
+   "label": "מזרחי טפחות",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון במזרחי טפחות.",
+   "description": "במזרחי-טפחות, הבנקאי האישי זמין לך בהתכתבות או בשיחת טלפון ישירות מהאפליקציה.\nבנוסף לשירות האישי והאנושי שאנו מציעים, קיימים מידע ופעולות באפליקציה שכדאי להכיר.\nניהול חשבון\n• פתיחת חשבון בקלות בלי להגיע לסניף\n• התכתבות עם הבנקאי האישי ועם יועץ השקעות, כולל אפשרות לשליחת קבצים\n• קבלת התרעה על הודעה חדשה מהבנקאי\n• חיבור מהיר וקל של כרטיס האשראי הבנקאי שלך ל-Apple Pay / Google Pay\n• הפקדה לפיקדונות\n• הפקדת צ'קים בקלות\n• ממשק נוח לחתימה דיגיטלית על עסקאות\n• כרטיסי אשראי - ביצוע פעולות וקבלת מידע: הפעלת כרטיס חדש, צפייה בחיובים, שחזור קוד סודי ועוד\n• מסחר והשקעות - קנייה והמרת מט\"ח, מסחר בניירות ערך, פירוט יתרות ותנועות, ועוד\nמשכנתאות והלוואות\n• הגשת בקשה לקבלת הלוואה ישירות לחשבון",
+   "icon_url": "https://play-lh.googleusercontent.com/r3sD4866lVNROdx3FRWkhvI97X-1jBODlB_dClnCBEmuVzEq7gDZxjEdDiUf3VSpSAlP6vE4_K1GM6eVPNTB=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/7tmaCYx3JoVWq9EcDX9ZUISq07s-JZlJyyPmmAQdESB3N1rR5NuO-ZlbCo0IRdy-Lr1HWS9PjKiZ42036mThJw=h720",
+    "https://play-lh.googleusercontent.com/Jo05f3AJy35vUWCjNcNChJYW1jGM2XD3xDOdSU0ElwrqY6NiBatrmDAo49Ed86QGPEi-ATh3WnU4r8nmSCNk=h720",
+    "https://play-lh.googleusercontent.com/u0tTgRGElgNm_bA4Cvk2FSd4EWgAoF0RsPZt8FRnbz0DzVlatZRaSbPSIQR4gVCj1jA3V1IxKyOPe2B-uXt3rg=h720",
+    "https://play-lh.googleusercontent.com/v9HOFRpFy0d7AkqwN6S0QdV3GZe3P7PJ4rBfFXgJDqhbO8_sRwprstSrjdzhtohPydHhFfQTwg7vir-_dqoKEA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.MizrahiTefahot.nh",
+   "sort": 114
+  },
+  {
+   "package": "com.fibi.nativeapp",
+   "label": "הבנק הבינלאומי",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק הבינלאומי.",
+   "description": "האפליקציה כוללת מגוון רחב של פעולות, מידע ושירותים וכלים מתקדמים לניהול החשבון:\n \n- הזמנת כרטיס אשראי וניהול הפעולות בכרטיס\n- העברת כסף לאיש קשר\n- הזדהות חכמה בטביעת אצבע, זיהוי פנים ועוד\n- הפקדת שיקים בסלולר\n- תיאום פגישה בסניף\n- התכתבות עם בנקאי\n- פיבי הבנקאית הוירטאלית – מאתרת ומציגה עבורך את מה שחשוב שתדע\n- שוק ההון – כלים ייחודיים להשקעה חכמה בשוק ההון\n- עדכון פרטים אישיים\n- משיכת כספים בסכום מוגדל\n-FIBIGUARD – אימות דו שלבי בכניסה לחשבון\nועוד......\n \nהרשאות נדרשות להתקנת האפליקציה: \n-מיקום – לאיתור סניף\n-מצלמה ופנס – לצילום שיקים\n-התקשרות למספר טלפון – לחיוג מהיר לתמיכה טכנית/מוקד\n-גישה לאנשי קשר – עבור \"העברת כספים לאנשי קשר\"\n-שמירה באחסון מקומי וחיצוני- לצילומי שיקים שביקשת לשמור",
+   "icon_url": "https://play-lh.googleusercontent.com/QSsaAcgFRqZccnc0wRrIzD6Ym7n1LRaRZl-vPXvtt3IGi7eiweo8iIt-O-VEY-sGvbGqVrW4UVfLxJDknD2f2g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/8J0I6JLWJ1gcgvt_2u0QVaPxkB-Uz-GMeX1nBfel4TrsxHuacLXngYl_Mimjfp8W1-EQb-IrkOHKDW5Y6glqow=h720",
+    "https://play-lh.googleusercontent.com/GEL2_Dz_A_-UrRhsi_-gSRdHdbWB-5JSMPz_WYnz_YwigFKrHaz0PyCiMXTpV1GUXBRDU6i570wuQiitcGiatGY=h720",
+    "https://play-lh.googleusercontent.com/0If_vZoZKp7cjAcpsg9EBB8xYhWQ1-28PMPWqVXpI6GbAnFQUUK1jKFNdReDp08BKUQ-Ae6iaBrI-jF7pzNv=h720",
+    "https://play-lh.googleusercontent.com/dZx5MIzsDTijWyEwiowS2oBoeSYglcPPPOpjOpgpWgFnYvR5bIvpmUwKyRqSvY6OJ4CYzq1LlIKf11W2SsZfqQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.fibi.nativeapp",
+   "sort": 115
+  },
+  {
+   "package": "com.otsar.nativeapp",
+   "label": "אוצר החייל",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק אוצר החייל.",
+   "description": "בנק אוצר החייל מאפשר לכם להתקדם איתנו לעבר העתיד עם אפליקציה לניהול החשבון שהיא גם ייחודית וגם מאובטחת ומוגנת מצד שני.\n \nהאפליקציה כוללת מגוון רחב של פעולות, מידע ושירותים וכלים מתקדמים לניהול החשבון:\n \n- הזמנת כרטיס אשראי וניהול הפעולות בכרטיס\n- העברת כסף לאיש קשר\n- הזדהות חכמה בטביעת אצבע, זיהוי פנים ועוד\n- הפקדת שיקים בסלולר\n- תיאום פגישה בסניף\n- התכתבות עם בנקאי\n- פיבי הבנקאית הוירטאלית – מאתרת ומציגה עבורך את מה שחשוב שתדע\n- שוק ההון – כלים ייחודיים להשקעה חכמה בשוק ההון\n- עדכון פרטים אישיים\n- משיכת כספים בסכום מוגדל\n-FIBIGUARD – אימות דו שלבי בכניסה לחשבון\nועוד......\n \nהרשאות נדרשות להתקנת האפליקציה: \n-מיקום – לאיתור סניף\n-מצלמה ופנס – לצילום שיקים",
+   "icon_url": "https://play-lh.googleusercontent.com/ibJ39eKL2RSPqbISrqzbXFI99Du96CkWey05rC7ZIKFtZppSwBFYQ8abYZNseEXScLqNzsR_GFGAiXQnjLsfx20=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/zIh_VCFAQb8XhNRcHD-sdovqOzw0qCnHi5SmWaQ6_LlIYcyUVijJgbn5Y6TeovqlqpEWQpukASjdtD78n_-KSQ=h720",
+    "https://play-lh.googleusercontent.com/6fQrikvEy22nnmmv9HvU3pvs2mWdFRifGTz8C2vYc1Px9N8DKrFeIkDotllx2O5G3cukrK-SDvm3-IwRm6h9=h720",
+    "https://play-lh.googleusercontent.com/Rl8qFPCALVjFMs9pD_hGMlRxeZA0bNIEM3XfnRMbaxTklC3Al173t3qsGPG-yBo0ZEJa04fEiRtrpPpjH7EC=h720",
+    "https://play-lh.googleusercontent.com/npSLfUU-zzrD9aOvPVafmA8w56w9SLQT0SaIx6cR1TTfTgb0YdouDU1OA53YwecuNnnLY_nwpMQvQuPLtb38=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.otsar.nativeapp",
+   "sort": 116
+  },
+  {
+   "package": "com.ideomobile.mercantile",
+   "label": "בנק מרכנתיל",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק מרכנתיל.",
+   "description": "האפליקציה של בנק מרכנתיל,\nיותר ממה שהיית מצפה מאפליקציה בנקאית...\nהזדהות קלה ונוחה, העברת מזומן (גם לאנשי קשר, גם באופן קבוע וגם במועד עתידי), המרות והעברות מט\"ח, הפקדת שיקים, קבלת הלוואה מידית, הפקדה לפיקדון, פעולות בכרטיס אשראי, מה קורה עם המשכנתא, מעקב אחר תיק ניירות ערך ועוד...\nובנוסף, עוד מגוון שירותים שלא היית מצפה מאפליקציה בנקאית:\n• דידי – נציגה דיגיטלית שזמינה 24/7 כדי לעזור לנווט באפליקציה, לקבל מידע ולבצע פעולות\n• תובנות מעניינות על מה קורה בחשבון, כמו חיוב כפול לבית עסק, ניתוח הוצאות והכנסות חודשי, סיכום ההוצאות בחו\"ל והתראות על שינוי בהרגלי ההוצאה\nוזו רק ההתחלה\nיש עוד דברים טובים בדרך כמו הזמנת פגישה עם בנקאי ועוד...\nהאפליקציה חינמית ומיועדת ללקוחות מרכנתיל בלבד!",
+   "icon_url": "https://play-lh.googleusercontent.com/iK71h8CJmKhMczToQHXSuPQjE2Eo52pUtlrFEZv0qJJmNiLSBZm9wN-hviHhSeclPX6GvmQZzYzhztPnt4zS0-M=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/oz2f2xF6OrEGWWw-GWzvBPXcNEaBP9YOBuudZ-HzoL23H6iQIAmIhd8V08kNmIaPd-CGbC2NqqQ_JGKm144WhsQ=h720",
+    "https://play-lh.googleusercontent.com/PcZ0AsrAuTMYxpdWr81jj8gpv4jum8lPDSazPY-nG3aWRjNRqfb9Tmb8NO0idfIYeqlij5GWtYGeXb7AFePGmls=h720",
+    "https://play-lh.googleusercontent.com/AchlskT6vykqxZSosthSb17zfMC7k6NBLWuJYCGAQVSI6gmOCiv8XYPVoxblZjQkDo6AWoCMLGg5Mo100AVjKg=h720",
+    "https://play-lh.googleusercontent.com/bOVwzyso1EQVE6w-ZIN-6EM5i_HVct84kHNxf7QSJLmvCm8IjM-ZXNRQSJw1MYJ1cTWIBOMsPBTdQ67sqnzT36c=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.mercantile",
+   "sort": 117
+  },
+  {
+   "package": "il.co.yahav.mobbanking",
+   "label": "בנק יהב",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק יהב.",
+   "description": "האפליקציה החדשה של הבנק מאפשרת לנהל את החשבון בצורה נוחה ומהירה, ומציעה חוויה בנקאית דיגיטלית מתקדמת, מבלי להגיע לסניף.\n\nהאפליקציה מתאימה למגוון רחב של מכשירים מתקדמים ומאפשרת קבלת מידע מקיף על החשבון, בכל נקודת זמן ומכל מקום, וביצוע מגוון פעולות בנקאיות, כגון:\nהפקדת שיקים.\nמגוון הוראות העברות כספים.\nהזמנות פנקסי שקים.\nמגוון פעולות בפיקדונות.\n\nניתן לצפות באפליקציה במידע מעודכן בזמן אמת באמצעות ניווט קל ונוח במגוון רחב נושאים, כגון: \nעובר ושב – פעולות בחשבון וריכוז יתרות. \nכרטיסי אשראי – מידע מפורט על חיובים קרובים וקודמים בכרטיסים.\nפיקדונות וחסכונות.\nמטבע חוץ.\nהלוואות.\nניירות ערך.\nועוד מגוון רחב של אפשרויות נוספות.\n\nמעכשיו אין צורך להגיע לסניף – בנק יהב הכי משתלם גם בדיגיטל.",
+   "icon_url": "https://play-lh.googleusercontent.com/MEicjgcZqVEt8iyr6AdEOC8y2WtKNN-XhbcVYvXl2EJ5ZzSVY7-OhasOpXv8tCsyyVNvHMXviXnT5H0nlCaciA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/9dVt9yYuxZ-n2DM9MOf8FZB1gboJRCFFUkeX5fmmFIIN1TDwN_JReJeeQaiEFLMMwR7I67FSyP2vGBNf0TF6=h720",
+    "https://play-lh.googleusercontent.com/6aJx3G70hYhrTlnxEQ5bdMvM4MIMF25mjJnEEQG5tUKz6wVGV7dSLaHJj925bFBkt_YFrw5yQkPUJpy7uNUa=h720",
+    "https://play-lh.googleusercontent.com/6t5zCrTGcoUsLG3kG2BmFj81p3Zy1mZH58tSQPpAuRW0_jeP7lw3POGK2ndnEivQq-9DLsfr6KlRrnhLXgah=h720",
+    "https://play-lh.googleusercontent.com/5G8uBjACWWzWB8-CrM6qvH_TBfIBYDPcCcJA95wNyeOLO7AmdZ8bYr96SsIkunYrkz6LEpYD-qpKIMscpIskWtw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.yahav.mobbanking",
+   "sort": 118
+  },
+  {
+   "package": "com.masad.nativeapp",
+   "label": "בנק מסד",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק מסד.",
+   "description": "בנק מסד מאפשר לכם להתקדם איתנו לעבר העתיד עם אפליקציה לניהול החשבון שהיא גם ייחודית וגם מאובטחת ומוגנת מצד שני.\n \nהאפליקציה כוללת מגוון רחב של פעולות, מידע ושירותים וכלים מתקדמים לניהול החשבון:\n \n- הזמנת כרטיס אשראי וניהול הפעולות בכרטיס\n- העברת כסף לאיש קשר\n- הזדהות חכמה בטביעת אצבע, זיהוי פנים ועוד\n- הפקדת שיקים בסלולר\n- תיאום פגישה בסניף\n- התכתבות עם בנקאי\n- פיבי הבנקאית הוירטאלית – מאתרת ומציגה עבורך את מה שחשוב שתדע\n- שוק ההון – כלים ייחודיים להשקעה חכמה בשוק ההון\n- עדכון פרטים אישיים\n- משיכת כספים בסכום מוגדל\n-FIBIGUARD – אימות דו שלבי בכניסה לחשבון\nועוד......\n \nהרשאות נדרשות להתקנת האפליקציה: \n-מיקום – לאיתור סניף\n-מצלמה ופנס – לצילום שיקים",
+   "icon_url": "https://play-lh.googleusercontent.com/v_ucRfEqz7pUE60y9ucHgf7DUygKrqovpBP7YtLZ_ceH9xhIQy_bjd20g2u45G0Q_f7CVZyFWsDiTXoHcgmH=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/4Mwdq_3KX_X6dbrKjJnc1Hf9gaDKhJyTg9gjdYtb6_gLdkfa7fwVRk4pDuhazXP4ra0MvvThWVvXOqzKl1HjdA=h720",
+    "https://play-lh.googleusercontent.com/Ce8hcNplkPhTo3PuDYCy0JBUw285ch5qjTsL2RXtqy4uHvIO_zXZMmIeLSPnzMtyTXNAPhr72aVNm_AeAHYCbw=h720",
+    "https://play-lh.googleusercontent.com/8Sq_v_vIgHwNcPcxv5g5Mk1OmaV0-oQKAdDpMmnPE86fhjVsi0XCRHza8_ZGLm6j0YAFP7o0as-eFxid2pLQ=h720",
+    "https://play-lh.googleusercontent.com/J6OExODR-V1kuKJ0bNH5kyCxY9rQgEFetc-I4O3Tiu-QiGnG0dzyezj7OnIJ25g0zWqZEIuaGws37788oLSa=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.masad.nativeapp",
+   "sort": 119
+  },
+  {
+   "package": "com.bankjerusalem",
+   "label": "בנק ירושלים",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק ירושלים.",
+   "description": "באמצעות אפליקציית בנק ירושלים ניתן לצפות במידע על חשבונך ולבצע פעולות בדרך פשוטה ומהירה, בכל מקום וזמן.\n\nבאפליקציה של בנק ירושלים ניתן לצפות במידע על:\n • תנועות בחשבון, הרשאות בחשבון ומסגרות\n • נתונים על המשכנתא, ההלוואות והפיקדונות\n • חיובים ופירוט עסקאות בכרטיסי האשראי\n\nניתן לבצע פעולות בנקאיות כמו:\n • הפקדת שיק\n • העברת כספים\n • הפקדה לפיקדון\n • הזמנת פנקסי שיקים\n\nבנוסף, האפליקציה מאפשרת גם להפיק אישור ניהול חשבון אונליין, לקבל דו\"ח יתרות לתיבת הדואר (האינבוקס), להירשם לשירות\nדואר ירוק, ועוד הרבה יותר.\n\nההזדהות לאפליקציית בנק ירושלים מתבצעת עם פרטי הזיהוי המשמשים אותך בכניסה לאתר הבנק שלנו.\nניתן גם להיכנס באמצעות קוד חד פעמי הנשלח לטלפון הנייד שלך.",
+   "icon_url": "https://play-lh.googleusercontent.com/7MiKbLi1TZyGQIJRfC6Vlmni25C7tOuon4x1dkxGfgQcMDx4j3EVV4FIc-Nz-PACySwd2VyIZgSf2W6LgBwROg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ygs191JLtBMZcfoY9G4NADQ8eXhx0pSN4jCuHWSha1qIgpCV-sr3wyjwvl2ixw2NS4n-t-RjovvAkmL6JOXndA=h720",
+    "https://play-lh.googleusercontent.com/Yyd67OpVoBkeK7ndX9eqAuSd2DmWqLFpoqgtFR0W3_tRmCxxSCvSimXhQSSLXZzWdL8NkuhaKOAAfImL4QDKg30=h720",
+    "https://play-lh.googleusercontent.com/9eus7qdy--hWT_eLWFxaUNzD8Rh0T11Qql8fEzffYmXzwN7G6Qkoi5equ17DLOREvDZp_c3n6epd42DkWrRL=h720",
+    "https://play-lh.googleusercontent.com/ZdswW08TWKIBgfPMhtK2RLNkpWISdoGwDpMFu2VInzXwiXMWRrkdmXgnQ8in2DizUI-Cx6pweLsnSCMFCDwulRI=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.bankjerusalem",
+   "sort": 120
+  },
+  {
+   "package": "com.pagi.nativeapp",
+   "label": "פאגי",
+   "category": "בנקים ותשלומים",
+   "note": "ניהול החשבון בבנק פאגי.",
+   "description": "בנק פאג\"י מאפשר לכם להתקדם איתנו לעבר העתיד עם אפליקציה לניהול החשבון שהיא גם ייחודית וגם מאובטחת ומוגנת מצד שני.\n \nהאפליקציה כוללת מגוון רחב של פעולות, מידע ושירותים וכלים מתקדמים לניהול החשבון:\n \n- הזמנת כרטיס אשראי וניהול הפעולות בכרטיס\n- העברת כסף לאיש קשר\n- הזדהות חכמה בטביעת אצבע, זיהוי פנים ועוד\n- הפקדת שיקים בסלולר\n- תיאום פגישה בסניף\n- התכתבות עם בנקאי\n- פיבי הבנקאית הוירטאלית – מאתרת ומציגה עבורך את מה שחשוב שתדע\n- שוק ההון – כלים ייחודיים להשקעה חכמה בשוק ההון\n- עדכון פרטים אישיים\n- משיכת כספים בסכום מוגדל\n-FIBIGUARD – אימות דו שלבי בכניסה לחשבון\nועוד......\n \nהרשאות נדרשות להתקנת האפליקציה: \n-מיקום – לאיתור סניף\n-מצלמה ופנס – לצילום שיקים",
+   "icon_url": "https://play-lh.googleusercontent.com/gs2y2J8HgSlGBzHi31Ii8DxRumdLJU6eQmc0N_uqP1HXGTB56mGUOI2vX8rksmhMt3hU7gdoxmglCTPTAeYxTQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/2E4xXgLhPU1AOGGKLL1-e6Dq6yaB0rbSFimpgv1KnVRorrxi66zmMybvXeoZvv59VAn7N6k4Cm9dkP_woRvO_5Y=h720",
+    "https://play-lh.googleusercontent.com/q1fpBG4Ilxur3VPYRLu-kxlL9ZhKuMl7_KUyxkqx6SQ5CzAVCU522EMeYzO5keTXCYDnsz7-H6gmoWM04gpUn84=h720",
+    "https://play-lh.googleusercontent.com/sNqxfgKteJUq7IHlm5IAuWpB-KEMy9Ux3zh9XZvSz_pVfxp1mPOYjbsUHqUHlGYAii-R2nuZVnc0PE-eWZS9x_I=h720",
+    "https://play-lh.googleusercontent.com/8b1RJQvsO8k5botd87yKLcmVUjpohUSd0eg4VwD-RN_-YDtj6kx_F2Uoe17WWDFNS9DMGfNF7gHOKibCJKkXdrI=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.pagi.nativeapp",
+   "sort": 121
+  },
+  {
+   "package": "il.co.firstdigitalbank",
+   "label": "וואן זירו",
+   "category": "בנקים ותשלומים",
+   "note": "הבנק הדיגיטלי ONE ZERO.",
+   "description": "מעל 190,000 לקוחות כבר נהנים מבנקאות הוגנת, שקופה ומשתלמת בבנק הדיגיטלי הראשון בישראל – ONE ZERO. \nאפשר להצטרף תוך 7 דקות וליהנות מתנאים מעולים והטבות מיוחדות, עם חיסכון של עד אלפי שקלים בשנה.\nמה מקבלים בבנק ONE ZERO?\n- פיקדונות בריבית הגבוהה בישראל\n- כרטיס האשראי היחיד בישראל ללא עמלת מט״ח בחשבונות One*\n- חבילת ONE travel הכוללת חבילות גלישה וביטוח נסיעות לחו״ל מתנה למחזיקי כרטיס האשראי של ONE ZERO\n- אפשרות למסלול השקעות בני״ע ללא תשלום בחשבון One+*\n- השקעות בשוק ההון ללא דמי משמרת וללא עמלת המרת מט״ח בחשבונות One\n- פיצ׳רים ייחודיים למסחר בשוק ההון בחשבונות One\n- מסחר בשוק ההון ישירות מהאפליקציה\n- העברות זה״ב מיידיות מהחשבון ללא עלות בחשבונות One\n- העברה בנקאית ללא הגבלה בכל החשבונות",
+   "icon_url": "https://play-lh.googleusercontent.com/ebHbM2xBid5yaJXSwGcnR7h07Zmx7IG01KgijsadYNCFOU9GqOYETcxUwB0AbYDwvbWMblFQkl8GcoCL7HnYZSE=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/cfZm-Cy5oCSZU3Pi6CgCyOO8eYbqxpy5vwkjILuFue-yZCfsnDd0BwKmu5F0UqgMLLqo74xG5wRy4S-fYF6TmOg=h720",
+    "https://play-lh.googleusercontent.com/syyz_FK7RsE9EJZqUgBNrFg_K5VfdX41P0GVtbkA5L1reTtsqcEmb0iPLHcewIabqa9RDbN03iryoVABe3Rn=h720",
+    "https://play-lh.googleusercontent.com/Cxji4MVltKFrmgwp7A_yLZEL8AxA-Kf6TRBfiZ-jev6yft_Z5aSIY5vT1ALKIK5nzc0Y_aQLOQesU2q0kZeI=h720",
+    "https://play-lh.googleusercontent.com/xhvrSic1dmZZ7rgbQmcxbQz11pi3IMvJvTKvKUjsURde8rN9dnOHR8UgcOnAtI9RxMvZClDfzxifEKXCOA_mew=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.firstdigitalbank",
+   "sort": 122
+  },
+  {
+   "package": "com.pepper.ldb",
+   "label": "פפר",
+   "category": "בנקים ותשלומים",
+   "note": "בנק דיגיטלי Pepper.",
+   "description": "נעים להכיר, PEPPER \nכל מה שצריך מהבנק שלך - באפליקציה חדשה ובעיצוב עדכני. פשוט, חכם וזמין מהנייד בכל מקום. בלי עמלות עו\"ש בסיסיות ובלי אותיות קטנות.\n\n• כל סוגי החשבונות שאפשר \nחשבון ש״ח יומיומי, חשבון מט\"ח, חשבון משותף, חסכונות, הלוואות, השקעות... הכל כאן, במקום אחד.\n\n• פעולות בנקאיות נגישות בקליק\nהעברת כספים, הפקדת צ'קים, הזמנת כרטיסי אשראי ו-Debit וניהול תקציב!\n\n• כלי לניהול תקציב\nממשק חדשני שמאפשר לך לעקוב אחרי ההוצאות וההכנסות, להבין באמת מה המצב הפיננסי שלך, להגדיר יעדים, ואפילו לחסוך קצת.\n\n• תובנות שימושיות על הכסף שלכם\nתמונה מלאה, ויזואלית וברורה עם הסברים פשוטים שיעזרו לך לנהל את הכסף שלך בצורה חכמה ובקלות.\n\n• שירות מעולה בכל רגע\nצ'אט שזמין לך 24/6. כן, גם ב-3:00 בבוקר.",
+   "icon_url": "https://play-lh.googleusercontent.com/kCqN1sebsU1y9EgockSIM88zykscu4VidnafQy3ApeebGC54AWdY5MPRK5R80mVN51522WLTKT4oli3aPWTjqQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/VN_3Dg0rJDQvMPijq9N-TiMMdq1KcW2FLjn4fMc8Ec9QRs-B6jh_hvwyMni7NnE-wXndP11GMpHdJkIc5ukkp20=h720",
+    "https://play-lh.googleusercontent.com/TdImyiCq564q8HdwJX8DnmS4zu4_-atH8sPf7OdhT4a0OQwpAIJcWDRP0PUKV_5S8QtmkHLdpN2XoMgS4wXpYg=h720",
+    "https://play-lh.googleusercontent.com/mIQO7Uzdqm_GbOOXjG_GoLKqaQBSZ5IBTV2KaAooqEKTSojhGr_XjQUrz9BnyLM7ZH6OMEzbII3vbhaSdH-Q=h720",
+    "https://play-lh.googleusercontent.com/hZBiZMqIKUhHECsdVV6hH27hiMvX5sN6kXV39eGzKYRyEtVBVPoIGJ5nszltSLI5Gq25pDE0S3DziB8mzKXTVmI=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.pepper.ldb",
+   "sort": 123
+  },
+  {
+   "package": "com.ideomobile.leumicard",
+   "label": "מקס",
+   "category": "בנקים ותשלומים",
+   "note": "כרטיסי אשראי max — פירוט עסקאות והטבות.",
+   "description": "האפליקציה שלנו כבר היום מועשרת בכל טוב ואנחנו מודים לכם על האמון, הפידבק והדירוגים בחמישה כוכבים מנצנצים. אבל אצלנו תמיד חושבים מה עוד אפשר לעשות ולכן שיפרנו, עדכנו, רעננו וחידשנו (חלקם בזכותכם, תודה!).עכשיו , יותר מתמיד, max היא כבר הרבה יותר מרק חברת אשראי ואת כל מה שיש לנו להציע לכם כחברה אנחנו רוצים להנגיש באפליקציה ולתת לכם מבט על התמונה הגדולה. כך במקום אחד תוכלו לראות גם את החיובים הצפויים לרדת, גם את החיסכון שפתחתם או הביטוח דירה אליו הצטרפתם וגם את הפינוקים וההחזרים שצברתם.\nבחלק העליון, יצרנו גישה מהירה לצפייה וביצוע פעולות בחיובים הצפויים לרדת, כרטיסים נטענים, כרטיסי מתנה, חיסכון, קריפטו ועוד.",
+   "icon_url": "https://play-lh.googleusercontent.com/MNXLJfB3LWb2MsTvkeZqpR1Q87qYMDbRplOoCXsmpBW3wXwBqgoWQhISa8oZV0_Ct-KofCI-mQcKhEo1jqur=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ZpPS_LH-Ju0PV6tTAU7i8TV1FIdlVoRAJ92xPOouqNKtbq0d-FZHGmCn8luthQANaZHLsBfAjcQjnxV7vicJHA=h720",
+    "https://play-lh.googleusercontent.com/SSev8YtuE6mypkSv8-V4ejUuMm7gSvaj4P68O9jQdCD9BZ3HV83fxVr0y5a4EmC1duv6w8wtshP9vzfeodbUqg=h720",
+    "https://play-lh.googleusercontent.com/4CNf7hclyqS2qnseg2VLydKwYxzX17Z9sZZi0CbECw0Tmot7KispbIb4BS7v8WIL_R5s40PinFt47KLGLC4oFxA=h720",
+    "https://play-lh.googleusercontent.com/43iG7mc_btoygOppr7n0NPtFjkamtzy_SqmB7y2btR1iQDNYnzw6bCvcg31avQwHXbuRW8Mge09lKctmVUyodw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.leumicard",
+   "sort": 124
+  },
+  {
+   "package": "com.onoapps.cal4u",
+   "label": "כאל",
+   "category": "בנקים ותשלומים",
+   "note": "כרטיסי אשראי כאל — פירוט עסקאות והטבות.",
+   "description": "האפליקציה עוזרת לכם להתעדכן בכל מה שקורה בכרטיסי האשראי שלכם בכאל - ויזה, מסטרקארד ודיינרס, לבצע פעולות בעצמכם, ליהנות מהטבות ומעכשיו גם לשלם ישירות מהנייד ב- Tap.\n\nעם האפליקציה יותר קל לצפות בעסקאות שעשיתם בארץ ובחו\"ל, כולל זיכויים ועסקאות בתהליך קליטה, לשנות את מועד החיוב, להגדיל את מסגרת האשראי בכאל, לשלוט בפריסת החיובים שלכם, לעצור הוראות קבע, לבקש הלוואה, לצפות בקוד הסודי, לחפש עסקאות, לבטל כרטיסים אבודים ועוד…\n\nהנה תזכורת לכל הדברים הטובים שתמצאו באפליקציית כאל:\n- האפליקציה מעדכנת את המידע שלכם כל הזמן. יש בה מידע מפורט על כל כרטיסי Cal שיש לכם, לא משנה אם זה כרטיס של ויזה, מסטרקארד או דיינרס, כרטיס בחיוב מיידי (דיירקט או דביט) או כרטיס עם חיוב נדחה.",
+   "icon_url": "https://play-lh.googleusercontent.com/f0GN5jiiiw3-6bFYzXv0VtjvAB48xj2BfDdWQe8jORhW_7rCNz1TzM2khK228QIyizeIYKJb_6ArGOpeHww_NQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/axzWeBhGKvji8DP7F7CTZ6msop8mrcxXwjA4l4t3zPHwORX8S4sYe8C5d3QYZvNzZPbEwFBNuDj8L7qkR_Jbag=h720",
+    "https://play-lh.googleusercontent.com/yI2Cy0nKnscj9KeGwyH2ndUkZk2lxOVCaYPVmxUgnAw_7RICdMyJAi_gHWd1DiN7n426CpXo44IjCtuw0oWM-Q=h720",
+    "https://play-lh.googleusercontent.com/5OLJtIGtU8eD-UH3C67EjW17otVZKBZnuzWS8Xizq0FQFzlUO_LV2ZUQpc4UYe3HRPyyF185W0tc_8U_hJerpqY=h720",
+    "https://play-lh.googleusercontent.com/uhRVzeTsw6gUinpBYuSyfv3wJ5gmtLAh9PLB1gk2DgVrv0kN7XwV71C5G8BrlEc2ePbsoEI3udInLJZhrwtqQg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.onoapps.cal4u",
+   "sort": 125
+  },
+  {
+   "package": "com.isracard.hatavot",
+   "label": "ישראכרט",
+   "category": "בנקים ותשלומים",
+   "note": "כרטיסי אשראי ישראכרט — פירוט עסקאות והטבות.",
+   "description": "נעים מאוד, אפליקציית ישראכרט, הבית של כרטיסי האשראי וההלוואות שלך.\n\nמה אפשר למצוא אצלנו?\n\n \n\nסטטוס כרטיסי אשראי והלוואות - כל המידע שחשוב לדעת על הכרטיסים וההלוואות שלך, כבר בכניסה לאפליקציה\n\n \n\nתצוגה חכמה של הלוואות - מה סכום התשלום הבא וכמה נשאר להחזיר? כל הנתונים מרוכזים במקום אחד. ועוד משהו שכדאי לדעת: אם יש לך הרבה הוצאות כרגע, אפשר לשלם החודש רק את הריבית ולדחות את תשלום הקרן לסוף ההלוואה\n\n \n\nתשלום בארנק הדיגיטלי של ישראכרט - אם הנייד ממילא תמיד איתך, למה לא לשלם איתו? נרשמים דרך האפליקציה ומשלמים ללא קוד סודי וללא צורך בכרטיס הפיזי באופן מהיר ומאובטח",
+   "icon_url": "https://play-lh.googleusercontent.com/pvhQDBMQbv0E6Vl3omYln62G3Kmkr9cja5oee3v7g3T_kcp9ASJIsgjiCYvStrLdOIrTz28eyO11CAmIsabeqWk=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/kLXNyGe8yOzrX2u41A5XEmuvBhl00VNrYHCbW_f2L6MbKeVHciNx78Lx_62nnqOqTC8HqE8sM3NEneHbdsrJjA=h720",
+    "https://play-lh.googleusercontent.com/rr1tq-CAFJmJwRlmmTdUB9Vm32MeIfwWQ6MiPxvCOrkS6FDpBDCmS7EAkwzwB1ZCcEI3_awcOs5v_3T9cOvDdeE=h720",
+    "https://play-lh.googleusercontent.com/9wc45iGI1ttxu32ArUYgQHkxAJCeBKRSerbHpuc0qKjT0UpijvBXlrs1333mc5z1R7Pqg4l_PPARIcWUH2cG3Q=h720",
+    "https://play-lh.googleusercontent.com/t0HvF1UFkNv9xVJqK13aycGYjqGd7GdNOI9GyJC5t0RMNaZ-kbLyrFDlTA4DpHfy-15EI54-92-VwTbkLrU45t4=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.isracard.hatavot",
+   "sort": 126
+  },
+  {
+   "package": "com.americanexpress.android",
+   "label": "אמריקן אקספרס",
+   "category": "בנקים ותשלומים",
+   "note": "כרטיסי אמריקן אקספרס — פירוט עסקאות והטבות.",
+   "description": "נעים מאוד, אפליקציית אמריקן אקספרס, הבית של כרטיסי האשראי והשירותים הדיגטליים שלך.\nמה אפשר למצוא אצלנו?\nסטטוס החשבון שלך - כל המידע שחשוב לדעת על הכרטיסים, הלוואות, הנקודות שצברת, כבר בכניסה\nלאפליקציה.\nפירוט עסקאות - אילו עסקאות ביצעת ומתי הן חויבו? על מה הוצאת הכי הרבה ובאיזה חודש ההוצאות שלך היו\nגבוהות במיוחד? באפליקציה אפשר לעקוב אחר החיובים בכרטיס ולצפות בתצוגה גרפית שלהם לפי ענפים.\nתשלום בארנק הדיגיטלי עם כרטיס אמריקן אקספרס - אם הנייד גם ככה תמיד איתך, למה לא לשלם איתו?\nנרשמים דרך האפליקציה ומשלמים ללא קוד סודי וללא צורך בכרטיס הפיזי באופן מהיר ומאובטח\nפריסת החיוב החודשי - החודש הוצאת קצת יותר מהרגיל? אין בעיה, אפשר לחלק את החיוב הקרוב למספר\nהתשלומים שנוח לך ב-3 צעדים מהירים.",
+   "icon_url": "https://play-lh.googleusercontent.com/cfA_7G5tg25kN4OmJKPd1LLvqVz-k8qVN_4wytrWd4CGsz97C_NtmsCWNjM7o-j3x46hgwhw_EJsIn8GE8CfPhA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/9jDTu5fY2liV2BG6CW8evCJ44yCruOwkNJedJmI5R5JRFqSp6Eyqoo8H64TGRIWpVfF74j0yzg5m4Z8IV4lEJg=h720",
+    "https://play-lh.googleusercontent.com/R84QpKsD6_nmiS-Dve--oJyBnmwy1JtRhSlMN9AkPC8xAaA5EOkCwi37PGFjK3ScUAPnWfO2Z-m76jGJc69F7Q=h720",
+    "https://play-lh.googleusercontent.com/gOjulOw9PtlSE3kD3tvAYtnGQEtbilSeN3R4tpwCUBo73zsnO2csr9IPgHH1zMPNutShQ8aGQuRIBgQEkf97=h720",
+    "https://play-lh.googleusercontent.com/Jy0ajyk2NluM7LXpwk7ehj0inWjL4PEQDBj7paAmQn8RN7SgLQk86vWblk8_fUvGWF9OdvlrG2YKxkrA_kfmUQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.americanexpress.android",
+   "sort": 127
+  },
+  {
+   "package": "clalit.android",
+   "label": "כללית",
+   "category": "בריאות",
+   "note": "זימון תורים, תוצאות בדיקות ומרשמים.",
+   "description": "מה השתנה? הכול! בנינו אותה מחדש עם עיצוב מתקדם ונקי, ממשק חכם ונוח\nלשימוש ומערכת מתקדמת שמתאימה את עצמה בדיוק בשבילכם.\n\nהנה כמה מהחידושים של האפליקציה:\n\n• עוזרים לכם לנהל את הבריאות - כרטיסיות אישיות שמציגות לכם את העדכונים החשובים ביותר ואת הפעולות שצריך לעשות.\n\n• כל השירותים במקום אחד - הזמינו תורים, שלחו בקשות למרפאה, צפו בתוצאות בדיקות, בדקו מלאי בבתי המרקחת ועוד...\n\n• פשוט להיכנס לאפליקציה - הזדהות עם קוד חד פעמי ב־SMS, טביעת אצבע או זיהוי פנים.\n\n• ביי ביי לפקקים ולבזבוז זמן - גישה מהירה לשירותי רפואה מרחוק ולשירותי התייעצות רפואית עם Tyto\n\n• חווית גלישה ממוקדת ונוחה - נווטו במהירות לשירותים השונים, הסירו הודעות שכבר קראתם, קבלו תמיכה גם בשפות אחרות.",
+   "icon_url": "https://play-lh.googleusercontent.com/9yi7wfvW6zHrbuKcLavv1p6j2-yHBwFRMNkmXBEitvMHt2Na8NgdJf1XreJ_G0Qz4fPqi0rVwDNjlRyy_s1Bjw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/L-1rEfAWAGhERvpVL64Uy8vSX5INc6MmtFS1Cj41WOOwC9pmaZ4e5sA69mSKs_fq_MF7m6xkQ7Kj52OYDGKK1jQ=h720",
+    "https://play-lh.googleusercontent.com/Psrsed5mjK58UzwxKDw95Yt2SxMtqyyJIzI8nDQB8raoI2_xnLJj9KU3dZvkee_YCZhbk9rbpEuOv7BQWlkfuQ=h720",
+    "https://play-lh.googleusercontent.com/VuSe-Zo588sp1gUUvSbvAx3FHlgzwg0rrI5_CCEii8gnLbzYxLEOrlnGwjW4u61YyuT3LprignDOKvGsqGKVQmI=h720",
+    "https://play-lh.googleusercontent.com/fVX_tMXf1PgBjmh8ExcsH3YlGq2FqXN3sCQPXoLf7QPIuBcmHh56qeycvBPI3mM67FJSwU6Y6JvXQPjK_AKK_Q=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=clalit.android",
+   "sort": 128
+  },
+  {
+   "package": "com.ideomobile.maccabi",
+   "label": "מכבי",
+   "category": "בריאות",
+   "note": "זימון תורים, תוצאות בדיקות ומרשמים.",
+   "description": "אפליקציית מכבי החדשה מאפשרת קבלת מידע רפואי אישי וביצוע פעולות בצורה בטוחה, פשוטה ומהירה\nהשקענו בתשתיות וטכנולוגיות מהחדשות והמתקדמות בעולם ובנינו ממשק משתמש חדשני כדי לאפשר לכם חוויה טובה יותר\nהאפליקציה החדשנית מאפשרת התאמה אישית של מסך הבית וכוללת מגוון רב של שירותים חדשים כמו סיכום ביקור, עריכת תור, קבלת סיסמה ראשונה, הזדהות בקוד חד פעמי\nוכל השירותים שאתם מכירים ואוהבים כגון: זימון תורים, צפייה בבדיקות מעבדה, בקשות מהרופא, הגשת בקשה לטופס התחייבות (טופס 17)",
+   "icon_url": "https://play-lh.googleusercontent.com/ASYkyXxblv8Fu3gbqOktWzNJz4nJSqlOjAtgi6AYlp_yHvGwl2nDKQ67WU4fRFnqaEArm4RT8peJVDNn-4lz=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/V4fOFrg95mrMQLdloMvSXWadqk5Uo28ZxQPRpEXCAxBJm5sJS86h4fzMMqN6xpllbgXP2d2TKFKTJuYgGVcRSA=h720",
+    "https://play-lh.googleusercontent.com/6HmzWp1yFpsi8Tvjc07jgHDDJzrlT5p0a19K896qAq3N_deYpoEO3zhl2PjTs8319XzoQUtHXShkBjhI-zwI=h720",
+    "https://play-lh.googleusercontent.com/fZ1jEGYKryVzOaH7qcyufbBK0f4eRJP8bCXCq8ivWfvHxHx3FLm4IKxEQzEba7EjhatMsNOhRfHqB-BMiS-QYyI=h720",
+    "https://play-lh.googleusercontent.com/SL_ASM0t6ySn-t-qIWPTk3qXjFR5GRf_imcfyHBfWIhQY1NNFZi-3EiiknmCzL656t4LVTLZNvisGU__n94ESQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.maccabi",
+   "sort": 129
+  },
+  {
+   "package": "org.meuhedet.android",
+   "label": "מאוחדת",
+   "category": "בריאות",
+   "note": "זימון תורים, תוצאות בדיקות ומרשמים.",
+   "description": "האפליקציה החדשה של מאוחדת היא בדיוק מה שאתם צריכים אצלכם בכיס: פשוטה, אינטואיטיבית, מדויקת ופרקטית.\nאז מה יש כאן?\n\n- זימון תורים\n- איתור שירותים - כולל מפות הגעה\n- פניה מקוונת לרופא: מרשמים, אישורים והפניות חתומים דיגיטלית\n- צפייה בתיק הרפואי שלכם ושל הילדים שלכם (אם גם הם במאוחדת, כמובן), כולל תוצאות בדיקות, סיכומי ביקורים, אבחנות, המלצות ותרופות\n- מעבדה דיגיטלית לבדיקת שתן ביתית\n- תוצאות בדיקות מעבדה ומכונים\n- קבלת קוד אישור זמני לביקור אצל רופא ללא כרטיס\n- צפייה בהתחייבויות\n- הזמנת כרטיס מגנטי\n- עדכון פרטים אישיים",
+   "icon_url": "https://play-lh.googleusercontent.com/k4ZD3DIcGNiCpSpLSUCljxUiwGRArf0hD8ckeJHNIUjRUVVhBPEqpp-DoMgQpFRSdqpmh3ZGBqu8yE9oGlkKnA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/sEmid2TIZnivkdUmJEPEiEvtgxzt85P66ivSLXu6sU6yf0gJ-FM-q8szMPE1U3_jd0P5X-b6r8K7ZiqNVhl_=h720",
+    "https://play-lh.googleusercontent.com/c-NTgGx1CHMIEYQfGpMDGSouCGsXlN1AX1A6CHfGwqq2WfTRxbfazsynD01fGqc8YmG9VzE8p3OPhurNQK41=h720",
+    "https://play-lh.googleusercontent.com/5Rr4wAIzYFsCsouV77Gc4KQwacTkpgVzMUrm8X9x16fliUmXZze5yMOHbUEYh_LIVWiRUpXiJw8XNwJYkWRFWg=h720",
+    "https://play-lh.googleusercontent.com/9zS6jIW2nzg-EMaCZWw7wh6ZqehNw9CrMyUBEIJ2IBc93juvCJW2o5PNNDEx0DITgh7ttEtO7MS9UyQuEsry8Q=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=org.meuhedet.android",
+   "sort": 130
+  },
+  {
+   "package": "leumit.mobile",
+   "label": "לאומית",
+   "category": "בריאות",
+   "note": "זימון תורים, תוצאות בדיקות ומרשמים.",
+   "description": "עם אפליקציית לאומית אפשר לנהל את הבריאות שלך ושל המשפחה בקלות, מכל מקום.\nזימון תורים לרופאים ומומחים, צפייה בתוצאות בדיקות, התכתבות עם הרופא האישי, בקשות התחייבות והחזר כספי – הכל ישירות מהאפליקציה.",
+   "icon_url": "https://play-lh.googleusercontent.com/I18h1nk7665CbRAjlO3E_ybqwrBquv5lcJNbTkJVXzdq7akd4uvrIdoPXk_4KrZ6Z-luOTRIhqwXidGF7SFhSt4=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/lybA4frBOxWRdK67sXHCBcjNiJkta2KcZR2yHczNrDu6lNWhJL4QdhMLKbpp5MIDZVO3tstyQBMO6tCm0E4C=h720",
+    "https://play-lh.googleusercontent.com/lg9cAZXVslAiUCI12CJnYK_VuEvq-0iHUm9m2OkOg6YdhEMO6KmDT-cbhh1WBrFbJnUTdQUcpw8HQMTF4uQ3Cw=h720",
+    "https://play-lh.googleusercontent.com/aQNNLSMwHj15wwB0JSBZXjQBrA0mbOu74DMKMaxIrJ5A114UdmgHN810MtcsHQSyugLM8weidnPAOwE28YgC=h720",
+    "https://play-lh.googleusercontent.com/3X6LWQO8MY2xP91JyNsGPChE7ZMFrqQdxBLnnO7UKEYbUwUIWB3-6U45I4tvKflIdn59yp_sViFnYhYQEL66j3U=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=leumit.mobile",
+   "sort": 131
+  },
+  {
+   "package": "il.org.mda.mymada",
+   "label": "מד\"א שלי",
+   "category": "בריאות",
+   "note": "קריאה לעזרה ומידע רפואי חיוני.",
+   "description": "האפליקציה הרשמית של מגן דוד אדום בישראל מספקת גישה מיידית לשירותי חירום, הנחיות עזרה ראשונה וקורסים והסמכות להצלת חיים. \n\n- להזמין אמבולנס או ליצור קשר עם מוקד החירום של מד\"א בצ'אט או שיחת וידאו בלחיצת כפתור. \n- לשתף מידע רפואי אישי ופרטי בני משפחה כדי לסייע לצוותים בזמן אמת. \n- ללמוד עקרונות עזרה ראשונה, הכשרות וההסמכות מקוונות. \n- לתרום דם, להתנדב במד\"א ולהתעדכן בחדשות רפואיות \n\nהאפליקציה נוחה וקלה לשימוש, תומכת במספר שפות וכוללת אפשרויות להתאמה אישית של אזור אישי, מידע רפואי, ובני משפחה. \n\nתכונות עיקריות: \n- קריאה לחירום 101 – שיחה, צ'אט, או וידאו. \n- שיתוף פרטים רפואיים להצלת חיים בזמן אמת. \n- מדריכי עזרה ראשונה דיגיטליים. \n- תרומת דם, חדשות ועדכונים רפואיים.",
+   "icon_url": "https://play-lh.googleusercontent.com/FoDFcN5zj0P7LBLnMiOm9v9iocFEUaXB0uW0dar8WreP_HYgowzjaOguD0D7vuPGWe3ZG5GGJgOy6F5uIEniEA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/AvJ35bIu9x1m3wywrcQtAEXiLiQ0yYYtSHtApMb2tT8W3HATO89wKMooxKUqsXd_YS1Zu3N8ndeYpaKHfdAP=h720",
+    "https://play-lh.googleusercontent.com/tLstJw3fQHwjK3iXCD9Rx5gD2eKV308D29HfvSkrnCaEzzElLJQYBYuegl-iR5E_-wDk6f0RruwwmJSPxaSs=h720",
+    "https://play-lh.googleusercontent.com/CoiPaMbcu7vTG8qaqQ8gmZCpidzr0UZfIjkSglCnZbDg9bOrE5k7dvA1BgvO-o6sZw7JGUf1SJ8WVsJZmzdIhQ=h720",
+    "https://play-lh.googleusercontent.com/-IVwo4M1jnCz9M0pDbRD49qz1c-dV4nNuNZ8kGShZVlysEYI15nEUYI3AOhX92MRiGHLgeatw4J_Y8dxy688IA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.org.mda.mymada",
+   "sort": 132
+  },
+  {
+   "package": "com.moblin.superpharm",
+   "label": "סופר-פארם",
+   "category": "בריאות",
+   "note": "בית מרקחת, מרשמים והזמנות.",
+   "description": "ברוכים הבאים לאפליקציית סופר-פארם אונליין, האפליקציה הרשמית של רשת סופר-פארם, הכוללת כ-300 סניפים בישראל ויותר מ-5 מיליון הורדות. עם אפליקציית סופר-פארם אונליין המעודכנת, תוכלו להשלים את הקניות שלכם ישירות מהנייד בצורה מאובטחת, מהירה ונוחה מאי פעם!\n\nמורידים היום ונהנים מחוויית קניות אונליין מתקדמת: מבצעים וקופונים בהתאמה אישית, מוצרים שניתן למצוא רק בסופר-פארם אונליין, אפשרות לאיסוף מהסניף, בדיקת מלאי של מוצרים בסניפים בזמן אמת, איתור סניפים, ועוד. עם סופר-פארם אונליין קונים את כל מה שצריך במקום אחד, בכל זמן ומכל מקום.\n\nכל הקטגוריות במקום אחד",
+   "icon_url": "https://play-lh.googleusercontent.com/s_4KtLSXJRdUDZVWwiHilzb6AayNzhM3jZLgwKeggXrBhMTJsROguZg2s7lBGHYxpalbJCed9WVJCinWRUs8ZA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ccIAfYHLPw5UpMMKl3X8oQCbu71lVNhaSjpgFTjd6k8aWada2Xc7MSLCi2cDHeog2rLp2gp_2zcEMMEHuQ9Oag=h720",
+    "https://play-lh.googleusercontent.com/E8V7T3VXXSkcn2eM9j_rq3xofm11QMdcg2_7w4HdKtxIbcBCfyJXIEJGpWlRxxE_iglc-3_wIR7_D0zK_BqvZ4k=h720",
+    "https://play-lh.googleusercontent.com/C1OZVgE_HwtAyjSGO8sItXqtqn5CsXAOb_Z0RD2TIn-OuCsLEZF7CHr4IVc-j9XM--53kaeaKpVgoN9xg1xtVQ=h720",
+    "https://play-lh.googleusercontent.com/12-M82V9Hcj2Xq7UbA3D0zaSSkX1D4ge4yks8jS3VJeuM-fG-8yYDrYlZsrollH2NKFapC_Y7zUMH8z15rqV_Q=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.moblin.superpharm",
+   "sort": 133
+  },
+  {
+   "package": "com.waze",
+   "label": "וייז",
+   "category": "תחבורה",
+   "note": "ניווט ועדכוני תנועה בזמן אמת.",
+   "description": "Waze היא אפליקציית ניווט מבוססת-קהילה, שעוזרת למיליוני משתמשים להגיע ליעדם בעזרת התראות מהדרך בזמן אמת ומפה עדכנית לאותו רגע. בזכות רשת הנהגים שלנו, אפליקציית Waze חוסכת לכם זמן באמצעות התראות מיידיות על עומסי תנועה, עבודות בדרך, תאונות, משטרה ועוד. משינויי מסלול ועדכוני בטיחות בזמן אמת ועד התראות על מחיר דלק נמוך, Waze היא קהילה של נהגים שעוזרים לנהגים אחרים. \n\nעם Waze אתם יכולים…\nלהגיע מהר יותר ליעד: המלולים הטובים ביותר עם הכי פחות תנועה \nלהימנע מדוחות: האפליקציה מתריעה על המיקום של ניידות משטרה, מצלמות מהירות ומצלמות רמזור\nלקבל זמני הגעה משוערים מדויקים יותר: על סמך נתונים בזמן אמת על עומסי תנועה, עבודות בדרך, תנאי מזג אוויר ועוד\nלקבל ניווט מבוסס-קהילה: עדכונים בזמן אמת מנהגים אחרים",
+   "icon_url": "https://play-lh.googleusercontent.com/d4dltd4baeDGnfJD1H-ut68ERsIynfywij9zHRL7ioB-PJW3ENw-bFgg08KGPo8zQfSyRW36e58xhlqQ0pE1gg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/K9_9vgPEKK_1u35yFY2TwU76X49hTOWm1grx3boG4091R2qUA1PhVNCXbdmph6UCPQx2aWj7GfXIjBamNg4teg=h720",
+    "https://play-lh.googleusercontent.com/Qxka9wwb1A4veP3C-7NIMQhFxwBTi-Q460TLpFa_xG8LnnepsP2aylDaZU0WjzSTOOFKw-EroEmvxTjBPgjL=h720",
+    "https://play-lh.googleusercontent.com/u68l-kc21JyxrEINIm7yxB-hc0cfG5J8fgyKCxUBIlDSYy3la8zHIDL1oMai_GKTsOr5kd5nDzuBljZ4uTKItA=h720",
+    "https://play-lh.googleusercontent.com/TIeNJK21oq0f9AslyyjKbkiltPjNHPNAaVqaCHBa9QuZ9wBgLCtHE7U3Vd-QCqPq-uBlLKm4dbrVXGfxT1oXJA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.waze",
+   "sort": 134
+  },
+  {
+   "package": "com.tranzmate",
+   "label": "מוביט",
+   "category": "תחבורה",
+   "note": "תחבורה ציבורית: מסלולים וזמני הגעה.",
+   "description": "מוביט מרכזת עבורכם את כל אפשרויות ההתניידות בתחבורה ציבורית, בנוחות ובקלות: אוטובוס, רכבת, רכבת תחתית, רכבת קלה, מוניות ועוד.\n\nיותר מ-1.5 מיליארד נוסעי תחבורה ציבורית ב-3500 ערים בעולם משתמשים במוביט כדי לנוע כל יום בדרכים בראש שקט, ללא דאגות.\nאנחנו מספקים לכם, הנוסעים, את המידע המדויק והרלוונטי ביותר, ומדריכים אתכם - צעד אחר צעד - איך להגיע לתחנה ואיך להגיע ליעד באוטובוס, ברכבת, באופניים, בקורקינט חשמלי, בכרמלית, ברכבת הקלה, בנסיעות שיתופיות או ברגל. במוביט תוכלו גם לשלם עבור הנסיעות שלכם בקלות ובנוחות ישירות מתוך האפליקציה!\nבדיוק בשל כך נבחרנו ע\"י ה-App Store לאחת האפליקציות הטובות ביותר בשנת 2017 וע\"י Google Play לאחת האפליקציות הטובות ביותר בשנת 2016.",
+   "icon_url": "https://play-lh.googleusercontent.com/FjTnfvZdHHgxETFVgd3B0H0VhmgNVBQo6zUK1jxU-1ddOeUa7hTsjvv-a-eQvVd5NbINrmRpXyqYwl8OA1sqrw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ghUtXdgyUGJ3S4GFQ59cPgQyhdkKtfyoV2GHigbyK378egKvItxZ6hC5jy2-vVpAEbc4SKitKFCUk4EthjduVQ=h720",
+    "https://play-lh.googleusercontent.com/-Q-bvmj4Gjh46dqOxI9Z8FBEdaMdWvrSvlqUoVrnWSy62nF7cuN-doKV3enomiVqSLcE_dy1NPtYlB-ybwa2Kyc=h720",
+    "https://play-lh.googleusercontent.com/qNvd0augImnBERybtrppb5QqR6jHB2Ab_I-h3bRrZLvA1B2mN-sJmDSWv-6e43ZqEQn_p4Qsh0F-VL86jcF6YQ=h720",
+    "https://play-lh.googleusercontent.com/h43nlPZwg7_A7DZRlfy4zSyH71WQll53CdOA-sp1fnScxe-IMjzlfqpGqlE4aV-S5NVNfePg8csRLfWYt-EODQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.tranzmate",
+   "sort": 135
+  },
+  {
+   "package": "com.google.android.apps.maps",
+   "label": "מפות Google",
+   "category": "תחבורה",
+   "note": "מפות וניווט.",
+   "description": "עם אפליקציית מפות Google אפשר לנווט בעולם בכיף ולהכיר בקלות מקומות חדשים. הניווט באפליקציה מבוסס על GPS ונתוני תנועה בזמן אמת, כך שאתם יכולים למצוא את המסלולים הטובים ביותר לנהיגה, להליכה, לרכיבה על אופניים ולנסיעה בתחבורה ציבורית. במפות Google יש תמונות, ביקורות ומידע שימושי על למעלה מ-250 מיליון עסקים ומקומות – ממסעדות וחנויות ועד מקומות שמציעים מוצרים ושירותים חיוניים לחיי היומיום.\n\nלנווט בעולם, בדרך שלכם:\n• מגיעים לאן שרוצים עם אפשרויות למסלולים חסכוניים בדלק\n• מוצאים את המסלול הטוב ביותר בעזרת נתוני תנועה בזמן אמת, הנחיות קוליות מפורטות ופקדי ניווט במסך\n• חוסכים זמן בעזרת שינויי מסלול אוטומטיים לפי עדכונים בזמן אמת על מצב התנועה, אירועי תנועה וסגירת כבישים",
+   "icon_url": "https://play-lh.googleusercontent.com/B8pdO_2K5nBsF0g1h6dKwV_jQFLP-XombGDEQGtJT-mw1EUKCKJpa9lBGCF4rP_MwCsozSXyvI3z19g9R3J4=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ySeICLMpNc_hmQOJJHz7mgMlxhTfbMQdf7bVrvfI88X2s9aggGXLG4ZETv2WyceJ0Z2GWWx4OCnudgeMGaIZ=h720",
+    "https://play-lh.googleusercontent.com/LvTiA8JehexJpiyg8GyyGYccORBw4zZgcs6suAb_acLmkMWi53YvmFL8HhLoPAH6Wlt6ruNJ7Sd802FMkftUtg=h720",
+    "https://play-lh.googleusercontent.com/_qPq9OOKXpVSmIKoWkzkmtD6ENSHpQHwBQ4rY-S4fDZGqexpEBskK40a2xuxL7_U4Jh8f9shDWo4blP1P_GJAw=h720",
+    "https://play-lh.googleusercontent.com/tM6BZ9oVH-sHqFx8Dii312-BYhRPAXDwpN-ZOli5icpjpJxwrsirdsrB-5sKQQIDaxa8tsCqYUYpBkQGUXLAceU=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.maps",
+   "sort": 136
+  },
+  {
+   "package": "com.moblin.israeltrain",
+   "label": "רכבת ישראל",
+   "category": "תחבורה",
+   "note": "לוח זמנים, כרטיסים ועדכונים.",
+   "description": "השקנו עבורכם אפליקציה חדשה, שמאפשרת תכנון נסיעה מהיר, יעיל ונוח, כולל שמירה של היסטוריית חיפושים והצגת התחנות הקרובות. \n \nשירותים נוספים יהפכו את חוויית הנסיעה שלכם לנוחה ויעילה יותר:\n- תזכורות לירידה מהרכבת\n- הוספת הנסיעה ליומן\n- שיתוף נסיעה \n- הצגת פרטי תחנות\n \n \nבנוסף - האפליקציה מרכזת הפניות לשירותים הבאים:\n- פנייה לשירות הלקוחות\n- תיאום נסיעה נגישה\n- בקשה לפיצוי\n- איתור אבידה\n- הגשת ערעור על דרישה לתשלום\n- תשלום חוב",
+   "icon_url": "https://play-lh.googleusercontent.com/Va7ogpvFG6XFMRNWm9hCVn2FYSHxznTpSxhJByZhK5PSC_y_1vh3toft19TBOHl8P6xi0a_qgqH1kP8Ox_ayuA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/yve4Dp80Rwx5ij5YqtX8DjbPsFd24ZHVe4bRaeACFC1bRD3Mrwz9epI5ZtiaFbv6zB7LceinVDMoQamPWUXmiw=h720",
+    "https://play-lh.googleusercontent.com/woLZHPLLSKaaoq0931xsuPUm7IJ3wAjMyQjATdx6lZIIlo5k51LIBTW4u2eMs2MwOi3sg5nD0DVagVJNMxkn=h720",
+    "https://play-lh.googleusercontent.com/kjhRGYDNaDZEwpqmqAwuUwYRJ5eEWQdwBwhj57AzXfUAK4EqkyUjWGRwrK5qRNKXo8w0kHEQV616rsCcwMQbN9Y=h720",
+    "https://play-lh.googleusercontent.com/pyCh39AllCDea4b6y5-e3_xbq4EQdTXgh2yCKnOQuBT_dLdhy2XgNWVR00xMC8tKqXCcq0xkW7xqggUof3h9=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.moblin.israeltrain",
+   "sort": 137
+  },
+  {
+   "package": "com.egged.egg",
+   "label": "אגד — Egg",
+   "category": "תחבורה",
+   "note": "תחבורה ציבורית בזמן אמת.",
+   "description": "🚌 Egg - אוטובוס קרוב ותחבורה ציבורית בזמן אמת!\nמחפשים אוטובוס קרוב? רוצים תכנון מסלול נסיעה מהיר? Egg היא האפליקציה לנסיעות בתחבורה ציבורית בישראל - חכמה, נוחה וללא פרסומות!\n\n🗺️ תכנון מסלול נסיעה וניווט בזמן אמת\nמצאו אוטובוס קרוב ואת הדרך המהירה ביותר באוטובוס וברכבת עם עדכונים בזמן אמת וזמני הגעה מדויקים. תחבורה ציבורית זמנים ישראל - תמיד מעודכנים!\n\n💳 תשלום באוטובוס בנייד - דיגיטלי, קל ונוח\nתשלום באוטובוס ותשלום ברכבת ישירות מהנייד - בלי רב-קו! תשלום תחבורה ציבורית מהיר ומאובטח, חיסכון בזמן ובמאמץ - ללא התחייבות ובלי לשלם מראש. פשוט סורקים את קוד ה-QR ומקבלים כרטיס דיגיטלי זמין בנייד.\n\n🚫 ללא פרסומות - תמיד!\nחוויית שימוש שקטה, נעימה וממוקדת בכם ובנסיעה.",
+   "icon_url": "https://play-lh.googleusercontent.com/4WUtKZuo7ER1GYCKJ4-17C8lKsmhtWFp5J9I3vMqunYPtQWP5QHNvisL949nGt1Xqqpzpdb5N9Uqhmcf92Y_=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/63WiX8gc3ImRIEmQ5b_9AmqLI2eudAwL-XbZ2kPpLiqD6wgEMhkvbVHC0RFlYW9uFOWpzuhYHiceUY-P0dUT200=h720",
+    "https://play-lh.googleusercontent.com/UaXp0LKUgM-AVmDK6GZ2hmxpqZuOEp_aL4qj5X5moqPsVYVeR7dzXXdOdjrAcn7Oud0QG8BHWs25MbgcW8bV=h720",
+    "https://play-lh.googleusercontent.com/UI5s0EVeruV2IKiAPQ6stahw9CExdN-v0VpABOKPMi0ZnPa9s7t7AitnTurfRmZ_IFUG3kTFEwcCdaFSDj5GKw=h720",
+    "https://play-lh.googleusercontent.com/abgBTdq3ReBvNx_m9_2QVwq25KuAHMBbEvSelMlE9IOcHcu54Qs4lnBh7gpc8xt4Ap26RfKJv1mlzqR6cKqcMA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.egged.egg",
+   "sort": 138
+  },
+  {
+   "package": "co.hopon.client",
+   "label": "הופאון",
+   "category": "תחבורה",
+   "note": "תשלום נסיעה בתחבורה הציבורית מהטלפון.",
+   "description": "הכירו את רב-פס: האפליקציה הרשמית לתשלומים בתחבורה הציבורית בישראל, אשר נותנת לך את החופש לבחור את אמצעי התשלום המתאים והמשתלם עבורך! \n\nתכנון מסלול ולוחות זמנים\nהמסלולים הטובים ביותר כדי להגיע ליעד שלכם בתחבורה הציבורית. מסלולים קווי אוטובוס .ורכבות ולוחות זמנים מדוייקים המעודכנים בזמן \n\n🤳 סורקים נוסעים\nנפרדים מכרטיס הרב-קו ומשלמים על הנסיעה ישירות מהנייד וגם נהנים מהנחות יומיות וחודשיות ללא התחייבות ובלי לשלם מראש\nאיך זה עובד? עולים לאוטובוס ובאמצעות האפליקציה מתקפים את הנסיעה על ידי סריקת קוד ה-QR הנמצא בסמוך לדלתות הכניסה והיציאה.",
+   "icon_url": "https://play-lh.googleusercontent.com/DiJQyck8YYSivQ9EBBrEICHn4oSsmPzsKkW-vcH2GQF89kHxgcNSclVGJd07ZGGKYc22gxd61WQfH_lVEetRrg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/acLUJPHbfwebFCUehTJb_m8HzuU4CKx2M-OSQxs6Qp01cfavbB-le0aaa_SyHo-PG4CuMm9G-x_ypR7rT229=h720",
+    "https://play-lh.googleusercontent.com/JD8yWRI9IPJfVJ6DHU27rsT1ksUpGYZDTnxQvNgS6YlQUmsz5_snaRjcVKK1QrH1_LI3SLWLAVyyeauuoJO14Q=h720",
+    "https://play-lh.googleusercontent.com/a-MZtcRgcn96toOE4B-WY1I8yGuTc2SU-as5MxVpJ6SRJ4asS0MukM9DcgfUOXOPRcC6rnjAGiSvu0qyoJrhwzQ=h720",
+    "https://play-lh.googleusercontent.com/NCI1A02n2GcdPwePyiOG5L5nueanxePlIZm1A9gLT-R41BuTkEDZb64wW6VGWSq8XvTLZSifmXZP9okVBZieONc=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=co.hopon.client",
+   "sort": 139
+  },
+  {
+   "package": "com.pcentra.ravkavonlinemobile",
+   "label": "רב-קו אונליין",
+   "category": "תחבורה",
+   "note": "טעינת רב-קו מהטלפון.",
+   "description": "רב-קו אונליין הוא שירות חדשני המאפשר טעינה של חוזי נסיעה בתחבורה ציבורית בישראל מכל מקום באמצעות כרטיס אשראי.\n\nגם אתם נוסעים בתחבורה ציבורית? משתמשים באוטובוסים, רכבת, רכבת קלה, מטרונית? מעוניינים לקנות כרטיסים במובייל? \nהצטרפו לאלפי הנוסעים שכבר טוענים את הרב-קו מרחוק!\n\nבאפליקציה תקבלו את כל המידע הדרוש לכם ע\"מ לבחור את חוזה הנסיעה המשתלם והטוב ביותר עבורכם בנחת, בנוחות ובמהירות.\n\nהאפליקציה מספקת שירות לנוסעים המבקשים לטעון את כרטיס הרב-קו שלהם או של נוסעים נוספים. הרכישה דרך המערכת שקולה לרכישת חוזה ישירות מחברת התחבורה הציבורית. חוזה נסיעה שנרכש באפליקציה יכובד ע\"י כל חברות התחבורה אשר נדרשות לכבד חוזה זה בדיוק כפי שהוא מכובד כאשר נרכש מנהג האוטובוס.",
+   "icon_url": "https://play-lh.googleusercontent.com/2Jfm-Fz6rMarACApoureWom_nTumLrQYH81raXtEZ4v2i3xNZDhX8cSnp3xAlbaNHO2HJQmFO6KikOBNmtQZ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/x63s0Y-VE2tPSjpikXtz9_ouJsffkPp1cZwEs9ZjXaJWG3JvPwxbROys7nQIxOnFhmUtnS7XjrItkQQyhaHaEg=h720",
+    "https://play-lh.googleusercontent.com/kg9ULsIHHWB16NUtnu9I9g02qjp12Es0K02qsWJ4cu_gAvMw5Q_r-QLuszMWidTdFcU6v9jcIsY2Q5Hgc-yH=h720",
+    "https://play-lh.googleusercontent.com/QrRcH0Kma1HTBUxOhoIbTGbsS1_VECE1gzZLL6vePx-nQsC-dCXmVQfY_YIytjVhv5WpsGkPj7mdYC5EaZrFcQ=h720",
+    "https://play-lh.googleusercontent.com/6ghmQNDak4nU4q0rc5bRG5fiVQuzzeqUqsgL27a39EuaDN1_ZqtSNljlIA9tgxQclx1lSwwMsakq9AqkwI3G5QU=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.pcentra.ravkavonlinemobile",
+   "sort": 140
+  },
+  {
+   "package": "com.efobus.efobus30",
+   "label": "איפה בוס",
+   "category": "תחבורה",
+   "note": "מתי האוטובוס מגיע — בזמן אמת.",
+   "description": "איפה בוס היא מערכת מידע מקיפה ביותר, שנותנת בזמן אמת מידע רב אודות התחבורה הציבורית בסביבתכם , והן מאפשרת לערוך תכנוני נסיעה עתידיים.\n\nמתאימה במיוחד לאנשים שמשתמשים בתחבורה ציבורית על בסיס קבוע, וגם למי שנוסע באוטובוס מדי פעם\n\nבנוסף לגירסה המיועדת למכשירי טלפון מבוססי אנדרואיד, קיימת גם גירסה לשעונים חכמים שמבוססים על Wear OS.\nהגירסה ל שעוני Wear OS, מאפשרת למשתמשים לעקוב אחר התקדמות האוטובוסים על גבי מפה המוצגת על מסך שעון ה Wear OS. וכמו כן ניתן לראות זמני אמת של אוטובוסים בתחנות נבחרות.\n\nבלחיצת כפתור תקבלו :\n• מידע מקיף על כל קו ותחנה – זמנים, מפות ועוד.\n• שעת ההגעה בזמן אמת של האוטובוס לתחנה שלכם.\n• מיקום אוטובוסים הנמצאים בדרכים\n• אזור מועדפים לשמירת הקוים, התחנות והנסיעות שלכם",
+   "icon_url": "https://play-lh.googleusercontent.com/bg0p3plpay-tEldFpo38WlfxWLfBDgv7BTBzbalDGv-9Wz75cq0Bg-H3gsY__xguhosfw6zVZPPJX_PMSrEsbcE=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/JlKDzY1po8XAblIIXzuYegyaBrE7Q32z5cyyiYaKcruawi09Lmg3rPHGWxRGO-HKprTy18xtfiO7shdohN7I=h720",
+    "https://play-lh.googleusercontent.com/s_r3_ki4nfWF-QHJLeOUA_uhFbzQqThJ696OifgDYFoA8GP1-zq3GPeFms6njG9UA8z_gba18mXch8Lxf7YUl-c=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.efobus.efobus30",
+   "sort": 141
+  },
+  {
+   "package": "com.mosko.bus",
+   "label": "אוטובוס קרוב",
+   "category": "תחבורה",
+   "note": "התחנה הקרובה וזמני ההגעה.",
+   "description": "אפליקציית התחבורה הציבורית המתקדמת והמדוייקת בישראל המשתמשת בג׳יפיאס המותקן על גבי האוטובוסים והרכבות כדי לספק זמני הגעה מדוייקים ומסלולי ניווט המעודכנים בזמן אמת. \n\nאיך זה עובד?\n\nהאפליקציה תאתר את תחנות האוטובוסים והרכבות בסביבתכם ותציג מיד את זמני ההגעה של הקווים לתחנות. השתמשו בחיפוש (לחיצה על זכוכית המגדלת בחלקו העליון של המסך) כדי לחפש מסלולי הגעה אפשריים מנקודה לנקודה ולקבל הוראות ניווט מדוייקות לכל מסלול ותעריפי נסיעה ולתשלום ברב-קו וברב-פס.\n\nבחירת קו במסך הראשי או דרך החיפוש תיקח אתכם למסך פרטי הקו שם תוכלו לגלות איפה התחנה הקרובה ואיפה נמצא האוטובוס שלכם ביחס אליה.",
+   "icon_url": "https://play-lh.googleusercontent.com/eNEMfIZfvF6uXUKae07PhIgqS0p65P4rggA-bn70P3kBRHvgxvzuuAKEDCxiy9UWob_1hvor4RstiJ81rO0v=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/oezNof8ooPBomIeuaDg7TPSYqWDfDVY7ku6vZuO4lxR748snPA6_5cuIzz1XNiDW2ESO98PxeTlS4SEUtuSNtA=h720",
+    "https://play-lh.googleusercontent.com/eWFOnT6TcxITxfwLoj9IGpxImZ1rzcXpfvZitMjlnmPrgb8tSZTgfIRvJt9iPhPcnV50h_fUwBU5N4Einl5l9A=h720",
+    "https://play-lh.googleusercontent.com/bqaxeYpLBTgPaHOtKexRhF828IwsB42oKIHoUjHywlY5ZvAtxwifLHWpqFSU0UEnoERfS5gQe1itFkLjCLJz=h720",
+    "https://play-lh.googleusercontent.com/QUgqPp7H-u-CaQDW5nLn6YqgTQK7qBL5QdqL3uzFFjTUWCI8x8hImNkw9_2wD3JNkFzJvbFh9l-aA6XqdQh2AQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.mosko.bus",
+   "sort": 142
+  },
+  {
+   "package": "com.gettaxi.android",
+   "label": "Gett",
+   "category": "תחבורה",
+   "note": "הזמנת מוניות.",
+   "description": "הזמינו מונית ונהג יגיע אליכם תוך דקות עם Gett!\n\nהזמנת מוניות, משלוחים מהירים, נסיעה מקומית, הורדה בשדה התעופה או נסיעת עבודה בטוחה?\n הורידו את אפליקציית Gett, פתחו חשבון ותיהנו מנסיעות נוחות במוניות ונהגים מובילים.\n\nפשוט להזמין ולבצע מעקב ותשלום בחשבון שפתחתם באפליקציית הזמנת המוניות עם הדירוג הטוב ביותר בישראל*. כך נוסעים בבטיחות, במהירות, ובקלות עם אלפי נהגים מורשים בכל רחבי הארץ. בצעו הזמנה של משלוח חבילה או מכונית לפי דרישה: השליח יחכה לכם ליד הבית וייקח אתכם או את החבילה בדיוק לאן שצריך.\n\n איכות במקום הראשון\nנהגי מונית איכותיים שקיבלו דירוג גבוה מהנוסעים! \n\n הזמנת נסיעה לכל רחבי הארץ",
+   "icon_url": "https://play-lh.googleusercontent.com/n_9jO1gaNOKg_akeZNVKvymmbAZJ9Ias0IWjfyuDQCy1Fx9bCF9-Skzl3ZXsFQfsANI5e4CiE0WLYIWsdOchlr8=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/M4zMVa23XwZ0ph90_tv0WRudv4pJSLEnWe9kubDJc4YxZ1Mvpm-5rCpfhpg2Ecjyw1X4nd9FzlT_s-U3KMv4Lw=h720",
+    "https://play-lh.googleusercontent.com/XRAL44c6Pn11PeOLch9LLUJb_TOhnZKoo6xPnGKqowvc1c6fd9Bs5b21NpFsXAjkid1X0v8JBQDqj7RBs2RDOIU=h720",
+    "https://play-lh.googleusercontent.com/wpokmbUCRFc8Gkp0ZnsVamuAGMNGZjfKyr32I2B7iNYvqfp01yND44JTPW5aCuYQnQawlo6MGlwIX-pCZNR2=h720",
+    "https://play-lh.googleusercontent.com/E4_XJhO8uIIv_29q35sPqyNf3tP3-WOWQT6KINF7mW4pO_QnlbjZ-AAxT2uSEwRXIJIgMd0a2kjtPd9vlbhrrAU=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.gettaxi.android",
+   "sort": 143
+  },
+  {
+   "package": "com.yandex.yango",
+   "label": "Yango",
+   "category": "תחבורה",
+   "note": "הזמנת מוניות.",
+   "description": "מוניות, משלוחים, מצרכים וחנויות\n\nמזמינים מונית דרך יאנגו עכשיו.\nתוכלו לתפוס מונית עם יאנגו בערים תל אביב, חיפה, באר שבע, אשדוד, אשקלון, ראשון לציון, פתח תקווה, הרצליה והוד השרון.\n\nואם אתם צריכים לשלוח למישהו חבילה או הזמנה דחופה מהעסק ללקוח, יש לנו פתרון גם בשביל זה באפליקציה: שירות המשלוחים Delivery!\n\nבזכות Yango לא תצטרכו לבזבז זמן על חיפוש חניה או לשלם מאות שקלים על דלק – המונית תגיע עד אליכם ותיקח אתכם לאן שתרצו. לא צריך אפילו להתקשר לנהג – רק לעקוב אחרי ההזמנה באפליקציית Yango, מרגע ששולחים אותה ועד שמגיעים ליעד.\n\nמזומן או אשראי?\n\nב-Yango אתם יכולים לשלם איך שנוח לכם, במזומן או באשראי. אם תוסיפו באפליקציה פרטי כרטיס אשראי, האפליקציה תחייב את הכרטיס אוטומטית בסיום הנסיעה.",
+   "icon_url": "https://play-lh.googleusercontent.com/Qe76orlRgxDMMzlKaKI4DJFeNAmcd1M7qPySrKgiCse8cbVEuL2fD8jNgRCUXkNUxwdiEIpV5QlNvoKG31tS=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/z8z54fPjNZUz9l_YMqI28CX3dzH-CmnbMqTtCJuYME_fqknZCMyLj4UiJn6vxrOjac7MQfWnvGcwFXidn2Pe=h720",
+    "https://play-lh.googleusercontent.com/na04nhXUU3CWMq8DHlB-B1BMsqemCyc0CoNZqAIfgekAJRgUH62-q9tLVemi8FUtgWLMOvIi4rhda0C4s4HWrw=h720",
+    "https://play-lh.googleusercontent.com/Y7d6T8SrsfVAuyvSaJVrTjl7KBFjyGJzVq8L61-MrGyHDopqc8NNfgj056IC-Mtfycu5oZQEa35Kz17-7Wua=h720",
+    "https://play-lh.googleusercontent.com/TtF9EfMnFLQdhZjkh5AffZMb7olbcep9S32yjrrx0uBT7qfDx695FZNrCAggPmonQZgXE2R3MMYh3LLmfAsZkiQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.yandex.yango",
+   "sort": 144
+  },
+  {
+   "package": "com.unicell.pangoandroid",
+   "label": "פנגו",
+   "category": "תחבורה",
+   "note": "תשלום חניה ותחבורה.",
+   "description": "פנגו (Pango), אפליקציית התחבורה החכמה לחניה, רכב ודרך המובילה בישראל, מציעה ל 3 מיליון לקוחותיה פתרונות תשלום כוללים אשר הופכים את הדרך לקלה ונוחה יותר. פנגו מרכזת במקום אחד את תשלומי התחבורה והשירותים הנלווים שנהגים ונוסעים צריכים. האפליקציה מאפשרת תשלום על חניה בכל הרשויות המקומיות ובמאות חניונים ברחבי הארץ, תשלום על מילוי דלק וכן על קניות בחנויות הנוחות של סונול, תשלום עבור שימוש בתחבורה ציבורית ( כולל נסיעה באוטובוס, ברכבת, בכרמלית וברכבת הקלה) , תשלום על נסיעה בכבישי אגרה, תשלומים הנוגעים לשטיפת רכב ושירותי חילוץ. כמו כן, החברה מספקת שירותים משלימים ללקוחותיה בעלי הרכבים ובהם איסוף לטסט וטיפול וביטוח רכב. עם פנגו חוסכים זמן ובכסף ונהנים משירותים מתקדמים היישר מהנייד שלכם.",
+   "icon_url": "https://play-lh.googleusercontent.com/oS1tExZr3WnRDtAyRBZRdunpaOUkpqeA1KuMKdtiHlSh4YiEkroci6bnJoPVbjnRoJaTd6qRNENCF3HPUu5kog=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/zq6ddpTUCgDhPX8kpN7v-ffZOal72dOdJHJQanBgZ-N3Xpf1lfc08zcLkPLPP31vqxqVZY_cqkibYQkEPDuwqA=h720",
+    "https://play-lh.googleusercontent.com/_SpbtHex6x_WJkFJk--jwAw5c8EdePPZRr5OBBhSR_-YSZVBvICVNicE3hqUdyTx1y5W4zoHcXV_GCXMiZPfw4o=h720",
+    "https://play-lh.googleusercontent.com/cxaHf8VR5_211dv9xcmVQxvouD4NwweF6iYJXXXPcKDK8RzpHjFXup77fG5Y5zC2Aqpn0BGwv_2KkZ_Oqwi62g=h720",
+    "https://play-lh.googleusercontent.com/n1u8T7AOI-uMDFesZG36F87WS3XhkEHKmH1jFd9jaRjUI0lRDm5dF2tyMKNz4ayDPovUOkZu7eQ1c2qe9cupwQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.unicell.pangoandroid",
+   "sort": 145
+  },
+  {
+   "package": "air.com.cellogroup.Cellopark",
+   "label": "סלופארק",
+   "category": "תחבורה",
+   "note": "תשלום חניה.",
+   "description": "Cello (לשעבר סלופארק Cellopark) היא אפליקציית החניה והדרך המתקדמת בישראל עם מגוון שירותים ויכולות.\n \nתשלום אוטומטי על חניה בכחול לבן בכל הארץ, שירותי תזכורות להפעלת חניה, כיבוי והארכת חניה אוטומטיים, סיוע במציאת חניה פנויה.\nתשלום במגוון חניונים כמו אחוזות החוף, סנטרל פארק, יאיר השחר, נכסי אריאל, קניוני עזריאלי, מליסרון ועוד מאות חניונים נוספים ברחבי הארץ.\nתשלום בכבישי אגרה (כביש 6 צפון, הנתיב המהיר), טעינה פשוטה של כרטיסי רב-קו (רב קו) , שירותי דרך וחילוץ, שירות תיקון פנצ'רים בפריסה ארצית, שירותי שטיפת רכב במחיר מוזל, הפעלה של מספר חניות מאותו חשבון והצעות ערך ייחודיות לעסקים.\n \nהשירות שלנו זמין 24/7 במגוון ערוצים >> וואטסאפ, מייל, טלפון, אפליקציה ורשתות חברתיות.\n \nאז בואו נכיר טיפה יותר",
+   "icon_url": "https://play-lh.googleusercontent.com/1eKNY0yq3iMltMo4K85exnc7FXOv-wFVTQeopjM-MrEg-1AQXG6qqlKb0hFP2zgjJYE2BqOe1ZOO5Sm1VQNDcoo=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/0Rve0P5qrByH28raIb8rCnOImHaAvFDBJh9U8SxMcgREBVJ_SOUrhLv8zER4RpTgjP1HSJdw9ltTbGZcKmhT2A=h720",
+    "https://play-lh.googleusercontent.com/CKk_NVYPXPpKftavttVUwtiSddPy06FfgtRcxDowcVAoHnWq5HX0TmYKvrs_6G-BW-TSoTI3cfheZVX5gSOW2w=h720",
+    "https://play-lh.googleusercontent.com/9R0u--p61QPsf9ZpC-hSLC6cPndrHpxlBpLpM2xJkxKgFcVp_vdCnqKi0Nhn96k4esWgVLrmDE1bVjDSEGHIqQ=h720",
+    "https://play-lh.googleusercontent.com/q8VDnhZdYb2NNC4CYx_k4kO4CrE2hsgSo8SYXe1OL2yM7ylxVOTc1tVmiGCCh5M6drZc_UFG7o5pCJupJedo=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=air.com.cellogroup.Cellopark",
+   "sort": 146
+  },
+  {
+   "package": "il.co.yellow.app",
+   "label": "פז yellow",
+   "category": "תחבורה",
+   "note": "תדלוק ותשלום בתחנות פז.",
+   "description": "נגיד שתורידו את אפליקציית yellow (וכנראה שתורידו), מה יצא לכם מזה?\nקודם כל, מתנה לבחירה בהצטרפות למועדון, ו-30 ₪ לתחילת הצבירה אחרי שמוסיפים אמצעי תשלום\n\nארנק דיגיטלי\nאם כבר מתדלקים בלי ארנק, אז מה, נבקש מכם ארנק בקניות? ברור שלא! גם בחנויות הנוחות של yellow, ובמגוון סופרים אפשר לשלם באפליקציה. תשלום נוח, פשוט, וגם צובר לכם כסף חזרה.\n\nתדלוק בלחיצת כפתור\nמוסיפים אמצעי תשלום לאפליקציה ושתגיעו לתחנת הדלק פז, פשוט תלחצו באפליקציה על \"תדלוק בצ'יק\", תקבלו קוד של 4 ספרות ותתחילו לתדלק. וזוכרים שדיברנו קודם על צבירה? אז על כל ליטר תצברו 10 אג' קאשבק. אפשר לתדלק עד 30 ₪ ברבעון.\n\nפז Charge | עמדות טעינה לרכבים חשמליים בפריסה ארצית",
+   "icon_url": "https://play-lh.googleusercontent.com/6cKkqlerMKSz0PSkLh4OFxPYdw2xWSVyh99-gZxwDSnPuVcbTM4MB9Wm63aQcYXgTzcTidsjguLeUEd1vgDezQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/AbAPoEQ9f8QhO1GQxPQPuHtQCtwVvUauIFIljqZKswPDYqEEJAGTfZSRbV7KuWa2nGnTB25z490ZKkrLi17feA=h720",
+    "https://play-lh.googleusercontent.com/Aqt9IvoWX9x4f5H-yUTJk2RuRRDasfSjqhobWHD1O8AfAPqtUJeUyewsCAj8hNCuxYd7JalPooxFU1DplHDhf8I=h720",
+    "https://play-lh.googleusercontent.com/8_zLfCFb5tITSvPtUY4FuvGyldyqH0vUlaeHEzwSRw9DRgXUp6wbX7l1cTjjEUT99iGLidRowkcJbUYNLsSXqMQ=h720",
+    "https://play-lh.googleusercontent.com/VocD3M-aBdp_tm3xYZMSsqPA1RW6w7XsIEm6NrjIBPq1pY20M8h32vUb5OirmyzoTdsFonBKlr-6u181AZT0Ew=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.yellow.app",
+   "sort": 147
+  },
+  {
+   "package": "com.doralonapp",
+   "label": "דור אלון",
+   "category": "תחבורה",
+   "note": "תדלוק ותשלום בתחנות דור אלון.",
+   "description": "תדלוק מהיר מהנייד\nבלי כרטיס, בלי ארנק, בלי להקליד את מספר הרכב ותעודת הזהות בכל פעם שרוצים לתדלק. כל הפרטים שמורים תמיד באפליקציה ואתם מקבלים תדלוק חכם יותר ומהיר יותר. \n\nהטבות שבאות בטוב\nמלא מוצרים באלוניות בהטבות שיש רק באפליקציה. אפשר לבחור בהטבות על הקפה לדרך, על חטיף או איזה מאפה בקטנה, על הפנס הזה ששכחת לטיול או החלב שבדיוק חסר לארוחת בוקר מחר. יש לנו הכל, ועם האפליקציה אפשר לקבל את זה יותר במחירים מיוחדים. \n\nמוצאים אותנו בקלות \nמתוך מעל ל- 220 תחנות של דור אלון, בטוח יש אחת שקרובה אליך. עם האפליקציה של דור אלון מאתרים בשניה את התחנה הכי קרובה ומנווטים בקלות לתדלוק מהיר או לאלונית. זה ממש נח.\n\nיוצרים אתנו קשר",
+   "icon_url": "https://play-lh.googleusercontent.com/uabwtkrBvNLZJ8UutVfAmXHdD9WxotrB9kyFE7PQ6a7Td3ogNpVwCaCxtubQZxSb6yKJianyhdyXhC6slz644Q=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/mYpBBp8UgH7hKUOLRD8fXPV7baptYzmZ6zcZzbeNCl-vrIfXCtyiRa5nZGRT_ItRCFGIT4MKkllLLZTu8CVCpA=h720",
+    "https://play-lh.googleusercontent.com/Fsl5PHwPQfFtlpTPFdGh2RkZD7z1el6iiuI57D7lh_jIkZ_u5NaNI_q7DYpPHY8-uCAltwyIGfMDLFB3sXYgAfw=h720",
+    "https://play-lh.googleusercontent.com/AVAS2RM3kZpWb0cxVC0r_vUspUTyj-0r2FUAJv9QGf2nLYD6DRFuy3MHmXQGC5EASwjY7frYYUDbyztT_ZJj1IU=h720",
+    "https://play-lh.googleusercontent.com/WiN0s__42MBUoZxyRDMgLc8q-9NdXlDu5GB-85K8OddHR7bcKdL57PCbDG0TpYFYW2eol9contdhUG540Tlct4I=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.doralonapp",
+   "sort": 148
+  },
+  {
+   "package": "com.sonol.mobileapp",
+   "label": "סונול",
+   "category": "תחבורה",
+   "note": "תדלוק ותשלום בתחנות סונול.",
+   "description": "שווה להוריד את אפליקציית סונול!\n\nאנחנו רוצים להפוך את חווית התדלוק שלכם לפשוטה, נוחה ומהירה יותר ועם האפליקציה של סונול תוכלו לחסוך כסף וליהנות מהתדלוק הכי מהיר בארץ! אם זה לא מספיק, יש גם תשלום ללא מגע, קפה ראשון חינם, צבירת נקודות goods ששוות לכם כסף ועוד הטבות ומבצעים בלעדיים שמיועדים רק לכם - לחברי האפליקציה של סונול.\n\nאיך צוברים נקודות goods ומה יוצא לכם מזה?!\n\nעם הורדת האפליקציה והרשמה, יחכו לכם 10goods מתנה וקפה ראשון טרי ואיכותי עלינו! ואז, בכל פעם שתיכנסו לתחנת סונול או לחנויות Sogood ותשלמו באמצעות האפליקציה (על הדלק והמוצרים בחנות) תמשיכו לצבור ולצבור (ולצבור) נקודות - אותן תוכלו לנצל למימוש הטבות שוות! באחריות.\n\nועכשיו, רגע האמת לטובתו התכנסנו.",
+   "icon_url": "https://play-lh.googleusercontent.com/sWbdf_hPuCFZE7BIWl2ytECR7pYmpt9WREpQym-pwSbv2lGWMxjwmhkf47EMbDQNP9c4TWhgagqG9Z6YnIDWPQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/lUx7t0k7WWYm85mdDqWTslTNynZq5RgfgZJOzDxBJagszfxwdEWuPqtV0m21KPFRNMnvON68MMKNWzXJM2n5Tc0=h720",
+    "https://play-lh.googleusercontent.com/xR1mTFB_Le1iRJ0NY1vrt65T3S1N0AkUG6x5kvOWuL_0hXweGCMqeyDi2FqXfbikU9rX65pLyBcUDUobGHI4bHQ=h720",
+    "https://play-lh.googleusercontent.com/lsF7YL2m6Iu1mYSFzLR_KV_Pxk2JgINNVrE4fF7USSgVkbrWdQBj1aRfLW2rinT6GdHbbT5auvmgBSkEei0brOM=h720",
+    "https://play-lh.googleusercontent.com/5inyWo1mGwIjYX0pRf2vbGt9ndfVx6ENh5bwuFwHeGHDZdtrAeba1uld4IfakPVz7wdevq23nRsgI9Krn-YyZw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.sonol.mobileapp",
+   "sort": 149
+  },
+  {
+   "package": "com.driivz.mobile.android.afcon.driver",
+   "label": "ON-EV אפקון",
+   "category": "רכב חשמלי",
+   "note": "טעינת רכב חשמלי ברשת אפקון.",
+   "description": "היי! 🚗⚡️\nנעים להכיר, ON – האפליקציה האולטימטיבית לטעינת רכבים חשמליים!\nמתיחת פנים ושדרוג לאפליקציית Afcon EV (אפקון טעינה חשמלית) המוכרת. \n\nרשת המהירה הגדולה ביותר של עמדות טעינה ציבוריות לרכב חשמלי בישראל* 📍\nדאגנו לך עם עמדות טעינה לרכב חשמלי ואפשרות טעינה מהירה לרכב חשמלי בכל מקום בארץ! עמדות הטעינה שלנו נמצאות במיקומים נוחים בתחנות דלק בצירים ראשיים, במרכזי קניות, חללי עבודה, ברחבי ערים, מסעדות, מרכזים רפואיים, מוסדות אקדמיים, מלונות ועוד. \nזו לא סתם עוד אפליקציה לטעינת רכב חשמלי, ב-ON ניתן לראות מראש את מיקום העמדה, הנחיות כיצד להגיע אליה וכן מידע בזמן אמת אודות זמינות, תקינות ועלות הטעינה בעמדה המסוימת.",
+   "icon_url": "https://play-lh.googleusercontent.com/YYd92WD07vLgAr1xpS_kOMGE5XjXHU1pvK4pXxNClkiu-FfrTuy68NXVwEiTCpfizOeoxlTq5Xs39fH9srXNgo8=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/teK92xlAE3yEPG4427WjvL5EWCv_ArGqxzVStMgy1cs0bAnbf1zM__aJBXXHzEQUShJDM4KA6fpV54zSOZs7kGs=h720",
+    "https://play-lh.googleusercontent.com/8HMsF0ueR14wOWKq0k8DWaPe7RTiywSxj_FerZ2KKN8co-mWcWNzWNWN6WrcIcMHs9L48xJD0ZZoH0tWbQnlRQ=h720",
+    "https://play-lh.googleusercontent.com/-962eCoEd2htEmuANug-VTDh3OniB2w6_FVRGzpvJIrK2M2tirDQt8aJuXzFHQP0YqWSfleVA-UwbDDd6de958w=h720",
+    "https://play-lh.googleusercontent.com/fMu_4SQKGNtwxu2An92WUhB5rgnnxi-_wtp3dU3krlu0oRihOspwwazDosq1AjB2oEuWzayJqa20XolOa80Bcg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.driivz.mobile.android.afcon.driver",
+   "sort": 150
+  },
+  {
+   "package": "il.evedge.evedge",
+   "label": "EVedge",
+   "category": "רכב חשמלי",
+   "note": "עמדות טעינה לרכב חשמלי (אלקטרה).",
+   "description": "EV-Edge עמדות טעינה לרכבים חשמליים נמנית על קבוצת יוניון. חברת EV-Edge היא חברה עם ניסיון עשירמאד בתחום הרכב, עם ידע רב בעולמות הקמעונאות וניסיון בשיווק ומכירה של מותגים מובילים בשוק הישראלי .\n\nלנו ב - EV-Edge קיימים שיתופי פעולה נרחבים בתחום עמדות טעינה לרכבים חשמליים עם הספקים המובילים בעולם, הפעילים מתחילתה של התהוות פעילות הרכב החשמלי בארה”ב ובאירופה, ובעלי למעלה מ-10 שנות ניסיון בתחום זה .\n\nפתרונות הטעינה שלנו ב- EV-Edge: \n1.עמדת טעינה ביתית - עמדת טעינה לרכב חשמלי בבית שלכם או בחניה .\n עמדת טעינה זו מציעה מגוון פתרונות טעינה חכמים המותאמים לכל צורך - בית פרטי, משותף או משרד:\n • הספק טעינה עד 22kW.\n • שירות לקוחות 24/7.\n • אפליקציה חדשנית לניהול ובקרה.\n\n2.",
+   "icon_url": "https://play-lh.googleusercontent.com/CpcWd9qakpm1d1qyygdaUxTwQBMcpBmfe_zhajzO3C39JbauJPH-mCjdUBxUwZNx7bZy7VkozhL-0pbhG2Nh6A=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/t09QNHsRL-dhQxpG_P4UHC7e_lmP8oqesnNvk7FCqD50yRL_4rVfgAKh2ZK1sw6_1PYgRWaz-ZF9EDo8-_q3=h720",
+    "https://play-lh.googleusercontent.com/pOdO3RCe342EuEoSUW7Su8Krv9pFWfRgSRTKsv2B-VclWgsZ3Te67p6sN8e19OlWoBRdGru9i2-pFNB8-jkK=h720",
+    "https://play-lh.googleusercontent.com/Flr4xzdoWOHNraoVwQk4BX5UToYHPRJWgixrWCnb0tepAZZortVaFW7-M4RBnKduPQzUT71Phbsu6PedDJo3zg=h720",
+    "https://play-lh.googleusercontent.com/Jk5WYg4JUuCsPFzTotMQP6l7Kk-bzcULdR-jHrRkh3-SCBy2JAVSjozmu57x2x-hnBcb6eOXsUJcAkBHNbz8nw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.evedge.evedge",
+   "sort": 151
+  },
+  {
+   "package": "gnrgy.android.emobilityapp",
+   "label": "Gnrgy Go",
+   "category": "רכב חשמלי",
+   "note": "טעינת רכב חשמלי ברשת גנרג'י.",
+   "description": "With Gnrgy Go, we have made EV charging a breeze. From finding charging stations to starting a charging session, this application provides users with a wide range of functionalities:\n- Real-time map of EV charging stations\n- Complete description of charging points including availibility status\n- Extensive filtering options to have charging stations list specific to user priorities\n- Reserve a charging outlet in advance\n- Navigate to the location of a charging station\n- Get authentication done with mobile application itself\n- Start/stop a charging session with just a button tap, easy as pie!\n- Bookmark preferred charging stations with favourite list\n\nLevel up with us, for an electric future.",
+   "icon_url": "https://play-lh.googleusercontent.com/7WaC1dKRy1yydlxL2FvqVzpvXcrmAzcOP6lRE8x8-yeWVyzqc77gcmTOmBNrHCRMg0F5W1hDo7vUTZwt0GTIrV8=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/Z8hXzX0QKGMH2Pvbxyis4iW_hUlNWuOc1SBBNvzqHF_IRXmNVQb_O6cbH2pM3huVqVHKAP2VNHQEsUQNXIUMtw=h720",
+    "https://play-lh.googleusercontent.com/ce5s3fImK0OCSc0xSu7sUCLTPou1zB2uiME_0d1TKrZzqR1BKKL8CX6NxkOVad3CYL7VRF0pfCxE55Q5n5Gr_A=h720",
+    "https://play-lh.googleusercontent.com/5AXWs60zv91jAWGye-ulq9a3G-h4IxefpSEQi7JNPQfLog34uijl5USdZpX1X771lAIPpoOFybgnOBVLchCb4bs=h720",
+    "https://play-lh.googleusercontent.com/7yGYFUpqkArW5QQElFY0eaGlvfYciRQTjpT_MIRkmUF1GX6QBvRp1g5Ato2YYv6PU9VIWxtdFFtViA2xN1iO1g=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=gnrgy.android.emobilityapp",
+   "sort": 152
+  },
+  {
+   "package": "com.driivz.mobile.android.greenspot.driver",
+   "label": "גרינספוט",
+   "category": "רכב חשמלי",
+   "note": "טעינת רכב חשמלי ברשת גרינספוט.",
+   "description": "גרינספוט הוקמה במטרה להקל על אימוץ הרכב החשמלי באמצעות הנגשת עמדות הטעינה לציבור\n \nהיישום שלנו מכוון לנהגים, ציי רכב ורכבים משותפים, והאפליקציה שלנו משתמשת במיקום שלך כדי להציג את כל עמדות הטעינה הסמוכות אליך ומבטיחה כי הסוללה ברכב שלך לעולם לא תיגמר. אנו נספק מידע על מיקום העמדה, זמינות, רמות הטעינה השונות ונגישות.\n\nברגע שתחליטו על תחנה, תוכלו פשוט להתחבר ולשלם באמצעות האפליקציה\n\nעם אפליקציית גרינספוט תהיה לך גישה למגוון אפשרויות\n1. מפות - מצא עמדת טעינה זמינות בקרבתך\n2. התראות - קבל עדכונים חיים על מצב טעינת הסוללה ברכב\n3. תשלומים - לבצע רכישות מאובטחות באמצעות האפליקציה\n4. מעקב אחר מיקום - באפשרותך ולשמור מיקומי עמדות אשר בהם אתה משתמש \n5. היסטוריה - עקוב אחר פעלות בעמדות טעינה קודמות",
+   "icon_url": "https://play-lh.googleusercontent.com/J4zhbOeCHMfPgkr6SyddEDX5ELFUmAcBRrTPabr_Kfqx6e5Mhn6HXNv9GMvKu6HYhuoaoFhwctJnedvTy3Cb0g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/z8dhkybvzX7srw1H-rDgCXobjqMXYlofOxJs6Ijk83XmasSOXFT--dFkCb9VIdASTDNz6hDvGMWSvlM-Zojrhg=h720",
+    "https://play-lh.googleusercontent.com/2PccEC2IPwHwugXFyx1xYbDdzAPQPLjdsD0FswtPcIZ7KztP3TbhypcHfqgSx3yC585JzL6jgx_pSFt3O2eFzyk=h720",
+    "https://play-lh.googleusercontent.com/7Nnf5nALPasPmr0q8g1nMFgYCv4-OVyzmK-2Oefr1ifsDfDjX2r_tePerCrJyHnqDFTlR79gdSpQQ_Z3qUW_uno=h720",
+    "https://play-lh.googleusercontent.com/tFu69ItKnbYFNe2ZGlF_Wb8jXQh8u7CptUGFKfUzmLBHp4F2jOUxxmwwNkKakAbmNIZY4dHXDVtk4EpRWnQJbg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.driivz.mobile.android.greenspot.driver",
+   "sort": 153
+  },
+  {
+   "package": "com.driivz.mobile.android.evi.driver",
+   "label": "סונול EVI",
+   "category": "רכב חשמלי",
+   "note": "טעינת רכב חשמלי ברשת סונול.",
+   "description": "!ברוכים הבאים למהפכת הרכב החשמלי בישראל \n סונול EVI, מהחברות המובילות בישראל לתשתיות טעינה חשמליות, עם פריסה ארצית של \n מטענים במיקומים נבחרים. באמצעות היישומון של סונול EVI תוכלו להטעין את רכבכם \n בנוחות ובמהירות מירבית. היישומון מאפשר לאתר את המיקום והזמינות של המטענים \n בסביבה הקרובה ולנווט לשם. מספר נקודות הטעינה ברשת הציבורית של סונול EVI גדל \n !בכל חודש\n\n :היישומון מאפשר גישה לשירותים הבאים\n- עמדות טעינה מהירות KW22 (AC) ואולטרה מהירות KW50-150 (DC)\n- מפת טעינה ארצית המציגה את זמינות המטענים בזמן אמת\n- ניווט למטען קרוב \n- הזמנת מטען מראש\n- התחלה והפסקת טעינה ישירות מהנייד\n- צפייה בחשבוניות והיסטורית הטעינה\n- גישה וניהול חשבון אישי, אמצעי זיהוי ואמצעי תשלום\n- קבלת התראות לנייד",
+   "icon_url": "https://play-lh.googleusercontent.com/W5JS2LgKU16v5oszm4mL-Rnh0PlCFaSsXLZn-bE2Amo2fBGC5Je5Nz4jMwoeisOs0TPzun6FailMylHVe85uICY=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ZQwGNZfekP0xRiQMIFK3kSyFNi9dOpZviAA0gnsJ4VBoDRr0JwRMmKuocL20s-rIDUywJdH_0EmLH-BrB_cv=h720",
+    "https://play-lh.googleusercontent.com/unGydVYxhwrMIo4ygpE6XLK43drvKVEfsQp8zHIDBLzHjR2Yu5ytLkPbKNrcS2AFLt9h9DYWxzDveJX2yAjh_A=h720",
+    "https://play-lh.googleusercontent.com/V6romCxQDcjcoMMz8fVspjOx9faVZhJ-3XljS6TWTqDOWyKbC0bV3x5I2QOmtl4sPvsmNUJuHjp4K5ybQrJfQA=h720",
+    "https://play-lh.googleusercontent.com/aaMt0OzTV8oOb_hh_mPJM6DNaGl_kDHJVWLL3iY5foh--Xb-qW8xWCEn5OkSQLWfUcvt5kpE2SZgiuzM5PZ62g=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.driivz.mobile.android.evi.driver",
+   "sort": 154
+  },
+  {
+   "package": "energy.wevo.doralon",
+   "label": "דור אלון EV",
+   "category": "רכב חשמלי",
+   "note": "טעינת רכב חשמלי ברשת דור אלון.",
+   "description": "טעינת EV חכמה של דור אלון אלקטריק. מאפיינים עיקריים:\n- שלוט במטען EV שלך וייעל את עלויות הטעינה שלך.\n- הצגת היסטוריית טרנזקציות.\n- נהל את התשלומים שלך בצורה פשוטה ומאובטחת.\n- מציעים פתרון מצוין לעסקים ולציים, עם הפריסה הטובה ביותר בישראל.",
+   "icon_url": "https://play-lh.googleusercontent.com/58mEiwyT8NdAMVzJeoiVKmXVlbCuQZoHZaio-4Zav7hVOvKoelWTumE5SUtTMcyhI7l6qlTS_5jvdi_Iz2MtFcQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/8nIYq1JmNJUqrupK7uEBB3aDBULBowLdtJS1UoYdXibh6S_JnARC8BnzXK7S_zHELKvJnaBJea0j86edtAfKIw=h720",
+    "https://play-lh.googleusercontent.com/Baa-kxzH2kP8MWWPT-wPCKu4jW7K7FBCCxXAvTKaHDrj4G_CqNnZfQ_fDG1BCCUVhdYhck2bc0CZwS-1tRGW=h720",
+    "https://play-lh.googleusercontent.com/u1gN6Uwmxb_g3i_RSXHISlCDPwypEtclXy_DxvdkeyWpE9OYiyzEsps7RNmrf4nOPGd01_pivITjDKOYcSNsxA=h720",
+    "https://play-lh.googleusercontent.com/_PoTgSbv4rECZ7f4phMiqp4yscLuc04L-OvdIsfE-vY0JnIOBN5wW4WuUZRxhdghiUEVLKMlLsjY704e1XKMr4Y=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=energy.wevo.doralon",
+   "sort": 155
+  },
+  {
+   "package": "com.acdcproject",
+   "label": "ACDC EV",
+   "category": "רכב חשמלי",
+   "note": "טעינת רכב חשמלי.",
+   "description": "מחפשים טעינה לרכב חשמלי?\nעם ACDC EV תוכלו למצוא עמדות טעינה לרכב חשמלי בכל מקום בישראל - בקלות ובמהירות.\n\n🔋 מצאו עמדות טעינה קרובות אליכם\nהאפליקציה מציגה מפת עמדות טעינה מתקדמת עם אלפי תחנות טעינה בפריסה ארצית.\n\n⚡ טעינה פשוטה עם צ’יפ אחד\nהתחברו לאלפי עמדות טעינה באמצעות צ’יפ טעינה חכם ותשלמו רק פעם אחת בחודש - חשבונית מרוכזת ונוחה.\n\n🗺️ ניווט מהיר לעמדות טעינה\nמצאו תחנות טעינה לרכב חשמלי ונווטו אליהן ישירות עם Waze.\n\n📍 מעל 2000 עמדות טעינה בישראל\nגישה רחבה לעמדות טעינה AC ו-DC, כולל טעינה מהירה בפריסה ארצית.\n\n💼 פתרון מושלם לפרטיים, חברות וציי רכב\nניהול טעינה מרוכז, שליטה בהוצאות והתאמה לעסקים ונהגים פרטיים.\n\nלמה לבחור ב-ACDC EV?\n✔ טעינה לרכב חשמלי מכל הרשתות במקום אחד",
+   "icon_url": "https://play-lh.googleusercontent.com/ZKR3SWe6MiaAf5Ln6fIGwD2EQpL0F5dmSIcC7OmXMEWZ4pGiRnkq95aDad_ub8igmnbyYTbTdUxygn1fl_UD8w=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/3xaoeerOagNASGnzOV4PVCjwRBXWuCZxU4mik4EXYB604vBzdjw0LDIVXtZp5pI3HpUyq00YYlCoUw3ABvl6uQ=h720",
+    "https://play-lh.googleusercontent.com/sz54O4hme2aacNoN-Dx3q5U5BYJ_mily7KFuaHiFkLETrjTLBL0cMkCPWQZCNHNUsHkt1lIGCUQDhSAYvKdf=h720",
+    "https://play-lh.googleusercontent.com/CHbg2bItqTLAfI8LN0SkuE2Zwu7_LIGD9w68WxGSmK0o2zRrkOnbuFL18BRzHVjroIcWHtmTRMKWYyy3j1HVKw=h720",
+    "https://play-lh.googleusercontent.com/IOn_US-DHb_letEOfi9aKqCApvsBopz0POvFKYwngBoukb6_yk5U2CyPb3Yzc9uyDDNM0vNyZ5HtGAArGqUxLQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.acdcproject",
+   "sort": 156
+  },
+  {
+   "package": "com.nayax.evcellcom",
+   "label": "EV סלקום",
+   "category": "רכב חשמלי",
+   "note": "טעינת רכב חשמלי ברשת סלקום.",
+   "description": "תהנה מהחופש להטעין את הרכב החשמלי שלך בכל עת שתצטרך עם אפליקציית סלקום EV שלנו!\nאפליקציה קלה ונוחה לשימוש. \nלאחר התקנת המטען, הורד את האפליקציה, סרוק את הקוד QR הייחודי הכלול בערכת ההתקנה שלך והתחל לנהל את הטעינה שלך.\nניתן לשתף את המטען שלך עם חברים ובני משפחה ע\"י שיתוף קוד ה-QR שברשותך.",
+   "icon_url": "https://play-lh.googleusercontent.com/0f0HF1-Ow4e06ureu8K0S8DrZ9ln3r5aOfq7WxkoJlXNG-a4L1iq_E6NloI9OK99xqCC5VdQMA0XIwCJjqz3gLo=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/jMxtcHtSuypstJNmwx3NdQ2DHbeaM6NVVk5_m0Of1lEZ8m6nNYx45TrXdgCcCHGY8VUWnB7Rmvzt-FhQ-ZvMjg=h720",
+    "https://play-lh.googleusercontent.com/28aXIHS38MoAN4LsOQjIhGybKaL6XTtAeZFF9Yb4iHqBUhFhkbGu2M9H65MfsUz4K5KvSPsU3fTspwz--CVN=h720",
+    "https://play-lh.googleusercontent.com/nsaZn_TWcA14bNu6UdnJINN0NfO6y5dXlkxsMSjWYP81XCrLH_gJWnwxol-VNG4EyuaY28y_vL6zFeQ4Svgj=h720",
+    "https://play-lh.googleusercontent.com/aR_Uv1D9_cp4w_EhS_tCH7NK8TUT9RJ40DuRQRqcDTTWTnrlyv5dAA_dbBTxNznH9Cc_ovoBRZqQwb0MbSdgKm4=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.nayax.evcellcom",
+   "sort": 157
+  },
+  {
+   "package": "com.xatori.Plugshare",
+   "label": "PlugShare",
+   "category": "רכב חשמלי",
+   "note": "מפת כל עמדות הטעינה.",
+   "description": "הורידו את המפה הכי מדויקת של תחנות טעינה לרכבים אלקטרוניים וטסלה. \n\nPlugShare היא הקהילה הכי גדולה בעולם של רכבים אלקטרוניים. נהגים כותבים ביקורות ומעלים תמונות של תחנות כדי לעזור לקהילת הרכבים האלקטרוניים לקבל את ההחלטות המושכלות ביותר בנושאי הטעינה. \n\nנהגים יכולים לסנן את המפה של PlugShare לפי סוג שקע, כולל CHAdeMO ו-SAE/CCS, ולפי מהירות הטעינה, כולל רמה 1, רמה 2, ומטענים מהירים של DC, למשל תחנת טעינה מהירה של טסלה (Tesla Supercharger). ניתן לסנן גם לפי ספק הטעינה – המפה של PlugShare כוללת מידע מפורט לגבי תחנות עבור כל רשת טעינה גדולה של רכבים אלקטרוניים באמריקה הצפונית, אירופה וברוב האזורים האחרים בעולם, כולל:",
+   "icon_url": "https://play-lh.googleusercontent.com/7Yhjfdd3wWxZng2M7hazWqMhvIlvkVXmuY6CS7xlOsyVdcbpPQcLbrLVqmuH_BSXWs_q7a3MsIKm3kqH_2m4=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/s5oRty3CzByQpx2VgPyXfgRxt7Y-OFuMpPFpF6Jb6y5kwwBi9dLPhkVcuPf9rSlnmLjbMiJ7rSeiDafulZgN=h720",
+    "https://play-lh.googleusercontent.com/gGH1q-1nVd9FV8ZnWgHTix6nq0FDzVOoTWQrlJrHyTwhjlxIa5M3WfkThAibUcYN0bm_2im1G8hJAcEjJsko5A=h720",
+    "https://play-lh.googleusercontent.com/NDaPsobfU0Yn45uX_pwNfwVdLEJCtvs8W4lixipO4BB6-8mXz18B9Tds6iy8kPMr5CJY5Mb-myeW3aYfTioR=h720",
+    "https://play-lh.googleusercontent.com/l5QiwtoNNh-eN7yp0g4jSfeglH6Mp6qNSla7PucgLPEi9GdoGWQDmC2v9qu7kkJJHRiAICTsfNT5kPKmIv3IhRs=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.xatori.Plugshare",
+   "sort": 158
+  },
+  {
+   "package": "com.teslamotors.tesla",
+   "label": "Tesla",
+   "category": "רכב חשמלי",
+   "note": "האפליקציה הרשמית לרכבי טסלה.",
+   "description": "אפליקציית טסלה מעמידה את הבעלים בתקשורת ישירה עם הרכבים שלהם ו- Powerwalls בכל עת ובכל מקום. באמצעות אפליקציה זו תוכלו:\n\n- בדוק את התקדמות הטעינה בזמן אמת והתחל או הפסק טעינה\n- יש לחמם או לקרר את המכונית לפני הנהיגה - גם אם זה במוסך\n- נעול או בטל נעילה מרחוק\n- אתר את הרכב שלך עם הוראות או עקוב אחר תנועתו\n- שלח כתובת מהיישומים המועדפים עליך כדי להתחיל בניווט ברכב שלך\n- אפשר לנוסעים לשלוט במהירות בתקשורת\n- נורות פלאש או צפרו לקרן כדי למצוא את רכבכם כאשר הם חונים\n- פתח או סגור את הגג הפנורמי\n- הזמן את הרכב שלך מהמוסך שלך או מחניה צמודה (לרכבים עם טייס אוטומטי)\n- עדכן את תוכנת הרכב שלך מכל מקום שאתה נמצא\n- התחב עם Powerwall: עקוב אחר כמות האנרגיה שנאגרת מהשמש, המשמשת את ביתך או מיוצאת לרשת",
+   "icon_url": "https://play-lh.googleusercontent.com/UzdRAQDS0HBndAYrjplxcf0qEEEoC-NNZQcefNOJeLN8nrtybgUN2ZxWHZ7WOzxR8ASPrjR57zzkaPWQDXA7=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/0BZzaTKTdbrxN43-TuFAtR4JdXPpDGlP3fEt94vraHuIL_Ch8QJdQhAlZT0F9KVsv03-X-ZBvUQJqYZVtiy3=h720",
+    "https://play-lh.googleusercontent.com/lIjtevCMwNJfGp8J50gIfZv91ZO2YS3Lx5G6ugKNvmOc2MP2eRF_qrbpZpp2ChgDckIm9flf7r54jm9wvNed=h720",
+    "https://play-lh.googleusercontent.com/X0tX2pGIAIOp3yp41R1oUH5VCWRFaAVb6Lr9AJhn9hPXRbtutYPwPadPgay49-Ag9sh-9qqKhaNvG-hcHRojOw=h720",
+    "https://play-lh.googleusercontent.com/RbzjXXw5CEIHfTJ_bGuiIwXHtZLze_81wTfQsPCWLOR38027elkHh1NKbGQ40hgIC4J70uwYpvcgZrIfLnU4=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.teslamotors.tesla",
+   "sort": 159
+  },
+  {
+   "package": "com.Shufersal",
+   "label": "שופרסל",
+   "category": "קניות ומשלוחים",
+   "note": "קניות בסופר אונליין.",
+   "description": "שופרסל גאה להציג את האפליקציה הכי שימושית על הסמארטפון ☺ הכוללת מגוון רחב של שירותים דיגיטליים מתקדמים ללקוחות האונליין וסניפי הרשת.\n\n קופונים ומבצעים בין אם אתם קונים בסניף או מזמינים קניות במשלוח הביתה, התחילו ליהנות ממגוון הטבות ומבצעים שחוסכים לכם כסף.\nהקופונים והמבצעים ניתנים לשימוש ברשתות שופרסל השונות: שופרסל דיל, שופרסל דיל EXTRA, שופרסל שלי ובאתר שופרסל Online.\n\nשופרסל Online במשלוח עד הבית מהיום למחר \nהזמנת משלוחים עד הבית ממגוון הפריטים של רשת שופרסל: סופרמרקט - מזון ומשקאות, רשת Be - מוצרי פארם בישום קוסמטיקה וויטמינים, רשת GREEN (גרין) למוצרי בריאות וטבע. מוצרי חשמל, מצעים, מגבות ועוד מגוון מוצרים לבית. בוחרים מועד למשלוח וממלאים סל בקלות ובמהירות ומקבלים את המשלוח עד הבית!",
+   "icon_url": "https://play-lh.googleusercontent.com/9mv3OPWhh6jq0cPgxfkCZNzqOc6BtEHu6UzbwgJ3JyMxYrIQo9lxS1GD72Z2dJy1Ooe2ripvSq_IZw6QYaH9=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/xsSxUatN7-EOIuV5J2v7ZICtSjr3sUkPb6d9pNfV-c7LHEaOVVGaa9YYvKQTHzNS4e5RBbcyf49FG_ZOEW_pcg=h720",
+    "https://play-lh.googleusercontent.com/oWGIyJtlsSykTzw8KnQZfKMPJWNKZ9JMp83GdOnhp2YjJP2mb3cF1fq6Rx306aZeImcngBFnTCHz-OgrcQx2=h720",
+    "https://play-lh.googleusercontent.com/PBySZ95e5X-AwZewfQDmK8B93jL3Io5kyprkZ2hqkOwJ6ieQCHBJTkE-tPNLLGOQYNAjtg8-kU9pZChvakc0WQ=h720",
+    "https://play-lh.googleusercontent.com/C7X8fIL_fbdC6yFTfFqtz2z2KsaUrKBFP0nF3rrmVCtgQRTshTeIefOsM0PjSZLbeA_rMpb-IplrVwHGcfaDOA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.Shufersal",
+   "sort": 160
+  },
+  {
+   "package": "com.superup.ramilevy",
+   "label": "רמי לוי",
+   "category": "קניות ומשלוחים",
+   "note": "קניות בסופר אונליין.",
+   "description": "מה כל כך מלהיב באפליקציה החדשה של רמי לוי:\n\nהכירו את המדף\nהמדף שלנו מציג את מגוון המוצרים של רמי לוי לפי קטגוריות בנראות חדשה ומרעננת. הכנו לכם גם מדף מיוחד עם כל המוצרים המומלצים שלנו.\n\nחיפוש מוצרים\nמעכשיו תוכלו למצוא מוצרים בקלות ובמהירות; בהקלדה, בהוראה קולית או בסריקה - איך שרק \nתבחרו.\n\nיוצרים לכם תוכן \nעולמות תוכן ייחודיים ומגוונים שהופכים את הקנייה לחוויה יוצאת דופן. בין היתר, תוכלו לצפות במתכונים ולהוסיף בלייב את המצרכים ישירות לעגלה.\n\nכמובן שיש גם את כל מה שכבר מוכר וידוע: הנחות ומבצעים בלעדיים, ניהול רשימות חכמות שהופכות בן רגע לעגלה פעילה, איתור הסניף הקרוב אליכם, יצירת קשר מהיר לשירות לקוחות ועוד המון חידושים והפתעות!",
+   "icon_url": "https://play-lh.googleusercontent.com/h_s3DweNcJhunyi5XyA4E9get-ABYKz4fmT3bRctz5CKcwjCtmV24fjcH4qMp-URi2UWm25L4u6oFPyUIrRX=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/1TNlcQe6Lk7ozO-W6YtQG1psWofeAJs9_VZe3PJ2b4gRxBkNc_JfaOGJW4wMjzVuoPAli0pXeXPsdYx7DbRPpi8=h720",
+    "https://play-lh.googleusercontent.com/sXaPZ-LmsmX69nnNGNCEcdKjkJ8Qqndq2OeofWTtwH3v_jokNuRhlT-w6UavSOVIvPQaz2Cs9xWVtFbqdxYQ=h720",
+    "https://play-lh.googleusercontent.com/P3VB7EDRoI1MfK6YN4JiJizcPrZRd4szsJvuK0Gs_Zxe9lsnH_Vx__xbWC-u341qkMPDTGjuh4sgMcb21oiw=h720",
+    "https://play-lh.googleusercontent.com/8rkQRl2m0uXOZ9JmNGjeVuw0MDa4cOQo59x9wxUpD_SuJUtpE7N9P0FXyzR8X45tBReODNAYtCS0NitgJOJ7wA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.superup.ramilevy",
+   "sort": 161
+  },
+  {
+   "package": "il.co.yochananof.mobile.twa",
+   "label": "יוחננוף",
+   "category": "קניות ומשלוחים",
+   "note": "קניות בסופר אונליין.",
+   "description": "יוחננוף - סופרשוק לכולם חנות בה תוכלו לקנות הכל און ליין ורק לבא לקחת!!",
+   "icon_url": "https://play-lh.googleusercontent.com/nZsnQLbePdGjUuU97FN7BitqXFYWb1TxP-pGeIks30RxDgZFh1p4BYUtoGobjjJDjWGsrTRQq2iGTDuLYN_s=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/zRYv-UfPOm-BWtU6nDp4zWUov2xg_PWJ-H9X9Ul7x5OcfYEIFTFqRXUoB-9HvgKLeE-f-w8VpuZMuF5wyDxYZA=h720",
+    "https://play-lh.googleusercontent.com/XbWr8-1ksTGF1Vez1tidk7X0yW-TDBoLNc-NLYrKstj2MALV8WVPZ2z38Q8pHhXb5dNut8WbjiLUaAFsifYkFQ=h720",
+    "https://play-lh.googleusercontent.com/XZScq3iu9L0Vv5KeMzqrJJdxWUtolYYLoxdhMcq7qIcyLdkkXQDaPVkwA9dHFRPrRmph146fYGzkaS2ZZvPeWa8=h720",
+    "https://play-lh.googleusercontent.com/sct6mmuPdQGkKjW7OWEqPGCCYj8hZYXZuaTNmXz92d52XFiHe7TCXTKVI0pax6NqOqY8kxjKBiIHuKI8dqt_Cg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.yochananof.mobile.twa",
+   "sort": 162
+  },
+  {
+   "package": "net.hazol.app",
+   "label": "הזול",
+   "category": "קניות ומשלוחים",
+   "note": "השוואת מחירים בסופרמרקטים.",
+   "description": "הזול – הדרך החכמה לחסוך בקניות \n\nנמאס לך לשלם יותר?\nהאפליקציה הזול משווה עבורך מחירים בין סופרים ומוצאת את סל הקניות הזול ביותר – במהירות ובקלות.\n\nאיך זה עובד?\n• בוחרים מוצרים\n• מבקשים הצעה\n• מקבלים השוואת מחירים בין סופרים\n\nהאפליקציה תראה לך:\n איפה הכי זול לקנות כל מוצר\n כמה יעלה הסל בכל סופר\n איך לחסוך יותר בכל קנייה\n\nאפשר לבחור סופרים ספציפיים או לבצע השוואה בין כולם.\n\nחיסכון אמיתי מתחיל בהחלטה חכמה.\nתן להזול לעשות את העבודה בשבילך.",
+   "icon_url": "https://play-lh.googleusercontent.com/pifJZ43m_8AUMquPnajL0r2Hh_xrMpcbujWFDbdiOh1wjIA3Wu4342230sRYnSGW-kCajVexHnqlFYSgIk6lwg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/NLpCfnKDkpP8od_EMtKTuaW0ulxeGqb-qxxIZK8gwOEoZNl4fCZSVcRRh8q5wTTLNa5jMjzEJ7i4MIMEFYvaHA=h720",
+    "https://play-lh.googleusercontent.com/d5SjDyjqd2vM0h3x8CiDs6RBFsmPtWONMwKJjVSKZI2xRCeGoTC0i3bBpen-j9lNFM9OI5hI8X96M0AlZMzJ=h720",
+    "https://play-lh.googleusercontent.com/cv_GCPnbG8u0zs2RIb0FU4QstVmPlYL1pdpVxeglbY8N3rP1oDTaoA7G6w29B_TfAzUW2BrflmvuDqARmqRy=h720",
+    "https://play-lh.googleusercontent.com/tS7GwyAVRnQPwAd8XsqxOGVbZ35-UFEJNqEBljsDX1X7-RSOfgQEZSu4HCdZ8IgZngtKBTbuKUoGZL7n16NXoA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=net.hazol.app",
+   "sort": 163
+  },
+  {
+   "package": "com.wolt.android",
+   "label": "וולט",
+   "category": "קניות ומשלוחים",
+   "note": "משלוחי אוכל ומוצרים.",
+   "description": "מה שחשוב לנו בוולט הוא לדאוג שתמיד יהיה לכם משהו טעים להזמין. איך זה עובד ולמה כל כך קל להזמין איתנו משלוחים? פשוט: נכנסים ל-Wolt, בוחרים מקום טוב בעיר או מגלים מקומות חדשים ומומלצים, בוחרים מה בא לכם הפעם, מזמינים ומחכים (אבל ממש קצת). משם כבר נעדכן אותכם איך מתקדמת ההזמנה, מתי השליח יצא לכיוון ו… זהו, הגענו!\n\nלא בא לכם לבשל? אין כוח לקום מהספה כדי למלא את המקרר? כולנו היינו שם. ובדיוק בגלל זה הפכנו להיות מומחים למשלוחים מהירים מהמסעדות והחנויות הכי שוות בעיר.\n\nאצלנו תמיד יודעים מה המצב. מהרגע שההזמנה התקבלה, נדאג לעדכן אותכם בזמן אמת מה סטטוס המשלוח, דקה אחר דקה. אפשר אפילו לראות מתי השליח מתקרב - שזה בעצם אומר שהגיע הזמן לזרוק על עצמכם איזה משהו ;)",
+   "icon_url": "https://play-lh.googleusercontent.com/ZwT4QDphpEcWtG4t8qL5yw5vKbLwQZLbd9KWs0YnIQYlhkO-VJVdBDkStoD0Fq8JjvK3uFlc9SMu99fYmdyqTw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/01bOZt6tNg7H8U6-_TrAFIZIhOpKQn9SAWKiyXP5mv_GifHj7vaIrcZkNbm9dF9rw4ryiz_io1GWwpR4Sex6xg=h720",
+    "https://play-lh.googleusercontent.com/0X4o3sFa8hjthkeXTQsugiU4sNmLuiho8Ky6yNLlEQbTKU4xlS3qRdANOaJPXymRwEtR5et03xldEgbuGHcRbQ=h720",
+    "https://play-lh.googleusercontent.com/Z2dbdP9vVA9Tu1xCds0WKZLm_s7xQDIU9E5mVYJNmHAtO5rFlmVRvc0a4VhuUlYGFUXcOtd7RHr7XoGBJDaK9Q8=h720",
+    "https://play-lh.googleusercontent.com/Cazo6elYZ30TC6R8Y7tmM3p_wai-XYz7-b2-50MPpgUxISA2tNR237bIOaVRFETG_CwHYp6z_DDjC1i_-V-Kuw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.wolt.android",
+   "sort": 164
+  },
+  {
+   "package": "com.tenbis.tbapp",
+   "label": "תן ביס",
+   "category": "קניות ומשלוחים",
+   "note": "הזמנת אוכל מהעבודה ומהבית.",
+   "description": "אפליקציית משלוחי האוכל של ישראל מאפשרת לכם להזמין הביתה מאלפי מסעדות, ליהנות ממגוון הטבות בלעדיות, לסנן לפי סוג מטבח, דירוגי משתמשים, דמי משלוח ועוד מלא דברים שרק יעשו לכם חשק לטרוף משהו.\n\n \n\nכמה זה עולה?\n\nהורדת האפליקציה והשימוש בה אינם כרוכים בתשלום.\n\nגם לא צריך כרטיס תן ביס בשביל להוריד אותה, מקסימום קצת מקום על המכשיר.\n\n \n\nבתיאבון ובהצלחה בבחירת המשלוח המועדף!\n\nתן ביס",
+   "icon_url": "https://play-lh.googleusercontent.com/Nz57qMMWuX-OXhVYKR6xi0ekUWpGQUYrVxPBzaoLtspvmM6xS3bCWW2cQSMWO7s5REI8Zfx5NQ3Zo3HyT99fYg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/CxYdx-TKcZGndTpZNcWAW5dvuYQllarRsBC4EF57Qjb4QNNmYjfBlHO7QDfg54WXmU_56LOC6R1gS5Ma8joY9X8=h720",
+    "https://play-lh.googleusercontent.com/gvfGKZI0iOlgj6um7ZnB94qa0uP5DRXJ-O25uIUIaHK4fFH0R2SyTAp-wZsGXdmVJElymwms_E_1HEx6_TJX3g=h720",
+    "https://play-lh.googleusercontent.com/EaryGhHU-bCeopwQa2kNOifq3auf7PBL2_l26Km7h7nNIu0Qvl7nvxGXPjQfOEm-k9xMId4ASrskYQuZt_4iBA=h720",
+    "https://play-lh.googleusercontent.com/EeKou2kp_z4wZtnlhTKkp26fSNXGvqYwvlvPxiJZ6LN3C6hphTR9VhrYsFOnPgDxWOvhcR9H7-BweKN0CKzDwQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.tenbis.tbapp",
+   "sort": 165
+  },
+  {
+   "package": "org.sefaria.sefaria",
+   "label": "ספריא",
+   "category": "יהדות",
+   "note": "ספרייה של מקורות יהודיים: תנ\"ך, תלמוד, הלכה ועוד.",
+   "description": "ספריא מביאה 3,000 שנים של טקסטים יהודיים בעברית ובתרגום לאנגלית (תנ”ך, משנה, תלמוד ועוד) לסמארטפון. ניתן לחפש מילות מפתח או לדפדף בתוכן העניינים בכדי לראות מקורות, תרגומים ופרשנויות. נפח הספריה כולה (כ500 מגה) מתאים לאחסון בטלפון עצמו כך שניתן להשתמש באפליקציה ללא חיבור לאינטרנט.\n\nספריא היא עמותה ללא מטרות רווח היוצרת תכנה בקוד פתוח ומפרסמת טקסטים דיגיטליים ברשיון פתוח לציבור. \nהאפליקציה כוללת:\nלוח קריאות בפרשת השבוע ,דף היומי, 929, רמב״ם יומי, ומשנה יומית\nגישה בלתי מקוונת לכל הטקסטים והקישורים במאגר של ספריא.",
+   "icon_url": "https://play-lh.googleusercontent.com/aiTY816uqHPTKkzoBXAbpqRJVN7JCC0sbNJYhb5oFq75ZG2Txv0uuIa4GTTkamAZfokHbS26g7C-ej4FVEox=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/cpK9SCDQINjw3PRbNQh381VHEKVeTaa0CRZ7JfLkxcDYfVBuP37NTZUIvtfcL313ivqWvA-3zdBKbj8gu1u99Io=h720",
+    "https://play-lh.googleusercontent.com/s9oxD48YHz3ws82Ej9em2DeCFB3IX8VEy4s245Ho7tANyCiC2FVAkOwztLIaYYBIHTtbvWrE0p6QzBfZnkMdLw=h720",
+    "https://play-lh.googleusercontent.com/sDymZm9FW1KKHr7wXwwPFY25HJuxyjCza2j6iJv88FxEisn4VlHetvPOwkssSGhHSsooG29PeOT-jlxgchkp=h720",
+    "https://play-lh.googleusercontent.com/X1SZlVodFRg8kIHaTQFgsRF3p-OzCuyl77xhHr7z-AFJNWmlw7bhsub0iQc09X-MHMcGgrpAmQLBEEkX0QR9sCo=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=org.sefaria.sefaria",
+   "sort": 166
+  },
+  {
+   "package": "org.otzaria.otzaria",
+   "label": "אוצריא",
+   "category": "יהדות",
+   "note": "מאגר ספרי קודש לעיון וחיפוש.",
+   "description": "אוצריא - ספריית תורנית דיגיטלית\n\nאוצריא היא אפליקציה חינמית בקוד פתוח המאפשרת גישה נוחה ומהירה לאלפי ספרי קודש, תורה, הלכה, מחשבה ועוד. האפליקציה פותחה במטרה להנגיש את אוצר הספרות היהודית לכל אדם, בכל מקום ובכל זמן.\n\nתכונות עיקריות:\n\n✨ חינמית לחלוטין - התוכנה חינמית - ותישאר חינמית לעד.\n\n📚 ספרייה עשירה - אלפי ספרי קודש מכל תחומי התורה: • תנ\"ך עם מפרשים • תלמוד בבלי וירושלמי • משנה ומדרשים • שולחן ערוך ונושאי כליו • ספרי הלכה, מחשבה וקבלה • ספרות חסידית ומוסר • ועוד אלפי ספרים נוספים\n\n🔍 חיפוש מתקדם - מנוע חיפוש מהיר ויעיל המאפשר: • חיפוש טקסט מלא בכל הספרייה • חיפוש בספרים שהוספת בעצמך • תוצאות מדויקות ומהירות",
+   "icon_url": "https://play-lh.googleusercontent.com/O9cLXYZYBeT-Rd99oO8ERJzfdRF4Pz0n9fs2v_1t7cd5DoBXMlh4kvGmdqyCPk1yVf9Vt8OKwrUxHKc7HVcU=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/rNfeKAzbk5DOB9jAZupa5C1auc9nrRHQ1vkMIl9rSVbyRlENTM5sy1SgiIXTJ7uIftUKhpQ4t2FltjCJ70_5NIg=h720",
+    "https://play-lh.googleusercontent.com/AURAT_gvdSWM-FBCB26HQaMVYjZiQJfmfxXlsWhd4mF7YPFosuQpBlQAoykD_LA9htF0BxTSYZwFK7X--z1P6Q=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=org.otzaria.otzaria",
+   "sort": 167
+  },
+  {
+   "package": "cc.zmanim.app",
+   "label": "זמנים",
+   "category": "יהדות",
+   "note": "זמני היום וזמני שבת לפי מיקום.",
+   "description": "זמנים — זמני היום וזמני שבת בכל מקום בישראל\nכל זמני היום ההלכתיים לכל עיר, יישוב, שכונה ומושב בישראל. זריחה, שקיעה, סוף זמן קריאת שמע (מג\"א וגר\"א), מנחה גדולה, מנחה קטנה, פלג המנחה, צאת הכוכבים ורבינו תם — מחושבים אסטרונומית בזמן אמת.\n\nלמה להתקין את האפליקציה?\n1,419 ערים ויישובים — מירושלים ובני ברק, דרך קרני שומרון ומצפה יריחו, ועד היישובים הקטנים ביותר בגליל, בערבה ובגולן. כל יישוב מקבל דף מלא משלו, לא רק העיר הגדולה הקרובה.\n\nחישוב לפי הגובה מעל פני הים — קריטי בעיקר בירושלים (754 מ'), בצפת (850 מ'), וביישובי הרי יהודה והגולן. ירושלים רואה זריחה כ-4 דקות מוקדם יותר מתל אביב, וזה מופיע נכון באפליקציה.",
+   "icon_url": "https://play-lh.googleusercontent.com/idprHIq822HvCkjjM4CmeuNTPUoCbkXNryg5Nwt_YeEezN0gdhgm_cC6rVfWmXx0T3BuRvTTMP0RQQZ-O4rDeM4=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/4YCzmkfFJ-wsMUyQlUkl7kZF5CAHKdE0ClaCzwaQ6q4Td5GlwJ9p0mRJNv80YDLw1Fi19gMW16guiYz2B_5JTQ=h720",
+    "https://play-lh.googleusercontent.com/6CwGzj0Ua63Yw3-QkOVl74dSxMP6nTcYUpl7y1sR5xay8BI3I6mDHEgo546hSR5LgJPQGjVSbDeKZtZ5JWSOzA=h720",
+    "https://play-lh.googleusercontent.com/DIcD5Odpzf_S7FK-41ArYmERXyS4j96JdHAKm9iipgClJ4He4HFnaLvxa4L1cOqgAXKMmIFP0j54tm9_P45u=h720",
+    "https://play-lh.googleusercontent.com/bmfkr7kPMQD_1iacAkTeVUsT4sZyWlSYd_YBjslLeCzBANbp9dQS018HLfPnijadnZveMO0vbhPyLSDUJbqlaA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=cc.zmanim.app",
+   "sort": 168
+  },
+  {
+   "package": "net.sf.times",
+   "label": "זמנים הלכתיים",
+   "category": "יהדות",
+   "note": "זמני היום והתראות לתפילות.",
+   "description": "זמני תפילה הלכתיים.\n\nזמנים מחושבים על בסיס מיקום GPS שלך. חיבור לאינטרנט משמש להביא כתובת הקרובה ביותר שלך, אחרת את המדינה או אזור הזמן הקרוב ביותר. \n\nזמני היום:\n• עלות השחר\n• טלית ותפילין המוקדם ביותר (משיכיר)\n• הנץ החמה\n• סוף זמן קריאת שמע\n• תפילת שחרית האחרונה\n• חצות היום\n• מנחה גדולה\n• מנחה קטנה\n• פלג המנחה\n• שקיעת השמש\n• בין השמשות\n• לילה\n• חצות הלילה\n* שעה זמנית\n\nזמני השבוע:\n• הדלקת נרות\n\nזמני החודש:\n• לידת ירח החדש (מולד)\n• ברכה המוקדמת ביותר של הירח החדש (קידוש לבנה)\n• ברכה האחרונה של הירח החדש (קידוש לבנה)\n\nזמני השנה:\n• סוף זמן אכילת חמץ\n• סוף זמן ביעור חמץ\n• חנוכה\n\n• התענית מתחילה ומסתיימת\n\nלחץ על הזמן לפתיחת רשימת כל דעותיו.",
+   "icon_url": "https://play-lh.googleusercontent.com/f5tiAv_8heRoO909FtdJU3iMT9byab-B00HDlltokzr6fWrrWC9tsYKbgohj_S268Qq7aC6fsZph3UfCPVnC=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ajWBTEfY-8BP6oVm7EzmVjZWXahEIWwcuphoLM281YpT7QF4B68Dv3ysalG0iQjn89RoQC6DUoDeRPZ-es9kbw=h720",
+    "https://play-lh.googleusercontent.com/i1H4IMR7iJUFbdEMZucr4rcJAuBydG35KOHJn-irdzz8WAyh40E3GxBC9QwZgdgP9lMsApEav54GHgt_9zIc6w=h720",
+    "https://play-lh.googleusercontent.com/05JzLjaXicqlSHBfuv1oShOzhZ0FGQ5skz9VAxb9cHIenJ-rPt6nGQxVaPZ7BIyx8irOkHsG1IBkIJLA2qylTUI=h720",
+    "https://play-lh.googleusercontent.com/cgrKryRiP1FcZGKo06Yg4CeIeZ4NL1Ek3f1NlUYbBY-Fz8Cv6onV5EVP7ZIsDFMVewOn0UxdixNTy4k6DRA6=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=net.sf.times",
+   "sort": 169
+  },
+  {
+   "package": "com.lionscribe.hebdate",
+   "label": "לוח עברי",
+   "category": "יהדות",
+   "note": "לוח שנה עברי ותאריכים.",
+   "description": "לוח עברי הוא לוח מלא עברי ולועזי לאנדרואיד.\n   * מציג חודש מלא עבור לוחות שנה עברי ולועזי. אתה יכול להציג כל מועד מאז בריאה.\n   * לוח אירועי מלאה. אתה יכול להציג, לערוך וליצור אירועים בתוך התוכנה.\n   * חגים, לימודי יומי, ועוד.\n   * זמנים עבור כל המיקומים.\n   * יישומון שניתן להוסיף למסך ראשי.\n   * טיימר לזמנים.\n * ניתן להשתמש בו כבוחר תאריכים (עברית) על ידי יישומים אחרים (כמו \"Tasks To Do\")\n * מנוי ביישום להסרת מודעות באנר.\n * הגדרת אירועים חוזרת במועדים עברים, והם יסנכרו עם לוח של גוגל (פרמיום בלבד).\n\nיש גם גרסת Wear OS של האפליקציה עם תכונות בסיסיות. זה מספק complication שניתן להוסיף ללוח השעון שלך.",
+   "icon_url": "https://play-lh.googleusercontent.com/n-rJONASwahXfhdgyo_CCvgj3hhvS66lmsrVVC-525VraQaTfCZYzWowgSRp-7cfkyjxomU2DdLkIqjQZa8sTg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/EUwYqKqjulToPo3YpCfepCc5o-VQEutv9_gDdZ8f9glJ-i045FCOWG3GVf6AXleb3thMYFv6R381my-qSsTUsw=h720",
+    "https://play-lh.googleusercontent.com/WV2LNWnowp7SlpLsZkY50PbcM6ZQhORWmbN1FBymtWjvO2cOGh9XK5X8oQCGOvmBHNwP-ExfNPfknwctbQ2s=h720",
+    "https://play-lh.googleusercontent.com/Qk03swwpEn9-J2tk_E2hy6gRYEhpKIgM5I9arbno5LwzBzBJNKB9-XldCCwwwxl4f2zYK9V0Vw9FZI2VIdCd=h720",
+    "https://play-lh.googleusercontent.com/zTQ8dvJkJtMArrzqIXxdHwCfiBk8-5d6DZ2qZgF9wyiNHl-E6OsEPURjWcQyI5yoNu9yapAFPnyev_7YiUMWkQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.lionscribe.hebdate",
+   "sort": 170
+  },
+  {
+   "package": "tfilon.tfilon",
+   "label": "תפילון",
+   "category": "יהדות",
+   "note": "סידור חכם לפי היום והזמן.",
+   "description": "תפילון הוא סידור חינמי שמראה את התפילה הנכונה להיום (יעלה ויבא בר\"ח, על הניסים בחנוכה ופורים), ללא שימוש באינטרנט של המכשיר.\nכל חישובי הזמנים והתאריכים מתבצעים במכשיר עצמו!\nיש אפשרות גם להגדיר האם להציג כל מיני תוספות (כגון ועננו בורא עולם או יה\"ר לחולים), ואפשר לבחור מתי חוגגים את פורים (י\"ד, ט\"ו או שניהם).\n\nתכונות תפילון:\n\nעובד גם במכשירים בהם אין עברית מובנית\nהתוכנה הראשונה למכשירי אנדרואיד המציגה עברית עם ניקוד מושלם!\nתצוגת זמני היום ל-120 ערים ברחבי העולם.\nהחלפת היום בשקיעה\nכל התוספות מופיעות בזמנן (למעט שבתות וימים טובים)\nדבר תורה אקראי לפני ברכת המזון\nנוסחים אשכנז, ספרד וע\"מ",
+   "icon_url": "https://play-lh.googleusercontent.com/dBCt749VvclmppLRtT-ICjB7mGEag8K7bZ3WQiVnBfIDpgjDjrbhgQ6bM0b9-8zLrk62BC58K4ipLvbpF-ByO0U=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/yhYs-dFggE36gpob5_-xZc6JmcQigEdYO4jq1RadA7uGEZOUsFvFmZLyEuzzJbJRbB0FxkwD-r701SOQbmvbGQ=h720",
+    "https://play-lh.googleusercontent.com/sM01rgLsHIGEftI_IYkAcc3YKbwQqqeMZZnd4lrguu87qLm-9MNuDU6jNtOgJ8HNHej_SJrurbP2BuPZ8Qcz8Fg=h720",
+    "https://play-lh.googleusercontent.com/22Xl6DaPAkPMWTg11kPUePkic947VPu1pMWR2K4ACThhzRhoukdUuJrrK-0lKQp1uLJqDzY3_rGGVnRW8H0SBQM=h720",
+    "https://play-lh.googleusercontent.com/B244efwlk0zdv7BcK7UBBrBt5bFDQUonPOGjKoNBF0Jsedt7xmFmV29oG2QE0ZmilliUQ2YJk77Bmb3gyDCqEw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=tfilon.tfilon",
+   "sort": 171
+  },
+  {
+   "package": "com.karriapps.smartsiddurlite",
+   "label": "הסידור החכם",
+   "category": "יהדות",
+   "note": "סידור שמותאם לתאריך ולמנהג.",
+   "description": "הטלפון שלך כבר חכם למה שהסידור שלך לא יהיה?\nהסידור החכם מכיל את כל תפילות ימי השנה בהם אפשר להשתמש בטלפון, כולל ראשי חודשים, ספירת העומר, חול המועד ועוד.\n\nהסידור עובד בשיטת ״רק מה שאתה צריך ורק מתי שאתה צריך״, כך שבכל פעם שאפתח את הסידור אראה רק את התפילות הרלוונטיות לאותו יום. ברכת הלבנה? תופיע רק בימים שבהם נהוג לאומרה. ברכת האילנות? רק בימי ניסן וכן הלאה.\n\nהסידור גם מאפשר גמישות ותכונות חשובות רבות כדי להקל על המשתמש הדתי. תכונות כמו תזכורות לספירת העומר, לוח שנה כולל זמני היום, זמני שבת, שקיעה וזריחה וכן האלה.\n\nהסידור החכם מאפשר גמישות רבה, אפשר לשנות את גודל הטקסט בצביתת המסך, לחיצה כפולה על המסך תתחיל או תעצור את הגלילה האוטומטית.",
+   "icon_url": "https://play-lh.googleusercontent.com/U0uOHPXaWRVShyY-zkxpP0VWeZJM_xUL9Yd0csDM4FkTv9bYeW4nWPgECNfwhZLf8x3ZMelR5h3XXf7Bd6flXA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/NU7rbZCP9jM65KIDF5ujFCCu9qFAXWzVDwGg4rMClSSpOkw9UiWF2qjWRKkoi7VpRusQHhsgjS7Dymi5JxjoPKI=h720",
+    "https://play-lh.googleusercontent.com/DQyiQOtbrfSGZYzNvugN8tJ49gSbLfWaKcGHv9b7C98ToD_iqon04zLdM19vQ-FIZoirChYJKScYH873pTj7BRU=h720",
+    "https://play-lh.googleusercontent.com/zUowU2kVWK7BWxLgG4CQu0Hm7Sh7l_wQs_77uGziCovrDWh0fQxpmjmXXGyJ3IoWsiAxlTFCU4p8SI74rIVeIA=h720",
+    "https://play-lh.googleusercontent.com/KHOFQDISvMpBuJ7V0mvSSA9nkFqfFR8gEK44tDn46iz_JylzKGEhRm7w9X1Ggvq1naL0d8_UfqktOuizA7Km=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.karriapps.smartsiddurlite",
+   "sort": 172
+  },
+  {
+   "package": "com.tehilim.book",
+   "label": "תהילים",
+   "category": "יהדות",
+   "note": "ספר תהילים מלא.",
+   "description": "ספר זה מכיל:\n* ספר תהילים\n* ברכות השחר\n* קריאת שמע שעל המיטה\n*נשמת כל חי בנוסחים שונים\n\nספר תהילים עם כל הפרקים,\nניתן לבחור פרק בנפרד או לבחור יום,\nבנוסף ניתן לשתף פרקים ולהגדיל פונט.\nאפליקציה זו פותחה ללא מטרות רווח,\nולכן אינה מכילה פרסומות.",
+   "icon_url": "https://play-lh.googleusercontent.com/rFbAk3g3wYXzZBUKw1sSOVIgdavcmISrs0rMF_C2KCgO7tQIX-KGYc11joqQfZdZFfXOopVUjQhNzILpcqcSKxI=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/xBMEMvszAwLcKCvWuE7W_9BwKB90tcm8c-6VSfrmDu7JC-YYFyHklvLl8pOD6_ZwznoGvEWxJ-OkrfWPktis=h720",
+    "https://play-lh.googleusercontent.com/VZStmSU7CNn0cNEUrLz3S-EOJ7ig8hUwydZrRXAd-pU7nvoydDEfO6nI5bi32yiZ55LqceehLuLEuD6KwU8C3PE=h720",
+    "https://play-lh.googleusercontent.com/BUbJ57Ohd8hKiwu5Y8TgTcy9-ghmEAH6BmPbjN-BMKnuoZfCPLmbDihk35yXyR5UCF3OAAqWNGUmAgIBvHgh=h720",
+    "https://play-lh.googleusercontent.com/dhnYDiTkgirzIkJjCOu-VRk7bJWLCZAyOzrO4z54zJ4GZGY27eJnfYqQFpGxXMY3oJ2HtzuLkTi7Vx_jh9-RyJM=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.tehilim.book",
+   "sort": 173
+  },
+  {
+   "package": "com.khl.www2",
+   "label": "קול הלשון",
+   "category": "יהדות",
+   "note": "אלפי שיעורי תורה להאזנה.",
+   "description": "זהו הקיוסק החדש של קול הלשון, המבוסס על האתר החדש. מאפשר גישה בדומה לאתר, בתוספת תמיכה בניהול והשמעת השיעורים אחרי הורדתם.",
+   "icon_url": "https://play-lh.googleusercontent.com/tHeOCPIm4E5ms_ztY55UM4S4Fl26vQo_4_1CbvhXTjOH0I-rX33YbVLMJ41tt93-2mOnuxRtzoSXHMA4oDEKAA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/3waMr5U6GIF78NfL4fn11irdKRMQ3xMME3k7UmQBIP--wFvNn0QzJKZbMXjlg0uHVp3zwXJPGVikIyzxEPOAFA=h720",
+    "https://play-lh.googleusercontent.com/cTVfCHX4IhiedSmtVizvm7c0U64Frprpa2FRrQmVsPyRmLgz3iXS1VcdtpySL_olGY2OslMiLdonjaVjEN_XgFM=h720",
+    "https://play-lh.googleusercontent.com/vZQR_nqCHV5f-7jUkbQdWdB6h6nWWAanviqxPho_wxSEvgGaQ3al1VhXB7Mg976iTys8KzjnZii2UWeREfLneQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.khl.www2",
+   "sort": 174
+  },
+  {
+   "package": "com.mogy.dafyomi",
+   "label": "הדף היומי",
+   "category": "יהדות",
+   "note": "לימוד הדף היומי עם שיעורים.",
+   "description": "האפליקציה של פורטל הדף היומי כוללת:\n* ש\"ס גמרא - צורת הדף (וגשל) וטקסט הדף\n* שיעורי שמע מגוונים על הדף היומי (עברית, אנגלית, אידיש ושפות נוספות)\n* תכני הפורטל על הדף היומי\n* מפה אונליין של שיעורי דף יומי הקרובים אליך וחיפוש חברותא\n* מילון ארמי עברי (מאת ע\"צ מלמד), ומילונים נוספים\n* לוח חודשי ללימוד הדף היומי, עם אפשרויות לסימון הנלמד (לשם מעקב) והוספת הערות\n* סקר חודשי בענייני דף יומי",
+   "icon_url": "https://play-lh.googleusercontent.com/hV1IL92HqkZM41VJA9jYpxtDQM6Nl_eJFheqACyLLEgEmjBOw8wj_3sHKifkYCZV8tKPhYFQ4zGlA-Yzw8K40kk=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/NQ8FisSFKxvwBBSfTvKk1FO-hN0pSXo8MsH9IciJUi8ZOcGtHG9WEx-yE-b-kDrzlkRTatUtJcMfvGMVCAWlPg=h720",
+    "https://play-lh.googleusercontent.com/dbQRfMtRv-1awsEzT3UOrQOJMojjufd21LIPorKH3qefOwPwy0AIoXeZYa0NiexwtGxQSXASM1VFRd0Br--r3Q=h720",
+    "https://play-lh.googleusercontent.com/ua7YE2DXNXXH6E9EhAf0jD4FrNf3PC-XmRhxBNpxua3rS4hbl85uD7J-weXbaoXzt48JQ-lBhUnoCVATj6yv=h720",
+    "https://play-lh.googleusercontent.com/ydmB_mUskUX1UI08CI5ZspJuHcFpeeqIKJaZC1fkQcEUY1yO3GCdgzS_6u3HWM6bSuV6pj9CkoTYY1ucNOSmJBc=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.mogy.dafyomi",
+   "sort": 175
+  },
+  {
+   "package": "com.dirshu",
+   "label": "דרשו",
+   "category": "יהדות",
+   "note": "הדף היומי בהלכה של דרשו.",
+   "description": "אפליקציה זו מספקת לך את כל מה שאתה עשוי לדרוש כדי לעקוב אחר תוכנית דירשו דף היומי בהלכה. האפליקציה כוללת שיעורי אודיו ווידאו ממספר מורים ומספקת גם \"סיכום מהיר\" קולי של הלמידה של היום ו\"תובנות נוספות\" בעמוד. יחד עם שיעורי השמע או הווידאו, ניתן לראות את נוסח המשנה ברורה בצורת גלילה או כ-PDF של המשנה ברורה דירשו המקורית. האפליקציה מספקת גם שיעורים וטקסט למכסה היומית של לימוד מוסר (צמיחה אישית) שהיא תוספת לתכנית דף היומי בהלכה.\n\nפונקציית לוח השנה מאפשרת לך לעקוב אחר ההתקדמות שלך, סימון אחד אומר שעשית את המשנה ברורה של אותו יום, שני סימון אומר שעשית גם את מכסת המוסר היומית. בימים בהם יש מבחן דירשו אופציונלי, עיגול צהוב מסביב לתאריך מציין שיש מבחן זמין, והכפתור הצהוב מאפשר לצפות בפרטי המבחן.",
+   "icon_url": "https://play-lh.googleusercontent.com/Bi2O0mSkkt-XDU2x_pnxEiRLMvBTzf4CFtSVtVzAk18rvbIwuWpfaBVbiXjhFyj9ZSI282bY4VxNY62Nu-qNQTU=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/aBtKsI5ogP6OuVMpkSUa2oiBHXsWmz7Agf-zx6lPECC28EhVQ1qOLw64TQS7jsg80iW8342qQW7tARVgsE2S=h720",
+    "https://play-lh.googleusercontent.com/q51uwNwGXZMJ7ZnieBoHbCav9FAcWs32LsbwqGDlV3JegL0wsaNnxKadHEx-aGWKZ57LjxtQB-2uW7c85OBeAg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.dirshu",
+   "sort": 176
+  },
+  {
+   "package": "com.maatayim.harambamhayomi",
+   "label": "הרמב\"ם היומי",
+   "category": "יהדות",
+   "note": "לימוד הרמב\"ם היומי.",
+   "description": "ניתן ללמוד את הפרק אמצעות טקסט עם פירוש של הרב שטיינזלץ, שיעור שמע מאת הרב חיים סבתו כמו כן מגוון תקצירים כטקסט ו כסרטון באורך 90 שניות.\nהאפליקציה המתקדמת מאפשרת ללומד לעקוב אחר הפרקים שהוחמצו ומציעה השלמה של החומר באמצעות תקציר הפרקים. ללמוד בכל מקום ובכל זמן שתבחר.",
+   "icon_url": "https://play-lh.googleusercontent.com/ZUSnvozY2at1WksXcMgefbpTjISu96mqJRzwCGcLz6Ho_r0fhgJZkGHnVeVTkA-46UUa-nEtYWo7o7TdWFPYQtk=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/o-ztEw06oQwXia8CrCqEvmDv3akr5jzYOGIX1gMBm49ApjuV5pvlEHL63DG44d8b_drPamo2gvtc8quPJhHB0GM=h720",
+    "https://play-lh.googleusercontent.com/pHnK_iVe-9ogFlst01rcSlJ3zSnWK4vAySmHp6BLfRP0UE1AoPxxj3Wh8alc7ArsvK-nDkhE3dWcbG169555=h720",
+    "https://play-lh.googleusercontent.com/ql_BgkW8lHMp-IvmcBYfjlHy_KyZWvEnUxauyhr48QsybhqwPGXskr0ftanyol_9USxs7Ib_Pt3MRY8l3G1Zvw=h720",
+    "https://play-lh.googleusercontent.com/uQQGSU2bQKhaLdBSXZid_tnRpx_aPL804Frhtg5v_es9E08E5C7QTO5B5QqaxbTXY6g27HkDfyIILe-bDRQ2=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.maatayim.harambamhayomi",
+   "sort": 177
+  },
+  {
+   "package": "org.kolel",
+   "label": "כולל",
+   "category": "יהדות",
+   "note": "שיעורי תורה ותכני יהדות.",
+   "description": "אפליקציית כולל מציעה את ספריית הוידאו הגדולה ביותר של שיעורי תורה, הלכה, מוסר והשקפה מטובי הרבנים, המרצים והארגונים בארץ ובעולם. \n\nהאפליקציה מאפשרת:\n*להתעדכן בסרטונים הכי חדשים\n*לעקוב אחרי רבנים וארגונים מועדפים \n*חוויית צפייה מהירה, נוחה וידידותית\n*חיפוש סרטונים לפי נושאים פופולאריים (אמונה ובטחון, הצלחה ועסקים, קבלה וסוד, ועוד...) \n*תגובות ושיתוף של סרטונים\n*גישה מהירה לסרטונים שנצפו להמשך צפייה\n\nמטרת האפליקציה היא זיכוי הרבים בלבד.",
+   "icon_url": "https://play-lh.googleusercontent.com/J0rneEbaYX8GMbVa2FB9qlPkAlgdyFlOPQE68S1r1BmDIj3vhFRkmwYfTGru9aJSME4KyxsIu10FkhWtqYInsw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/80pR7tsvz45weAaK5gA2ncdL1wQPVXCzAl0pHaxbcTgAjEWqhICQwCxQTrJpOFpSRAyGTxTkZWy1-DFyiwYLgcE=h720",
+    "https://play-lh.googleusercontent.com/JrlTBQFklrJ28XtCX9zy9coaktyuLWs6Z8GAb71tGrL1TeerS97cVUnlp7Cup0LxNGkeT6sN9bggtiG1RvtPoC0=h720",
+    "https://play-lh.googleusercontent.com/FYV6ySUH96M4hFIwyafjctbRVwkNkBLQKmJUoZWPFqWyebBjUdjdp-qd52W7I9ikvi-KvbhCOyh-G9bs5Tvmeg=h720",
+    "https://play-lh.googleusercontent.com/R6-JjPyKff3_jE4aTUBUMxRDOfiFmSRuiP5HmWzRx0oUAfQuN7Ng6tanfEd7jdnDpZARAq_K3gn4VbRLQ7f1pz0=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=org.kolel",
+   "sort": 178
+  },
+  {
+   "package": "com.gaiamobile.hidabrut2",
+   "label": "הידברות — מסוננת",
+   "category": "יהדות",
+   "note": "הידברות בגרסה המסוננת.",
+   "description": "אפליקציית הידברות המותאמת לחנויות המסוננות - ללא קישורים חיצוניים, ללא יוטיוב ועוד",
+   "icon_url": "https://play-lh.googleusercontent.com/fSgheyX8Nday2ualo43XYC0lljqeAdigPr2bsuxQiB2Z3ZVS4_t7gGyrb3cRKnKNBFEmhq6X7WAFxuPlrcZ_tw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/6vcMNMQZwRiwdXFWqomgEX2dcSy0fDcANlh0UMoh1hpYgJ-24QzYXdSJQrJydi-EfDCo39HnTpRP6wgQkqb7ZsY=h720",
+    "https://play-lh.googleusercontent.com/xsWqQilT6IIQBDZ9tRdcuDdX9JhP4846srTDLUVb_etVS5nTw3mYSo2jmYe3Nz9eINmUHjOYaZGTabq6bUkJnQ=h720",
+    "https://play-lh.googleusercontent.com/4p9s-yNZilAcwFup2XDg-q57VhQwCdIpf8w30jYJV2nsctYoLNS4LeecWi54agHh1s6AyryI02SLUkvSiGpS2A=h720",
+    "https://play-lh.googleusercontent.com/YBviSk0jdo9l3i3sfi6lrsFWQP174frl1FhBy24JAPHRKSurUR-I7zgN1eFFGrShkoZnzelN4iGRfsv5sefH=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.gaiamobile.hidabrut2",
+   "sort": 179
+  },
+  {
+   "package": "il.co.hamichlol",
+   "label": "המכלול",
+   "category": "יהדות",
+   "note": "האנציקלופדיה היהודית — ערכים לעיון וחיפוש.",
+   "description": "המכלול הוא אנציקלופדיה שיתופית, יהודית ומהימנה, בלשון נקייה ובאספקלריה תורנית, שאותה כולם יכולים לערוך. \n\nנכון לחודש יולי 2026 - אב ה'תשפ\"ו יש במכלול 380,378 ערכים שעברו בקרה, עריכה או חסימה, על ידי חלק מ-18,191 משתמשים רשומים שמתוכם 394 פעילים. 3,245 מתוכם הם ערכים שנוצרו במכלול ונכתבו מלכתחילה על ידי עורכי המכלול, ו-103 ערכים שתורגמו במכלול מוויקיפדיות בשפות אחרות. שאר הערכים יובאו מויקיפדיה העברית. בנוסף יש בו 589,720 דפים שאינם ערכים, ונעשו בו כ-3,693,913 עריכות מיום הקמתו. כמו כן הועלו לאתר כ-9,473 קבצים שונים.\n\n42,426 ערכים עדיין בקטגוריה שנועדה למיינם לצורך טיפול והתאמה.\n\nהמכלול מופעל באמצעות מערכת מדיה ויקי, ומתבססת ברובה על תוכני ויקיפדיה העברית.",
+   "icon_url": "https://play-lh.googleusercontent.com/bl4d4KxAQdwJBwoRyeDf5AUj_nq9krEf8j94kTeWO3HMzBum4FLcm8B4ee_u4ZgqagD4mu-Z2PrAqXsvUeHEjQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ybGhJJRWmF1-UGoZAbW6Wo3jiF2-P82LrQZnQ-jYMY_KZYXHAZh8PweMRekILeCe5QF_UdAJlcdc6i6Xn50vckU=h720",
+    "https://play-lh.googleusercontent.com/LtwVbMasDTlM5MmWkFG1MHmuJ3yaZL0cbXhtuMEU1I1c3ssPgyxdrSbto7PnkE1N8l333Wq0Z5932_jXEFZhbrs=h720",
+    "https://play-lh.googleusercontent.com/NJIUrZgtTO-6krB93V-TdtgsW9JqblyTzcAlhFwFALCog3pCmmZSLhH_-OGSWnksPgwbYs5Dku-chDqo5457=h720",
+    "https://play-lh.googleusercontent.com/KRADqqCNpjx2vn89XeIYfS94_jtBWnosghHcJ4CAmZ2I3Y5exFV-a7d45RE9uYlKAIW3D-5MHehBiZZ6v-Y8KDw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.hamichlol",
+   "sort": 180
+  },
+  {
+   "package": "co.bhol.app",
+   "label": "בחדרי חרדים",
+   "category": "חדשות ופורומים",
+   "note": "חדשות ופורום הציבור החרדי.",
+   "description": "ברוכים הבאים לאפליקציה החדשה של 'בחדרי חרדים' - אתר החדשות החרדי הותיק והאמין ברשת. צוות של כתבים ועורכים עמלים כמעט 24 שעות ביממה, שישה ימים בשבוע - על החדשות העדכניות ביותר ומביאים אותם אליכם מרחבי העולם וישראל. כל מידע שמעניין ציבור חרדי ויהודי.\n\n'בחדרי חרדים', שחרת על דגלו את העיקרון 'לפני הכל חרדים', הוקם בשנת 2002 ומתופעל עד היום בידי מערכת מקצועית - שרשמה אין ספור חשיפות סקופים ודיווחים, שהפכו לסיפורים בינלאומיים. עד היום נחשב האתר למוביל וגדול בתחום אתרי חדשות החרדים, גלריות תמונות ווידאו מרבנים ואדמו\"רים, מבזקי אונליין,\n\nהתחברו עכשיו לאפליקציה ולא תפספסו אף עדכון מהעולם החרדי - מרבי עקיבא וכיכר השבת, סטמפורד היל ו -13 AV. אתם מוזמנים להגיב להעיר ולהאיר ולעדכן אותנו בחדשות שלכם.",
+   "icon_url": "https://play-lh.googleusercontent.com/DySgf96wVMXVbQCAirhLm64PIywO4tJX2WCGR2AHZUrtG51U5iebBZzGLbAiLw0qoHfRTH5Tw7XrRv3W1_mZBA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/PMRpbscLpXUC8dsLMi7LOUk8MBa56OhqkDmN_oC0DNONxke7sGsavWytonxaFGgswXSalZSsq6FUnYDA-Pm1veM=h720",
+    "https://play-lh.googleusercontent.com/katRWiN0r8rHYab36qTFENk00dTeJEg292xmkliqfD0XB-Yafr2eEbvYcTgemsugoId-FMiPrVIj7Rz1DOPb=h720",
+    "https://play-lh.googleusercontent.com/fL6_rBnzr8KJ6gG1UWHFQRorLYzQR3P9zCoMYKZEP3JLycwqeDF17aQDUz-YYiB4HSvWzyYi7eH1vNOyksswpH8=h720",
+    "https://play-lh.googleusercontent.com/YJwoqH5msFuFzbT9DqPq4DKLkuVLGzsF59YzpC_RZNBBFA8IWBBNSX5FQoEn4CE7WWrNhd49MSUkOU3Cu3fi=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=co.bhol.app",
+   "sort": 181
+  },
+  {
+   "package": "kikar.hashabat",
+   "label": "כיכר השבת",
+   "category": "חדשות ופורומים",
+   "note": "חדשות הציבור החרדי.",
+   "description": "\"כיכר השבת\" - אתר החדשות החרדי המוביל בעולם, באפליקציה חדשה וחדשנית עם סיקור של כל ההתרחשויות והאירועים הבולטים יחד עם כל מה שמעניין במגזר החרדי בארץ ובעולם. \n\nהישארו מעודכנים - באפליקציית החדשות המתקדמת ביותר - בכל מה שקורה בעולם החרדי בחדרי חדרים ובחצרות הרבנים והאדמו\"רים. קראו, שתפו, הגיבו לידיעות והביעו את דעתכם ותהיו חזק בעניינים. \n\nמקווים שתהנו\nצוות \"כיכר השבת\"",
+   "icon_url": "https://play-lh.googleusercontent.com/izGR8T_b1UNnAv7J2GZKnKUmgGGXBCjTIgZsKxxtoD0kmnkhps1SE9wMHaXlz4ocBYCzI52seCQ8IyuFsXqMXw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/MSOqkpAyFepxR8vCSwWhFXffdsW4BoOpLIWyXGImL5FiZmccxov6R1euUdr_Wcazvor6yFf9Yymrl2WFQ8qVug=h720",
+    "https://play-lh.googleusercontent.com/sgdkstGJB3d_FNDDER3dgGCCLhxiIGqAZEOnIrUlp6gKBpcxh44MjLfbsr9fm_eQ2NBpGcNjce7seSBrWKQO=h720",
+    "https://play-lh.googleusercontent.com/2psBXcR0mkVyvpO39r5To0iFkjgigYfU6ZM_49e6A-ZKKXu_K-UPIDTk5FoJ30yNWhHdA5owfapHp_k2qWmiWA=h720",
+    "https://play-lh.googleusercontent.com/Hlzi3dyNgqRYVA41QZYcFDP3T6IehYGqrjU1tGF2N62JVwW8Y021G2eluqmUyAj2Fx1OiN0WooJ3QylmsldsOQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=kikar.hashabat",
+   "sort": 182
+  },
+  {
+   "package": "co.il.jdn.new_app",
+   "label": "JDN",
+   "category": "חדשות ופורומים",
+   "note": "חדשות היהדות החרדית.",
+   "description": "JDN app is another platform of JDN - the Haredi news channel.\nJDN provides news and updates from around the world, focusing on the Haredi world.\nAll JDN content is supervised and screened meticulously.\nJDN - the leading news channel in the Haredi sector\nJDN offers a variety of information in many areas:\nNews, politics, Hassidic world, video clips, Rebbes galleries, food, well being, women and much more.\nNow in a state of the art app\n\nאפליקציית JDN הינה פלטפורמה נוספת של גוף החדשות למגזר החרדי JDN.\nJDN מספקת חדשות ועדכונים מהנעשה בעולם בכלל, ובעולם החרדי בפרט.\nהתכנים מסוננים ומפוקחים.\nJDN - גוף החדשות המוביל במגזר החרדי.\nתוכל למצוא תוכן ממגוון רחב של תחומים:",
+   "icon_url": "https://play-lh.googleusercontent.com/03JaVGQDPKYIiswsFh7JawszcGgJVlHU62GX_of1W4RmTaA0m8yenG19BSxE3oS9qsw3Bjj8NujVcj8vJBTf7zY=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/FbOXLQVxkELMGJQsbpTYg0pX7f5_kurXANroVzw4aF_-tUBtJskwlsPgYwpDItOWodRLcNmz8-JcOevQO5apcQ=h720",
+    "https://play-lh.googleusercontent.com/AtGI8XvsUdxDl14uhBR4uwAsWmSGYoE3CnHk2IJuepPr1hdN1Ge_ax0rUJC7pe2k7mt-9Nvt8Uf2n5eh74Uf=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=co.il.jdn.new_app",
+   "sort": 183
+  },
+  {
+   "package": "com.hm_news",
+   "label": "המחדש",
+   "category": "חדשות ופורומים",
+   "note": "חדשות ועדכונים.",
+   "description": "\"המחדש\" - הוא אתר החדשות הכשר הגדול ביותר, עם תכנים על הנעשה במגזר החרדי והדתי, בפוליטיקה הישראלית, מזג האוויר, וחדשות מהעולם. \n\nאנחנו דואגים שתישארו מעודכנים בזמן ומסביב לשעון, במבזקים, כתבות, ראיונות, מוסיקה חסידית, לצד שיעורי תורה ותוכן תורני עשיר. \n\nמוזמנים להוריד את האפליקצייה החדשה והעדכנית ולהישאר מעודכנים בתוכן נקי לציבור החרדי.",
+   "icon_url": "https://play-lh.googleusercontent.com/z9iBfTkDbvRYNbwOpc7AyY1ZIJRFm_rjaajT9J_kdMO55y0UM1ai2P00hxUo9x04lMCVMaziX7VKqMJEIbZF0g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/kUT8i9FGQUDa3QXINTiMX4Dro_eSi-dH_WMZ2AptVfPTP8pkzU2Y0BpU_BLYsulkuu2sp7QztqBfZsQib6CU9A=h720",
+    "https://play-lh.googleusercontent.com/UmPO0mR8Y-bo14vbf2636zmmFhL9cfppYYLTyzBmZkguPOHf5Lzn-VFh2xkDZ1XbQY3VlPD8PBX38ekPI0JmkQ=h720",
+    "https://play-lh.googleusercontent.com/kPUVQkbqU0znsV9BbLPxrJ8a6AEFFNFUsryexeSdbSf5yZpiQ9McyNqOQciKZUmlufMemqHhs8aewiUx-pTnYg=h720",
+    "https://play-lh.googleusercontent.com/sYXC0C39DqlnqGwgz-X2d8q1Gs46_Tsclmy46hFSh9xuUBuS47T4VWka8uMJ9FKiYpLrMjdORJIReuXEvDYBLms=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.hm_news",
+   "sort": 184
+  },
+  {
+   "package": "kol_barama.co.il",
+   "label": "קול ברמה",
+   "category": "מדיה",
+   "note": "רדיו קול ברמה בשידור חי.",
+   "description": "אפליקציית רדיו קול ברמה החדשה עכשיו באוויר.\nכל התוכניות והשידורים להאזנה חוזרת, שידורים חיים, מגוון רחב של תכני וידאו, חדשות ואקטואליה, מוזיקה, מאחרי הקלעים של התחנה ועוד תכנים נוספים ממתינים לכם ביישומון.\nאפליקציה קלה ונוחה לשימוש ובכל מקום וזמן.\n\n- התממשקות מלאה לאתר התחנה.\n- לוח שידורים מתעדכן.\n- ארכיון תוכניות מלא להאזנה חוזרת.\n- פלייליסטים לכל ימות השנה\n- תאימות מלאה לכל סוגי המכשירים.\n- נגישות לקהל בעל מוגבלות.\n- אייטמים וחדשות סביב השעון\n\nקול ברמה - בשבילי ובשבילך",
+   "icon_url": "https://play-lh.googleusercontent.com/xoF09gGAOErXfTl5dSP8oGSGmBaeVITIJ0ISz0Criu2kIXnJjLwcQWqgodZ5V2ri4sQ85-ye6m-XpJQsFJfp=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/h5blfs34MBejEn-s-zgDjmjaKVKnubhDdlICOAisU9O4idh0F5W_fMQyni_ydr7EzYiqXc-egR9BiwOrpzIRSQ=h720",
+    "https://play-lh.googleusercontent.com/rsa_ydOcjifhOdY-gt8gxrkmB_MXENd84RMqHQLHrH2kurATTeJlkr31lL3oMiajfQvdI_YxgNoUT8OpOqrIQg=h720",
+    "https://play-lh.googleusercontent.com/KljsTcw9vQ279dkWt1u8KIPzoOR6cfYxubRijgpQPmnFsAhsiVTP7-Irl5-XMnpMdOj2D8KEeGKhyRocIWHWz-E=h720",
+    "https://play-lh.googleusercontent.com/DOs501SGFblxHJjF8EVCNtscrAFHXKXSOk8_pT61u7lVJvQGYU7I5dV7O72cOUv-Z4aGDYPCSNWrtMvQ4IoNJg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=kol_barama.co.il",
+   "sort": 185
+  },
+  {
+   "package": "com.kcm.fm",
+   "label": "קול חי — MS",
+   "category": "מדיה",
+   "note": "תחנות קול חי ומיוזיק.",
+   "description": "אמס MS - אפליקציית התוכן והחדשות התורנית חרדית הגדולה בעולם היהודי, מבית אימפריית התקשורת 'קבוצת קול חי'. האפליקציה מציעה מגוון רחב של תכנים לקריאה, האזנה וצפייה, ומספקת חוויה מלאה וייחודית לבית היהודי ולמשפחה שומרת תורה ומצוות. האפליקציה מתעדכנת באופן שוטף ומהיר ומציעה תכנים חדשים בנושאי אקטואליה וחדשות מהארץ ומהעולם היהודי.\n\nבאפליקציית אמס MS תמצאו:\n\n- שידור חי של 'קול חי' ו'קול חי מיוזיק' תחנות הרדיו המובילות במגזר החרדי.\n- חדשות ואקטואליה עדכנית.\n- סדרות VOD ותוכניות אירוח לצפייה והאזנה.\n- פודקאסטים ושידורים מיוחדים.\n- ערוצי שיעורי תורה ממיטב הרבנים והמרצים.\n- עולמות מוזיקה ועשרות ערוצי מוזיקה במגוון סגנונות.",
+   "icon_url": "https://play-lh.googleusercontent.com/7A_KSetxsoCm0G-iX7R6vVpDYhyMlMpLL2cOaMsCNwBK145_8aeLEm17KavBZzHM1zCYSIz2Kjlwx9ethj-o=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/kjosT2BYLC5YZZvTKDjuS0qhwQRcQLXA8L03e2OMUFPvIyleaI8FVgAWTgwtdZ5ENH16u09k2c_hJPzP6p4yaw=h720",
+    "https://play-lh.googleusercontent.com/kkqP8M7x6tyttNJAfBEK7JYgozSut17cFndgrPoGQbFd9BXUJ6AYSZU9lMNsPuR9nuUOJiDMaiKw7f2wpG4wbg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.kcm.fm",
+   "sort": 186
+  },
+  {
+   "package": "kcm.fm.volume",
+   "label": "מיוזיק ווליום",
+   "category": "מדיה",
+   "note": "מוזיקה יהודית מקבוצת קול חי.",
+   "description": "קול חי מיוזיק גאה להציג את 'מיוזיק ווליום' - אפליקציה מהפכנית עם עשרות ערוצי מוזיקה בדיוק בטעם שלכם.\n\nעם 'מיוזיק ווליום', תהנו מאלפי שעות מוזיקה מכל הז'אנרים והסגנונות, קלאסיקות אהובות, להיטים עכשוויים, שירי ילדים, רגש, קצב, שמחה ועצב.\n\nהאפליקציה מאפשרת סינון ומיון לפי סגנונות, אמנים, ומצבי רוח, מה שמבטיח שתמצאו תמיד את השיר המושלם לכל רגע.\n\nקול חי מיוזיק הוא ערוץ המוזיקה היהודי הפופולרי בעולם היהודי (בישראל בתדר 102.5 fm, ובעולם באתר ובאפליקציה).\nאנו יודעים שמוזיקה היא הרבה יותר מסתם צלילים - היא חוויה שנוגעת בנפש. לכן, במקום להסתפק בפלייליסטים אוטומטיים, הצוות שלנו, המורכב מעורכים מומחים, מקדיש זמן ומחשבה לבנות את הפלייליסטים הטובים ביותר, כדי שכל רגע מוזיקלי יתנגן לכם לא פחות ממושלם.",
+   "icon_url": "https://play-lh.googleusercontent.com/op-VXNxZGaoQtgYeP2b6czRpKOs1YpmqEbScwZTh21YTrMRBvRbCsiWxLZ5vi47Cdj9yxbQzq3r99eD9-YWFtQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/g3FcdVZJPZT5d6tB_bpfA3nU7rrkcNhz2BKcY3DDLl-cIUe0ITkevpWO-BgCEchofL4ejto1353RGvo2g_dU=h720",
+    "https://play-lh.googleusercontent.com/5NB6VtI-vy-Ve_LqEKUZscDqBpkAK3d3WVI4lTbsLAPEsrCb4_UGAFfRrDoONDGS7f2rEWrrjMEPb7uUkQMD-g=h720",
+    "https://play-lh.googleusercontent.com/bWMzbXE7u9uWrEvykjLiC7XEtm6Grft-9WuF7rKencEsD5IAOM3xl3t4kb8k99C-vnBtavIfhMedc9n9RCj1lMQ=h720",
+    "https://play-lh.googleusercontent.com/xnFenkKRk0uwRMstmZaOtuDblPxHW485jNWuxb50A63pjU4shYZpLXBdZ7VCG6vOEvQ1ACowbRmP8a6KSBKQrg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=kcm.fm.volume",
+   "sort": 187
+  },
+  {
+   "package": "com.google.android.apps.nbu.files",
+   "label": "Files — מנהל קבצים",
+   "category": "כלים",
+   "note": "מנהל קבצים של Google: פינוי מקום, העברה ושיתוף.",
+   "description": "✨ פנה מקום במכשיר שלך עם המלצות ניקוי\n🔍 מצא קבצים מהר יותר עם חיפוש וגלישה פשוטה\n↔️ שתף במהירות קבצים במצב לא מקוון עם שיתוף מהיר\n☁️ גבה קבצים לענן כדי לחסוך מקום במכשיר שלך\n🔒 אבטח את הקבצים שלך עם מנעול שאינו מכשיר\n\nפנה מקום\nראה בקלות כמה מקום נשאר במכשיר, בכרטיס ה-SD ובכונן ה-USB שלך. פנה מקום על ידי מציאת תמונות ישנות מאפליקציות צ'אט, קבצים כפולים, ניקוי מטמון ועוד.\n\nמצא קבצים מהר יותר\nחסוך זמן בחיפוש תמונות, סרטונים ומסמכים בטלפון שלך. חפש במהירות או עיין בקובצי ה-GIF שלך או שתף את הסרטון שהורדת לאחרונה. מיין קבצים לפי גודל כדי להבין מה תופס מקום.\n\nשיתוף קבצים מהיר ומאובטח\nשתף תמונות, סרטונים, אפליקציות ועוד למכשירי Android ו-Chromebook סביבך עם שיתוף מהיר.",
+   "icon_url": "https://play-lh.googleusercontent.com/cjyFg0ABFwOFdLf1GsCGRvOoAANqCnIsFCgwGe8g-FPVaQ5STxoqZAKQOph44Hlx-gO0GMx8AZC9AY1VUBiO=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/0qGSSrjDHFZettmn0jCmh_c591yzSdYj-OquqF6VvQxj_LbGeph9XZHdxySxG8-3EWPqU1TrrYPi-jyrBPHfavE=h720",
+    "https://play-lh.googleusercontent.com/ds7t_EQy41zVERDUFy3uw6PQ7Lm3AKEUWKyy33cTqoFUyFffeVXzGL5pKUraXgqEeKqJ93Y_hwuhuItF055dAfM=h720",
+    "https://play-lh.googleusercontent.com/gRzZR4MrANMqPP-Sy4SkrGAZwPhjXBatsOgEWbBHZbHESZn_9E7SLDW5-QozFTkCL3es5RIve6FQaPhSC0Br=h720",
+    "https://play-lh.googleusercontent.com/kUirNFSe6NExMHhtiLMd_YiVZyRCpnLb1CSZ_UlhN3tMujvQSZ5bw1pbJJKS-cSHk4isakwM2an0CWuZeGm8=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.nbu.files",
+   "sort": 188
+  },
+  {
+   "package": "com.alphainventor.filemanager",
+   "label": "מנהל קבצים +",
+   "category": "כלים",
+   "note": "מנהל קבצים מלא.",
+   "description": "+ מנהל קבצים הוא סייר קבצים קל וחזק למכשירי אנדרואיד. זה בחינם, מהיר וכולל את כל תכונות. בגלל ממשק המשתמש הפשוט שלו, זה מאוד קל לשימוש. עם + מנהל קבצים, אתה יכול לנהל בקלות את הקבצים והתיקיות שלך במכשיר שלך, (אחסון רשת מצורף-) NAS ואחסון ענן כמו Dropbox ו- Google Drive.\n\nאתה יכול לנהל את האחסון מקומי ומרוחקים / ענן. הוא תומך בכל פעולות ניהול קבצים (פתוח, חיפוש, ניווט בספרייה, להעתיק ולהדביק, לחתוך, למחוק, לשנות, לדחוס, לשחרר לחץ, העברה, להורדה, סימנייה, לארגן). מנהל קבצי פלוס תומכת בקבצי מדיה ופורמטים של קבצים גדולים, כולל apk.\n\nמיקומים מרכזיים ופונקציות של מנהל קבצי פלוס הם כדלקמן:\n\n• אחסון עיקרי: אתה יכול לנהל את כל קבצים ותיקיות במכשיר האחסון המקומי שלך.",
+   "icon_url": "https://play-lh.googleusercontent.com/ks-rS8x71PjjK3fRF6bqtkarpsczS6hiErvgmK2Y0uivOjYxZjPMoyZhagZiiM8Y5mu2pjyX_UwHP9OmmXRWGGQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/4gRJ5hD0qASjlV49KK1CLm9hKKuHE0TDhz3BSaOx_QeVtqc9gYhS_to1dq_M-5dlLwv0rIRfIFLmGhfRjtfG1g=h720",
+    "https://play-lh.googleusercontent.com/xjN3CT895CefWRsi46r-vu_Zgil5v3k_PU_TXUoDkvqE8cw_-kDMws0E0QBU7U02GWhTxAncY8FrpIG-9yfb3A8=h720",
+    "https://play-lh.googleusercontent.com/XHLFLOxHxkzjNXA1MlIbJJWnkpAkQs4LoP8Xan-_pafj9eehOSkMhF9BPcNPXx6jBUDFWNCnC3s2PX1bP5b6frw=h720",
+    "https://play-lh.googleusercontent.com/lBtgz6OCWfYJip-WGjmAZ-sFfQlyC7FjHLiosYcTiL3ON2poGVj7yumWyv5WMiJxj2XjFaT6YLWqMWdvs2DA4w=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.alphainventor.filemanager",
+   "sort": 189
+  },
+  {
+   "package": "com.google.android.calculator",
+   "label": "מחשבון",
+   "category": "כלים",
+   "note": "מחשבון של Google.",
+   "description": "‏אפליקציית המחשבון כוללת עיצוב ממשק מרשים ומאפשרת ביצוע של פעולות מתמטיות פשוטות ומתקדמות.\n\n• ניתן לבצע חישובים בסיסיים כמו חיבור, חיסור, כפל וחילוק\n• אפשר לבצע פעולות מדעיות, כמו פונקציות טריגונומטריות, לוגריתמיות ואקספוננציאליות",
+   "icon_url": "https://play-lh.googleusercontent.com/VBPoo5bxW4MYDd6pZLZ6W8XqyvubpatbvF55sYJaIzDqyMg2GK_tg3Nopo2rHAXc8NJMKPyL7RI8zoP_J6r8tmY=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/jN6Zl5ZrCpJ9ixdJRNiITC2f2xRZBI9jfwnWz3xMWxhouP6LH-p25416PYBJkwVKvp9AoL3WPiUXyyoxrdD0FA=h720",
+    "https://play-lh.googleusercontent.com/1BJJC-IV2Nn0MbBxiCLaHgGF_HA5vhXvnxRHrkKP-bCwRzeDr3R_fN0mZJQXMLjbC1Lv5HCGw-nX0fUHGhhc2w=h720",
+    "https://play-lh.googleusercontent.com/r8U3aHqkpWXw6TesSB7UYvvWEptkxn0Bf6oGF4tzM_ZGmzFq-pYHZsobDm2bNfAzU6jviw8qPagGHYBNmksc=h720",
+    "https://play-lh.googleusercontent.com/EjhzXa9PjDlrEZvWh4rTe5bqQEF-waP0Fz4Rf_6_0g5s0aSc_G_VJQcqEnxeXhwJEPvHKOw-ZuGwgMIND2fKfw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.calculator",
+   "sort": 190
+  },
+  {
+   "package": "com.google.android.calendar",
+   "label": "יומן Google",
+   "category": "כלים",
+   "note": "יומן ותזכורות.",
+   "description": "מורידים למכשירי Android (טלפונים וטאבלטים) או Wear OS את האפליקציה הרשמית של יומן Google, עושים סדר בלוז ומתכננים בקלות את היום: אפשר ליצור אירועים ומשימות, להוסיף כמה יומנים, לשנות את התצוגה לפי מה שמתאים, להתקין ווידג'טים ועוד.\n\nביומן Google, אתם יכולים: \n• לראות אירועים מ-Gmail שנוספים ליומן אוטומטית, כולל טיסות, הופעות והזמנות למלונות ומסעדות.\n• לעבור בלי בעיה בין היומן במחשב ל-Android (בטלפון או בטאבלט) או ל-Wear OS כדי לא לפספס שום דבר, כל עוד אתם מחוברים לאותו חשבון Google.\n• לאחד יומנים אחרים עם יומן Google, כולל Exchange, כדי לראות את האירועים בכל היומנים אחד ליד השני. \n• ליצור יומן משותף עם המשפחה, החברים והקולגות כדי שהם יוכלו לראות, להוסיף או לשנות אירועים.",
+   "icon_url": "https://play-lh.googleusercontent.com/vEoqLbT_QkYcEaawWBRc22N6i98OUtOUpM1LmKdVs_xx7lCsUyFfV0ZiqoUXjMijUteiBhhN4K5MpoF96FRNOg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/5sVZzBzch4nuyTKZoCAguLBMeUtmDEoLVw9D0SjUpLv1PTLxe6uzxvPrVz7ix6gPjiWwvdF1ljHi4SxmBfk9hw=h720",
+    "https://play-lh.googleusercontent.com/rA4cIrRVX55GU2hZOTV9AyUStDhS-TZkifhereADgF1sx416CrPoSOCVJicrHQu1gI39D_FuJ0nTezDiM4SiG7w=h720",
+    "https://play-lh.googleusercontent.com/nAad7MPK6QZYdidZsdUy_kYXh02kE_nguQeuSB7EtjNzkfAse2wKVj_J67DVTMYBOuWbSQoHCl8LeTaw9L5f=h720",
+    "https://play-lh.googleusercontent.com/z0KXKLr8DvZMaf-cokqCLAA2e3p3A24B8tpLMPUJppQ9JNit2LLXmxtdkH5hBCSz7QI8K2FHcMHI2CTYzMnOzQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.calendar",
+   "sort": 191
+  },
+  {
+   "package": "com.google.android.keep",
+   "label": "Google Keep",
+   "category": "כלים",
+   "note": "פתקים ורשימות.",
+   "description": "מתעדים במהירות את מה שעובר בראש ואחר כך מקבלים תזכורות בזמן ובמקום הנכונים. בדרכים, מקליטים תזכורת קולית שמתומללת באופן אוטומטי. יש גם אפשרות לצלם תמונה של פוסטר, קבלה או מסמך ולשמור אותה בצורה מסודרת או לאתר אותה באמצעות החיפוש בשלב מאוחר יותר. בזכות Google Keep קל לתעד את המחשבות וליצור רשימות, ולשתף אותן עם החברים והמשפחה.\n \n מתעדים את כל מה שעובר בראש\n • מוסיפים פתקים, רשימות ותמונות ב-Google Keep. אין לכם הרבה זמן? מקליטים תזכורת קולית, והמערכת של Keep תתמלל אותה כדי שתוכלו למצוא אותה בקלות מאוחר יותר.\n • משתמשים בווידג'טים לטלפון ולטאבלט ומוסיפים כרטיסי מידע כותכונות נוספות למכשיר Wear OS כדי לתעד את המחשבות במהירות.\n משתפים רעיונות עם חברים ומשפחה",
+   "icon_url": "https://play-lh.googleusercontent.com/0AM0MfDO-MWUAKwg8vpbftm7GqvEW1JfLGHCgwsgIemF6hMW61XOVnnNDHCGeRMiYZtVaxV2M-AYoP_zMoJt6w=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/VMHfou8dsBV703TfOxuUoRd5UG_oZVnkTgrOcknwVlpTmWdmOy9AlgxujHiKN4krfiC58TlGFjuJuEYUaeHO=h720",
+    "https://play-lh.googleusercontent.com/ClBIgAJn0H-QMyNrtSjl70E419GSUvZQlLwsvpIgdfdYqH7DFJhUAetrpcHrUhe1rZY-ZiaK5GwCqVollQgcunE=h720",
+    "https://play-lh.googleusercontent.com/vOzXidM_-Ht5G_pdukRglrgZaAnd1C5dHowyK3L_HMd0Q0eMtyU7IJa-ac7n7FzdKFnl0hBRt1usCm-d87lJvdE=h720",
+    "https://play-lh.googleusercontent.com/_-UhyC1z2hCvhzsGhgcp6qM9eeEaV8TJpsgDaTCscngteQ52j0Q5I3XfyDnctm-4S3a4GgQ8V5eHTsvWpvahrw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.keep",
+   "sort": 192
+  },
+  {
+   "package": "com.google.android.apps.docs",
+   "label": "Google Drive",
+   "category": "כלים",
+   "note": "אחסון וגיבוי קבצים בענן.",
+   "description": "Google Drive הוא חלק מ-Google Workspace – זהו מקום בטוח שבו תוכלו לגבות את כל הקבצים שלכם ולגשת אליהם מכל מכשיר. קל להזמין אחרים לצפות בכל קובץ או תיקייה, לערוך אותם ולהוסיף להם תגובות.\n\nב-Drive אפשר:\n\n• לאחסן קבצים בצורה בטוחה ולגשת אליהם מכל מקום\n• לגשת במהירות לקבצים החשובים שלכם ולקבצים האחרונים שפתחתם\n• לחפש קבצים לפי שם או תוכן\n• לשתף קבצים ותיקיות ולהגדיר להם הרשאות\n• לצפות בתוכן שלכם בדרכים, גם ללא חיבור לאינטרנט\n• לקבל התראות על פעילות חשובה שבוצעה בקבצים שלכם\n• להשתמש במצלמה של המכשיר כדי לסרוק מסמכים\n\nלמנויים של Google Workspace יש גישה לפונקציות נוספות של Drive, כולל:\n• ניהול פשוט של המשתמשים ושל שיתוף הקבצים באופן שישמור על תאימות הנתונים",
+   "icon_url": "https://play-lh.googleusercontent.com/chc-Fx3Qi3BisTZw1aOteYK_XkMHUiXKRbX2Hc8shyFI8pYt7DcyUPzVwLGJKIeKCKDD6nFVhEtUrIaEyzcnmA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/IKAoweOGqGZEtV8uqkqt4FaOZ-lGQ56eUklsWf5ynzrANuwLV6rVmldVZp8qRsL7HP-AwR4wbdAynM8LcN-YWg=h720",
+    "https://play-lh.googleusercontent.com/Iw34-P7h4Qxlmuusf5ZZecFKtUKBF8Yb2p7UGQgHl6NOBousfZwV8QXRBvTnErCkgiDDPjByJSePpFqHZsaTng=h720",
+    "https://play-lh.googleusercontent.com/dHctysCQ_Rbn2rIjxh5lfnUoz4qyHBFeyC_-CRCsW_LKrwpSygcOSidXqbp-861d3VyXysKH3scEJ_9ggOMJAL4=h720",
+    "https://play-lh.googleusercontent.com/HVRUifwVE7ibBG1g4QxP5dCNJhA1xKJTazNLidD_OzntJVs4wo1JMj5QM5XODV5nlhJVSy5FyjGPxzEEQDc8sw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.docs",
+   "sort": 193
+  },
+  {
+   "package": "com.google.android.apps.authenticator2",
+   "label": "מאמת החשבונות",
+   "category": "כלים",
+   "note": "קודי אימות לכניסה מאובטחת.",
+   "description": "עם מאמת החשבונות של Google מקבלים שכבת אבטחה נוספת לחשבונות באינטרנט, בזכות הוספת שלב שני לאימות בכניסה לחשבון. כלומר, בנוסף לסיסמה צריך להזין גם קוד שנוצר על ידי אפליקציית מאמת החשבונות של Google שמותקנת בטלפון. לאפליקציית מאמת החשבונות של Google יש אפשרות ליצור את קוד האימות בטלפון גם אם אין חיבור לרשת סלולרית או לאינטרנט. \n* סנכרון הקודים ממאמת החשבונות בחשבון Google ובכל המכשירים. כך תמיד תהיה גישה אליהם, גם אם הטלפון יאבד. \n* הגדרת החשבונות במאמת החשבונות באופן אוטומטי באמצעות קוד QR. זו דרך קלה ומהירה לוודא שהקודים יוגדרו בצורה מדויקת. \n* תמיכה במספר חשבונות. אפליקציית מאמת החשבונות מאפשרת לנהל כמה חשבונות, לכן אין צורך לעבור בין אפליקציות בכל כניסה לחשבון.",
+   "icon_url": "https://play-lh.googleusercontent.com/4qyuLCJkVpVfoIeu6b0ld6LkKzPHHby9ZilLbxhUZLK4f64o65oHGW-ZsuVe3LAWDVuIZpkQISmmVvA4-qnofw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/K0v7YVrTI4T1rHkjrYzuPbRyB6VG2SuuNHyKoAIKbUnpi2n_G7HOtPFR__vT9Gnk229Pr0Kj17yO6-hRQj2Lgq0=h720",
+    "https://play-lh.googleusercontent.com/d8SmgK0c50lqQlBY4YB3cSmqCTg5-UnvL424zh1m_s8lEzqQW4Uzbnl-LAy0TibpSjKXbrdcX9lVMudDX994rg=h720",
+    "https://play-lh.googleusercontent.com/L1rjVN3V0Hu9o-6zY5Rp_FWCtWd2XmIXcvNJy2P1x0rhWcdzCBSfqkZZNk6fXotvP9KS8Kd9I9iKyjVwImgvUg=h720",
+    "https://play-lh.googleusercontent.com/CLA_X-VOeSLHlm1QY3_daAGCn3kL2hsGBPZOVcVQdKuepE6SBj41-uCE3bbXuswkxSD2H7TI--Ewi3-Vr3zucw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2",
+   "sort": 194
+  },
+  {
+   "package": "com.azure.authenticator",
+   "label": "Microsoft Authenticator",
+   "category": "כלים",
+   "note": "קודי אימות לכניסה מאובטחת.",
+   "description": "השתמש ב- Microsoft Authenticator עבור כניסות קלות ומאובטחות לכל החשבונות המקוונים שלך באמצעות אימות רב-גורמי או ללא סיסמה. יש לך גם אפשרויות נוספות לניהול חשבונות עבור החשבון Microsoft אישי, חשבון Microsoft שלך בעבודה או בבית ספר.\n\nתחילת העבודה עם אימות רב-גורמי\n\nאימות רב-גורמי (MFA) או אימות דו-גורמי (2FA) מספק שכבה נוספת של אבטחה. בעת כניסה באמצעות אימות רב-גורמי, תזין את הסיסמה שלך ולאחר מכן תתבקש לספק דרך נוספת להוכחת שזה באמת אתה. אשר את ההודעה שנשלחה ל- Microsoft Authenticator או הזן את הסיסמה החד-פעמית (OTP) שנוצרה על-ידי האפליקציה. הסיסמאות החד-פעמיות (קודי OTP) כוללות שעון עצר של 30 שניות שסופר לאחור.",
+   "icon_url": "https://play-lh.googleusercontent.com/7Qf6PPkO5HPtxkkGdI56KAXonEzgzyUvQARaDWP3dUsmwweJEHAI1oiZf6tSZn1wkSKKj7SO-eemScUh9a5k=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/Tq79SEgIS8ytPXVPVH7z4gDsrNu3NQ81r1xe1EzJdPCRpFoW62grDNeDnzJxaqC9Ia4rZzWQ1tdDkYXDlBK-2Ww=h720",
+    "https://play-lh.googleusercontent.com/ho_gFaSqAVazlU8rDzj4leYXcud6kHvzaPS8pwxnPAYIxMe7eDoosn_mRlT4tobnpYhygFTDek5f6dAETvEH=h720",
+    "https://play-lh.googleusercontent.com/Wl70p93d3p5Uase_GSVYKkVFsBnKRvMY81M4Ck1hmyApSlRaQEJYb9UjDNtsjJUIMNQTrIcShi93fWH1aPiCJjU=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.azure.authenticator",
+   "sort": 195
+  },
+  {
+   "package": "com.adobe.scan.android",
+   "label": "Adobe Scan",
+   "category": "כלים",
+   "note": "סריקת מסמכים ל-PDF במצלמה.",
+   "description": "מחק קסם לסריקות נקיות יותר.\nמחק הקסם החדש מסיר טביעות אצבעות, צללים, כתמים וקמטים לא רצויים בסריקות, בלחיצה אחת. מקבלים מסמכים נקיים יותר בלי לסרוק מחדש.\n\nסורק מסמכים, אצלכם בכיס.\n‏Adobe Scan זמינה להורדה בחינם והופכת את המכשיר הנייד שלכם לסורק PDF ומסמכים חכם, שעוזר לכם ליצור, לשמור ולארגן מסמכים מודפסים כקבצים דיגיטליים.\n\n‏4 דרכים להשתמש ב-Adobe Scan‏\n1) חסכו זמן עם סורק מסמכים מהיר: סרקו במהירות גבוהה כדי להפוך ערימות של דפים לקובצי PDF תוך שניות.\n\n2) צרו קובץ PDF ישירות מהטלפון: המירו מסמכי נייר או תמונות מודפסות ל-PDF או ל-JPEG בעזרת סורק המסמכים והתמונות הנייד.\n\n3) המירו תמונות לטקסט: השתמשו בתכונת התמונה-לטקסט כדי להפוך מילים בסריקות שלכם לכאלה שניתן לחפש ולערוך באמצעות OCR.",
+   "icon_url": "https://play-lh.googleusercontent.com/C90I3a2u64QLuE_BiMr4YbHRtgjRoOCrNMLg67R5buhqH82pMq6weh9IvYkUVPl_IAVAlfCYl18DN4XCEbq2Hg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ZZg7OluCapfRlE7jDNq_ZMaNaztrRxcI85sLlJlEzU_ZHKnnyTBpK58wlwomCjMDJ5QsMyg67qxKjzZfR2o-YOU=h720",
+    "https://play-lh.googleusercontent.com/RwaagCAPPJrdxrzXPfF1sMyNO3SWMQekPNw5oamHtk4y1AOqqTblcyTXi806UvYWqHZJuYv61zKj45lG8lju=h720",
+    "https://play-lh.googleusercontent.com/FcVHmTTtjFWMP1OXIKeCi83NOIwM1QjNDEiWc0a2U-1m1BDa9EJnTNr5y-m-FpGsCXYpKTSDbXOEbQOS2eGHuA=h720",
+    "https://play-lh.googleusercontent.com/7AyMDyoj2TS4GhLk2gdkUKWYLxNQyMuOkSwguptA7f80sBBD3CuclS2x5vtOxAGle1X8dLVDkp0ovPweywZJ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.adobe.scan.android",
+   "sort": 196
+  },
+  {
+   "package": "com.adobe.reader",
+   "label": "Adobe Acrobat Reader",
+   "category": "כלים",
+   "note": "קריאה וחתימה על קובצי PDF.",
+   "description": "Reader היא קורא ה-PDF ועורך ה-PDF הפופולריים בעולם עם יותר מאשר 635 מיליון התקנות. פותחים ומשתפים מסמכים, מוסיפים להם הערות וחותמים עליהם – והכול באפליקציה אחת. שומרים את הקבצים באינטרנט וקוראים מסמכים בכל מקום.\n\n**עדכון**\nתכונות מאפליקציית Fill & Sign של Adobe זמינות כעת ב-Adobe Acrobat Reader. מלאו, חתמו ושלחו כל טופס באופן מהיר ואמין. אתם יכולים אפילו לצלם תמונה של מסמך נייר ולמלא אותו בטלפון או בטאבלט שלכם, ואז לחתום ולשלוח. זה קל ופשוט: בלי מסמך פיזי, וללא צורך בהדפסה או בשליחת פקסים.\n\nקבלו 7 ימי ניסיון חינם ונסו את כל התכונות של Acrobat Reader.\n\nמנוי פרימיום מאפשר לך לערוך טקסט ותמונות בקבצי PDF, להשתמש בממיר PDF לשילוב, לארגן ולהמיר קבצי PDF ועוד.\n\nתכונות בתשלום:\nעריכת קובצי PDF",
+   "icon_url": "https://play-lh.googleusercontent.com/VIohTA3wyJgKJ-SZzoJeYuykxyVFCbSmXFAjefIGQybY57FX44VCHyVa3CTOZROzWLbMc-VFwL4CEDj47LeRpM0=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/n2VkQlbhuMhwdCmSEjO5Y5oKRuG2hhxZ_WPrOS4Lg_vSjwM48lLH3HGlbv9xiEo8lKjDcJ1JzvQ89ru6Nyr8ZQ=h720",
+    "https://play-lh.googleusercontent.com/HkT1kAs-nCfmrIYhR-3Ez8u7ZtC5zhXo3D5GmCz8nax4iVqfh-UxiPwXZQD3eGpeXGZG-Mv1J_MgPPPcdKTUyQ=h720",
+    "https://play-lh.googleusercontent.com/ijfbbKHWExbyJ7dEkg7p20I6VLKeA594tsBXH4XYUbA23smOnAKK0nNt2Cbtj05OUYZIvDkl_mq8SHY5MHbi1KI=h720",
+    "https://play-lh.googleusercontent.com/tLxcZ6G3wSYYgClSzR1bz19N4QMWaVzSDpasPn8r7G-KiRF1dCy7ws9nh2EldqEElr25rhvGbmvusEER4Y2iuQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.adobe.reader",
+   "sort": 197
+  },
+  {
+   "package": "com.google.android.apps.translate",
+   "label": "Google Translate",
+   "category": "כלים",
+   "note": "תרגום טקסט ושיחה.",
+   "description": "• תרגום טקסט: תרגום בין 108 שפות באמצעות הקלדה\n• תרגום בקליק: אפשר להעתיק טקסט בכל אפליקציה ולהקיש על הסמל של Google Translate כדי לתרגם (כל השפות)\n• זמין תמיד: תרגום ללא צורך בחיבור לאינטרנט (ב-59 שפות)\n• תרגום מיידי של טקסט בתמונות באמצעות המצלמה – פשוט להפנות את המצלמה אל הטקסט (ב-94 שפות)\n• תמונות: צילום או ייבוא של תמונות לקבלת תרגומים באיכות גבוהה יותר (ב-90 שפות)\n• שיחות: תרגום שיחות בין שתי שפות בזמן אמת (ב-70 שפות)\n• כתב יד: כתיבה ידנית של תווים במקום הקלדה (ב-96 שפות)\n• התרגומים שלי: סימון תרגומים בכוכב ושמירת תרגומים לעיון בעתיד (בכל השפות)\n• סנכרון בין מכשירים: התחברות לצורך סנכרון התרגומים שלי בין האפליקציה לבין המחשב השולחני",
+   "icon_url": "https://play-lh.googleusercontent.com/muIZuJn9awFB9XWa4g0aiqFxHbgAFVVfHVQrEmos46v29NfyZX5z1n1ZYBjH3Zvg80Dm90TI2ZdQZMr2cLMcCg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/oSPOo3RqYcnFrkWzNoF8ERhdwW-zkDVDVJS891ntPvGbuvg5KFE7p0-4IBXW8s16Qd87op-ACQ-6rm_ymvQ8=h720",
+    "https://play-lh.googleusercontent.com/73MZTlbQfG0MOUmPUCjDYnpC_JILirUEc0S4_jgbLpCRqtYx774X7HEpTuPpSoho1KqJoAl5VzndcC8qkW-SoQ=h720",
+    "https://play-lh.googleusercontent.com/YiMXnEXOcSvgrk6KF3PDDZjnaokJBhbsB9vH41YTTTCtys81xBXghttaob2m4TIJutoFyF3h-JNVjP18tCmR=h720",
+    "https://play-lh.googleusercontent.com/eBDYNn1TQkNwz3NQq9BdYHbgfQlt2PntXSJR9lX7sr5Hyp6wGAQlH3D5wr_sRzsPzuiibzDOPbPMOSFuKrlY6Xo=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.translate",
+   "sort": 198
+  },
+  {
+   "package": "com.exovoid.weather.app",
+   "label": "מזג אוויר ישראל",
+   "category": "כלים",
+   "note": "תחזית מזג האוויר.",
+   "description": "זה היישום הטוב ביותר עבור מזג אוויר באזור שלך, בישראל ובשאר העולם. \n\n- הנפשות מציאותיות ביותר של תנאי מזג האוויר \n- ראה בחטף את שינוי מזג האוויר הבא \n\n- מעודכן ברציפות \n- תחזית שעתית מדויקת ל-10 הימים הקרובים \n- מהיר, יפה וקל לשימוש \n- תחזית מדויקת לגשם, קרח, שלג, ערפל, רוח, סופה, נקודת טל, מפתח UV, לחות, לחץ \n- ערכי ההיסטוריה הגבוהים והנמוכים ביותר \n- הנפשות לוויין ומפת מכ\"מ \n- ממוטב לטלפונים ולמחשבי לוח \n- טפט חי\n- מזג האוויר באזור ההודעות וטמפרטורה בשורת המצב \n- ויד'גט מעולה למסך הבית \n- अपने पसंदीदा स्मार्टवॉच पर उपलब्ध। वेयर ओएस के लिए पूर्ण समर्थन।\n- התראות מזג אוויר חמורות: קבל מידע שימושי על אזהרות מזג אוויר חמורות",
+   "icon_url": "https://play-lh.googleusercontent.com/1DHVrzUm4wvmHaFJwfe147FxHBIsuQRPLY-bNOUJYXzcGG1BJgCfWcZWXX7K5Oj9NJKF0mRvZWEsjioK_Z-g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/BDBjpNu1hGaBkkd8UhG93OwoidSXmEbbqGXbF7ObjmgYRfNUeo6yXDWeQa-TvBUtZaczgRw6knoeSALn8yZmXw=h720",
+    "https://play-lh.googleusercontent.com/U7KpMvQconDZva16KPhmhlSew8QVm83Vm4qnePAFb24flpjeHm0s0cj8rGXOxb5Sh75aBTgDNHlY0HJb1ZtJ=h720",
+    "https://play-lh.googleusercontent.com/XYq37mHIKjT6CObK1gGnkl5yCQPz7mhQQg492Bc06_6KrFPK_r57KJO3hfg7xGlGuv4yb8GkgnglvX2sYfVyKg=h720",
+    "https://play-lh.googleusercontent.com/cmyjdEnxOLdJVUzIYjlsjXXsytXcKBngXqKhpKHkxyne-RBJlziCQzAICXRy5Jc2NgGnUcxWf3A951Ugy4N-=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.exovoid.weather.app",
+   "sort": 199
+  },
+  {
+   "package": "com.govil.mygov",
+   "label": "MyGov",
+   "category": "ממשלה ושירותים",
+   "note": "שירותי ממשלה והזדהות.",
+   "description": "אזור אישי ממשלתי היא אפליקציה חדשה שמנגישה שירותים דיגיטליים לתושבים, לעסקים ואגודות שיתופיות בישראל. האפליקציה מאובטחת ברמה גבוהה ומאפשרת לך לשלם תשלומים, לקבל מידע, להוריד מסמכים רשמיים חתומים דיגיטלית ולבצע פעולות מול הממשלה.\n• האפליקציה מרכזת שירותים ממשלתיים תחת קורת גג אחת, ואפשר למצוא בקלות כל מה שצריך. לדוגמה: הורדת ספח תז, הורדת רישיון רכב ועוד\n• האפליקציה מאפשרת לך לבצע פעולות בקלות ובמהירות, בכל זמן ובכל מקום. לדוגמה: שינוי מען, הפעלת תז, העברת בעלות על כלי רכב, שיוך רכב לתג נכה ועוד\n• האפליקציה מאובטחת ברמה גבוהה כדי להגן על המידע האישי שלך.\n• האפליקציה קלה לשימוש ומאפשרת לך לבצע פעולות בקלות ובמהירות.\nהורידו עכשיו את האפליקציה והתחילו להשתמש בשירותים הממשלתיים בקלות ובנוחות!",
+   "icon_url": "https://play-lh.googleusercontent.com/HW_6Gx6naBfloCkicGmyjdvEeudJaoDiq4cbJ3reF1O8Bmf3Z6THXdgSUl95Q9sJLHmE8oHFbgjSsiLau3u3dQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/3iUp3TO1UmRiUKaaBodOFaL37ytMGFrAB231Oy7KAzXxFspWcEoAC0aqgYQ8S-FGiFC7IO5gZET6a8XevhBh8VU=h720",
+    "https://play-lh.googleusercontent.com/-z2_MY739QMdT74alST8BWN1ga9lFMD_T8wJhieiLBk2m9gd4DecbkUEaRng3fpr0-d-wc96uawCRPo70lkB8g=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.govil.mygov",
+   "sort": 200
+  },
+  {
+   "package": "com.alert.meserhadash",
+   "label": "פיקוד העורף",
+   "category": "ממשלה ושירותים",
+   "note": "התרעות והנחיות מצילות חיים.",
+   "description": "היישומון הרשמי של פיקוד העורף מספק התרעות, הנחיות ומידע מציל חיים בזמן אמת לפי מיקומכם ובאזורי עניין לבחירתכם. ביישומון תוכלו לקבל עדכונים חשובים בעת אירוע חירום וליצור קשר עם פיקוד העורף. היישומון זמין בשפות עברית, ערבית, רוסית ואנגלית",
+   "icon_url": "https://play-lh.googleusercontent.com/oZtUiwvjSaJNhDtIBWqTsx8CP99yujDxmsAobC_cScmQ6dLteilp00xGK39etxIliJ3WY-dHxnkw3zxYyhT3kFw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/0z0JlY1s34h2Z6ykP1ns02yf0Ly7Zk3sVNjiVxVO9yl-2yhL9RzBCGamJ3wVY0CYA5_LxWxMM33pP3_VYPXD=h720",
+    "https://play-lh.googleusercontent.com/HR-aid09HynKmutLirznxTIz6RQnfxaGpzGJVppzSnE3WMxYgJWh1mB4oXHSt3XHzLVy63o7oJoLEhaPAQZQ=h720",
+    "https://play-lh.googleusercontent.com/p79rX3h7Rdml9g-ycozZqHgkGplnWU1vI6G6f9j-dxrOpjnt3EgrfXFndyxKWRxYbvOlwA5rKlzdwz6Adi35tg=h720",
+    "https://play-lh.googleusercontent.com/Ws3zHj6aKxBmx7yB-Lv_9xQ3aYchaeVF9njcopXr57K1Pt4ZNeoprRPYUDW1a-cL0Y1JEJg2XmirthW5XAr48Q=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.alert.meserhadash",
+   "sort": 201
+  },
+  {
+   "package": "com.red.alert",
+   "label": "צבע אדום",
+   "category": "ממשלה ושירותים",
+   "note": "התרעות בזמן אמת.",
+   "description": "צבע אדום היא אפליקציה התנדבותית המאפשרת לך לקבל התרעה בזמן אמת כאשר אזעקת צבע אדום נשמעת באזורך!\n\nהאפליקציה מסתמכת על מידע רשמי המגיע ממערכות פיקוד העורף.\n\nשימו לב:\nיש לבטל אופטימיזציות סוללה בהגדרות המכשיר עבור אפליקציית צבע אדום כדי לקבל התרעות כשהאפליקציה ברקע!\n\n★ סוגי איומים - קבלת התרעות על ירי רקטות, חדירת כלי טיס עוינים, חדירת מחבלים ועוד\n★ זמן תגובה מהיר - התרעות צבע אדום מתקבלות לפני / במקביל לאזעקות בחוץ\n★ אמינות - שרתי התרעה ייעודיים המשפרים משמעותית את אמינות קבלת ההתרעות\n★ בחירת אזורים - אפשרות בחירת יישובים ומרחבים שלמים עבורם תופעל האזעקה על-ידי חיפוש לפי שם היישוב / שם המרחב\n★ התרעות לפי מיקום - אפשרות הגדרת התרעות מבוססות מיקום כדי לקבל התרעות תוך כדי תנועה",
+   "icon_url": "https://play-lh.googleusercontent.com/ezZtrJwEMDPvniTiLxOOA56B4N5hv4uTxOoPfcP6S_6OBjHEYlXF3OD8f0Zh08smAJD6_yDXd-c1wdObwDMs=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/tPCRgoxQfxpvCdbUI0ouYj3puzcps4Bz-hC5JxoYkj6fRkwxQ1U_7ZCx5rCB43h5FS9_76yq3lLschNAKwl8SA=h720",
+    "https://play-lh.googleusercontent.com/pEP4fHr8KIZJem7hGIZjI5j5cyBzR4KYtvAMqviy1P8OS0MNYWCjSiTsPIWBWxUo6Rapx7kc_P6PYF5ia5ktIQ=h720",
+    "https://play-lh.googleusercontent.com/AWpyhGN9EbtI_E5o-HIH-d7P5_nvjssnRpRCoZ5k4bvKzCZpYfwtl5vid3KAwOHglwUEAIVNa0TNFXGrMcSA=h720",
+    "https://play-lh.googleusercontent.com/q11danWrRH4HM3f1LyIsHkoxkyjXSbWZDtxh82XpGjL0C04NVxyjEpbgrRTFfG-Er-9OxcpV2TgfSjn9KFJWPA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.red.alert",
+   "sort": 202
+  },
+  {
+   "package": "com.israelpost.israelpost",
+   "label": "דואר ישראל",
+   "category": "ממשלה ושירותים",
+   "note": "מעקב משלוחים ושירותי דואר.",
+   "description": "איזה כיף שהגעת לאפליקציה החדשה.\nעכשיו נראה ביחד מה התחדש פה:\n- מהיום אפשר לעקוב אחרי החבילות שלך- להתעדכן בסטטוס החבילות והדואר מכל מקום, ולדעת איפה הם בכל רגע\n- לזמן תור ולאתר סניף קרוב אליך- בכמה צעדים פשוטים - לקבוע תורת מידע על סניפים, לפי המיקום שלך או לפי כתובת נבחרת נבחרת\n- לבצע את כל הפעולות בקלות, כבר באפליקציה",
+   "icon_url": "https://play-lh.googleusercontent.com/zBfUrWWzm0q7f_ocXPTprcksNSt2-FgvBIehyku8kVbvCvwKrmNiJfOQzFdt6FTRiHkFxLc1tCD7OdGfQGMj=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/NtYU_tIWGIaOJQiQempbXpDbP5x609tAwC7clk3_0IMoCMaUYuSu0Lg4x_JifuhLPPtSCjjiNxKR_oWo0D4YKQ=h720",
+    "https://play-lh.googleusercontent.com/5_3-InI41q-66I44G87qVTQNmMldEHH2LZMRAvPdpvYMDgMTJ-djLM9s-DD6EQ7xWyB6HJjPekGP1TOG6AkXNg=h720",
+    "https://play-lh.googleusercontent.com/iw8YfBEOXHeJE-hGnDC4SShS1Q3AtLjhuaxG_tHvo61b05I6p-4rP66GnmaJiptf-fJgg5J-rBUE2H2aj1alHWU=h720",
+    "https://play-lh.googleusercontent.com/YPreCxu47paetGEElv945ofwvYCnI6utg0jHo38-7oFBc0ZtSY0o-Te2VcG-GdUxBW4Qp74-2tG6uJWTdFqucbM=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.israelpost.israelpost",
+   "sort": 203
+  },
+  {
+   "package": "com.ewavemobile.electriccompany",
+   "label": "חברת החשמל",
+   "category": "ממשלה ושירותים",
+   "note": "חשבונות, תקלות ושירותים.",
+   "description": "האפליקציה של חברת חשמל מאפשרת לכם, בכל רגע נתון, לבצע:\nתשלום חשבון חשמל, לקבל מידע על תקלות והפסקות באזור המגורים, לקבל מידע על תשלומים וחשבונות , להוסיף ולנהל שותפים בחשבון, לקבל התראות בנושאים מגוונים ועוד אפשרויות בעתיד.",
+   "icon_url": "https://play-lh.googleusercontent.com/Nq8Ut1nIf8cJ0pvr-ohRvOd9WvbxRlt-S0LYuK2-3XXjnnlT8SeKV2DMSisCqerLGe8TWgCupFnYZXe-y-eC=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/7tn0bsjNfRxs-0Q5koAtlC4BndnCZvEjMkqYmqOFKQWwD-mn8bY1ltdU3xryoBxbaDqPERCoImC41W5_-9MwVg=h720",
+    "https://play-lh.googleusercontent.com/ZgrM7mAP3m_dWJUDbi4nvPZCBZQaxB6UxXpNjPM_I5rvD-JtHgYgTp9Q3HIssDauyp4lS4vzBK4ttcb16xtT=h720",
+    "https://play-lh.googleusercontent.com/s_Pd3VtfjsVE5FtFYL6lbunxlolAoIdDDHXeAoMdlPhiv28-tSwq3Qm9nMW6FLd3Qz5QFXwjyyYmaO5cS3dcJYk=h720",
+    "https://play-lh.googleusercontent.com/u_ACP_pkC-PXGuXlkyy_1B_Ue9N_tHVmeBl15aEP4FkUPrXBGWLoQ0WaBZcE7vwfWn43RBHtsCcIgkbAkz_7ZQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.ewavemobile.electriccompany",
+   "sort": 204
+  },
+  {
+   "package": "il.co.bezeq.my",
+   "label": "בזק",
+   "category": "ממשלה ושירותים",
+   "note": "שירות לקוחות בזק.",
+   "description": "ניסינו לחשוב על כל הדרכים שיחסכו לכם זמן ויקלו על החיים שלכם בכל הנוגע לניהול, צפייה וביצוע פעולות בחשבון בזק שלכם. עם אפליקציית בזק המידע והשירותים המוצעים בבזק נגישים לכם במקום אחד, מכל מקום ובכל זמן. \n\nאז איך מתחילים? \nהורידו את אפליקציית בזק והיכנסו בכל עת (גם באמצע הלילה ובסופי שבוע) באמצעות מערכת זיהוי ביומטרי כדי לשמור על פרטיותכם. אפליקציית בזק חוסכת לכם זמן יקר בכך שאתם יכולים לבצע בקלות ובנוחות פעולות באופן עצמאי, ללא תלות בנציגי שירות ומבלי שתצטרכו להמתין על הקו לנציג שיענה לשיחתכם. \nבין אם אתם נמנים על שירות אינטרנט ביתי, טלפון או חשמל של בזק אנרג'י, באפליקציית בזק תוכלו לקבל גישה שקופה ונוחה לכלל השירותים והמוצרים שברשותכם והכל ממקום אחד\n\nתמיכה טכנית ופתרון תקלות:",
+   "icon_url": "https://play-lh.googleusercontent.com/GiIvEfOqi1RkaUo6xqFTUWn7kS1XRZaqWOxahiqvUV5NTSy8s8q5yasLKnPWAS-GoXmIRXpG15xde9iDyO0P=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/Y6NzrrbLoqHcdG3PBKRx6N6U8zLH0pYqXsbQt_OtfMxZdXH7TJ4Jbjg6r5GZzTUfNJJeDkNhvzN9vuEpkrv86w=h720",
+    "https://play-lh.googleusercontent.com/YgJcrbwr0Sq4KQ4RhwLqRoNmlgI8lOKiIn-u3rt3hfmu5KH-nVulHyavCVZ6TRnWflWLRnGYqp7r07ZthpLHk4g=h720",
+    "https://play-lh.googleusercontent.com/YgiRPjXSW6F9mTr6p3QuPSGhgp4PXdNjMSwPBm4bDFwScr7VZ2P59iWQe1Kt96iGvNGFThSYoXF7g5cuU_Lp-8Y=h720",
+    "https://play-lh.googleusercontent.com/JYMQ0QQlOzt6mqif2HqPET1YqvMUgeTCj5pIH7Tw6Q6nf99RFic7dGBm4g9K9LB2Mhlthqx9LofxJLv1iq0QUA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.bezeq.my",
+   "sort": 205
+  },
+  {
+   "package": "il.co.orange.app.myorange",
+   "label": "פרטנר",
+   "category": "ממשלה ושירותים",
+   "note": "שירות לקוחות פרטנר.",
+   "description": "אפליקציית Partner 5G זמינה בכל זמן ובכל מקום, ומאפשרת למצוא בקלות את כל המידע שצריך, לבצע פעולות ולחסוך זמן. באפליקציה ניתן לבדוק חשבוניות\nוחיובים ולהבין בדיוק על מה משלמים, לעקוב אחר ניצול חבילות ושירותים, וגם לשנות ולהוסיף שירותים ללא צורך בפנייה לנציג. אפליקציית Partner 5G מאפשרת\nגם לנהל סיסמאות והגדרות בצורה פשוטה ונוחה, ולהתעדכן במידע חשוב שמגיע אליכם בזמן אמת.",
+   "icon_url": "https://play-lh.googleusercontent.com/c6gQyP4iwbF9hGc-3snCt7RCvmU5lhcRuvtvzHTRCADlxJ7zXFdzPjtx4JuedAGOuy_e50GVv7FZfl_chqFTHQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/yw03u5DTCI0HqJ6zLQ8wUSnE1D8LkR0LUmsPv3UYnBHJQDCbf-OCnS3sYhix0BXrg5rluvx2dgZv6Tj81g27=h720",
+    "https://play-lh.googleusercontent.com/PlIBzBBHIJHGt5Hr5FfJPHIbj3usO-d_Ulf_JB-iLkvTVbZt5Gbx_qGQp0oxa9Vq90r4HnFVt2xuwOn13CyNng=h720",
+    "https://play-lh.googleusercontent.com/JktzuuQpXhRCpCEM2cZpGcuwFlG7whWioko0CskKlQAKruEJAanRfGmkj-0nBqY4lnxjVVaK7S2TXPGYSzkF=h720",
+    "https://play-lh.googleusercontent.com/OKiiaR-HMNALLz1fbSSlMmUeqH9pMF7URrne-AnY34D5dT98lvBzYFR6TqHec1DH-XaPyQ_IgmDa-4vsnqU0zQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.orange.app.myorange",
+   "sort": 206
+  },
+  {
+   "package": "com.webtechinnovation.cellcommobile",
+   "label": "סלקום שלי",
+   "category": "ממשלה ושירותים",
+   "note": "שירות לקוחות סלקום.",
+   "description": "כל עולמות התוכן עבור העובד, במקום אחד.\n\nפורטל דינמי לתקשור חוויתי ושירות עצמי, שמשלב תכנים מקצועיים, עדכונים מותאמים אישית, גישה למידע אישי וביצוע פעולות\n\nבכל זמן, מכל מקום, עם חוויית משתמש נוחה וידידותית.",
+   "icon_url": "https://play-lh.googleusercontent.com/ozbriMV3JKGRlvO8DJ36-tZ-aaEdL6qQAJWLZM8nhUgTtZWetmWqnOq-5SGVSz2bSyYPYIamdoHaz1FsRDq7Gw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/MRFmQaVqGjfjW-zUkaiXI55EOi_4lYWRTLvPucBhJBJMGYuwEfoAsX3GKMYC_4rV8SxGIXGvQtyMlZ4gQjPM=h720",
+    "https://play-lh.googleusercontent.com/JVt4tXcNZYimCdLrBAWfJGhZe8ZMVHleg5x55yGy3MzgvNRjox3-_rOc3irMHZ0rxBEmXwpWQHYpnFU9W_XTqg=h720",
+    "https://play-lh.googleusercontent.com/k8jG3daOAKflWHk2L6kfcWJNuekZg_NA1nDj3ely6XLNFWze99vo0VkxUwyCL1mWcpddSWEIsKQONrEB2a5w=h720",
+    "https://play-lh.googleusercontent.com/MDzmjO9QsljoJnRUsRxaunvpoMZkdHut3BopjvmJsvXSPthhoCmHTlqvWDjisqULthOBCBN9r91vuR-GVSnl=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.webtechinnovation.cellcommobile",
+   "sort": 207
+  },
+  {
+   "package": "com.pelephone_mobile",
+   "label": "פלאפון שלי",
+   "category": "ממשלה ושירותים",
+   "note": "שירות לקוחות פלאפון.",
+   "description": "פלאפון שלי\nביצוע פעולות וקבלת מידע 24/7\nהתחדשנו, הוספנו המון פיצ'רים חדשים באפליקציה והפכנו אותה למהירה ופשוטה יותר! \nאפליקציית פלאפון שלי מאפשרת לך לקבל מידע אישי ולבצע מגוון פעולות בשירות עצמי \nלמשל :\n• צפייה בחשבונית ובמצב החשבון\n• מידע על ניצול חבילת הגלישה בארץ ובחו\"ל \nרכישת חבילת גלישה לחו\"ל\n• מעבר מסלול\n• הרחבת חבילת גלישה\nקניית סמארטפונים ואביזרים\n• איתור מרכז שירות לפי מיקומך וזימון תור \n• עדכון פרטי מנוי\n• \nהאפליקציה תוכננה במיוחד ללקוחות פלאפון, כדי לאפשר לך לקבל מידע ולבצע פעולות בלי לחכות לנציג, כשהכי נוח לך. \nמעכשיו לא צריך סיסמה בכל כניסה! התחברת פעם אחת? בפעם הבאה הכניסה בצ'יק, הפרטים מתעדכנים אוטומטית.",
+   "icon_url": "https://play-lh.googleusercontent.com/b96t0qYaci3BB5vdXa-m8tfMReo-58akfvemCSazV6wC8tbLCo6Qh8IwdFOwSdATKkhX3TXdQBHxSP6Pq0pb-QE=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/pCYpe-yO6lG1PjM5pSVzjA5_o4WLClZeNS2foUvHucpj_611ywyHA1vD9YBO3punTEAFFlzl18G5AalK4VHt5RA=h720",
+    "https://play-lh.googleusercontent.com/dS1yBaf1QLWXqvHogKOYxxq4DeGBoSf3GuAKjzd1lqYnCcH89yu9N3AaufgR12JpXZB0cUQrKghPi2oXPWYBoOM=h720",
+    "https://play-lh.googleusercontent.com/j3UZx6CHEi_zmsxhqAInTLzr0Qgj1F2MTQNiHgyju5T9d17emnO1bV4gVznTIRHK0mCCtisXTLERPVu1wJ1GIsE=h720",
+    "https://play-lh.googleusercontent.com/ut4ziMGepdww8jo-gnYgoI9GGhPRcvEpG0hjBUelEiTgOf4epS9hxynG9hE9LtDQx3r0vpzVgpuhbHAClY2KNRk=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.pelephone_mobile",
+   "sort": 208
+  },
+  {
+   "package": "ii.co.hotmobile.HotMobileApp",
+   "label": "HOT mobile",
+   "category": "ממשלה ושירותים",
+   "note": "שירות לקוחות הוט מובייל.",
+   "description": "אפליקצית my HOT mobile מאפשרת לך לקבל מידע אישי 24/7 ולבצע מגוון פעולות בשירות עצמי\n בזמן שהכי נוח לך ומבלי להמתין לנציג: \n\n• בדיקת שימושי גלישה בארץ ובחו\"ל\n• רכישת חבילות חו\"ל ושירותים נוספים\n• צפייה בפרטי מנוי וביצוע פעולות\n• ביצוע מעבר תוכנית\n• רכישת סמארפונים ואביזרים\n• צפייה בחשבוניות\n• שליחת טפסים\n• החלפת SIM\n• צ'אט עם נציג\n• איתור מרכזי שירות ונקודות מכירה\n• חיבור לעולם האפליקציות המובילות של HOT mobile\n \n \nועכשיו התחדשנו בממשק פשוט יותר , חכם יותר ונגיש יותר !\n \nתמיד איתך.",
+   "icon_url": "https://play-lh.googleusercontent.com/bU_TfdTMRqTghFTn06gIeX4SdK33y7m2k-xW3KnmuehRyIGyo7MisqlYLbhweVgaX1Bi3BvbdDK2EKa7hWhquw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/R70sW9nXFq0s9GbEWlHX4eWuysIlxV0oHkWU_xtveIEowvOMYpJ1dO6SkOg3UzFkHi7bvsjBEsocElsAzJ2ROA=h720",
+    "https://play-lh.googleusercontent.com/GHjumdiqMZdrAi8TVRPGjn3LHOaROh9nB7ZhLf1igJnkZXn7f8bEvFflvex5Udku05g74-WECNUNd70gMHsKoek=h720",
+    "https://play-lh.googleusercontent.com/0trwApdl6dVXgFxwg8BeOMqdWZ6dLyc7LUDpy58c09kVVbOnjSJo3Rg2LzIiKIGp02nuu1Wf_65ATKn-XzP6Bw=h720",
+    "https://play-lh.googleusercontent.com/PMK2Fib5ImHU-NyAm6H1KkOAZJePzk5u5zuN5Qc12-Z5cESnnfygij6u3br97py6WXaeDNSRAsDn3Cfn-Olhug=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=ii.co.hotmobile.HotMobileApp",
+   "sort": 209
+  },
+  {
+   "package": "com.microsoft.office.word",
+   "label": "Word",
+   "category": "עבודה ולימודים",
+   "note": "עריכת מסמכים.",
+   "description": "ניתן ליצור, לערוך, לקרוא ולשתף מסמכים במכשיר הנייד עם אותה עוצמה שאתם רגילים אליה מהמחשב.\n\nכתבו קורות חיים, מכתבים, עבודות, הערות או יצירה מכל מקום. המרה בין Word ל- PDF, שיתוף פעולה עם אחרים וגישה לקבצים שלכם מכל מקום. בעזרת כלי עריכה נוחים לשימוש וכלי מובנה לצפייה במסמכים, Word הופך את הכתיבה במכשיר נייד לפשוטה ויעילה.\n\nבחרו מתוך תבניות של קורות חיים, ניוזלטרים, ברושורים ועוד כדי להניע כל פרויקט. אם אתם סטודנטים, בלוגרים, עיתונאים או מנהלי פרויקטים, Word הולך איתכם לכל מקום.\n\nיצירת מסמכים\n\n• התחילו בקלות עם תבניות מודרניות למכתבים, קורות חיים, תסריטים, הצעות מחיר, חשבוניות ועוד \n• השתמשו בכלי עיצוב ופריסה עשירים כדי להביע את הרעיונות שלכם בצורה ברורה",
+   "icon_url": "https://play-lh.googleusercontent.com/UPPHK323_gvNZWTnmq_lgp_qrSXwdXI8aYNfqNF27MtuujT2YAytdueWIKncRh5YfNB_rfpCBfImzo95iYC1Fw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/4rQEqUaLlUp2O2G8qaoq_axakcyFT0a3WXXkic5kkiB1ChPELIkAnPxHKkMt8zbJ6BspcoySTGgnqB32bV705Z8=h720",
+    "https://play-lh.googleusercontent.com/ryUSWemRYA99hS-kOVVUXyhxY1RaLE7eXCba55ujCPKBBSsSrdIP9dNg1FX9wimVFUKnCw65rjqfCHghmHdy-TQ=h720",
+    "https://play-lh.googleusercontent.com/CgMcnpkrX7AdsG5OBV0mkSdf3dhijU9V1sMKLiGBnH4CGWfItj-tqO2e7d46TiZO-XrT6OS1JkX2sKbHwHl1=h720",
+    "https://play-lh.googleusercontent.com/exXL-gz0jENrqs8tKeNX9CX1UV5sUYdzJheCcJe3xXK-fx_t8LNxYd2VfvjrMT2GFHnSCAMMG27cEUSecuwd9A=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.office.word",
+   "sort": 210
+  },
+  {
+   "package": "com.microsoft.office.excel",
+   "label": "Excel",
+   "category": "עבודה ולימודים",
+   "note": "גיליונות אלקטרוניים.",
+   "description": "גיליונות אלקטרוניים וחישובים \n • יצירת תרשימים, תקציבים, תכניות פרויקט, חשבונאות וניתוח פיננסי באמצעות התבניות המודרניות של Excel.\n • השתמשו במחשבון חשבונאי, בכלי ניתוח נתונים ובנוסחאות מוכרות לביצוע חישובים.\n• עבדו עם גליונות ותרשימים ברורים וקלים לקריאה, המשופרים על-ידי עיצוב עשיר.\n \nחשבונאות, תקציב ומעקב הוצאות \n • תבניות תקציב וכלי תכנון: השתמשו בגיליונות אלקטרוניים מוכנים כדי לתכנן הוצאות בקטגוריות ובמסגרות זמן שונות.\n • מעקב אחר תקציב: ניתן לעקוב אחר הוצאות ולחסוך כסף.\n • כלי חשבונאות: השתמשו ב- Excel כמחשבון מס עבור הערכות, ניהול כספים אישי ועוד.\n \nניתוח נתונים \n • יוצר תרשימים: ניתן להוסיף הערות, לערוך ולהוסיף תרשימים שממחישים את הנתונים.",
+   "icon_url": "https://play-lh.googleusercontent.com/yycGmvRqYttLxLsu_2mMo17jb5KVfrSSj0W67w5nN6QcOn30HIxQ7DBwdNVtbTRTFCQNd5vNyd-bgeGfmiSS=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/zuPO6ZjwcGQWk9d4qjjtIi55j1jb7_4OPu-q0VQla6JIxSZxRlD1bog0m78AXCiY9Ve-wKsQMHl0T-asYxbKcOY=h720",
+    "https://play-lh.googleusercontent.com/UZF2wPuAG7hV28UcS0JI4LadELcGlYNJC4G9hne-mAzsqWxkqNC2jjx7QqSZta4HtVZqn6BOZamz9nEUTWKLVP0=h720",
+    "https://play-lh.googleusercontent.com/MY2EZilriv9IB9xsF2VeAS1jhgKhLlAF7qZgFs0owXRgC6AXNkJOY9WkvDcIqd4bgG81owG2Izpx2IjISHBLJA=h720",
+    "https://play-lh.googleusercontent.com/WV5z_EAgZhuqUPxSHprjSERu-7kKs6YuXVocj3Yt8NbdQJ5b86Id5WM3vs484JcodIAc8C1dSXfT9DCJoe7tOQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.office.excel",
+   "sort": 211
+  },
+  {
+   "package": "com.google.android.apps.docs.editors.docs",
+   "label": "Google Docs",
+   "category": "עבודה ולימודים",
+   "note": "מסמכים של Google.",
+   "description": "אפליקציית Docs מאפשרת ליצור ולערוך מסמכים, ולעבוד עליהם יחד עם אחרים בטלפון או בטאבלט עם Android. \n\nאילו פעולות ניתן לבצע באפליקציית Docs?\n- ליצור מסמכים חדשים ולערוך קבצים קיימים\n- לשתף מסמכים ולערוך מסמך בו-זמנית עם אחרים\n- לעבוד מכל מקום ובכל שעה, גם כשאין חיבור לאינטרנט\n- להוסיף תגובות ולהגיב להן\n- כל העבודה נשמרת אוטומטית תוך כדי הקלדה ולעולם לא תאבדו אותה\n- להשתמש בכלי החקירה ישירות מתוך Docs\n- לפתוח, לערוך ולשמור מסמכי Word.",
+   "icon_url": "https://play-lh.googleusercontent.com/fzQ8TFqWZQ34NVL5veaXOFtymoGSVqI5YisBw3sgl6mc0AMKAGgKw5st2YMiSzTanSWbCDrmLipI7bD_epry=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/vEccvFcnRH90D99IADuEJUPOdkBEGju0v0ceVg-YnCFXgyuiA3nHMsULz_1pmFj1oq1GpFaGAdeM_09NbKpGe_w=h720",
+    "https://play-lh.googleusercontent.com/0nXKqkYlMq2vFLTlm4fN7YIDPX4myoRNk7vhWQge5QJh_3-q1uBm3__haPDv3Br2xrnSulAWvSRB-c66KsfnWg=h720",
+    "https://play-lh.googleusercontent.com/vVppzx2XrwY6x5_GBf1_IYtxinBiM8IjtxbDmOkD8diu9EyF-CA48QQsbYmXdSxF4lh_J9kz0FQ5PdgEbwQn=h720",
+    "https://play-lh.googleusercontent.com/xiN3QME6i_HCPnkizz2bCJmS90tI9HZZapEGaTwgFdgke4yGLmcAOtZpgmkXzqYEG6KPaElRRLhO2iAU1Kv7=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.docs.editors.docs",
+   "sort": 212
+  },
+  {
+   "package": "com.google.android.apps.docs.editors.sheets",
+   "label": "Google Sheets",
+   "category": "עבודה ולימודים",
+   "note": "גיליונות של Google.",
+   "description": "אפליקציית Sheets מאפשרת ליצור ולערוך גיליונות אלקטרוניים, ולעבוד עליהם יחד עם אחרים בטלפון או בטאבלט עם Android. \n\nאילו פעולות ניתן לבצע באפליקציית Sheets?\n- ליצור גיליונות אלקטרוניים חדשים ולערוך קבצים קיימים\n- לשתף גיליונות אלקטרוניים ולערוך גיליון בו-זמנית עם אחרים\n- לעבוד מכל מקום ובכל שעה, גם כשאין חיבור לאינטרנט\n- להוסיף תגובות ולהגיב להן\n- לעצב תאים, להוסיף ולמיין נתונים, להציג תרשימים, להוסיף נוסחאות, למצוא ולהחליף תוכן ועוד\n- כל העבודה נשמרת אוטומטית תוך כדי הקלדה ולעולם לא תאבדו אותה\n- להשתמש בכלי החקירה לקבלת תובנות מיידיות, להוספה מהירה של תרשימים ולהחלת עיצוב בלחיצה אחת\n- לפתוח, לערוך ולשמור קובצי Excel.",
+   "icon_url": "https://play-lh.googleusercontent.com/NjfIWrzr4KXjVVUpihoWNJ1ZFfDBqjr3l4lsrbXG9fcYNJlpiH4wCxFXrQsgqMt7fXgKCmk33mvI2arRyzo5hGY=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/DnGvHJ7gg3ScIlE7wooXhtBhIa9KeuOvl14MO2rRj3h5SorUmlisbb_mAmqibVi_jpac9sMs7U3Vnd9lP1SV=h720",
+    "https://play-lh.googleusercontent.com/x0ukfJZFnFUeh17nB5WNRByz4xd4W5mfafnKdLXGjeRKUI-NnSCdvV6nQCUrdEXLR-2Xc9LV0dxLYVHFY03R=h720",
+    "https://play-lh.googleusercontent.com/FOLy09H8Ja0OkFgx62i3qPwZqOpTcWdEeDs2A6XeITY7luDFN1gFD7EqkXimvKF2BOSYFGe37C8RXlv-tsrP=h720",
+    "https://play-lh.googleusercontent.com/SzTghaLNmhjWKBt2pjN6PcHhFbfL75CblnPNi0VhRZtWudZmsjznP7ev-JT0o5EpSNB3prf2uUlgvDBV2x4dBg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.docs.editors.sheets",
+   "sort": 213
+  },
+  {
+   "package": "com.mashov.main",
+   "label": "משוב",
+   "category": "עבודה ולימודים",
+   "note": "מערכת משוב לתלמידים ולהורים.",
+   "description": "אפליקציית משו\"ב הרשמית\nמערכת שעות, ציונים, דואר ועוד !\nעכשיו גם באפליקציה נוחה וידידותית.\n\n* האפליקציה זמינה רק עבור בתי ספר המפעילים את מערכת משו\"ב.",
+   "icon_url": "https://play-lh.googleusercontent.com/M_fjtVNuF7Dbp_b3sNHeBR-3wDASKOg-PAMl7bLsPJlz0iFy9m9mF_1eTWdllVreYZkOnhxQpC9_bJtOZEjoPJY=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/irhUyHfaxBbjag-zLs76UONAUgDdckeqVKPk008k1nUu3ZIW1N6Pdyu4uQZyNCdAEpHmlb264sV7UDH0mhvRQA=h720",
+    "https://play-lh.googleusercontent.com/4N7wyisSio39wicZhQguGXnM1Qz1s7PDF608GEPICtPVwmhEkVjDqFSWi766QE26Dy2fwhAPWcu4uS1UihjvzHM=h720",
+    "https://play-lh.googleusercontent.com/dXQqr5vDj1M_xkpISiJwl0qafC9tUduxzjyVApAcxqa5HX7mogN_96uLnx5PTfO5SkN6xzkH1AlGRnboK9EveS8=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.mashov.main",
+   "sort": 214
+  },
+  {
+   "package": "com.smartschool.webtop",
+   "label": "וובטופ",
+   "category": "עבודה ולימודים",
+   "note": "מערכת וובטופ לתלמידים ולהורים.",
+   "description": "וובטופ - Webtop מבית Smart School\nיישומון מושלם למורים, הורים ותלמידים עבור ניהול וצפייה יומיומית במידע הפדגוגי!\nהאפליקציה החדשה של Webtop עוצבה מחדש כדי לשפר ולדייק את החוויה והפרודוקטיביות שלכם.\nהעיצוב המתקדם מאפשר ניווט מהיר וברור בין המודולים השונים, הזנה וצפייה במידע בצורה מהירה ויעילה. \n\nתכונות עיקריות: \n- כרטיס תלמיד, לוח בקרה וריכוז יומי אישי על אירועים בשיעור, ציונים, נושאי שיעור ושיעורי בית, תוכנית לימודים אישית ועוד.\n- מערכת שעות, שינויי מערכת יומיים ולוח אירועים ומבחנים.\n- מערכת דיוור והודעות בין מורים, הורים ותלמידים, כולל הודעות החתמה דיגיטליות, סקרים, הודעות SMS ודואר אלקטרוני.\n- מילוי דוחות שיעור בזמן אמת ודיווח הצדקות לאירועים בשיעור.",
+   "icon_url": "https://play-lh.googleusercontent.com/kglSwTSwXS6X5dv7Ni8MC81E8au-tgNHhDcJQ-glOh-smMZD9Kcb7Ye36HasWuwuiqDapfrIfyITHZHAm7U1mA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/tu9etm2b-9AL0HvuwM3or5GJqBjcqIBS7tHRGoMvZVoUz9G3eIYz7LCCK18FTxLFW8_Q4vXHOE3TMBE-zW82uMM=h720",
+    "https://play-lh.googleusercontent.com/AC3VnEqIR43_MhHsit-LpUkZOMN1yIzlkJMQTpLvJWnCf8fTha5TlZ9E4wFBR85zWZMivB0dUCvBXd7T9Pcq=h720",
+    "https://play-lh.googleusercontent.com/Z3HRuVA_nebJCFfjGkaYtjgBspGd3PoKlCF-4mnoyIBXe51k49cyKV6sf0MRlxOAYLGS3gO8WaYSMYnFQFHwq8w=h720",
+    "https://play-lh.googleusercontent.com/kA1AVX4KKqZwyZ2vLCdHiRX4iA0yyc4UUeHpnjCQSoP3TEHaQXeFYLzun0eKGnunhpLi3BDAoFylu5gFe-BlaAM=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.smartschool.webtop",
+   "sort": 215
+  }
+ ]
+}

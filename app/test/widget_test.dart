@@ -826,6 +826,69 @@ void main() {
     expect(find.text('בקשה מהמנהל'), findsOneWidget);
   });
 
+  testWidgets('store has category tabs on top, rows under "all", and filtering by tab', (tester) async {
+    tester.view.physicalSize = const Size(800, 2000);       // כל השורות על המסך
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final native = FakeNative()..caInstalled = true;
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      if (req.url.path == '/v1/device') {
+        return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+            'via_vpn': true,
+            'store_categories': ['תקשורת', 'בנקים ותשלומים', 'תחבורה', 'מדיה'],
+            'managed_apps': [
+              {'package': 'com.waze', 'label': 'וייז', 'category': 'תחבורה',
+               'play_url': 'https://play.google.com/store/apps/details?id=com.waze'},
+              {'package': 'com.whatsapp', 'label': 'וואטסאפ', 'category': 'תקשורת',
+               'play_url': 'https://play.google.com/store/apps/details?id=com.whatsapp'},
+              {'package': 'com.filtertube.app', 'label': 'FilterTube', 'category': 'מדיה'},
+            ]}), 200, headers: json);
+      }
+      if (req.url.path == '/v1/device/vpn') return http.Response(jsonEncode(_vpn), 200, headers: json);
+      if (req.url.path == '/v1/enroll') {
+        return http.Response(jsonEncode({'token': 't', 'level': 1, 'level_name': 'מחמיר', 'vpn': _vpn,
+            'ca': {'pem': 'x'}}), 201, headers: json);
+      }
+      return http.Response('{}', 200, headers: json);
+    });
+    final c = makeController(native, server);
+    await tester.runAsync(() async {
+      await c.start();
+      await c.activate('ABCDE-FGHJK', '');
+      await c.refresh();
+    });
+    await tester.pumpWidget(MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
+        child: AppStoreScreen(controller: c))));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+    // טאבים בסדר מהשרת — רק קטגוריות שיש בהן אפליקציות ("בנקים ותשלומים" ריקה ולא מוצגת)
+    final tabs = ['הכול', 'תקשורת', 'תחבורה', 'מדיה'];
+    final xs = [for (final t in tabs) tester.getCenter(find.text(t).first).dx];
+    for (var i = 1; i < xs.length; i++) {
+      expect(xs[i], lessThan(xs[i - 1]), reason: 'RTL: ${tabs[i]} אחרי ${tabs[i - 1]}');
+    }
+    expect(find.text('בנקים ותשלומים'), findsNothing);
+    // "הכול": שורה לכל קטגוריה, עם כל האפליקציות
+    expect(find.text('וייז'), findsOneWidget);
+    expect(find.text('וואטסאפ'), findsOneWidget);
+    expect(find.text('FilterTube'), findsOneWidget);
+    // טאב "מדיה" — רק FilterTube
+    await tester.tap(find.text('מדיה').first);
+    await tester.pumpAndSettle();
+    expect(find.text('FilterTube'), findsOneWidget);
+    expect(find.text('וייז'), findsNothing);
+    expect(find.text('וואטסאפ'), findsNothing);
+    // אפליקציה מ-Google Play: הכפתור פותח את העמוד שלה ב-Play
+    await tester.tap(find.text('הכול').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('וייז'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('התקנה מ-Google Play'));
+    await tester.pumpAndSettle();
+    expect(native.playOpens, ['com.waze']);
+  });
+
   testWidgets('device owner installs directly from the store detail page', (tester) async {
     final native = FakeNative()
       ..caInstalled = true

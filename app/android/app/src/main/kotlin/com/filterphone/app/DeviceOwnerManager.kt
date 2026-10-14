@@ -259,7 +259,8 @@ object DeviceOwnerManager {
         val p = prefs(context)
         val hiddenBefore = p.getStringSet(K_HIDDEN, emptySet())!!.toSet()
         val suspendedBefore = p.getStringSet(K_SUSPENDED, emptySet())!!.toSet()
-        val blocked = policy.apps - GuardPolicy.untouchable(context)
+        // נחסמות בנגישות בלבד (Play) — לא מוסתרות, כדי שימשיכו לעבוד ברקע; מה שהוסתר בעבר — חוזר
+        val blocked = policy.apps - policy.accessibilityOnly - GuardPolicy.untouchable(context)
         val wantHidden = if (mode == AppMode.HIDE) blocked else emptySet()
         val wantSuspended = if (mode == AppMode.SUSPEND) blocked else emptySet()
         for (pkg in hiddenBefore - wantHidden) runCatching { dpm.setApplicationHidden(admin, pkg, false) }

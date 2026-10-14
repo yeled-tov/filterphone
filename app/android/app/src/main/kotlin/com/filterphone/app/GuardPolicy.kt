@@ -77,6 +77,8 @@ object GuardPolicy {
         val dpc: JSONObject? = null,
         /** אפליקציות מחוץ ל-VPN (FilterTube וכו'). שרת שעוד לא שולח את השדה → ברירת המחדל. */
         val vpnBypass: List<VpnBypass.App> = VpnBypass.DEFAULTS,
+        /** חסומות לכניסה בנגישות בלבד — מנהל המכשיר לא מסתיר אותן (Play: עדכונים ברקע ממשיכים). */
+        val accessibilityOnly: Set<String> = emptySet(),
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null
     }
@@ -168,6 +170,9 @@ object GuardPolicy {
             keywords = parseKeywords(o.opt("keywords")),
             dpc = dpc,
             vpnBypass = VpnBypass.parse(o.opt("vpn_bypass")),
+            accessibilityOnly = o.optJSONArray("accessibility_only")
+                ?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }.toSet() }
+                ?: emptySet(),
         )
     }
 

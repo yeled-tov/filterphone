@@ -78,12 +78,15 @@ def test_registration_waits_for_approval_then_activates(env):
     assert svc.redis.hget("fp:levels", "10.8.0.10") == "1"
     pol = json.loads(svc.redis.hget("fp:policy", "10.8.0.10"))
     assert pol["level"] == 1 and pol["app_images"] == "block"
-    assert {"pps.whatsapp.net", "play.google.com", "instagram.com", "news-x.co.il"} <= set(pol["hosts"])
+    assert {"pps.whatsapp.net", "instagram.com", "news-x.co.il"} <= set(pol["hosts"])
+    # Play חסום לכניסה בלבד: השרתים שלו פתוחים (עדכונים ברקע + התקנה דרך חנות FilterPhone)
+    assert not {"play.google.com", "play.googleapis.com"} & set(pol["hosts"])
 
     me = client.get("/v1/device", headers=auth(reg["token"])).json()
     assert me["status"] == "active" and me["level_name"] == "מחמיר"
     assert {b["id"] for b in me["blocks"]} >= {"whatsapp_profile", "play_store", "instagram", "custom_hosts"}
     assert "com.android.vending" in me["device_policy"]["blocked_apps"]
+    assert me["device_policy"]["accessibility_only"] == ["com.android.vending"]     # לא מוסתר במנהל המכשיר
     vpn = client.get("/v1/device/vpn", headers=auth(reg["token"])).json()
     assert vpn["address"] == "10.8.0.10/32" and "BEGIN CERTIFICATE" in vpn["ca"]["pem"]
 
@@ -279,3 +282,11 @@ def test_ssrf_guard_rejects_private_targets():
                 "http://[::1]/", "http://localhost/"):
         with pytest.raises(fetch.FetchError):
             fetch._check_url(url)
+
+
+def test_full_play_block_closes_the_network_and_allows_hiding():
+    from filterphone.api.catalog import DeviceSettings, compile_settings
+    entry = compile_settings(1, DeviceSettings(options=["play_store"]))
+    full = compile_settings(1, DeviceSettings(options=["play_store", "play_store_full"]))
+    assert "play.googleapis.com" not in entry.hosts and entry.accessibility_only == ("com.android.vending",)
+    assert "play.googleapis.com" in full.hosts and full.accessibility_only == ()

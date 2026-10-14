@@ -27,7 +27,7 @@ dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27", "fakeredis>=2.23", "r
 include = ["filterphone*"]
 
 [tool.setuptools.package-data]
-filterphone = ["engine/heads.json", "proxy/passthrough.txt", "api/static/*"]
+filterphone = ["engine/heads.json", "proxy/passthrough.txt", "api/static/*", "api/store_seed.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

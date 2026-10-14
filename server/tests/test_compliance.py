@@ -775,9 +775,11 @@ def test_filtertube_is_seeded_into_the_store_with_description(env):
     h = admin_headers(client)
     apps = {a["package"]: a for a in client.get("/v1/admin/apps", headers=h).json()["apps"]}
     assert "com.filtertube.app" in apps and "com.filtertube.filtertube" in apps
-    store = apps["com.filtertube.filtertube"]
-    assert "שלוש רמות" in store["description"] and store["category"] == "וידאו"
-    assert store["play_url"].startswith("https://play.google.com/")
+    play, full = apps["com.filtertube.app"], apps["com.filtertube.filtertube"]
+    assert "שלוש רמות" in full["description"] and full["category"] == play["category"] == "מדיה"
+    # ב-Google Play נמצאת com.filtertube.app; com.filtertube.filtertube — התקנה ישירה בלבד
+    assert play["play_url"] == "https://play.google.com/store/apps/details?id=com.filtertube.app"
+    assert full["play_url"] == "" and play["icon_url"].startswith("https://play-lh.googleusercontent.com/")
     # הזריעה חד-פעמית: מחיקה לא גוררת זריעה מחדש
     client.delete(f"/v1/admin/apps/{apps['com.filtertube.app']['id']}", headers=h)
     svc.seed_store()

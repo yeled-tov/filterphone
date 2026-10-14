@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import base64
+import functools
 import hashlib
 import ipaddress
 import json
@@ -49,12 +50,43 @@ from .catalog import (
     policy_checksum,
     summary,
 )
+from .fetch import FetchError, fetch_image
 from .observe import REGISTRY as API_METRICS
 from .wg import WireGuard, WireGuardError
 
 log = logging.getLogger("filterphone.api")
 
 ORG_NAME_DEFAULT = "פילטר פון"     # מוצג בטלפון: "המכשיר הזה שייך ל-פילטר פון"
+
+# ---- החנות
+STORE_SEED_VERSION = 2
+STORE_MEDIA_TTL_S = 30 * 86400          # תמונות חנות מסוננות נשמרות חודש (כתובת חדשה = קובץ חדש)
+STORE_MEDIA_MAX_BYTES = 3_000_000
+FT_STORE, FT_FULL = "com.filtertube.filtertube", "com.filtertube.app"
+FT_DESC = (
+    "FilterTube — יוטיוב עם סינון תוכן מובנה. עובד מחוץ ל-VPN (יוטיוב חוסם כתובות של שרתים), "
+    "והסינון מובנה בתוך האפליקציה עצמה — כך שהיא פועלת גם כשהסינון של FilterPhone פעיל.\n\n"
+    "שלוש רמות סינון:\n"
+    "• רמה 1 — מחמיר: רק ערוצים/תכנים מאושרים.\n"
+    "• רמה 2 — בינוני: חסימה רחבה של תוכן לא ראוי, חיפוש מוגבל.\n"
+    "• רמה 3 — בסיסי: חסימת תוכן בוטה בלבד.\n\n"
+    "את הרמה בוחרים בתוך FilterTube. היא מחליפה את יוטיוב הרגיל (שנחסם לפי ההגדרות שלכם)."
+)
+# הזריעה של גרסה 1 (כפי שהייתה) — כדי לזהות מה המנהל עוד לא שינה
+_FT_V1 = (
+    {"package": FT_STORE, "label": "FilterTube — גרסת החנות", "category": "וידאו",
+     "note": "יוטיוב כשר עם 3 רמות סינון — מהחנות הרשמית.",
+     "play_url": f"https://play.google.com/store/apps/details?id={FT_STORE}", "sort": 1},
+    {"package": FT_FULL, "label": "FilterTube", "category": "וידאו",
+     "note": "יוטיוב כשר עם 3 רמות סינון — הגרסה המלאה.", "sort": 2},
+)
+
+
+@functools.lru_cache(maxsize=1)
+def store_seed() -> dict:
+    """אפליקציות בסיסיות מאומתות מול Google Play (שם חבילה, אייקון, תיאור, צילומי מסך) + סדר הקטגוריות."""
+    with open(Path(__file__).with_name("store_seed.json"), encoding="utf-8") as f:
+        return json.load(f)
 LEVEL_NAMES = {k: v["name"] for k, v in LEVELS.items()}
 ONLINE_WINDOW_S = 180           # WireGuard מחדש handshake כל 2 דקות בערך
 EVENTS_KEY = "fp:events"
@@ -912,6 +944,7 @@ class Services:
                               "revision": row["policy_revision"]},
             "apps_report_needed": not row["apps_at"] or db.now() - row["apps_at"] > 86400,
             "managed_apps": self.device_managed_apps(),
+            "store_categories": store_seed()["categories"],     # סדר הטאבים בחנות
             "heartbeat_interval_s": self.cfg.heartbeat_interval_s,
         })
         return out
@@ -1450,38 +1483,115 @@ class Services:
         log.info("seeded %d built-in profiles", len(SEED_PROFILES))
 
     def seed_store(self) -> None:
-        """מזריע את FilterTube לחנות פעם אחת (דגל ב-meta). המנהל יכול לערוך/למחוק אחר כך."""
-        ft_desc = (
-            "FilterTube — יוטיוב עם סינון תוכן מובנה. עובד מחוץ ל-VPN (יוטיוב חוסם כתובות של שרתים), "
-            "והסינון מובנה בתוך האפליקציה עצמה — כך שהיא פועלת גם כשהסינון של FilterPhone פעיל.\n\n"
-            "שלוש רמות סינון:\n"
-            "• רמה 1 — מחמיר: רק ערוצים/תכנים מאושרים.\n"
-            "• רמה 2 — בינוני: חסימה רחבה של תוכן לא ראוי, חיפוש מוגבל.\n"
-            "• רמה 3 — בסיסי: חסימת תוכן בוטה בלבד.\n\n"
-            "את הרמה בוחרים בתוך FilterTube. היא מחליפה את יוטיוב הרגיל (שנחסם לפי ההגדרות שלכם)."
-        )
-        apps = [
-            {"package": "com.filtertube.filtertube", "label": "FilterTube — גרסת החנות", "category": "וידאו",
-             "note": "יוטיוב כשר עם 3 רמות סינון — מהחנות הרשמית.", "description": ft_desc,
-             "play_url": "https://play.google.com/store/apps/details?id=com.filtertube.filtertube", "sort": 1},
-            {"package": "com.filtertube.app", "label": "FilterTube", "category": "וידאו",
-             "note": "יוטיוב כשר עם 3 רמות סינון — הגרסה המלאה.", "description": ft_desc, "sort": 2},
-        ]
+        """מזריע את החנות לפי גרסאות (store_seed_version ב-meta), כל גרסה פעם אחת:
+        1 — FilterTube; 2 — קטלוג אפליקציות בסיסיות מאומתות מ-Google Play (store_seed.json).
+        מה שהמנהל ערך או מחק אחרי הזריעה — לא נדרס (מעדכנים רק שדות שעוד שווים לערך המקורי)."""
         with self.db() as c, db.transaction(c):
-            if c.execute("SELECT value FROM meta WHERE key = 'store_seeded'").fetchone():
+            row = c.execute("SELECT value FROM meta WHERE key = 'store_seed_version'").fetchone()
+            have = int(row["value"]) if row else (
+                1 if c.execute("SELECT 1 FROM meta WHERE key = 'store_seeded'").fetchone() else 0)
+            if have >= STORE_SEED_VERSION:
                 return
-            t = db.now()
-            for a in apps:
-                if c.execute("SELECT 1 FROM managed_apps WHERE package = ?", (a["package"],)).fetchone():
-                    continue
-                c.execute(
-                    "INSERT INTO managed_apps (package, label, category, note, description, play_url, sort,"
-                    " screenshots, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (a["package"], a["label"], a["category"], a["note"], a["description"],
-                     a.get("play_url", ""), a["sort"], "[]", t, t))
-            c.execute("INSERT INTO meta (key, value) VALUES ('store_seeded', '1')"
-                      " ON CONFLICT(key) DO UPDATE SET value = '1'")
-        log.info("seeded FilterTube into the store")
+            if have < 1:
+                self._seed_store_v1(c)
+            if have < 2:
+                self._seed_store_v2(c)
+            c.execute("INSERT INTO meta (key, value) VALUES ('store_seed_version', ?)"
+                      " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(STORE_SEED_VERSION),))
+        log.info("store seeded up to version %d", STORE_SEED_VERSION)
+
+    @staticmethod
+    def _seed_store_v1(c: sqlite3.Connection) -> None:
+        t = db.now()
+        for a in _FT_V1:
+            if c.execute("SELECT 1 FROM managed_apps WHERE package = ?", (a["package"],)).fetchone():
+                continue
+            c.execute(
+                "INSERT INTO managed_apps (package, label, category, note, description, play_url, sort,"
+                " screenshots, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (a["package"], a["label"], a["category"], a["note"], FT_DESC, a.get("play_url", ""),
+                 a["sort"], "[]", t, t))
+
+    @staticmethod
+    def _seed_store_v2(c: sqlite3.Connection) -> None:
+        seed = store_seed()
+        t = db.now()
+        # FilterTube: ב-Google Play נמצאת com.filtertube.app; com.filtertube.filtertube — התקנה ישירה בלבד.
+        # הקטגוריה "וידאו" → "מדיה" (הטאב בחנות). מעדכנים רק מה שעוד זהה לזריעה של גרסה 1.
+        c.execute("UPDATE managed_apps SET category = 'מדיה' WHERE package IN (?, ?) AND category = 'וידאו'",
+                  (FT_STORE, FT_FULL))
+        ft = seed["filtertube_play"]
+        c.execute("UPDATE managed_apps SET play_url = ?, label = CASE WHEN label = ? THEN ? ELSE label END,"
+                  " note = CASE WHEN note = ? THEN ? ELSE note END,"
+                  " icon_url = CASE WHEN icon_url = '' THEN ? ELSE icon_url END,"
+                  " screenshots = CASE WHEN screenshots IN ('', '[]') THEN ? ELSE screenshots END, updated_at = ?"
+                  " WHERE package = ? AND play_url = ''",
+                  (f"https://play.google.com/store/apps/details?id={FT_FULL}", "FilterTube", "FilterTube",
+                   _FT_V1[1]["note"], "יוטיוב כשר עם 3 רמות סינון — מ-Google Play.",
+                   ft["icon_url"], json.dumps(ft["screenshots"]), t, FT_FULL))
+        c.execute("UPDATE managed_apps SET play_url = '',"
+                  " label = CASE WHEN label = ? THEN ? ELSE label END,"
+                  " note = CASE WHEN note = ? THEN ? ELSE note END, updated_at = ?"
+                  " WHERE package = ? AND play_url = ?",
+                  (_FT_V1[0]["label"], "FilterTube — הגרסה המלאה", _FT_V1[0]["note"],
+                   "יוטיוב כשר עם 3 רמות סינון — התקנה ישירה (לא דרך Google Play).", t, FT_STORE,
+                   _FT_V1[0]["play_url"]))
+        for a in seed["apps"]:
+            if c.execute("SELECT 1 FROM managed_apps WHERE package = ?", (a["package"],)).fetchone():
+                continue
+            c.execute(
+                "INSERT INTO managed_apps (package, label, category, note, description, icon_url, screenshots,"
+                " play_url, sort, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (a["package"], a["label"], a["category"], a["note"], a["description"], a["icon_url"],
+                 json.dumps(a["screenshots"]), a["play_url"], a["sort"], t, t))
+
+    # ------------------------------------------------------------ תמונות החנות — דרך מסנן התמונות
+
+    def store_media(self, app_id: int, slot: str) -> tuple[bytes, str]:
+        """אייקון / צילום מסך של אפליקציה בחנות, אחרי מנוע הסינון ברמה המחמירה (1) — בלי קשר לרמת
+        המכשיר. נשמר בדיסק (לפי hash של הכתובת). מנוע לא זמין → 503: לא מגישים תמונה שלא סוננה."""
+        with self.db() as c:
+            row = c.execute("SELECT icon_url, screenshots FROM managed_apps WHERE id = ? AND enabled = 1",
+                            (app_id,)).fetchone()
+        if row is None:
+            raise ApiError(404, "לא נמצא")
+        urls = _json_list(row["screenshots"])
+        m = re.fullmatch(r"s([0-7])", slot)
+        url = row["icon_url"] if slot == "icon" else urls[int(m.group(1))] if m and int(m.group(1)) < len(urls) else ""
+        if not url:
+            raise ApiError(404, "לא נמצא")
+        folder = Path(self.cfg.data_dir) / "store_media"
+        key = hashlib.sha256(url.encode()).hexdigest()
+        body_f, ct_f = folder / key, folder / f"{key}.ct"
+        try:
+            if time.time() - body_f.stat().st_mtime < STORE_MEDIA_TTL_S:
+                return body_f.read_bytes(), ct_f.read_text()
+        except OSError:
+            pass
+        try:
+            data, ct = fetch_image(url, STORE_MEDIA_MAX_BYTES)
+        except FetchError as e:
+            raise ApiError(502, str(e)) from e
+        try:
+            header, filtered = protocol.call_sync(self.cfg.engine_socket, {"op": "classify", "level": 1,
+                                                                           "budget_ms": 15000}, data, timeout=20)
+        except (OSError, protocol.ProtocolError) as e:
+            raise ApiError(503, "מנוע הסינון לא זמין") from e
+        if header.get("action") == "pass":
+            out, out_ct = data, ct if ct.startswith("image/") else "image/jpeg"
+        elif filtered:
+            out, out_ct = filtered, header.get("ct") or "image/png"
+        else:
+            raise ApiError(503, "מנוע הסינון לא החזיר תמונה")
+        folder.mkdir(parents=True, exist_ok=True)
+        tmp = folder / f"{key}.tmp"
+        tmp.write_bytes(out)
+        ct_f.write_text(out_ct)
+        os.replace(tmp, body_f)
+        return out, out_ct
+
+    def _media_url(self, app_id: int, slot: str, version: int) -> str:
+        return f"https://{self.cfg.public_host}/v1/store/media/{app_id}/{slot}?v={version}"
 
     def list_profiles(self) -> list[dict]:
         with self.db() as c:
@@ -1569,9 +1679,13 @@ class Services:
         """מה שהטלפון מקבל: רק אפליקציות מאושרות, עם שדות ההתקנה (בלי נתוני ניהול פנימיים)."""
         out = []
         for a in self.managed_apps(enabled_only=True):
+            # התמונות דרך השרת — אחרי מסנן התמונות (store_media), לא ישירות מהמקור
+            shots = _json_list(a["screenshots"])
             entry = {"package": a["package"], "label": a["label"], "category": a["category"],
-                     "note": a["note"], "description": a["description"], "icon_url": a["icon_url"],
-                     "screenshots": _json_list(a["screenshots"]), "play_url": a["play_url"],
+                     "note": a["note"], "description": a["description"],
+                     "icon_url": self._media_url(a["id"], "icon", a["updated_at"]) if a["icon_url"] else "",
+                     "screenshots": [self._media_url(a["id"], f"s{i}", a["updated_at"]) for i in range(len(shots))],
+                     "play_url": a["play_url"],
                      "required": bool(a["required"]), "added_at": a["created_at"],
                      "updated_at": a["updated_at"]}
             if a["apk_url"] and self._SHA256_RE.match(a["apk_sha256"] or "") and a["version_code"]:

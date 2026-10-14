@@ -880,7 +880,9 @@ function dpcCard(d, patch) {
 
 /** החנות: אפליקציות שהמנהל אישר. העלאת APK = התקנה ועדכון ישירים בטלפונים מנוהלים. */
 async function viewApps() {
-  const { apps } = await api("/v1/admin/apps");
+  const { apps, categories = [] } = await api("/v1/admin/apps");
+  // הקטגוריות = הטאבים בחנות שבטלפון. קטגוריה חדשה מופיעה כטאב אחרי הקבועות.
+  const catList = el("datalist", { id: "store-cats" }, categories.map((c) => el("option", { value: c })));
   const file = el("input", { type: "file", accept: ".apk,application/vnd.android.package-archive" });
   const progress = el("span", { class: "muted small" });
   const upload = el("button", { class: "primary", onclick: async () => {
@@ -904,7 +906,7 @@ async function viewApps() {
   } }, "העלאה");
   const pkg = el("input", { class: "ltr", placeholder: "com.example.app" });
   const label = el("input", { placeholder: "שם בחנות" });
-  const category = el("input", { placeholder: "קטגוריה (כלים, ניווט...)" });
+  const category = el("input", { placeholder: "קטגוריה (טאב בחנות)", list: "store-cats" });
   const playUrl = el("input", { class: "ltr", placeholder: "קישור Google Play (רשות) — https://play.google.com/...",
     oninput: (e) => {
       const m = e.target.value.match(/[?&]id=([\w.]+)/);     // חילוץ שם החבילה מהקישור
@@ -922,6 +924,14 @@ async function viewApps() {
     }
     return attempt(() => api(`/v1/admin/apps/${a.id}`, { method: "PATCH", body }), msg).then(render, () => {});
   };
+  // חיפוש ברשימה (שם / חבילה / קטגוריה) — בלי טעינה מחדש
+  const filter = el("input", { type: "search", placeholder: `חיפוש ב-${apps.length} אפליקציות…`, oninput: (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    rows.forEach((r, i) => {
+      const a = apps[i];
+      r.hidden = Boolean(q) && ![a.label, a.package, a.category].some((v) => (v || "").toLowerCase().includes(q));
+    });
+  } });
   const rows = apps.map((a) => {
     const direct = Boolean(a.apk_url && a.version_code);
     const sw = (key, title, sub) => {
@@ -931,14 +941,15 @@ async function viewApps() {
     };
     return el("div", { class: "app-row" },
       el("div", { class: "grow" }, el("b", {}, a.label || a.package), el("small", { class: "ltr" }, a.package),
-        el("small", {}, [a.category, direct ? `גרסה ${a.version_name || a.version_code} · התקנה ישירה` : "בלי קובץ — בקשה / התקנה ידנית",
+        el("small", {}, [a.category, direct ? `גרסה ${a.version_name || a.version_code} · התקנה ישירה`
+          : a.play_url ? "התקנה ועדכונים דרך Google Play" : "בלי קובץ — בקשה / התקנה ידנית",
           `עודכן ${date(a.updated_at)}`].filter(Boolean).join(" · "))),
-      direct ? chip("APK אצלנו", "ok") : chip("ידני"),
+      direct ? chip("APK אצלנו", "ok") : a.play_url ? chip("Google Play", "ok") : chip("ידני"),
       sw("enabled", "מוצגת", "מופיעה בחנות בטלפונים"),
       direct ? sw("required", "חובה", "מותקנת אוטומטית בכל טלפון מנוהל") : null,
       el("button", { class: "ghost small", onclick: async () => {
         const l = el("input", { value: a.label || "" });
-        const c = el("input", { value: a.category || "" });
+        const c = el("input", { value: a.category || "", list: "store-cats" });
         const n = el("textarea", { rows: 2, value: a.note || "" });
         const desc = el("textarea", { rows: 5, value: a.description || "" });
         const icon = el("input", { class: "ltr", value: a.icon_url || "", placeholder: "https://.../icon.png" });
@@ -965,9 +976,9 @@ async function viewApps() {
     card("העלאת אפליקציה", "מעלים קובץ APK — השרת קורא ממנו את שם החבילה והגרסה ובודק אותו. טלפון מנוהל (מנהל מכשיר) " +
       "מתקין ומעדכן ממנו ישירות, גם כשהתקנת אפליקציות חסומה בו. גרסה חדשה של אותה אפליקציה = עדכון אצל כולם.",
       el("div", { class: "row gap wrap" }, file, upload, progress)),
-    card("אפליקציה בלי קובץ", "תופיע בחנות כ'בקשה' — למשל אפליקציה שמתקינים מ-Google Play באישורך.",
-      el("div", { class: "row gap wrap" }, pkg, label, category, playUrl, addStoreOnly)),
-    card(`בחנות (${apps.length})`, null, apps.length ? el("div", { class: "apps" }, rows) : empty("עוד אין אפליקציות בחנות.")),
+    card("אפליקציה מ-Google Play / בלי קובץ", "מדביקים קישור Google Play — הלקוח מתקין ומעדכן דרך Play (בלי שנארח קובץ). בלי קישור — תופיע כ'בקשה'.",
+      el("div", { class: "row gap wrap" }, pkg, label, category, playUrl, addStoreOnly), catList),
+    card(`בחנות (${apps.length})`, null, apps.length ? [filter, el("div", { class: "apps" }, rows)] : empty("עוד אין אפליקציות בחנות.")),
   ];
 }
 

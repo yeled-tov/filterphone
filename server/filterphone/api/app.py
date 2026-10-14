@@ -46,7 +46,7 @@ from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
 from .security import RateLimiter
-from .service import LEVEL_NAMES, ApiError, Services
+from .service import LEVEL_NAMES, ApiError, Services, store_seed
 from .support import SupportDesk
 from .wg import WireGuard, WireGuardError
 
@@ -65,6 +65,7 @@ heartbeat_limiter = RateLimiter(limit=40, window_s=600)    # דיווח תקופ
 rekey_limiter = RateLimiter(limit=3, window_s=86400)       # החלפת מפתח VPN — נדיר מאוד
 restore_limiter = RateLimiter(limit=8, window_s=3600)      # שחזור לפי מספר טלפון — לכל כתובת ולכל מספר
 support_limiter = RateLimiter(limit=20, window_s=600)     # הודעות לתמיכה מטלפון אחד
+media_limiter = RateLimiter(limit=600, window_s=600)      # תמונות החנות (אייקונים / צילומי מסך) לכל כתובת
 MAX_APK_UPLOAD = 300 * 1024 * 1024
 _APK_FILE = re.compile(r"^[A-Za-z][A-Za-z0-9_.]{2,199}-\d{1,10}\.apk$")
 
@@ -623,6 +624,13 @@ def _routes(app: FastAPI) -> None:
             out["support"] = unread          # הטלפון מציג התראה "יש תשובה מהתמיכה"
         return out
 
+    @app.get("/v1/store/media/{app_id}/{slot}")
+    def store_media(app_id: int, slot: str, request: Request, svc: SvcDep):
+        """אייקון / צילום מסך לחנות — אחרי מסנן התמונות ברמה המחמירה (ציבורי: אין בו מידע אישי)."""
+        _limit(media_limiter, f"sm:{client_ip(request)}")
+        body, ct = svc.store_media(app_id, slot)
+        return Response(content=body, media_type=ct, headers={"Cache-Control": "public, max-age=604800"})
+
     @app.post("/v1/device/support", status_code=201)
     def device_support(body: SupportIn, tasks: BackgroundTasks, desk: DeskDep, row: DeviceRow):
         """הודעה מהלקוח לתמיכה (צ'אט באפליקציה). נשמרת, ונשלחת לוואטסאפ של המנהל ברקע."""
@@ -857,7 +865,7 @@ def _routes(app: FastAPI) -> None:
 
     @app.get("/v1/admin/apps")
     def list_apps(svc: SvcDep, _: AdminRow):
-        return {"apps": svc.managed_apps()}
+        return {"apps": svc.managed_apps(), "categories": store_seed()["categories"]}
 
     @app.post("/v1/admin/apps", status_code=201)
     def create_app(body: ManagedAppIn, svc: SvcDep, admin: AdminRow):

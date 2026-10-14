@@ -272,6 +272,7 @@ class DeviceStatus {
     this.appsReportNeeded = false,
     this.customer,
     this.storeApps = const [],
+    this.storeCategories = kStoreCategories,
     this.supportUnread = 0,
     this.supportWhatsApp = '',
   });
@@ -295,6 +296,9 @@ class DeviceStatus {
 
   /// קטלוג החנות מהשרת (אפליקציות שהמנהל אישר).
   final List<StoreApp> storeApps;
+
+  /// סדר הטאבים (הקטגוריות) בחנות — מהשרת; שרת ישן → ברירת המחדל.
+  final List<String> storeCategories;
 
   /// תשובות מהתמיכה שעוד לא נקראו, ומספר וואטסאפ לפנייה ישירה (אם המנהל הגדיר).
   final int supportUnread;
@@ -337,6 +341,10 @@ class DeviceStatus {
         for (final a in (j['managed_apps'] as List? ?? const []))
           if (a is Map) StoreApp.fromJson(Map<String, Object?>.from(a)),
       ],
+      storeCategories: [
+        for (final c in (j['store_categories'] as List? ?? kStoreCategories))
+          if (c is String && c.isNotEmpty) c,
+      ],
       supportUnread: (support['unread'] as num?)?.toInt() ?? 0,
       supportWhatsApp: support['whatsapp'] as String? ?? '',
     );
@@ -362,6 +370,12 @@ class SupportMessage {
 
 /// אפליקציה בחנות של FilterPhone. עם [raw] (url + sha256 + version_code) — ניתנת להתקנה ישירה
 /// דרך מנהל המכשיר; בלי — בקשה מהמנהל / התקנה מהחנות הרגילה.
+/// הקטגוריות (הטאבים בחנות) בסדר קבוע — כשהשרת לא שלח סדר משלו.
+const kStoreCategories = <String>[
+  'תקשורת', 'בנקים ותשלומים', 'בריאות', 'תחבורה', 'רכב חשמלי', 'קניות ומשלוחים', 'יהדות',
+  'חדשות ופורומים', 'מדיה', 'כלים', 'ממשלה ושירותים', 'עבודה ולימודים',
+];
+
 class StoreApp {
   StoreApp({
     required this.package,

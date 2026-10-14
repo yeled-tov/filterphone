@@ -176,12 +176,18 @@ OPTIONS: tuple[Option, ...] = (
                   "discordcdn.com"), apps=("com.discord",)),
 
     # ------------------------------------------------------------ גוגל ואנדרואיד
-    Option("play_store", "google", "חנות Google Play",
-           "אי אפשר להתקין אפליקציות חדשות מהחנות.",
+    # Play חסום רק *לכניסה* (מגן FilterPhone מחזיר החוצה) — לא מוסתר במנהל המכשיר ולא חסום ברשת, כדי
+    # שעדכוני אפליקציות ברקע (וואטסאפ, ביט...) וההתקנה דרך חנות FilterPhone ימשיכו לעבוד.
+    Option("play_store", "google", "כניסה לחנות Google Play",
+           "אי אפשר להיכנס לחנות ולהתקין ממנה ישירות. אפליקציות מאושרות מותקנות ומתעדכנות דרך חנות FilterPhone.",
+           apps=("com.android.vending",), popular=True, needs_guard=True,
+           warn="נאכף ע\"י מגן FilterPhone (נגישות). מומלץ לחסום יחד גם 'אתרי הורדת APK'."),
+    Option("play_store_full", "google", "Google Play — חסימה מלאה",
+           "החנות חסומה גם ברשת ומוסתרת: אין התקנות ואין עדכוני אפליקציות בכלל.",
            hosts=("play.google.com", "play.googleapis.com", "play-fe.googleapis.com",
                   "play-lh.googleusercontent.com", "market.android.com"),
-           apps=("com.android.vending",), popular=True,
-           warn="גם עדכוני אפליקציות דרך החנות ייעצרו. מומלץ לחסום יחד גם 'אתרי הורדת APK'."),
+           apps=("com.android.vending",),
+           warn="גם עדכוני אבטחה של וואטסאפ וכו' וההתקנה דרך חנות FilterPhone ייעצרו."),
     Option("google_discover", "google", "הפיד של גוגל (Discover)",
            "הכתבות עם התמונות במסך הבית של אפליקציית גוגל ובדף הפתיחה של Chrome.",
            hosts=("discover-pa.googleapis.com",), popular=True),
@@ -354,6 +360,10 @@ SPLIT_APPS: dict[str, tuple[str, ...]] = {
         "searchresultsactivity",
     ),
 }
+
+# אפליקציות שנחסמות רק בנגישות (כניסה), ולא מוסתרות/מושבתות במנהל המכשיר — כי הן צריכות להמשיך לרוץ
+# ברקע. אם נבחרה האפשרות ה"מלאה" שלהן — מוסתרות כרגיל.
+ACCESSIBILITY_ONLY_APPS: dict[str, str] = {"com.android.vending": "play_store_full"}
 
 # הגנות מיוחדות בטלפון. ההגדרות (תבניות זיהוי) נשלחות מהשרת — כשוואטסאפ משנה את המסכים שלו,
 # מעדכנים כאן בלי לשחרר אפליקציה חדשה. האפליקציה מחזיקה גם ברירת מחדל זהה.
@@ -791,6 +801,7 @@ class Compiled:
     vpn_bypass: dict = field(default_factory=dict)  # {enabled, apps} — אפליקציות שעוברות מחוץ ל-VPN
     network_only_unknown: tuple[str, ...] = ()  # אפליקציות "ברשת" בלי שרתים ידועים — אין מה לחסום
     split_apps: tuple[str, ...] = ()            # חסומות רק במסכים שלהן (SPLIT_APPS), לא כאפליקציה שלמה
+    accessibility_only: tuple[str, ...] = ()    # חסומות בנגישות בלבד — לא מוסתרות במנהל המכשיר
 
     def proxy_json(self, level: int) -> str:
         """מה שהפרוקסי קורא (fp:policy ב-Redis)."""
@@ -816,6 +827,7 @@ class Compiled:
             "dpc": self.dpc,
             "keywords": self.keywords,
             "vpn_bypass": self.vpn_bypass,
+            "accessibility_only": list(self.accessibility_only),
         }
 
 
@@ -857,6 +869,8 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         vpn_bypass=resolve_vpn_bypass(s.vpn_bypass),
         network_only_unknown=tuple(unknown),
         split_apps=tuple(split),
+        accessibility_only=tuple(sorted(p for p, full in ACCESSIBILITY_ONLY_APPS.items()
+                                        if p in device_apps and full not in s.options)),
     )
 
 
