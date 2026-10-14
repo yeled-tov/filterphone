@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import com.wireguard.android.backend.Tunnel
@@ -208,6 +209,12 @@ class MainActivity : FlutterActivity() {
             "openPlay" -> {
                 val pkg = call.argument<String>("package").orEmpty()
                 val url = call.argument<String>("url")
+                // שלב א': כש-Play חסום לכניסה — "חלון התקנה" לאפליקציה הזו בלבד (GuardService/PlayLock)
+                if (pkg.isNotBlank()) {
+                    PlayLock.start(pkg, call.argument<List<String>>("titles").orEmpty(),
+                        ManagedApps.installedVersion(this, pkg), SystemClock.elapsedRealtime())
+                    GuardService.onPlaySession()
+                }
                 val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg"))
                     .setPackage("com.android.vending")
                 val web = Uri.parse(url?.takeIf { it.startsWith("https://") }

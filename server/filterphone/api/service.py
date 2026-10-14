@@ -83,6 +83,14 @@ _FT_V1 = (
 
 
 @functools.lru_cache(maxsize=1)
+def _play_titles() -> dict[str, list[str]]:
+    seed = store_seed()
+    out = {a["package"]: a.get("play_titles", []) for a in seed["apps"]}
+    out[seed["filtertube_play"]["package"]] = seed["filtertube_play"].get("play_titles", [])
+    return out
+
+
+@functools.lru_cache(maxsize=1)
 def store_seed() -> dict:
     """אפליקציות בסיסיות מאומתות מול Google Play (שם חבילה, אייקון, תיאור, צילומי מסך) + סדר הקטגוריות."""
     with open(Path(__file__).with_name("store_seed.json"), encoding="utf-8") as f:
@@ -1686,6 +1694,8 @@ class Services:
                      "icon_url": self._media_url(a["id"], "icon", a["updated_at"]) if a["icon_url"] else "",
                      "screenshots": [self._media_url(a["id"], f"s{i}", a["updated_at"]) for i in range(len(shots))],
                      "play_url": a["play_url"],
+                     # השם כפי שמופיע ב-Google Play (עברית/אנגלית) — לנעילת חלון Play לאפליקציה הזו
+                     "play_titles": _play_titles().get(a["package"], []),
                      "required": bool(a["required"]), "added_at": a["created_at"],
                      "updated_at": a["updated_at"]}
             if a["apk_url"] and self._SHA256_RE.match(a["apk_sha256"] or "") and a["version_code"]:

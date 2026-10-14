@@ -6,6 +6,8 @@
     <string name="guard_screen_blocked">המסך הזה חסום בטלפון הזה (FilterPhone)</string>
     <string name="guard_profile_photo_blocked">תמונות פרופיל חסומות בטלפון הזה (FilterPhone)</string>
     <string name="guard_keyword_blocked">החיפוש הזה חסום בטלפון הזה (FilterPhone)</string>
+    <string name="guard_play_only_selected">בחלון הזה אפשר להתקין רק את האפליקציה שנבחרה בחנות FilterPhone</string>
+    <string name="guard_play_window_closed">חלון ההתקנה נסגר. להתקנת אפליקציה — דרך חנות FilterPhone</string>
     <string name="guard_self_protected">ההגדרה הזו מוגנת על ידי מנהל הסינון (FilterPhone)</string>
     <string name="protection_channel">הגנת FilterPhone</string>
     <string name="protection_channel_desc">התראה קבועה כל עוד הסינון פעיל — כדי שאנדרואיד לא יעצור את ההגנה ברקע.</string>

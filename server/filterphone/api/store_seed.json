@@ -22,6 +22,9 @@
    "https://play-lh.googleusercontent.com/4mj4bOREG833X9Maxt_jfPHBn1sA6F2WMqXflvuwllPRzGyd3h3jY9Jhf4ArtUn4V5-Mu9H1RGH2yOrQSVL_=h720",
    "https://play-lh.googleusercontent.com/6qQcsAxnOzglrXEoXYl5Xb3TZ8cCFZXN42Ojq_Uv__JXl1aAtOY-IQPgWAuj6-ePU0gnrCRIKqHK-s_ljhni=h720",
    "https://play-lh.googleusercontent.com/NPbcAav-M2qOlPvdvNntiqYpzFBeQvosn6XWCdsk-MJX_V6kFwgtC-JiT21Nps9J-zkfEZc8ne5qWevANttB=h720"
+  ],
+  "play_titles": [
+   "FilterTube"
   ]
  },
  "apps": [
@@ -39,7 +42,10 @@
     "https://play-lh.googleusercontent.com/-4WrLXawEqzjRXJbL232o7M7JqDGo_doPLA78i_6nquCf2UIfW2hHf7MbngWJ-fVgT5KwC_bBNO7vgi-PNW5Qw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.whatsapp",
-   "sort": 100
+   "sort": 100,
+   "play_titles": [
+    "WhatsApp Messenger"
+   ]
   },
   {
    "package": "com.whatsapp.w4b",
@@ -55,7 +61,10 @@
     "https://play-lh.googleusercontent.com/WDPgOOgIc6KXbpLpbxboBxAjd19OJzAmnDJ6bcNO3vkWJtSG5LBYI8sjIMHNajSv1XouoT7htD_EPifYMETxrdA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.whatsapp.w4b",
-   "sort": 101
+   "sort": 101,
+   "play_titles": [
+    "WhatsApp Business"
+   ]
   },
   {
    "package": "com.google.android.apps.messaging",
@@ -71,7 +80,10 @@
     "https://play-lh.googleusercontent.com/novmdUQroD2yKI2-3B5914l7PQvGqz0Y9QRnAU5y7zKSAETI4wlaPzRusjNgOi3FI_oe6K-1ByIntdeQI83w6w=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.messaging",
-   "sort": 102
+   "sort": 102,
+   "play_titles": [
+    "Google Messages"
+   ]
   },
   {
    "package": "com.google.android.gm",
@@ -87,7 +99,10 @@
     "https://play-lh.googleusercontent.com/zOtzmFuMzh9d_uvtNhAjWqg-gPXBH0tG3jkR737vZCj0IhwJYFqMxIAl14jYMdmYgLzXXqEACn3CrYWrO7PizA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.gm",
-   "sort": 103
+   "sort": 103,
+   "play_titles": [
+    "Gmail"
+   ]
   },
   {
    "package": "com.microsoft.office.outlook",
@@ -103,7 +118,10 @@
     "https://play-lh.googleusercontent.com/8dRq1OlXX_hJXgylPqgunT-o52GXK8YnbRvmXpVVl2c17PTGMkXUm3Uz8TYskIsZlQFmBZqC5jpYawY5B46W-RU=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.office.outlook",
-   "sort": 104
+   "sort": 104,
+   "play_titles": [
+    "Microsoft Outlook"
+   ]
   },
   {
    "package": "us.zoom.videomeetings",
@@ -119,7 +137,10 @@
     "https://play-lh.googleusercontent.com/UgRm-oZ4-8FBLKXFpW3gTUHR6jNtrHzt8GsSdxppZORXWg6JjeOTDgb2U3T7b7F2UGNQgoRG0hInLIGUcDLKYw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=us.zoom.videomeetings",
-   "sort": 105
+   "sort": 105,
+   "play_titles": [
+    "Zoom Workplace"
+   ]
   },
   {
    "package": "com.google.android.apps.tachyon",
@@ -135,7 +156,10 @@
     "https://play-lh.googleusercontent.com/svie8_dVeU9-6y4zQTZQCgKWYfPnUunZLkqVVnsEZ_DxZnxHqZgMb_9bxNoVdR_rXwwlRnu5PzPfGiPvpxJP9IY=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.tachyon",
-   "sort": 106
+   "sort": 106,
+   "play_titles": [
+    "Google Meet"
+   ]
   },
   {
    "package": "com.microsoft.teams",
@@ -151,7 +175,10 @@
     "https://play-lh.googleusercontent.com/LVz44hqtivW4c978LAD7bJw0PM02aOycczjrOoeogfLFPXhXB_leq6rDxQdTXaCGVsnyKmNemOxZcJ8qnCAD=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.teams",
-   "sort": 107
+   "sort": 107,
+   "play_titles": [
+    "Microsoft Teams"
+   ]
   },
   {
    "package": "com.bnhp.payments.paymentsapp",
@@ -167,7 +194,10 @@
     "https://play-lh.googleusercontent.com/DOsdkBcm8_RUc9xEOWLEUfFBHToiE1JniA8eh-stQHU4ei8twyp4He02OYbO6Y5SvCkCGDy0mlXX9GsO9X4T=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.bnhp.payments.paymentsapp",
-   "sort": 108
+   "sort": 108,
+   "play_titles": [
+    "bit ביט"
+   ]
   },
   {
    "package": "com.payboxapp",
@@ -183,7 +213,10 @@
     "https://play-lh.googleusercontent.com/N_FyZVem60wLGtVwsLLat9PcB679-_V9de83wkRcKG9jvpjAhKoYee20uKlvTguVk8VnYe2T6PkBcyt2BnRL2Q0=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.payboxapp",
-   "sort": 109
+   "sort": 109,
+   "play_titles": [
+    "פייבוקס ארנק דיגיטלי - PayBox"
+   ]
   },
   {
    "package": "com.ideomobile.hapoalim",
@@ -199,7 +232,10 @@
     "https://play-lh.googleusercontent.com/g9ldvkwn-Wi6402T6JnpIZrLDMzPSAz7EC44pgw6HSJU_e9-ZZuD1WIophjBiYb5YVL0vcK2ZWYAA65fOzTw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.hapoalim",
-   "sort": 110
+   "sort": 110,
+   "play_titles": [
+    "בנק הפועלים - ניהול החשבון"
+   ]
   },
   {
    "package": "com.leumi.leumiwallet",
@@ -215,7 +251,11 @@
     "https://play-lh.googleusercontent.com/Fl8ys-JNyC_Xu2-rsL_GVG87xr6NYABFonM3cNxTS8QBhn2tKfJDxnsgR1iPb_YnGo0yvUCsWYajtOnFyt8_=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.leumi.leumiwallet",
-   "sort": 111
+   "sort": 111,
+   "play_titles": [
+    "לאומי",
+    "Leumi"
+   ]
   },
   {
    "package": "com.ideomobile.discount",
@@ -231,7 +271,11 @@
     "https://play-lh.googleusercontent.com/R8Lubr7JSC-2WVN9xtbbvw1O031gVjtVWYFs3wj-m5UzE3H4ngwxAJEj3pgQLEByPT5iKQS9WtSOfAyaTYod=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.discount",
-   "sort": 112
+   "sort": 112,
+   "play_titles": [
+    "בנק דיסקונט",
+    "Discount Bank"
+   ]
   },
   {
    "package": "com.idb.android.apps.authenticator",
@@ -245,7 +289,10 @@
     "https://play-lh.googleusercontent.com/Nc5PsCj9il_iD7MD6nRGNYYLZKawjRCgmWwticrNG6A45J0t2T2OrnPKo6P1cD0bO8FRdRuyWD4ecmSrCSL-UQY=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.idb.android.apps.authenticator",
-   "sort": 113
+   "sort": 113,
+   "play_titles": [
+    "דיסקוד (בנק דיסקונט)"
+   ]
   },
   {
    "package": "com.MizrahiTefahot.nh",
@@ -261,7 +308,10 @@
     "https://play-lh.googleusercontent.com/v9HOFRpFy0d7AkqwN6S0QdV3GZe3P7PJ4rBfFXgJDqhbO8_sRwprstSrjdzhtohPydHhFfQTwg7vir-_dqoKEA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.MizrahiTefahot.nh",
-   "sort": 114
+   "sort": 114,
+   "play_titles": [
+    "מזרחי טפחות - ניהול חשבון"
+   ]
   },
   {
    "package": "com.fibi.nativeapp",
@@ -277,7 +327,10 @@
     "https://play-lh.googleusercontent.com/dZx5MIzsDTijWyEwiowS2oBoeSYglcPPPOpjOpgpWgFnYvR5bIvpmUwKyRqSvY6OJ4CYzq1LlIKf11W2SsZfqQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.fibi.nativeapp",
-   "sort": 115
+   "sort": 115,
+   "play_titles": [
+    "הבנק הבינלאומי"
+   ]
   },
   {
    "package": "com.otsar.nativeapp",
@@ -293,7 +346,10 @@
     "https://play-lh.googleusercontent.com/npSLfUU-zzrD9aOvPVafmA8w56w9SLQT0SaIx6cR1TTfTgb0YdouDU1OA53YwecuNnnLY_nwpMQvQuPLtb38=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.otsar.nativeapp",
-   "sort": 116
+   "sort": 116,
+   "play_titles": [
+    "אוצר החייל"
+   ]
   },
   {
    "package": "com.ideomobile.mercantile",
@@ -309,7 +365,11 @@
     "https://play-lh.googleusercontent.com/bOVwzyso1EQVE6w-ZIN-6EM5i_HVct84kHNxf7QSJLmvCm8IjM-ZXNRQSJw1MYJ1cTWIBOMsPBTdQ67sqnzT36c=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.mercantile",
-   "sort": 117
+   "sort": 117,
+   "play_titles": [
+    "בנק מרכנתיל, مركنتيل",
+    "Mercantile Discount Bank"
+   ]
   },
   {
    "package": "il.co.yahav.mobbanking",
@@ -325,7 +385,10 @@
     "https://play-lh.googleusercontent.com/5G8uBjACWWzWB8-CrM6qvH_TBfIBYDPcCcJA95wNyeOLO7AmdZ8bYr96SsIkunYrkz6LEpYD-qpKIMscpIskWtw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.co.yahav.mobbanking",
-   "sort": 118
+   "sort": 118,
+   "play_titles": [
+    "בנק יהב - ניהול חשבון"
+   ]
   },
   {
    "package": "com.masad.nativeapp",
@@ -341,7 +404,10 @@
     "https://play-lh.googleusercontent.com/J6OExODR-V1kuKJ0bNH5kyCxY9rQgEFetc-I4O3Tiu-QiGnG0dzyezj7OnIJ25g0zWqZEIuaGws37788oLSa=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.masad.nativeapp",
-   "sort": 119
+   "sort": 119,
+   "play_titles": [
+    "בנק מסד"
+   ]
   },
   {
    "package": "com.bankjerusalem",
@@ -357,7 +423,10 @@
     "https://play-lh.googleusercontent.com/ZdswW08TWKIBgfPMhtK2RLNkpWISdoGwDpMFu2VInzXwiXMWRrkdmXgnQ8in2DizUI-Cx6pweLsnSCMFCDwulRI=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.bankjerusalem",
-   "sort": 120
+   "sort": 120,
+   "play_titles": [
+    "בנק ירושלים"
+   ]
   },
   {
    "package": "com.pagi.nativeapp",
@@ -373,7 +442,10 @@
     "https://play-lh.googleusercontent.com/8b1RJQvsO8k5botd87yKLcmVUjpohUSd0eg4VwD-RN_-YDtj6kx_F2Uoe17WWDFNS9DMGfNF7gHOKibCJKkXdrI=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.pagi.nativeapp",
-   "sort": 121
+   "sort": 121,
+   "play_titles": [
+    "פאגי"
+   ]
   },
   {
    "package": "il.co.firstdigitalbank",
@@ -389,7 +461,10 @@
     "https://play-lh.googleusercontent.com/xhvrSic1dmZZ7rgbQmcxbQz11pi3IMvJvTKvKUjsURde8rN9dnOHR8UgcOnAtI9RxMvZClDfzxifEKXCOA_mew=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.co.firstdigitalbank",
-   "sort": 122
+   "sort": 122,
+   "play_titles": [
+    "ONE ZERO"
+   ]
   },
   {
    "package": "com.pepper.ldb",
@@ -405,7 +480,11 @@
     "https://play-lh.googleusercontent.com/hZBiZMqIKUhHECsdVV6hH27hiMvX5sN6kXV39eGzKYRyEtVBVPoIGJ5nszltSLI5Gq25pDE0S3DziB8mzKXTVmI=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.pepper.ldb",
-   "sort": 123
+   "sort": 123,
+   "play_titles": [
+    "PEPPER – Mobile Banking",
+    "Pepper – Mobile Banking"
+   ]
   },
   {
    "package": "com.ideomobile.leumicard",
@@ -421,7 +500,10 @@
     "https://play-lh.googleusercontent.com/43iG7mc_btoygOppr7n0NPtFjkamtzy_SqmB7y2btR1iQDNYnzw6bCvcg31avQwHXbuRW8Mge09lKctmVUyodw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.leumicard",
-   "sort": 124
+   "sort": 124,
+   "play_titles": [
+    "max"
+   ]
   },
   {
    "package": "com.onoapps.cal4u",
@@ -437,7 +519,11 @@
     "https://play-lh.googleusercontent.com/uhRVzeTsw6gUinpBYuSyfv3wJ5gmtLAh9PLB1gk2DgVrv0kN7XwV71C5G8BrlEc2ePbsoEI3udInLJZhrwtqQg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.onoapps.cal4u",
-   "sort": 125
+   "sort": 125,
+   "play_titles": [
+    "כאל- הטבות, מידע, אשראי",
+    "Cal- Benefits, Payment,Service"
+   ]
   },
   {
    "package": "com.isracard.hatavot",
@@ -453,7 +539,10 @@
     "https://play-lh.googleusercontent.com/t0HvF1UFkNv9xVJqK13aycGYjqGd7GdNOI9GyJC5t0RMNaZ-kbLyrFDlTA4DpHfy-15EI54-92-VwTbkLrU45t4=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.isracard.hatavot",
-   "sort": 126
+   "sort": 126,
+   "play_titles": [
+    "ישראכרט - ארנקים, אשראי והטבות"
+   ]
   },
   {
    "package": "com.americanexpress.android",
@@ -469,7 +558,10 @@
     "https://play-lh.googleusercontent.com/Jy0ajyk2NluM7LXpwk7ehj0inWjL4PEQDBj7paAmQn8RN7SgLQk86vWblk8_fUvGWF9OdvlrG2YKxkrA_kfmUQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.americanexpress.android",
-   "sort": 127
+   "sort": 127,
+   "play_titles": [
+    "אמריקן אקספרס-אשראי,חו\"ל הטבות"
+   ]
   },
   {
    "package": "clalit.android",
@@ -485,7 +577,10 @@
     "https://play-lh.googleusercontent.com/fVX_tMXf1PgBjmh8ExcsH3YlGq2FqXN3sCQPXoLf7QPIuBcmHh56qeycvBPI3mM67FJSwU6Y6JvXQPjK_AKK_Q=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=clalit.android",
-   "sort": 128
+   "sort": 128,
+   "play_titles": [
+    "כללית"
+   ]
   },
   {
    "package": "com.ideomobile.maccabi",
@@ -501,7 +596,10 @@
     "https://play-lh.googleusercontent.com/SL_ASM0t6ySn-t-qIWPTk3qXjFR5GRf_imcfyHBfWIhQY1NNFZi-3EiiknmCzL656t4LVTLZNvisGU__n94ESQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.ideomobile.maccabi",
-   "sort": 129
+   "sort": 129,
+   "play_titles": [
+    "מכבי שירותי בריאות"
+   ]
   },
   {
    "package": "org.meuhedet.android",
@@ -517,7 +615,10 @@
     "https://play-lh.googleusercontent.com/9zS6jIW2nzg-EMaCZWw7wh6ZqehNw9CrMyUBEIJ2IBc93juvCJW2o5PNNDEx0DITgh7ttEtO7MS9UyQuEsry8Q=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=org.meuhedet.android",
-   "sort": 130
+   "sort": 130,
+   "play_titles": [
+    "מאוחדת"
+   ]
   },
   {
    "package": "leumit.mobile",
@@ -533,7 +634,11 @@
     "https://play-lh.googleusercontent.com/3X6LWQO8MY2xP91JyNsGPChE7ZMFrqQdxBLnnO7UKEYbUwUIWB3-6U45I4tvKflIdn59yp_sViFnYhYQEL66j3U=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=leumit.mobile",
-   "sort": 131
+   "sort": 131,
+   "play_titles": [
+    "לאומית",
+    "Leumit"
+   ]
   },
   {
    "package": "il.org.mda.mymada",
@@ -549,7 +654,11 @@
     "https://play-lh.googleusercontent.com/-IVwo4M1jnCz9M0pDbRD49qz1c-dV4nNuNZ8kGShZVlysEYI15nEUYI3AOhX92MRiGHLgeatw4J_Y8dxy688IA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.org.mda.mymada",
-   "sort": 132
+   "sort": 132,
+   "play_titles": [
+    "מד\"א שלי",
+    "My mda"
+   ]
   },
   {
    "package": "com.moblin.superpharm",
@@ -565,7 +674,11 @@
     "https://play-lh.googleusercontent.com/12-M82V9Hcj2Xq7UbA3D0zaSSkX1D4ge4yks8jS3VJeuM-fG-8yYDrYlZsrollH2NKFapC_Y7zUMH8z15rqV_Q=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.moblin.superpharm",
-   "sort": 133
+   "sort": 133,
+   "play_titles": [
+    "סופר-פארם - יש פה הכל",
+    "Super-Pharm: We Have It All"
+   ]
   },
   {
    "package": "com.waze",
@@ -581,7 +694,11 @@
     "https://play-lh.googleusercontent.com/TIeNJK21oq0f9AslyyjKbkiltPjNHPNAaVqaCHBa9QuZ9wBgLCtHE7U3Vd-QCqPq-uBlLKm4dbrVXGfxT1oXJA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.waze",
-   "sort": 134
+   "sort": 134,
+   "play_titles": [
+    "Waze: ניווט ועדכוני תנועה",
+    "Waze Navigation & Live Traffic"
+   ]
   },
   {
    "package": "com.tranzmate",
@@ -597,7 +714,11 @@
     "https://play-lh.googleusercontent.com/h43nlPZwg7_A7DZRlfy4zSyH71WQll53CdOA-sp1fnScxe-IMjzlfqpGqlE4aV-S5NVNfePg8csRLfWYt-EODQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.tranzmate",
-   "sort": 135
+   "sort": 135,
+   "play_titles": [
+    "מוביט: ניווט ותכנון מסלולים",
+    "Moovit: Your Transit Tracker"
+   ]
   },
   {
    "package": "com.google.android.apps.maps",
@@ -613,7 +734,11 @@
     "https://play-lh.googleusercontent.com/tM6BZ9oVH-sHqFx8Dii312-BYhRPAXDwpN-ZOli5icpjpJxwrsirdsrB-5sKQQIDaxa8tsCqYUYpBkQGUXLAceU=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.maps",
-   "sort": 136
+   "sort": 136,
+   "play_titles": [
+    "Google מפות",
+    "Google Maps"
+   ]
   },
   {
    "package": "com.moblin.israeltrain",
@@ -629,7 +754,11 @@
     "https://play-lh.googleusercontent.com/pyCh39AllCDea4b6y5-e3_xbq4EQdTXgh2yCKnOQuBT_dLdhy2XgNWVR00xMC8tKqXCcq0xkW7xqggUof3h9=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.moblin.israeltrain",
-   "sort": 137
+   "sort": 137,
+   "play_titles": [
+    "רכבת ישראל -Israel Railways",
+    "Israel Railways"
+   ]
   },
   {
    "package": "com.egged.egg",
@@ -645,7 +774,11 @@
     "https://play-lh.googleusercontent.com/abgBTdq3ReBvNx_m9_2QVwq25KuAHMBbEvSelMlE9IOcHcu54Qs4lnBh7gpc8xt4Ap26RfKJv1mlzqR6cKqcMA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.egged.egg",
-   "sort": 138
+   "sort": 138,
+   "play_titles": [
+    "Egg: תחבורה ציבורית בזמן אמת",
+    "egg - Bus & Train in Israel"
+   ]
   },
   {
    "package": "co.hopon.client",
@@ -661,7 +794,11 @@
     "https://play-lh.googleusercontent.com/NCI1A02n2GcdPwePyiOG5L5nueanxePlIZm1A9gLT-R41BuTkEDZb64wW6VGWSq8XvTLZSifmXZP9okVBZieONc=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=co.hopon.client",
-   "sort": 139
+   "sort": 139,
+   "play_titles": [
+    "הופאון רב-פס: אוטובוסים ורכבות",
+    "Rav-Pass by HopOn הופאון רב-פס"
+   ]
   },
   {
    "package": "com.pcentra.ravkavonlinemobile",
@@ -677,7 +814,11 @@
     "https://play-lh.googleusercontent.com/6ghmQNDak4nU4q0rc5bRG5fiVQuzzeqUqsgL27a39EuaDN1_ZqtSNljlIA9tgxQclx1lSwwMsakq9AqkwI3G5QU=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.pcentra.ravkavonlinemobile",
-   "sort": 140
+   "sort": 140,
+   "play_titles": [
+    "רב-קו אונליין - טעינת רב-קו",
+    "Rav-Kav Online Rav-Kav Loading"
+   ]
   },
   {
    "package": "com.efobus.efobus30",
@@ -691,7 +832,10 @@
     "https://play-lh.googleusercontent.com/s_r3_ki4nfWF-QHJLeOUA_uhFbzQqThJ696OifgDYFoA8GP1-zq3GPeFms6njG9UA8z_gba18mXch8Lxf7YUl-c=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.efobus.efobus30",
-   "sort": 141
+   "sort": 141,
+   "play_titles": [
+    "איפה בוס 3.0 - תחב״צ בזמן אמת"
+   ]
   },
   {
    "package": "com.mosko.bus",
@@ -707,7 +851,11 @@
     "https://play-lh.googleusercontent.com/QUgqPp7H-u-CaQDW5nLn6YqgTQK7qBL5QdqL3uzFFjTUWCI8x8hImNkw9_2wD3JNkFzJvbFh9l-aA6XqdQh2AQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.mosko.bus",
-   "sort": 142
+   "sort": 142,
+   "play_titles": [
+    "אוטובוס קרוב - התחנה שלך",
+    "Bus Nearby - אוטובוס קרוב"
+   ]
   },
   {
    "package": "com.gettaxi.android",
@@ -723,7 +871,11 @@
     "https://play-lh.googleusercontent.com/E4_XJhO8uIIv_29q35sPqyNf3tP3-WOWQT6KINF7mW4pO_QnlbjZ-AAxT2uSEwRXIJIgMd0a2kjtPd9vlbhrrAU=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.gettaxi.android",
-   "sort": 143
+   "sort": 143,
+   "play_titles": [
+    "Gett הזמנת מוניות ומשלוחים",
+    "Gett- Corporate Ground Travel"
+   ]
   },
   {
    "package": "com.yandex.yango",
@@ -739,7 +891,11 @@
     "https://play-lh.googleusercontent.com/TtF9EfMnFLQdhZjkh5AffZMb7olbcep9S32yjrrx0uBT7qfDx695FZNrCAggPmonQZgXE2R3MMYh3LLmfAsZkiQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.yandex.yango",
-   "sort": 144
+   "sort": 144,
+   "play_titles": [
+    "Yango Taxi and Delivery",
+    "Yango: taxi, food, delivery"
+   ]
   },
   {
    "package": "com.unicell.pangoandroid",
@@ -755,7 +911,10 @@
     "https://play-lh.googleusercontent.com/n1u8T7AOI-uMDFesZG36F87WS3XhkEHKmH1jFd9jaRjUI0lRDm5dF2tyMKNz4ayDPovUOkZu7eQ1c2qe9cupwQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.unicell.pangoandroid",
-   "sort": 145
+   "sort": 145,
+   "play_titles": [
+    "פנגו - Pango"
+   ]
   },
   {
    "package": "air.com.cellogroup.Cellopark",
@@ -771,7 +930,10 @@
     "https://play-lh.googleusercontent.com/q8VDnhZdYb2NNC4CYx_k4kO4CrE2hsgSo8SYXe1OL2yM7ylxVOTc1tVmiGCCh5M6drZc_UFG7o5pCJupJedo=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=air.com.cellogroup.Cellopark",
-   "sort": 146
+   "sort": 146,
+   "play_titles": [
+    "Cello"
+   ]
   },
   {
    "package": "il.co.yellow.app",
@@ -787,7 +949,10 @@
     "https://play-lh.googleusercontent.com/VocD3M-aBdp_tm3xYZMSsqPA1RW6w7XsIEm6NrjIBPq1pY20M8h32vUb5OirmyzoTdsFonBKlr-6u181AZT0Ew=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.co.yellow.app",
-   "sort": 147
+   "sort": 147,
+   "play_titles": [
+    "הארנק הדיגיטלי של פז yellow"
+   ]
   },
   {
    "package": "com.doralonapp",
@@ -803,7 +968,10 @@
     "https://play-lh.googleusercontent.com/WiN0s__42MBUoZxyRDMgLc8q-9NdXlDu5GB-85K8OddHR7bcKdL57PCbDG0TpYFYW2eol9contdhUG540Tlct4I=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.doralonapp",
-   "sort": 148
+   "sort": 148,
+   "play_titles": [
+    "דור אלון"
+   ]
   },
   {
    "package": "com.sonol.mobileapp",
@@ -819,7 +987,10 @@
     "https://play-lh.googleusercontent.com/5inyWo1mGwIjYX0pRf2vbGt9ndfVx6ENh5bwuFwHeGHDZdtrAeba1uld4IfakPVz7wdevq23nRsgI9Krn-YyZw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.sonol.mobileapp",
-   "sort": 149
+   "sort": 149,
+   "play_titles": [
+    "עוצרים בסונול למלא אנרגיה"
+   ]
   },
   {
    "package": "com.driivz.mobile.android.afcon.driver",
@@ -835,7 +1006,10 @@
     "https://play-lh.googleusercontent.com/fMu_4SQKGNtwxu2An92WUhB5rgnnxi-_wtp3dU3krlu0oRihOspwwazDosq1AjB2oEuWzayJqa20XolOa80Bcg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.driivz.mobile.android.afcon.driver",
-   "sort": 150
+   "sort": 150,
+   "play_titles": [
+    "ON-EV"
+   ]
   },
   {
    "package": "il.evedge.evedge",
@@ -851,7 +1025,11 @@
     "https://play-lh.googleusercontent.com/Jk5WYg4JUuCsPFzTotMQP6l7Kk-bzcULdR-jHrRkh3-SCBy2JAVSjozmu57x2x-hnBcb6eOXsUJcAkBHNbz8nw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.evedge.evedge",
-   "sort": 151
+   "sort": 151,
+   "play_titles": [
+    "EVedge עמדות טעינה לרכב חשמלי",
+    "EV Edge"
+   ]
   },
   {
    "package": "gnrgy.android.emobilityapp",
@@ -867,7 +1045,10 @@
     "https://play-lh.googleusercontent.com/7yGYFUpqkArW5QQElFY0eaGlvfYciRQTjpT_MIRkmUF1GX6QBvRp1g5Ato2YYv6PU9VIWxtdFFtViA2xN1iO1g=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=gnrgy.android.emobilityapp",
-   "sort": 152
+   "sort": 152,
+   "play_titles": [
+    "Gnrgy Go"
+   ]
   },
   {
    "package": "com.driivz.mobile.android.greenspot.driver",
@@ -883,7 +1064,10 @@
     "https://play-lh.googleusercontent.com/tFu69ItKnbYFNe2ZGlF_Wb8jXQh8u7CptUGFKfUzmLBHp4F2jOUxxmwwNkKakAbmNIZY4dHXDVtk4EpRWnQJbg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.driivz.mobile.android.greenspot.driver",
-   "sort": 153
+   "sort": 153,
+   "play_titles": [
+    "גרינספוט– טעינה לרכבים חשמליים"
+   ]
   },
   {
    "package": "com.driivz.mobile.android.evi.driver",
@@ -899,7 +1083,10 @@
     "https://play-lh.googleusercontent.com/aaMt0OzTV8oOb_hh_mPJM6DNaGl_kDHJVWLL3iY5foh--Xb-qW8xWCEn5OkSQLWfUcvt5kpE2SZgiuzM5PZ62g=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.driivz.mobile.android.evi.driver",
-   "sort": 154
+   "sort": 154,
+   "play_titles": [
+    "סונול EVI – פתרונות לרכב חשמלי"
+   ]
   },
   {
    "package": "energy.wevo.doralon",
@@ -915,7 +1102,11 @@
     "https://play-lh.googleusercontent.com/_PoTgSbv4rECZ7f4phMiqp4yscLuc04L-OvdIsfE-vY0JnIOBN5wW4WuUZRxhdghiUEVLKMlLsjY704e1XKMr4Y=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=energy.wevo.doralon",
-   "sort": 155
+   "sort": 155,
+   "play_titles": [
+    "DOR ALON EV",
+    "Dor Alon EV"
+   ]
   },
   {
    "package": "com.acdcproject",
@@ -931,7 +1122,10 @@
     "https://play-lh.googleusercontent.com/IOn_US-DHb_letEOfi9aKqCApvsBopz0POvFKYwngBoukb6_yk5U2CyPb3Yzc9uyDDNM0vNyZ5HtGAArGqUxLQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.acdcproject",
-   "sort": 156
+   "sort": 156,
+   "play_titles": [
+    "ACDC EV - טעינה לרכב חשמלי"
+   ]
   },
   {
    "package": "com.nayax.evcellcom",
@@ -947,7 +1141,11 @@
     "https://play-lh.googleusercontent.com/aR_Uv1D9_cp4w_EhS_tCH7NK8TUT9RJ40DuRQRqcDTTWTnrlyv5dAA_dbBTxNznH9Cc_ovoBRZqQwb0MbSdgKm4=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.nayax.evcellcom",
-   "sort": 157
+   "sort": 157,
+   "play_titles": [
+    "EV סלקום",
+    "EV Cellcom"
+   ]
   },
   {
    "package": "com.xatori.Plugshare",
@@ -963,7 +1161,11 @@
     "https://play-lh.googleusercontent.com/l5QiwtoNNh-eN7yp0g4jSfeglH6Mp6qNSla7PucgLPEi9GdoGWQDmC2v9qu7kkJJHRiAICTsfNT5kPKmIv3IhRs=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.xatori.Plugshare",
-   "sort": 158
+   "sort": 158,
+   "play_titles": [
+    "PlugShare",
+    "PlugShare - EV & Tesla Map"
+   ]
   },
   {
    "package": "com.teslamotors.tesla",
@@ -979,7 +1181,10 @@
     "https://play-lh.googleusercontent.com/RbzjXXw5CEIHfTJ_bGuiIwXHtZLze_81wTfQsPCWLOR38027elkHh1NKbGQ40hgIC4J70uwYpvcgZrIfLnU4=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.teslamotors.tesla",
-   "sort": 159
+   "sort": 159,
+   "play_titles": [
+    "Tesla"
+   ]
   },
   {
    "package": "com.Shufersal",
@@ -995,7 +1200,10 @@
     "https://play-lh.googleusercontent.com/C7X8fIL_fbdC6yFTfFqtz2z2KsaUrKBFP0nF3rrmVCtgQRTshTeIefOsM0PjSZLbeA_rMpb-IplrVwHGcfaDOA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.Shufersal",
-   "sort": 160
+   "sort": 160,
+   "play_titles": [
+    "שופרסל App"
+   ]
   },
   {
    "package": "com.superup.ramilevy",
@@ -1011,7 +1219,10 @@
     "https://play-lh.googleusercontent.com/8rkQRl2m0uXOZ9JmNGjeVuw0MDa4cOQo59x9wxUpD_SuJUtpE7N9P0FXyzR8X45tBReODNAYtCS0NitgJOJ7wA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.superup.ramilevy",
-   "sort": 161
+   "sort": 161,
+   "play_titles": [
+    "רמי לוי אונליין"
+   ]
   },
   {
    "package": "il.co.yochananof.mobile.twa",
@@ -1027,7 +1238,10 @@
     "https://play-lh.googleusercontent.com/sct6mmuPdQGkKjW7OWEqPGCCYj8hZYXZuaTNmXz92d52XFiHe7TCXTKVI0pax6NqOqY8kxjKBiIHuKI8dqt_Cg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.co.yochananof.mobile.twa",
-   "sort": 162
+   "sort": 162,
+   "play_titles": [
+    "יוחננוף - סופרשוק לכולם"
+   ]
   },
   {
    "package": "net.hazol.app",
@@ -1043,7 +1257,10 @@
     "https://play-lh.googleusercontent.com/tS7GwyAVRnQPwAd8XsqxOGVbZ35-UFEJNqEBljsDX1X7-RSOfgQEZSu4HCdZ8IgZngtKBTbuKUoGZL7n16NXoA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=net.hazol.app",
-   "sort": 163
+   "sort": 163,
+   "play_titles": [
+    "הזול – השוואת מחירים בסופר"
+   ]
   },
   {
    "package": "com.wolt.android",
@@ -1059,7 +1276,11 @@
     "https://play-lh.googleusercontent.com/Cazo6elYZ30TC6R8Y7tmM3p_wai-XYz7-b2-50MPpgUxISA2tNR237bIOaVRFETG_CwHYp6z_DDjC1i_-V-Kuw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.wolt.android",
-   "sort": 164
+   "sort": 164,
+   "play_titles": [
+    "וולט: משלוחי אוכל ועוד",
+    "Wolt Delivery: Food and more"
+   ]
   },
   {
    "package": "com.tenbis.tbapp",
@@ -1075,7 +1296,10 @@
     "https://play-lh.googleusercontent.com/EeKou2kp_z4wZtnlhTKkp26fSNXGvqYwvlvPxiJZ6LN3C6hphTR9VhrYsFOnPgDxWOvhcR9H7-BweKN0CKzDwQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.tenbis.tbapp",
-   "sort": 165
+   "sort": 165,
+   "play_titles": [
+    "תן ביס"
+   ]
   },
   {
    "package": "org.sefaria.sefaria",
@@ -1091,7 +1315,11 @@
     "https://play-lh.googleusercontent.com/X1SZlVodFRg8kIHaTQFgsRF3p-OzCuyl77xhHr7z-AFJNWmlw7bhsub0iQc09X-MHMcGgrpAmQLBEEkX0QR9sCo=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=org.sefaria.sefaria",
-   "sort": 166
+   "sort": 166,
+   "play_titles": [
+    "Sefaria - ספריא",
+    "Sefaria"
+   ]
   },
   {
    "package": "org.otzaria.otzaria",
@@ -1105,7 +1333,10 @@
     "https://play-lh.googleusercontent.com/AURAT_gvdSWM-FBCB26HQaMVYjZiQJfmfxXlsWhd4mF7YPFosuQpBlQAoykD_LA9htF0BxTSYZwFK7X--z1P6Q=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=org.otzaria.otzaria",
-   "sort": 167
+   "sort": 167,
+   "play_titles": [
+    "אוצריא"
+   ]
   },
   {
    "package": "cc.zmanim.app",
@@ -1121,7 +1352,10 @@
     "https://play-lh.googleusercontent.com/bmfkr7kPMQD_1iacAkTeVUsT4sZyWlSYd_YBjslLeCzBANbp9dQS018HLfPnijadnZveMO0vbhPyLSDUJbqlaA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=cc.zmanim.app",
-   "sort": 168
+   "sort": 168,
+   "play_titles": [
+    "זמנים - זמני היום וזמני שבת"
+   ]
   },
   {
    "package": "net.sf.times",
@@ -1137,7 +1371,11 @@
     "https://play-lh.googleusercontent.com/cgrKryRiP1FcZGKo06Yg4CeIeZ4NL1Ek3f1NlUYbBY-Fz8Cv6onV5EVP7ZIsDFMVewOn0UxdixNTy4k6DRA6=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=net.sf.times",
-   "sort": 169
+   "sort": 169,
+   "play_titles": [
+    "זמנים הלכתיים",
+    "Halachic Times"
+   ]
   },
   {
    "package": "com.lionscribe.hebdate",
@@ -1153,7 +1391,11 @@
     "https://play-lh.googleusercontent.com/zTQ8dvJkJtMArrzqIXxdHwCfiBk8-5d6DZ2qZgF9wyiNHl-E6OsEPURjWcQyI5yoNu9yapAFPnyev_7YiUMWkQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.lionscribe.hebdate",
-   "sort": 170
+   "sort": 170,
+   "play_titles": [
+    "לוח עברי",
+    "HebDate Hebrew Calendar"
+   ]
   },
   {
    "package": "tfilon.tfilon",
@@ -1169,7 +1411,11 @@
     "https://play-lh.googleusercontent.com/B244efwlk0zdv7BcK7UBBrBt5bFDQUonPOGjKoNBF0Jsedt7xmFmV29oG2QE0ZmilliUQ2YJk77Bmb3gyDCqEw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=tfilon.tfilon",
-   "sort": 171
+   "sort": 171,
+   "play_titles": [
+    "תפילון - סידור חכם",
+    "Tfilon - A smart Siddur"
+   ]
   },
   {
    "package": "com.karriapps.smartsiddurlite",
@@ -1185,7 +1431,11 @@
     "https://play-lh.googleusercontent.com/KHOFQDISvMpBuJ7V0mvSSA9nkFqfFR8gEK44tDn46iz_JylzKGEhRm7w9X1Ggvq1naL0d8_UfqktOuizA7Km=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.karriapps.smartsiddurlite",
-   "sort": 172
+   "sort": 172,
+   "play_titles": [
+    "הסידור החכם",
+    "Smart Siddur"
+   ]
   },
   {
    "package": "com.tehilim.book",
@@ -1201,7 +1451,10 @@
     "https://play-lh.googleusercontent.com/dhnYDiTkgirzIkJjCOu-VRk7bJWLCZAyOzrO4z54zJ4GZGY27eJnfYqQFpGxXMY3oJ2HtzuLkTi7Vx_jh9-RyJM=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.tehilim.book",
-   "sort": 173
+   "sort": 173,
+   "play_titles": [
+    "תהילים"
+   ]
   },
   {
    "package": "com.khl.www2",
@@ -1216,7 +1469,11 @@
     "https://play-lh.googleusercontent.com/vZQR_nqCHV5f-7jUkbQdWdB6h6nWWAanviqxPho_wxSEvgGaQ3al1VhXB7Mg976iTys8KzjnZii2UWeREfLneQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.khl.www2",
-   "sort": 174
+   "sort": 174,
+   "play_titles": [
+    "קול הלשון",
+    "Kol Halashon Android App"
+   ]
   },
   {
    "package": "com.mogy.dafyomi",
@@ -1232,7 +1489,11 @@
     "https://play-lh.googleusercontent.com/ydmB_mUskUX1UI08CI5ZspJuHcFpeeqIKJaZC1fkQcEUY1yO3GCdgzS_6u3HWM6bSuV6pj9CkoTYY1ucNOSmJBc=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.mogy.dafyomi",
-   "sort": 175
+   "sort": 175,
+   "play_titles": [
+    "הדף היומי",
+    "Portal Hadaf Hayomi"
+   ]
   },
   {
    "package": "com.dirshu",
@@ -1246,7 +1507,10 @@
     "https://play-lh.googleusercontent.com/q51uwNwGXZMJ7ZnieBoHbCav9FAcWs32LsbwqGDlV3JegL0wsaNnxKadHEx-aGWKZ57LjxtQB-2uW7c85OBeAg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.dirshu",
-   "sort": 176
+   "sort": 176,
+   "play_titles": [
+    "Dirshu Daf Hayomi B’halacha"
+   ]
   },
   {
    "package": "com.maatayim.harambamhayomi",
@@ -1262,7 +1526,10 @@
     "https://play-lh.googleusercontent.com/uQQGSU2bQKhaLdBSXZid_tnRpx_aPL804Frhtg5v_es9E08E5C7QTO5B5QqaxbTXY6g27HkDfyIILe-bDRQ2=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.maatayim.harambamhayomi",
-   "sort": 177
+   "sort": 177,
+   "play_titles": [
+    "הרמב\"ם היומי"
+   ]
   },
   {
    "package": "org.kolel",
@@ -1278,7 +1545,11 @@
     "https://play-lh.googleusercontent.com/R6-JjPyKff3_jE4aTUBUMxRDOfiFmSRuiP5HmWzRx0oUAfQuN7Ng6tanfEd7jdnDpZARAq_K3gn4VbRLQ7f1pz0=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=org.kolel",
-   "sort": 178
+   "sort": 178,
+   "play_titles": [
+    "כולל - יהדות, שיעורי תורה ועוד",
+    "Kolel - Judaism, Torah Videos"
+   ]
   },
   {
    "package": "com.gaiamobile.hidabrut2",
@@ -1294,7 +1565,10 @@
     "https://play-lh.googleusercontent.com/YBviSk0jdo9l3i3sfi6lrsFWQP174frl1FhBy24JAPHRKSurUR-I7zgN1eFFGrShkoZnzelN4iGRfsv5sefH=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.gaiamobile.hidabrut2",
-   "sort": 179
+   "sort": 179,
+   "play_titles": [
+    "הידברות - הגרסה המסוננת"
+   ]
   },
   {
    "package": "il.co.hamichlol",
@@ -1310,7 +1584,10 @@
     "https://play-lh.googleusercontent.com/KRADqqCNpjx2vn89XeIYfS94_jtBWnosghHcJ4CAmZ2I3Y5exFV-a7d45RE9uYlKAIW3D-5MHehBiZZ6v-Y8KDw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.co.hamichlol",
-   "sort": 180
+   "sort": 180,
+   "play_titles": [
+    "המכלול - האנציקלופדיה היהודית"
+   ]
   },
   {
    "package": "co.bhol.app",
@@ -1326,7 +1603,10 @@
     "https://play-lh.googleusercontent.com/YJwoqH5msFuFzbT9DqPq4DKLkuVLGzsF59YzpC_RZNBBFA8IWBBNSX5FQoEn4CE7WWrNhd49MSUkOU3Cu3fi=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=co.bhol.app",
-   "sort": 181
+   "sort": 181,
+   "play_titles": [
+    "בחדרי חרדים"
+   ]
   },
   {
    "package": "kikar.hashabat",
@@ -1342,7 +1622,11 @@
     "https://play-lh.googleusercontent.com/Hlzi3dyNgqRYVA41QZYcFDP3T6IehYGqrjU1tGF2N62JVwW8Y021G2eluqmUyAj2Fx1OiN0WooJ3QylmsldsOQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=kikar.hashabat",
-   "sort": 182
+   "sort": 182,
+   "play_titles": [
+    "כיכר השבת",
+    "Kikar.co.il - Charedi News"
+   ]
   },
   {
    "package": "co.il.jdn.new_app",
@@ -1356,7 +1640,10 @@
     "https://play-lh.googleusercontent.com/AtGI8XvsUdxDl14uhBR4uwAsWmSGYoE3CnHk2IJuepPr1hdN1Ge_ax0rUJC7pe2k7mt-9Nvt8Uf2n5eh74Uf=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=co.il.jdn.new_app",
-   "sort": 183
+   "sort": 183,
+   "play_titles": [
+    "JDN - חדשות היהדות החרדית"
+   ]
   },
   {
    "package": "com.hm_news",
@@ -1372,7 +1659,10 @@
     "https://play-lh.googleusercontent.com/sYXC0C39DqlnqGwgz-X2d8q1Gs46_Tsclmy46hFSh9xuUBuS47T4VWka8uMJ9FKiYpLrMjdORJIReuXEvDYBLms=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.hm_news",
-   "sort": 184
+   "sort": 184,
+   "play_titles": [
+    "המחדש"
+   ]
   },
   {
    "package": "kol_barama.co.il",
@@ -1388,7 +1678,10 @@
     "https://play-lh.googleusercontent.com/DOs501SGFblxHJjF8EVCNtscrAFHXKXSOk8_pT61u7lVJvQGYU7I5dV7O72cOUv-Z4aGDYPCSNWrtMvQ4IoNJg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=kol_barama.co.il",
-   "sort": 185
+   "sort": 185,
+   "play_titles": [
+    "קול ברמה - kol barama"
+   ]
   },
   {
    "package": "com.kcm.fm",
@@ -1402,7 +1695,10 @@
     "https://play-lh.googleusercontent.com/kkqP8M7x6tyttNJAfBEK7JYgozSut17cFndgrPoGQbFd9BXUJ6AYSZU9lMNsPuR9nuUOJiDMaiKw7f2wpG4wbg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.kcm.fm",
-   "sort": 186
+   "sort": 186,
+   "play_titles": [
+    "אמס - MS מקבוצת קול חי&מיוזיק"
+   ]
   },
   {
    "package": "kcm.fm.volume",
@@ -1418,7 +1714,10 @@
     "https://play-lh.googleusercontent.com/xnFenkKRk0uwRMstmZaOtuDblPxHW485jNWuxb50A63pjU4shYZpLXBdZ7VCG6vOEvQ1ACowbRmP8a6KSBKQrg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=kcm.fm.volume",
-   "sort": 187
+   "sort": 187,
+   "play_titles": [
+    "מיוזיק ווליום"
+   ]
   },
   {
    "package": "com.google.android.apps.nbu.files",
@@ -1434,7 +1733,10 @@
     "https://play-lh.googleusercontent.com/kUirNFSe6NExMHhtiLMd_YiVZyRCpnLb1CSZ_UlhN3tMujvQSZ5bw1pbJJKS-cSHk4isakwM2an0CWuZeGm8=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.nbu.files",
-   "sort": 188
+   "sort": 188,
+   "play_titles": [
+    "Files by Google"
+   ]
   },
   {
    "package": "com.alphainventor.filemanager",
@@ -1450,7 +1752,11 @@
     "https://play-lh.googleusercontent.com/lBtgz6OCWfYJip-WGjmAZ-sFfQlyC7FjHLiosYcTiL3ON2poGVj7yumWyv5WMiJxj2XjFaT6YLWqMWdvs2DA4w=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.alphainventor.filemanager",
-   "sort": 189
+   "sort": 189,
+   "play_titles": [
+    "מנהל קבצים",
+    "File Manager"
+   ]
   },
   {
    "package": "com.google.android.calculator",
@@ -1466,7 +1772,11 @@
     "https://play-lh.googleusercontent.com/EjhzXa9PjDlrEZvWh4rTe5bqQEF-waP0Fz4Rf_6_0g5s0aSc_G_VJQcqEnxeXhwJEPvHKOw-ZuGwgMIND2fKfw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.calculator",
-   "sort": 190
+   "sort": 190,
+   "play_titles": [
+    "מחשבון",
+    "Calculator"
+   ]
   },
   {
    "package": "com.google.android.calendar",
@@ -1482,7 +1792,11 @@
     "https://play-lh.googleusercontent.com/z0KXKLr8DvZMaf-cokqCLAA2e3p3A24B8tpLMPUJppQ9JNit2LLXmxtdkH5hBCSz7QI8K2FHcMHI2CTYzMnOzQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.calendar",
-   "sort": 191
+   "sort": 191,
+   "play_titles": [
+    "‏יומן Google",
+    "Google Calendar"
+   ]
   },
   {
    "package": "com.google.android.keep",
@@ -1498,7 +1812,11 @@
     "https://play-lh.googleusercontent.com/_-UhyC1z2hCvhzsGhgcp6qM9eeEaV8TJpsgDaTCscngteQ52j0Q5I3XfyDnctm-4S3a4GgQ8V5eHTsvWpvahrw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.keep",
-   "sort": 192
+   "sort": 192,
+   "play_titles": [
+    "Google Keep - הערות ורשימות",
+    "Google Keep - Notes and lists"
+   ]
   },
   {
    "package": "com.google.android.apps.docs",
@@ -1514,7 +1832,10 @@
     "https://play-lh.googleusercontent.com/HVRUifwVE7ibBG1g4QxP5dCNJhA1xKJTazNLidD_OzntJVs4wo1JMj5QM5XODV5nlhJVSy5FyjGPxzEEQDc8sw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.docs",
-   "sort": 193
+   "sort": 193,
+   "play_titles": [
+    "Google Drive"
+   ]
   },
   {
    "package": "com.google.android.apps.authenticator2",
@@ -1530,7 +1851,11 @@
     "https://play-lh.googleusercontent.com/CLA_X-VOeSLHlm1QY3_daAGCn3kL2hsGBPZOVcVQdKuepE6SBj41-uCE3bbXuswkxSD2H7TI--Ewi3-Vr3zucw=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2",
-   "sort": 194
+   "sort": 194,
+   "play_titles": [
+    "מאמת החשבונות של Google",
+    "Google Authenticator"
+   ]
   },
   {
    "package": "com.azure.authenticator",
@@ -1545,7 +1870,10 @@
     "https://play-lh.googleusercontent.com/Wl70p93d3p5Uase_GSVYKkVFsBnKRvMY81M4Ck1hmyApSlRaQEJYb9UjDNtsjJUIMNQTrIcShi93fWH1aPiCJjU=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.azure.authenticator",
-   "sort": 195
+   "sort": 195,
+   "play_titles": [
+    "Microsoft Authenticator"
+   ]
   },
   {
    "package": "com.adobe.scan.android",
@@ -1561,7 +1889,11 @@
     "https://play-lh.googleusercontent.com/7AyMDyoj2TS4GhLk2gdkUKWYLxNQyMuOkSwguptA7f80sBBD3CuclS2x5vtOxAGle1X8dLVDkp0ovPweywZJ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.adobe.scan.android",
-   "sort": 196
+   "sort": 196,
+   "play_titles": [
+    "Adobe Scan: סורק מסמכים",
+    "Adobe Scan AI PDF Scanner, OCR"
+   ]
   },
   {
    "package": "com.adobe.reader",
@@ -1577,7 +1909,11 @@
     "https://play-lh.googleusercontent.com/tLxcZ6G3wSYYgClSzR1bz19N4QMWaVzSDpasPn8r7G-KiRF1dCy7ws9nh2EldqEElr25rhvGbmvusEER4Y2iuQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.adobe.reader",
-   "sort": 197
+   "sort": 197,
+   "play_titles": [
+    "Adobe Acrobat Reader לקרוא PDF",
+    "Adobe Acrobat Reader: Edit PDF"
+   ]
   },
   {
    "package": "com.google.android.apps.translate",
@@ -1593,7 +1929,10 @@
     "https://play-lh.googleusercontent.com/eBDYNn1TQkNwz3NQq9BdYHbgfQlt2PntXSJR9lX7sr5Hyp6wGAQlH3D5wr_sRzsPzuiibzDOPbPMOSFuKrlY6Xo=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.translate",
-   "sort": 198
+   "sort": 198,
+   "play_titles": [
+    "Google Translate"
+   ]
   },
   {
    "package": "com.exovoid.weather.app",
@@ -1609,7 +1948,11 @@
     "https://play-lh.googleusercontent.com/cmyjdEnxOLdJVUzIYjlsjXXsytXcKBngXqKhpKHkxyne-RBJlziCQzAICXRy5Jc2NgGnUcxWf3A951Ugy4N-=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.exovoid.weather.app",
-   "sort": 199
+   "sort": 199,
+   "play_titles": [
+    "מזג אוויר ישראל XL PRO",
+    "Weather XL PRO"
+   ]
   },
   {
    "package": "com.govil.mygov",
@@ -1623,7 +1966,10 @@
     "https://play-lh.googleusercontent.com/-z2_MY739QMdT74alST8BWN1ga9lFMD_T8wJhieiLBk2m9gd4DecbkUEaRng3fpr0-d-wc96uawCRPo70lkB8g=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.govil.mygov",
-   "sort": 200
+   "sort": 200,
+   "play_titles": [
+    "MyGov"
+   ]
   },
   {
    "package": "com.alert.meserhadash",
@@ -1639,7 +1985,11 @@
     "https://play-lh.googleusercontent.com/Ws3zHj6aKxBmx7yB-Lv_9xQ3aYchaeVF9njcopXr57K1Pt4ZNeoprRPYUDW1a-cL0Y1JEJg2XmirthW5XAr48Q=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.alert.meserhadash",
-   "sort": 201
+   "sort": 201,
+   "play_titles": [
+    "פיקוד העורף",
+    "Home Front Command"
+   ]
   },
   {
    "package": "com.red.alert",
@@ -1655,7 +2005,11 @@
     "https://play-lh.googleusercontent.com/q11danWrRH4HM3f1LyIsHkoxkyjXSbWZDtxh82XpGjL0C04NVxyjEpbgrRTFfG-Er-9OxcpV2TgfSjn9KFJWPA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.red.alert",
-   "sort": 202
+   "sort": 202,
+   "play_titles": [
+    "צבע אדום - התרעות בזמן אמת",
+    "RedAlert - צבע אדום"
+   ]
   },
   {
    "package": "com.israelpost.israelpost",
@@ -1671,7 +2025,10 @@
     "https://play-lh.googleusercontent.com/YPreCxu47paetGEElv945ofwvYCnI6utg0jHo38-7oFBc0ZtSY0o-Te2VcG-GdUxBW4Qp74-2tG6uJWTdFqucbM=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.israelpost.israelpost",
-   "sort": 203
+   "sort": 203,
+   "play_titles": [
+    "חברת דואר ישראל"
+   ]
   },
   {
    "package": "com.ewavemobile.electriccompany",
@@ -1687,7 +2044,11 @@
     "https://play-lh.googleusercontent.com/u_ACP_pkC-PXGuXlkyy_1B_Ue9N_tHVmeBl15aEP4FkUPrXBGWLoQ0WaBZcE7vwfWn43RBHtsCcIgkbAkz_7ZQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.ewavemobile.electriccompany",
-   "sort": 204
+   "sort": 204,
+   "play_titles": [
+    "חברת החשמל לישראל",
+    "Israel Electric Company"
+   ]
   },
   {
    "package": "il.co.bezeq.my",
@@ -1703,7 +2064,10 @@
     "https://play-lh.googleusercontent.com/JYMQ0QQlOzt6mqif2HqPET1YqvMUgeTCj5pIH7Tw6Q6nf99RFic7dGBm4g9K9LB2Mhlthqx9LofxJLv1iq0QUA=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.co.bezeq.my",
-   "sort": 205
+   "sort": 205,
+   "play_titles": [
+    "בזק Bezeq"
+   ]
   },
   {
    "package": "il.co.orange.app.myorange",
@@ -1719,7 +2083,10 @@
     "https://play-lh.googleusercontent.com/OKiiaR-HMNALLz1fbSSlMmUeqH9pMF7URrne-AnY34D5dT98lvBzYFR6TqHec1DH-XaPyQ_IgmDa-4vsnqU0zQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=il.co.orange.app.myorange",
-   "sort": 206
+   "sort": 206,
+   "play_titles": [
+    "MyPartner"
+   ]
   },
   {
    "package": "com.webtechinnovation.cellcommobile",
@@ -1735,7 +2102,10 @@
     "https://play-lh.googleusercontent.com/MDzmjO9QsljoJnRUsRxaunvpoMZkdHut3BopjvmJsvXSPthhoCmHTlqvWDjisqULthOBCBN9r91vuR-GVSnl=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.webtechinnovation.cellcommobile",
-   "sort": 207
+   "sort": 207,
+   "play_titles": [
+    "סלקום שלי"
+   ]
   },
   {
    "package": "com.pelephone_mobile",
@@ -1751,7 +2121,10 @@
     "https://play-lh.googleusercontent.com/ut4ziMGepdww8jo-gnYgoI9GGhPRcvEpG0hjBUelEiTgOf4epS9hxynG9hE9LtDQx3r0vpzVgpuhbHAClY2KNRk=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.pelephone_mobile",
-   "sort": 208
+   "sort": 208,
+   "play_titles": [
+    "פלאפון שלי"
+   ]
   },
   {
    "package": "ii.co.hotmobile.HotMobileApp",
@@ -1767,7 +2140,10 @@
     "https://play-lh.googleusercontent.com/PMK2Fib5ImHU-NyAm6H1KkOAZJePzk5u5zuN5Qc12-Z5cESnnfygij6u3br97py6WXaeDNSRAsDn3Cfn-Olhug=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=ii.co.hotmobile.HotMobileApp",
-   "sort": 209
+   "sort": 209,
+   "play_titles": [
+    "My HOT mobile"
+   ]
   },
   {
    "package": "com.microsoft.office.word",
@@ -1783,7 +2159,10 @@
     "https://play-lh.googleusercontent.com/exXL-gz0jENrqs8tKeNX9CX1UV5sUYdzJheCcJe3xXK-fx_t8LNxYd2VfvjrMT2GFHnSCAMMG27cEUSecuwd9A=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.office.word",
-   "sort": 210
+   "sort": 210,
+   "play_titles": [
+    "Microsoft Word: Edit Documents"
+   ]
   },
   {
    "package": "com.microsoft.office.excel",
@@ -1799,7 +2178,10 @@
     "https://play-lh.googleusercontent.com/WV5z_EAgZhuqUPxSHprjSERu-7kKs6YuXVocj3Yt8NbdQJ5b86Id5WM3vs484JcodIAc8C1dSXfT9DCJoe7tOQ=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.office.excel",
-   "sort": 211
+   "sort": 211,
+   "play_titles": [
+    "Microsoft Excel: Spreadsheets"
+   ]
   },
   {
    "package": "com.google.android.apps.docs.editors.docs",
@@ -1815,7 +2197,10 @@
     "https://play-lh.googleusercontent.com/xiN3QME6i_HCPnkizz2bCJmS90tI9HZZapEGaTwgFdgke4yGLmcAOtZpgmkXzqYEG6KPaElRRLhO2iAU1Kv7=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.docs.editors.docs",
-   "sort": 212
+   "sort": 212,
+   "play_titles": [
+    "Google Docs"
+   ]
   },
   {
    "package": "com.google.android.apps.docs.editors.sheets",
@@ -1831,7 +2216,10 @@
     "https://play-lh.googleusercontent.com/SzTghaLNmhjWKBt2pjN6PcHhFbfL75CblnPNi0VhRZtWudZmsjznP7ev-JT0o5EpSNB3prf2uUlgvDBV2x4dBg=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.docs.editors.sheets",
-   "sort": 213
+   "sort": 213,
+   "play_titles": [
+    "Google Sheets"
+   ]
   },
   {
    "package": "com.mashov.main",
@@ -1846,7 +2234,10 @@
     "https://play-lh.googleusercontent.com/dXQqr5vDj1M_xkpISiJwl0qafC9tUduxzjyVApAcxqa5HX7mogN_96uLnx5PTfO5SkN6xzkH1AlGRnboK9EveS8=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.mashov.main",
-   "sort": 214
+   "sort": 214,
+   "play_titles": [
+    "משוב לתלמידים ולהורים"
+   ]
   },
   {
    "package": "com.smartschool.webtop",
@@ -1862,7 +2253,10 @@
     "https://play-lh.googleusercontent.com/kA1AVX4KKqZwyZ2vLCdHiRX4iA0yyc4UUeHpnjCQSoP3TEHaQXeFYLzun0eKGnunhpLi3BDAoFylu5gFe-BlaAM=h720"
    ],
    "play_url": "https://play.google.com/store/apps/details?id=com.smartschool.webtop",
-   "sort": 215
+   "sort": 215,
+   "play_titles": [
+    "Webtop - וובטופ"
+   ]
   }
  ]
 }

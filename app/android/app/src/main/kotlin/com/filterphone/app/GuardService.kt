@@ -56,10 +56,14 @@ class GuardService : AccessibilityService() {
      * סוגי האירועים: תמיד מעבר בין מסכים; שינויי תוכן — רק בוואטסאפ (זיהוי תמונות פרופיל);
      * שינויי טקסט — כשחסימת מילות חיפוש פעילה (כל אפליקציה, כדי לתפוס הקלדה בשדה חיפוש).
      */
+    private var lastPlayScanAt = 0L
+    private var lastPlayReturnAt = 0L
+    private val playReturns = ArrayDeque<Long>()
+
     private fun reconfigure() {
         val policy = GuardPolicy.get(this)
         val wa = policy.waProfile
-        val wantContent = wa != null && wa.packages.contains(foreground)
+        val wantContent = wantsContent(foreground, policy)
         scanKeywords = policy.keywords != null
         if (scanKeywords && keywordVersion != policy.version) {
             keywordDetector = KeywordDetector(policy.keywords!!.terms)
@@ -96,10 +100,13 @@ class GuardService : AccessibilityService() {
             markAlive()
             if (guardSelf(pkg, event.className?.toString())) return
             if (guardCritical(pkg)) return
+            endPlayWindowIfLeft(pkg)
             trackForeground(pkg, policy)
+            if (guardPlay(pkg, policy, fromContent = false)) return
             if (!policy.isEmpty) onWindow(pkg, event.className?.toString(), policy)
             if (scanKeywords) checkFocusedInput(pkg)
         } else if (contentEvents) {
+            if (guardPlay(pkg, policy, fromContent = true)) return
             onContent(pkg, policy)
         }
     }
@@ -232,9 +239,95 @@ class GuardService : AccessibilityService() {
         if (pkg in GuardPolicy.untouchable(this) && !isLauncher(pkg)) return
         if (pkg != foreground) {
             foreground = pkg
-            val wa = policy.waProfile
-            if ((wa != null && wa.packages.contains(pkg)) != contentEvents) reconfigure()
+            if (wantsContent(pkg, policy) != contentEvents) reconfigure()
         }
+    }
+
+    /** שינויי תוכן נחוצים: בוואטסאפ (תמונות פרופיל), וב-Play בזמן חלון התקנה (ניווט בתוך Play). */
+    private fun wantsContent(pkg: String?, policy: GuardPolicy.Policy): Boolean =
+        policy.waProfile?.packages?.contains(pkg) == true ||
+            (pkg == PlayLock.PLAY && PlayLock.active(SystemClock.elapsedRealtime()) != null)
+
+    // ------------------------------------------------------------ שלב א': חלון Play לאפליקציה אחת
+
+    /**
+     * Play חסום לכניסה, אבל החנות שלנו פתחה "חלון התקנה" לאפליקציה מסוימת: מתירים רק את העמוד שלה
+     * (וחלונות הביניים של ההתקנה). ניווט החוצה — חוזרים לעמוד שלה. true = טופל (לא לחסום כרגיל).
+     */
+    private fun guardPlay(pkg: String, policy: GuardPolicy.Policy, fromContent: Boolean): Boolean {
+        if (pkg != PlayLock.PLAY || PlayLock.PLAY !in policy.apps) return false
+        val now = SystemClock.elapsedRealtime()
+        val s = PlayLock.active(now) ?: return false          // אין חלון — החסימה הרגילה
+        if (fromContent && now - lastPlayScanAt < PLAY_SCAN_MS) return true
+        lastPlayScanAt = now
+        PlayLock.onVersion(ManagedApps.installedVersion(this, s.pkg), now)
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return true
+        try {
+            if (root.packageName?.toString() != PlayLock.PLAY) return true
+            val (texts, search) = collectOrdered(root)
+            if (PlayLock.verdict(texts, search, s.titles) == PlayLock.Verdict.RETURN) returnToPlayTarget(s.pkg, now)
+        } catch (e: Exception) {
+            Log.w(TAG, "play window check failed", e)
+        } finally {
+            recycle(root)
+        }
+        return true
+    }
+
+    /** חזרה לעמוד של האפליקציה שנבחרה. ניסיונות חוזרים ברצף (מישהו "נלחם") — סוגרים את החלון. */
+    private fun returnToPlayTarget(target: String, now: Long) {
+        if (now - lastPlayReturnAt < 1_200) return
+        lastPlayReturnAt = now
+        playReturns.addLast(now)
+        while (playReturns.isNotEmpty() && now - playReturns.first() > 30_000) playReturns.removeFirst()
+        if (playReturns.size > 4) {
+            PlayLock.end()
+            playReturns.clear()
+            reconfigure()
+            block(PlayLock.PLAY, GLOBAL_ACTION_HOME, R.string.guard_play_window_closed, minGapMs = 0)
+            return
+        }
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW,
+            android.net.Uri.parse("market://details?id=$target"))
+            .setPackage(PlayLock.PLAY)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        runCatching { startActivity(intent) }.onFailure { performGlobalAction(GLOBAL_ACTION_BACK) }
+        if (now - lastToastAt > 3_000) {
+            lastToastAt = now
+            Toast.makeText(this, R.string.guard_play_only_selected, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** יצאו מ-Play לאפליקציה אחרת / למסך הבית — חלון ההתקנה נסגר (Play חוזר להיות חסום). */
+    private fun endPlayWindowIfLeft(pkg: String) {
+        val s = PlayLock.session ?: return
+        if (pkg == s.pkg || pkg == packageName || pkg in PlayLock.COMPANIONS) return
+        if (pkg in GuardPolicy.untouchable(this) && !isLauncher(pkg)) return     // מקלדת וכו'
+        PlayLock.end()
+        playReturns.clear()
+        reconfigure()
+    }
+
+    /** הטקסטים בחלון לפי סדר הרכיבים (מלמעלה למטה), ויש בו שדה הקלדה? — ל-PlayLock. */
+    private fun collectOrdered(root: AccessibilityNodeInfo): Pair<List<String>, Boolean> {
+        val out = ArrayList<String>(64)
+        var editable = false
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        var seen = 0
+        while (stack.isNotEmpty() && seen < MAX_NODES) {
+            val node = stack.removeLast()
+            seen++
+            if (node.isEditable || node.className?.toString() == "android.widget.EditText") editable = true
+            node.text?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
+            node.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
+            for (i in node.childCount - 1 downTo 0) {
+                runCatching { node.getChild(i) }.getOrNull()?.let { stack.addLast(it) }
+            }
+            if (node !== root) recycle(node)
+        }
+        stack.forEach { if (it !== root) recycle(it) }
+        return out to editable
     }
 
     private fun isLauncher(pkg: String): Boolean =
@@ -405,6 +498,14 @@ class GuardService : AccessibilityService() {
         @Volatile private var instance: GuardService? = null
 
         val isRunning: Boolean get() = instance != null
+
+        private const val PLAY_SCAN_MS = 300L
+
+        /** החנות פתחה חלון התקנה ב-Play — שינויי תוכן ב-Play נחוצים מעכשיו (מכל חוט). */
+        fun onPlaySession() {
+            val s = instance ?: return
+            s.main.post { s.reconfigure() }
+        }
 
         /** נקרא אחרי שמירת מדיניות חדשה (מכל חוט). */
         fun onPolicyChanged() {

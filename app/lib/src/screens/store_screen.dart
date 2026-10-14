@@ -60,7 +60,7 @@ class StoreController extends ChangeNotifier {
   /// מתקין (ישיר דרך מנהל המכשיר, או דרך Google Play). מחזיר הודעה למשתמש.
   Future<String> install(StoreApp a) async {
     if (a.viaPlay && !(c.deviceOwner && a.directInstall)) {
-      final ok = await c.native.openPlay(a.package, a.playUrl);
+      final ok = await c.native.openPlay(a.package, a.playUrl, titles: [...a.playTitles, a.label]);
       return ok ? 'נפתח ב-Google Play להתקנת ${a.label}' : 'לא ניתן לפתוח את Google Play';
     }
     try {

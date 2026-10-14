@@ -385,6 +385,7 @@ class StoreApp {
     this.description = '',
     this.iconUrl = '',
     this.playUrl = '',
+    this.playTitles = const [],
     this.screenshots = const [],
     this.versionCode,
     this.versionName = '',
@@ -400,6 +401,9 @@ class StoreApp {
   final String description;
   final String iconUrl;
   final String playUrl;
+
+  /// השם ב-Google Play (עברית/אנגלית) — כדי שהמגן יזהה את העמוד שלה בחלון ההתקנה.
+  final List<String> playTitles;
   final List<String> screenshots;
   final int? versionCode;
   final String versionName;
@@ -424,6 +428,7 @@ class StoreApp {
         description: j['description'] as String? ?? '',
         iconUrl: j['icon_url'] as String? ?? '',
         playUrl: j['play_url'] as String? ?? '',
+        playTitles: [for (final t in (j['play_titles'] as List? ?? const [])) if (t is String) t],
         screenshots: [for (final s in (j['screenshots'] as List? ?? const [])) if (s is String) s],
         versionCode: (j['version_code'] as num?)?.toInt(),
         versionName: j['version_name'] as String? ?? '',

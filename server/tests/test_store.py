@@ -59,6 +59,8 @@ def test_device_gets_filtered_media_urls_and_tab_order(env):
     assert entry["icon_url"] == f"{base}/icon?v={row['updated_at']}"
     assert entry["screenshots"][0] == f"{base}/s0?v={row['updated_at']}"
     assert "play-lh" not in json.dumps(entry)                  # אף תמונה לא נטענת ישירות מהמקור
+    # השם ב-Play (עברית + אנגלית) — כדי שהמגן יזהה את העמוד שלה בחלון ההתקנה
+    assert entry["play_titles"] == ["Waze: ניווט ועדכוני תנועה", "Waze Navigation & Live Traffic"]
 
 
 def test_store_media_goes_through_the_strict_filter_and_is_cached(env, monkeypatch):

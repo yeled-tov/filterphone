@@ -232,8 +232,10 @@ class FakeNative implements NativeBridge {
   }
 
   final playOpens = <String>[];
+  final playTitles = <List<String>>[];
   @override
-  Future<bool> openPlay(String package, String? url) async {
+  Future<bool> openPlay(String package, String? url, {List<String> titles = const []}) async {
+    playTitles.add(titles);
     playOpens.add(package);
     return true;
   }
@@ -839,7 +841,8 @@ void main() {
             'store_categories': ['תקשורת', 'בנקים ותשלומים', 'תחבורה', 'מדיה'],
             'managed_apps': [
               {'package': 'com.waze', 'label': 'וייז', 'category': 'תחבורה',
-               'play_url': 'https://play.google.com/store/apps/details?id=com.waze'},
+               'play_url': 'https://play.google.com/store/apps/details?id=com.waze',
+               'play_titles': ['Waze: ניווט ועדכוני תנועה']},
               {'package': 'com.whatsapp', 'label': 'וואטסאפ', 'category': 'תקשורת',
                'play_url': 'https://play.google.com/store/apps/details?id=com.whatsapp'},
               {'package': 'com.filtertube.app', 'label': 'FilterTube', 'category': 'מדיה'},
@@ -887,6 +890,8 @@ void main() {
     await tester.tap(find.text('התקנה מ-Google Play'));
     await tester.pumpAndSettle();
     expect(native.playOpens, ['com.waze']);
+    // השמות שהמגן מזהה בחלון ההתקנה: מה שהשרת שלח מ-Play + השם בחנות
+    expect(native.playTitles.single, ['Waze: ניווט ועדכוני תנועה', 'וייז']);
   });
 
   testWidgets('device owner installs directly from the store detail page', (tester) async {

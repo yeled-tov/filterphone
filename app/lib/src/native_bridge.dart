@@ -227,7 +227,9 @@ abstract class NativeBridge {
   Future<String> uninstallApp(String package);
 
   /// פתיחת עמוד האפליקציה ב-Google Play (מתווך): true אם נפתח.
-  Future<bool> openPlay(String package, String? url);
+  /// עמוד האפליקציה ב-Google Play. [titles] — השמות שלה ב-Play: כש-Play חסום לכניסה, המגן מתיר רק
+  /// את העמוד הזה עד שההתקנה מסתיימת ("חלון התקנה").
+  Future<bool> openPlay(String package, String? url, {List<String> titles = const []});
 
   /// פתיחת אפליקציה מותקנת.
   Future<bool> openApp(String package);
@@ -391,8 +393,8 @@ class ChannelNativeBridge implements NativeBridge {
   Future<String> uninstallApp(String package) => _call<String>('uninstallApp', {'package': package});
 
   @override
-  Future<bool> openPlay(String package, String? url) =>
-      _call<bool>('openPlay', {'package': package, 'url': url});
+  Future<bool> openPlay(String package, String? url, {List<String> titles = const []}) =>
+      _call<bool>('openPlay', {'package': package, 'url': url, 'titles': titles});
 
   @override
   Future<Map<String, Map<String, Object?>>> storeAppStates(List<String> packages) async {
