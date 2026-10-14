@@ -31,6 +31,7 @@ import numpy as np
 
 from .. import metrics, protocol, sdnotify
 from ..settings import Settings, get_settings
+from . import remote as remote_cfg
 from . import segment
 from .batcher import Batcher
 from .cache import Entry, ResultCache, image_key
@@ -48,6 +49,7 @@ from .imaging import (
 )
 from .models import Embedder, NudeDetector, Segmenter
 from .policy import Action, Decision, PaintMode, Thresholds, decide, on_failure, women_among
+from .remote import RemoteEngine
 from .segment import Person, SegStats
 
 log = logging.getLogger("filterphone.engine")
@@ -57,6 +59,7 @@ NO_PERSON = SegStats(0.0, 0.0)      # סגמנטציה שלא רצה/נכשלה 
 FEMALE = SCORE_NAMES.index("female")
 MIN_USEFUL_S = 0.25                 # פחות זמן מזה עד שהפרוקסי מוותר — לא מתחילים לעבוד (עבודה שתיזרק)
 STUCK_AFTER_S = 60.0                # יש עבודה, ושום תמונה לא הסתיימה בהצלחה דקה שלמה — המנוע תקוע
+REMOTE_RECHECK_S = 15.0             # כל כמה זמן בודקים אם הגדרות Modal השתנו בדשבורד
 
 
 @dataclass(slots=True)
@@ -100,10 +103,17 @@ class Engine:
         self.inflight: dict[str, asyncio.Future[Entry]] = {}
         self.stats: Counter[str] = Counter()
         self._init_runtime(cfg)
+        # Modal (GPU חיצוני): רק אם מוגדר. כשל → נפילה מיידית לניתוח המקומי (ראו _remote)
+        self._remote_check_at = 0.0
+        self._reload_remote()
 
     def _init_runtime(self, cfg: Settings) -> None:
         """בקרת עומס ומדדים (נפרד מטעינת המודלים — כדי שאפשר יהיה לבדוק בלי מודלים)."""
         self.cfg = cfg
+        self.remote: RemoteEngine | None = None
+        self._remote_check_at = float("inf")    # בלי מודלים (בדיקות) — לא קוראים הגדרות מהדיסק
+        self._remote_mtime: float | None = None
+        self._remote_loaded = False
         self._slots = asyncio.Semaphore(cfg.engine_max_inflight)
         self._explain_slot = asyncio.Semaphore(1)
         self.active = 0
@@ -117,6 +127,7 @@ class Engine:
         self.m_queue_seconds = m.histogram("queue_seconds", "זמן המתנה בתור לפני עיבוד")
         self.m_cache = m.counter("cache_total", "פגיעות בקאש (hit/miss)")
         self.m_models = m.counter("model_runs_total", "הרצות מודלים, לפי מודל")
+        self.m_remote = m.counter("remote_total", "ניתוח בשרת ה-GPU (Modal), לפי תוצאה (ok / fallback)")
         self.m_active = m.gauge("active_jobs", "תמונות בעיבוד עכשיו")
         self.m_waiting = m.gauge("waiting_jobs", "תמונות בתור")
         self.m_batch_depth = m.gauge("batch_queue", "תצוגות שממתינות לאצוות SigLIP2")
@@ -207,6 +218,8 @@ class Engine:
         entry = await self.cache.get(work.key)
         cached = entry is not None
         if entry is None:
+            entry = await self._remote(work, level)
+        if entry is None:
             entry, work.decoded = await self._analyze_dedup(work.key, data)
 
         entry, decision = await self._resolve(level, entry, work)
@@ -218,6 +231,57 @@ class Engine:
             self.stats["cache_hits"] += 1
         self.m_cache.inc(result="hit" if cached else "miss")
         return verdict
+
+    def _reload_remote(self) -> None:
+        """הגדרות Modal מהדשבורד נקלטות תוך REMOTE_RECHECK_S, בלי הפעלה מחדש (בדיקת mtime זולה)."""
+        now = time.monotonic()
+        if now < self._remote_check_at:
+            return
+        self._remote_check_at = now + REMOTE_RECHECK_S
+        path = remote_cfg.config_path(self.cfg)
+        try:
+            mtime: float | None = os.stat(path).st_mtime
+        except OSError:
+            mtime = None
+        if self._remote_loaded and mtime == self._remote_mtime:
+            return
+        self._remote_loaded, self._remote_mtime = True, mtime
+        saved = remote_cfg.read_config(path) if mtime is not None else None
+        self.remote = RemoteEngine.from_settings(self.cfg, self.heads.version, saved)
+        log.info("remote engine (Modal): %s", f"{self.remote.mode} {self.remote.url}" if self.remote else "off")
+
+    async def _remote(self, work: _Work, level: int) -> Entry | None:
+        """ניתוח ב-Modal (אם מוגדר וזמין). מחזיר את ה-Entry שהיה נשמר בקאש מקומית — אותם
+        ציונים ואותם שלבים (גלאי/סגמנטציה) שהמדיניות ביקשה לרמה הזו — או None (→ ניתוח מקומי)."""
+        self._reload_remote()
+        if self.remote is None or not self.remote.enabled:
+            return None
+        # "רק בעומס": כל עוד השרת המקומי פנוי — מנתחים מקומית (חוסך את הקרדיט של Modal)
+        if self.remote.mode == "overflow" and self.waiting == 0 \
+                and self.active < max(2, self.cfg.engine_max_inflight // 2):
+            return None
+        result = await self.remote.analyze(work.data, level)
+        if result is None:
+            self.stats["remote_fallbacks"] += 1
+            self.m_remote.inc(result="fallback")
+            return None
+        entry, labels = result
+        await self.cache.put(work.key, entry)
+        if labels is not None:
+            await self.cache.put_labels(work.key, labels)
+            work.labels = segment.decode_labels(labels)
+        self.stats["remote_runs"] += 1
+        self.m_remote.inc(result="ok")
+        return entry
+
+    async def analyze_resolved(self, data: bytes, level: int) -> tuple[Entry, bytes | None]:
+        """ניתוח + השלבים שהמדיניות מבקשת לרמה הזו — בדיוק כמו classify, בלי קאש ובלי ציור.
+        רץ בשרת Modal: מחזיר את ה-Entry הסופי ואת מפת הסגמנטציה (PNG) אם חושבה."""
+        entry, decoded = await self._analyze(data)
+        work = _Work(image_key(data), data, decoded=decoded)
+        entry, _ = await self._resolve(level, entry, work)
+        labels = segment.encode_labels(work.labels) if work.labels is not None else None
+        return entry, labels
 
     async def _resolve(self, level: int, entry: Entry, work: _Work) -> tuple[Entry, Decision]:
         """מריץ את השלבים שהמדיניות מבקשת (גלאי, סגמנטציה) עד להחלטה סופית."""
@@ -541,6 +605,7 @@ async def _report_stats(engine: Engine, every_s: float = 300.0) -> None:
                 "scanned": s["scanned"], "cache_hits": s["cache_hits"], "block": s["block"],
                 "replace": s["replace"], "pass": s["pass"], "detector": s["detector_runs"],
                 "segment": s["segment_runs"], "undecodable": s["undecodable"],
+                "remote": s["remote_runs"], "remote_fallbacks": s["remote_fallbacks"],
                 "memory_mb": metrics.process_memory_bytes() // 1_000_000}))
         engine.stats.clear()
 

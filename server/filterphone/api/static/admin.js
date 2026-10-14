@@ -1585,10 +1585,67 @@ function whatsappCard(wa) {
       el("button", { class: "primary", onclick: save }, "שמירה")));
 }
 
+function gpuCard(g) {
+  if (!g) return null;
+  const fromEnv = g.source === "env";
+  const url = el("input", { class: "ltr", value: g.url || "", placeholder: "https://השם-שלך--filterphone-engine.modal.run", disabled: fromEnv });
+  const key = el("input", { class: "ltr", value: g.key || "", placeholder: "wk-...", autocomplete: "off", disabled: fromEnv });
+  const secret = el("input", { type: "password", class: "ltr", autocomplete: "off", disabled: fromEnv,
+    placeholder: g.secret_set ? "שמור — השאירו ריק בלי שינוי" : "ws-..." });
+  const MODES = [["always", "תמיד — כל תמונה חדשה נבדקת ב-GPU"], ["overflow", "רק כשהשרת עמוס (חוסך קרדיט)"], ["off", "כבוי — הכול בשרת הרגיל"]];
+  const mode = el("select", { disabled: fromEnv }, MODES.map(([v, t]) => el("option", { value: v, selected: g.mode === v }, t)));
+  const result = el("p", { class: "small" });
+  const save = async () => {
+    await attempt(() => api("/v1/admin/gpu", { method: "PUT", body: { url: url.value, key: key.value, secret: secret.value, mode: mode.value } }), "נשמר — המנוע יקלוט תוך כ-15 שניות");
+    render();
+  };
+  const test = async (btn) => {
+    btn.disabled = true;
+    result.className = "small muted";
+    result.textContent = "בודק… (בפעם הראשונה עד דקה — Modal מעלה את המודלים ל-GPU)";
+    try {
+      const r = await api("/v1/admin/gpu/test", { method: "POST" });
+      result.className = r.ok ? "small ok-text" : "error small";
+      result.textContent = r.ok ? `✓ מחובר — תשובה תוך ${r.ms}ms` : `✗ ${r.error}`;
+    } catch (e) {
+      result.className = "error small";
+      result.textContent = `✗ ${e.message}`;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  return card("שרת GPU לסינון תמונות (Modal)", "ניתוח התמונות רץ על כרטיס גרפי ב-Modal: אותם מודלים ואותה החלטה בדיוק — רק מהר יותר. כל תקלה, איטיות או קרדיט שנגמר — חוזרים מיד לשרת הרגיל, בלי שהלקוח מרגיש. תמונה שכבר נבדקה לא נשלחת שוב (מטמון).",
+    el("div", { class: "chips" },
+      chip(g.active ? "פעיל" : g.configured ? "כבוי" : "לא מוגדר", g.active ? "ok" : "warn"),
+      fromEnv ? chip("מוגדר בקובץ השרת (FP_MODAL_*)") : null,
+      chip(`גרסת מודלים: ${g.heads}`)),
+    el("div", { class: "grid two" },
+      el("label", {}, "כתובת (URL) מ-Modal", url), el("label", {}, "מצב", mode),
+      el("label", {}, "Token ID", key), el("label", {}, "Token Secret", secret)),
+    result,
+    el("details", {}, el("summary", {}, "איך מחברים (פעם אחת)"),
+      el("p", { class: "muted small" }, "המדריך המלא בעברית: docs/MODAL.md בפרויקט. בקצרה:"),
+      el("ol", { class: "small steps" },
+        el("li", {}, "נרשמים ב-modal.com."),
+        el("li", {}, "מעלים את שרת הסינון: ב-GitHub → Actions → \"העלאה ל-Modal\" → Run workflow (צריך את הסודות MODAL_TOKEN_ID ו-MODAL_TOKEN_SECRET)."),
+        el("li", {}, "בסוף ההעלאה מופיעה כתובת שמסתיימת ב-filterphone-engine.modal.run — מדביקים כאן."),
+        el("li", {}, "ב-modal.com → Settings → Proxy Auth Tokens → New: מדביקים כאן את Token ID ו-Token Secret."),
+        el("li", {}, "שמירה ← \"בדיקת חיבור\"."))),
+    el("div", { class: "row end gap" },
+      g.source === "dashboard" ? el("button", { class: "danger small", onclick: async () => {
+        if (!await confirmDialog("להסיר את חיבור ה-GPU?", "הסינון ימשיך כרגיל בשרת עצמו.", "הסרה", true)) return;
+        await attempt(() => api("/v1/admin/gpu", { method: "PUT", body: { clear: true } }), "הוסר");
+        render();
+      } }, "הסרה") : null,
+      el("button", { class: "ghost", disabled: !g.configured, onclick: (ev) => test(ev.currentTarget) }, "בדיקת חיבור"),
+      fromEnv ? null : el("button", { class: "primary", onclick: save }, "שמירה")));
+}
+
 async function viewSystem() {
   const o = await api("/v1/admin/overview");
   const sys = await api("/v1/admin/system").catch(() => null);
   const wa = await api("/v1/admin/whatsapp").catch(() => null);
+  const gpu = await api("/v1/admin/gpu").catch(() => null);
   const ag = o.adguard;
   const CHECKS = { db: "מסד נתונים", redis: "Redis", engine: "מנוע תמונות", wireguard: "WireGuard", adguard: "AdGuard" };
   const m = (snap, key) => (snap && snap[key] !== undefined ? num(Math.round(snap[key])) : "—");
@@ -1600,6 +1657,7 @@ async function viewSystem() {
         ["נכשלו בגלל עומס / זמן", `${m(sys.engine, 'fp_engine_jobs_failed_total{reason="timeout"}')} / ${m(sys.engine, 'fp_engine_jobs_failed_total{reason="overload"}')}`],
         ["בעיבוד / בתור עכשיו", `${m(sys.engine, "fp_engine_active_jobs")} / ${m(sys.engine, "fp_engine_waiting_jobs")}`],
         ["זיכרון המנוע", sys.engine ? `${Math.round((sys.engine.fp_engine_memory_bytes || 0) / 1e6)}MB` : "—"],
+        ["נותחו ב-GPU (Modal) / חזרו לשרת", `${m(sys.engine, 'fp_engine_remote_total{result="ok"}')} / ${m(sys.engine, 'fp_engine_remote_total{result="fallback"}')}`],
       ]),
       kv([
         ["זיכרון הפרוקסי", sys.proxy ? `${Math.round((sys.proxy.fp_proxy_memory_bytes || 0) / 1e6)}MB` : "—"],
@@ -1626,6 +1684,7 @@ async function viewSystem() {
       el("div", { class: "ltr mono small" }, [...x.apps, ...x.screens.map((s) => `${s.package}: ${s.match.join("/")}`)].join(" · "))) : "—")));
   return [
     healthCard,
+    gpuCard(gpu),
     whatsappCard(wa),
     el("div", { class: "grid two" }, agCard,
       card("מנוע הסינון", null, kv([["מצב", o.engine ? chip("פעיל", "ok") : chip("לא זמין", "bad")],

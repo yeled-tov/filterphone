@@ -29,6 +29,7 @@ class Settings:
     nudenet_model: str = "nudenet-320n.onnx"
     segment_model: str = "selfie-multiclass-256.onnx"   # רמה 2: מסכת עור/בגד/פנים
     ort_threads: int = 3                # ליבה אחת נשארת פנויה לפרוקסי
+    ort_providers: str = ""             # ריק = מעבד (CPU). ל-GPU (Modal): "CUDAExecutionProvider,CPUExecutionProvider"
     batch_max: int = 8
     batch_wait_ms: float = 6.0
     decode_threads: int = 2
@@ -69,6 +70,17 @@ class Settings:
     sync_grace_s: int = 1500            # מדיניות שלא אושרה ע"י הטלפון יותר מזה — "סנכרון מתעכב"
     apk_dir: str = "/var/www/filterphone"   # דף ההורדה — שם נמצא ה-APK להקמת Device Owner ב-QR
     apk_signature_sha256: str = ""      # טביעת תעודת החתימה (hex) — אופציונלי, מחזק את בדיקת ה-QR
+
+    # --- Modal (שרת GPU חיצוני לסינון תמונות). ריק = מה שנשמר בדשבורד (מערכת → שרת GPU); בלי שניהם — מקומי. ---
+    # מוגדר → כל תמונה חדשה מנותחת ב-Modal (SigLIP2 + NudeNet + סגמנטציה על GPU), והחלטת הסינון
+    # מתקבלת מקומית מאותם ציונים (אותו קוד, אותה החלטה). כשל / מכסה שנגמרה / timeout → נפילה
+    # מיידית לניתוח המקומי. הקאש (לפי hash) חוסם ניתוח חוזר — מקומי ו-Modal כאחד.
+    modal_url: str = ""                 # https://<workspace>--fp-engine-analyze.modal.run
+    modal_key: str = ""                 # Modal-Key (מזהה טוקן proxy-auth, wk-...)
+    modal_secret: str = ""              # Modal-Secret (סוד הטוקן, ws-...)
+    modal_timeout_s: float = 8.0        # תקרת זמן לבקשה ל-Modal; אחריה — נפילה למקומי
+    modal_cooldown_s: float = 30.0      # אחרי כשל/מכסה — לא פונים ל-Modal למשך הזמן הזה (ואז מנסים שוב)
+    modal_mode: str = "always"          # always = כל תמונה חדשה / overflow = רק כשהשרת המקומי עמוס / off
 
     # --- AdGuard (שכבת ה-DNS של החסימות לפי מכשיר). בלי משתמש/סיסמה — רק הפרוקסי אוכף ---
     adguard_url: str = "http://127.0.0.1:3002"

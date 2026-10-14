@@ -41,7 +41,7 @@ from pydantic import BaseModel, Field
 
 from .. import logs, metrics
 from ..settings import get_settings
-from . import db, observe, security
+from . import db, gpu, observe, security
 from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
@@ -421,6 +421,14 @@ class WhatsAppIn(BaseModel):
     clear_secrets: bool = False
 
 
+class GpuIn(BaseModel):
+    url: str | None = Field(default=None, max_length=300)
+    key: str | None = Field(default=None, max_length=200)
+    secret: str | None = Field(default=None, max_length=200)
+    mode: str | None = Field(default=None, max_length=20)
+    clear: bool = False
+
+
 class ProvisionIn(BaseModel):
     level: int = 1
     label: str = Field(default="", max_length=80)
@@ -679,6 +687,25 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/admin/whatsapp/test")
     def whatsapp_test(desk: DeskDep, _: AdminRow):
         return desk.send_test()
+
+    # --- שרת GPU (Modal) לניתוח תמונות ---
+
+    @app.get("/v1/admin/gpu")
+    def gpu_settings(svc: SvcDep, _: AdminRow):
+        return gpu.status(svc.cfg)
+
+    @app.put("/v1/admin/gpu")
+    def gpu_save(body: GpuIn, svc: SvcDep, admin: AdminRow):
+        try:
+            st = gpu.save(svc.cfg, body.model_dump())
+        except ValueError as e:
+            raise ApiError(400, str(e)) from None
+        svc.audit(admin["username"], "gpu_config", "modal", st["mode"] if st["configured"] else "removed")
+        return st
+
+    @app.post("/v1/admin/gpu/test")
+    def gpu_test(svc: SvcDep, _: AdminRow):
+        return gpu.test(svc.cfg)
 
     # --- בוט וואטסאפ לא-רשמי (שירות נפרד, מאומת בטוקן בוט) ---
 

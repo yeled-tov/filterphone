@@ -1,0 +1,57 @@
+name: העלאה ל-Modal (שרת GPU)
+
+# מעלה את deploy/modal_engine.py ל-Modal. מריצים ידנית: Actions → "העלאה ל-Modal" → Run workflow.
+# צריך פעם אחת שני סודות ב-GitHub (Settings → Secrets and variables → Actions):
+#   MODAL_TOKEN_ID, MODAL_TOKEN_SECRET — מ-modal.com → Settings → API Tokens → New Token.
+# מריצים שוב אחרי כל שינוי במודלים / בספים (אחרת "בדיקת חיבור" בדשבורד תדווח על גרסה שונה).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: modal-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: בדיקת סודות
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          if [ -z "$MODAL_TOKEN_ID" ] || [ -z "$MODAL_TOKEN_SECRET" ]; then
+            echo "::error::חסרים הסודות MODAL_TOKEN_ID / MODAL_TOKEN_SECRET — ראו docs/MODAL.md"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: התקנת Modal
+        run: pip install "modal==1.6.1"
+      - name: העלאה
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          set -o pipefail
+          modal deploy deploy/modal_engine.py 2>&1 | tee deploy.log
+          url=$(grep -oE 'https://[A-Za-z0-9.-]+--filterphone-engine\.modal\.run' deploy.log | head -1 || true)
+          {
+            echo "## שרת ה-GPU הועלה ✓"
+            if [ -n "$url" ]; then
+              echo ""
+              echo "הכתובת להדבקה בדשבורד (מערכת → שרת GPU):"
+              echo ""
+              echo '```'
+              echo "$url"
+              echo '```'
+            fi
+            echo ""
+            echo "ואז: Proxy Auth Token מ-modal.com → Settings → Proxy Auth Tokens, שמירה, ו\"בדיקת חיבור\"."
+          } >> "$GITHUB_STEP_SUMMARY"

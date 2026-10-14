@@ -1,5 +1,12 @@
-"""טעינת המודלים (ONNX Runtime, מעבד בלבד) והרצתם."""
+"""טעינת המודלים (ONNX Runtime) והרצתם.
+
+ברירת המחדל היא מעבד (CPU). להרצה על GPU (למשל בשרת Modal) קובעים
+``FP_ORT_PROVIDERS=CUDAExecutionProvider,CPUExecutionProvider`` — ORT ישתמש ב-GPU ויפול חזרה
+למעבד אם ה-GPU לא זמין. ברירת המחדל זהה למה שהיה (CPUExecutionProvider בלבד).
+"""
 from __future__ import annotations
+
+import os
 
 import numpy as np
 import onnxruntime as ort
@@ -11,6 +18,19 @@ from .segment import softmax
 ort.set_default_logger_severity(3)
 
 
+def _providers() -> list:
+    """ספקי ההרצה: ברירת מחדל מעבד; ניתן לדרוס לסביבת GPU דרך משתנה סביבה (השרת המקומי לא משתנה).
+    ב-CUDA מכבים TF32 — חישוב FP32 מלא, כדי שהציונים יהיו זהים כמעט לגמרי לאלה של המעבד
+    (TF32 מקצר את דיוק הכפלת המטריצות ועלול להזיז ציון שקרוב לסף)."""
+    names = [p.strip() for p in os.environ.get("FP_ORT_PROVIDERS", "").split(",") if p.strip()]
+    if not names:
+        return ["CPUExecutionProvider"]
+    return [(n, {"use_tf32": "0"}) if n == "CUDAExecutionProvider" else n for n in names]
+
+
+_PROVIDERS = _providers()
+
+
 def _session(path: str, threads: int) -> ort.InferenceSession:
     so = ort.SessionOptions()
     so.intra_op_num_threads = threads
@@ -18,7 +38,7 @@ def _session(path: str, threads: int) -> ort.InferenceSession:
     so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     so.log_severity_level = 3
-    return ort.InferenceSession(path, so, providers=["CPUExecutionProvider"])
+    return ort.InferenceSession(path, so, providers=_PROVIDERS)
 
 
 class Embedder:
