@@ -778,6 +778,7 @@ function complianceCard(d) {
   const syncText = d.device_policy_version === null || d.device_policy_version === undefined
     ? chip("הטלפון עוד לא אישר גרסה", "warn")
     : d.device_policy_version >= d.policy_version ? chip("מסונכרן", "ok")
+      : c.policy_sync === "deferred" ? chip("ייושם בפתיחת האפליקציה / בתחזוקה הלילית", "")
       : chip("Policy synchronization pending — ממתין לטלפון", c.policy_sync === "pending" ? "bad" : "warn");
   const issues = c.issues.length ? el("ul", { class: "issues" }, c.issues.map((i) =>
     el("li", { class: i.severity === "red" ? "bad" : "warn" }, i.text))) : el("p", { class: "ok-text" }, "✓ כל רכיבי ההגנה פועלים.");

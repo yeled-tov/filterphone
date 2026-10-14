@@ -115,7 +115,7 @@ def sanitize_heartbeat(hb: dict) -> dict:
     for k in _HB_BOOL:
         if isinstance(hb.get(k), bool):
             out[k] = hb[k]
-    for k in ("app_version", "private_dns", "policy_error", "preflight"):
+    for k in ("app_version", "private_dns", "policy_error", "preflight", "sync_mode"):
         if isinstance(hb.get(k), str) and hb[k]:
             out[k] = security.clean_text(hb[k], 80)
     for k in ("sdk", "policy_version", "last_policy_sync", "ts"):

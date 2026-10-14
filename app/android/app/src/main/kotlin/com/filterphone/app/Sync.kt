@@ -51,6 +51,7 @@ object Sync {
             .put("app_version", runCatching { pm.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "")
             .put("sdk", Build.VERSION.SDK_INT)
             .put("device_uid", DeviceId.get(context))
+            .put("sync_mode", "daily")       // רענון יומי + בפתיחה/ברענון ידני (חיסכון סוללה) — לא תקופתי
             .put("policy_version", policy.version)
             .put("vpn", vpn)
             .put("accessibility", accessibility)
@@ -188,9 +189,11 @@ class SyncJob : JobService() {
                 if (params.jobId != Recovery.JOB_RETRY) {
                     TunnelManager.healthCheck()
                     Recovery.startProtection(app)        // ייתכן שאנדרואיד יסרב מהרקע — זה בסדר
-                    Sync.heartbeat(app)
+                    Sync.heartbeat(app)                  // כולל בדיקת גרסה + התקנה אוטומטית (במנהל מכשיר)
                     // מנהל מכשיר: יישור ההגדרות (למשל נעילת VPN אחרי שההגדרות הגיעו)
                     runCatching { DeviceOwnerManager.apply(app, GuardPolicy.get(app)) }
+                    // תחזוקה יומית — מתזמנים את מחר (JobScheduler לא יודע שעון-קיר)
+                    if (params.jobId == Recovery.JOB_DAILY) Recovery.rescheduleDaily(app)
                 }
             } catch (e: Exception) {
                 Log.w("FilterPhone", "sync job failed", e)

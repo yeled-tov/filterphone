@@ -143,6 +143,10 @@ def evaluate(row, hb: dict, guard: dict, handshake: int, needs_device_block: boo
         policy_sync = "synced"
     elif now - (row["policy_updated_at"] or 0) < sync_grace_s:
         policy_sync = "syncing"
+    elif hb.get("sync_mode") == "daily":
+        # רענון יומי + בפתיחה/ברענון ידני (חיסכון סוללה): שינוי מהדשבורד ייושם בפתיחה הבאה או בתחזוקה
+        # הלילית — זו לא תקלה, אז לא מסמנים צהוב.
+        policy_sync = "deferred"
     else:
         policy_sync = "pending"
         issues.append("policy_pending")

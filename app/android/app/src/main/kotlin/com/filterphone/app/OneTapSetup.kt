@@ -67,7 +67,7 @@ object OneTapSetup {
         if (consent && TunnelManager.hasConfig() && TunnelManager.state != Tunnel.State.UP) {
             runCatching {
                 TunnelManager.connect().get(25, TimeUnit.SECONDS)
-                Recovery.schedulePeriodic(context)
+                Recovery.scheduleDaily(context)
             }.onFailure { Log.w(TAG, "one-tap connect failed", it) }
         }
         out["vpn"] = TunnelManager.state == Tunnel.State.UP

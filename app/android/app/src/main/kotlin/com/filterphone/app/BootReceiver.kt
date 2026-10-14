@@ -15,7 +15,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED && intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
         TunnelManager.init(context)
-        Recovery.schedulePeriodic(context)
+        Recovery.scheduleDaily(context)
         if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
             // עדכון עצמי במנהל מכשיר: מחזירים מיד חסימות ששוחררו לזמן ההתקנה
             Recovery.runAsync(context) { SelfUpdate.restoreRestrictions(context) }

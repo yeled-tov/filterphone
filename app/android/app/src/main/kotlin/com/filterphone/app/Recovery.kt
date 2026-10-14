@@ -6,23 +6,29 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import java.util.Calendar
 import java.util.concurrent.Executors
+import kotlin.random.Random
 
 /**
- * התאוששות ברקע — בלי לולאות:
+ * התאוששות ברקע — בלי לולאות ובלי לרוקן סוללה:
  *   - runAsync: עבודה ברקע (חיבור VPN חוסם עד 25 שניות — אסור ב-main thread).
  *   - scheduleRetry: ניסיון חיבור נוסף דרך JobScheduler אחרי ההשהיה (ה-Backoff קובע אותה).
  *     JobScheduler שורד מוות של התהליך ומכבד את מצב Doze — המערכת מריצה כשמתאים לה.
- *   - schedulePeriodic: בדיקה + דיווח לשרת כל 15 דקות (המינימום של אנדרואיד), גם אחרי אתחול.
+ *   - scheduleDaily: תחזוקה אחת ביממה (~02:00) — בדיקת גרסה + התקנה אוטומטית + סנכרון מדיניות.
+ *     אין דיווח/בדיקה תקופתיים כל כמה דקות (זה מה שרוקן סוללה). שינויי מדיניות מהדשבורד מוחלים
+ *     כשהאפליקציה נפתחת או ברענון ידני (syncSoon), והחיבור מתוחזק מונחה-אירועים (רשת + הדלקת מסך).
  *   - startProtection: השירות הקדמי (התראה קבועה) שמגיב מיד לשינויי רשת.
  */
 object Recovery {
     private const val TAG = "FilterPhone"
-    const val JOB_PERIODIC = 4201
+    const val JOB_PERIODIC = 4201        // ישן — נשאר לביטול בלבד (גרסאות קודמות תזמנו אותו כל 15 דק')
     const val JOB_NOW = 4202
     const val JOB_RETRY = 4203
     const val JOB_RESUME = 4204          // סוף השהיה שהמנהל אישר — מחזירים את כל ההגנה בזמן
-    private const val PERIOD_MS = 15 * 60_000L
+    const val JOB_DAILY = 4205           // תחזוקה יומית: בדיקת גרסה + התקנה + סנכרון
+    const val DAILY_HOUR = 2             // ~02:00 מקומי
+    private const val DAILY_WINDOW_MS = 3 * 60 * 60_000L   // חלון ביצוע: עד 05:00 (כשיש רשת/טעינה)
 
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "fp-recovery").apply { isDaemon = true } }
 
@@ -41,15 +47,43 @@ object Recovery {
     private fun scheduler(context: Context) = context.getSystemService(JobScheduler::class.java)
     private fun component(context: Context) = ComponentName(context, SyncJob::class.java)
 
-    /** תקופתי: בדיקת VPN + דיווח לשרת + רענון מדיניות. נשמר גם אחרי אתחול (persisted). */
-    fun schedulePeriodic(context: Context) {
+    /**
+     * תחזוקה יומית (~02:00): בדיקת גרסה חדשה + התקנה אוטומטית (במנהל מכשיר), סנכרון מדיניות ודיווח.
+     * מתוזמן כעבודה חד-פעמית עם חלון (JobScheduler לא יודע שעון-קיר), ומתזמן מחדש את היום הבא כשרץ.
+     * נשמר אחרי אתחול. מבטל את המשרה הישנה (כל 15 דק') אם נשארה מגרסה קודמת.
+     */
+    fun scheduleDaily(context: Context) {
         val js = scheduler(context) ?: return
-        if (js.getPendingJob(JOB_PERIODIC) != null) return
-        val job = JobInfo.Builder(JOB_PERIODIC, component(context))
-            .setPeriodic(PERIOD_MS)
+        runCatching { js.cancel(JOB_PERIODIC) }                       // ישן — כל 15 דקות
+        if (js.getPendingJob(JOB_DAILY) != null) return
+        val delay = delayToHourMs(System.currentTimeMillis(), DAILY_HOUR, Random.nextLong(30 * 60_000L))
+        val job = JobInfo.Builder(JOB_DAILY, component(context))
+            .setMinimumLatency(delay)
+            .setOverrideDeadline(delay + DAILY_WINDOW_MS)
+            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setPersisted(true)
             .build()
-        runCatching { js.schedule(job) }.onFailure { Log.w(TAG, "periodic job not scheduled", it) }
+        runCatching { js.schedule(job) }.onFailure { Log.w(TAG, "daily job not scheduled", it) }
+    }
+
+    /** מתזמן מחדש את התחזוקה של מחר (נקרא בסוף ריצת JOB_DAILY). */
+    fun rescheduleDaily(context: Context) {
+        scheduler(context)?.cancel(JOB_DAILY)
+        scheduleDaily(context)
+    }
+
+    /**
+     * כמה מילי-שניות עד השעה [hour] הבאה (מקומית), בתוספת [jitter] (לפזר עומס בשרת). טהור — נבדק ביחידה.
+     * [now] במילי-שניות אפוך; מחושב לפי אזור הזמן של המכשיר.
+     */
+    fun delayToHourMs(now: Long, hour: Int, jitter: Long = 0): Long {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        if (cal.timeInMillis <= now) cal.add(Calendar.DAY_OF_YEAR, 1)
+        return (cal.timeInMillis - now) + jitter.coerceAtLeast(0)
     }
 
     /** "עכשיו" (אחרי שינוי מדיניות / פתיחת האפליקציה / אתחול): בהקדם, כשיש רשת. */
@@ -77,7 +111,7 @@ object Recovery {
 
     fun cancelAll(context: Context) {
         val js = scheduler(context) ?: return
-        listOf(JOB_PERIODIC, JOB_NOW, JOB_RETRY, JOB_RESUME).forEach { js.cancel(it) }
+        listOf(JOB_PERIODIC, JOB_NOW, JOB_RETRY, JOB_RESUME, JOB_DAILY).forEach { js.cancel(it) }
     }
 
     /** בסוף ההשהיה (גם אם האפליקציה סגורה / הטלפון אותחל): VPN, מגן, מנהל מכשיר — הכול חוזר. */

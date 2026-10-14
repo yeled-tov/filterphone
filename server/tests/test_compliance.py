@@ -205,6 +205,10 @@ def test_compliance_states():
     r = ev(fake_row(heartbeat_at=now - 60, policy_version=5, device_policy_version=4, policy_updated_at=now - 4000),
            hb, hs=now - 30)
     assert r.policy_sync == "pending" and r.state == C.YELLOW
+    # אבל במצב "רענון יומי" (חיסכון סוללה) — ייושם בפתיחה הבאה, לא תקלה (נשאר ירוק)
+    r = ev(fake_row(heartbeat_at=now - 60, policy_version=5, device_policy_version=4, policy_updated_at=now - 4000),
+           {**hb, "sync_mode": "daily"}, hs=now - 30)
+    assert r.policy_sync == "deferred" and r.state == C.GREEN
     # מכשיר לא פעיל
     assert ev(fake_row(status="disabled"), hb).state == C.INACTIVE
 

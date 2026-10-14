@@ -5,8 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
@@ -23,7 +25,8 @@ import com.wireguard.android.backend.Tunnel
  *
  * למה צריך אותו, אם שירות ה-VPN עצמו כבר רץ: כשהמנהרה נופלת (רשת התחלפה, השרת לא ענה),
  * שירות ה-VPN נעלם — ואיתו העדיפות של התהליך. השירות הזה נשאר, מקבל מיד אירועי רשת,
- * מחבר מחדש (דרך ה-Backoff — בלי לולאה), ובודק תקינות כל 5 דקות.
+ * ומחבר מחדש (דרך ה-Backoff — בלי לולאה). בלי טיימר תקופתי שמעיר את המעבד: הבדיקה מונחית-אירועים —
+ * שינוי רשת והדלקת מסך (בדיוק כשהמשתמש עומד לגלוש). כך כמעט בלי סוללה בזמן שהטלפון במנוחה.
  * ההתראה מראה את המצב האמיתי: מוגן / מתחבר מחדש / נדרשת פעולה.
  *
  * אנדרואיד 14+: סוג specialUse (סינון תוכן — אין סוג ייעודי ל"שומר VPN"). START_STICKY:
@@ -34,13 +37,17 @@ class ProtectionService : Service() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private val tunnelListener: (Tunnel.State) -> Unit = { main.post { updateNotification() } }
 
-    private val healthTick = object : Runnable {
-        override fun run() {
-            Recovery.runAsync(applicationContext) {
-                TunnelManager.healthCheck()
-                main.post { updateNotification() }
-            }
-            main.postDelayed(this, HEALTH_EVERY_MS)
+    /** המשתמש הדליק מסך — בדיוק הרגע שחשוב שהסינון יהיה פעיל. בדיקה זולה (מחברת רק אם צריך). */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_ON) checkHealth("screen")
+        }
+    }
+
+    private fun checkHealth(why: String) {
+        Recovery.runAsync(applicationContext) {
+            TunnelManager.healthCheck()
+            main.post { updateNotification() }
         }
     }
 
@@ -53,7 +60,8 @@ class ProtectionService : Service() {
         TunnelManager.addListener(tunnelListener)
         registerNetworkCallback()
         PackageWatch.register(this)          // FilterTube הותקנה/הוסרה — המנהרה נבנית מחדש מיד
-        main.postDelayed(healthTick, HEALTH_EVERY_MS)
+        runCatching { registerReceiver(screenReceiver, IntentFilter(Intent.ACTION_SCREEN_ON)) }
+        checkHealth("start")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -124,7 +132,7 @@ class ProtectionService : Service() {
 
     override fun onDestroy() {
         running = false
-        main.removeCallbacks(healthTick)
+        runCatching { unregisterReceiver(screenReceiver) }
         PackageWatch.unregister(this)
         TunnelManager.removeListener(tunnelListener)
         networkCallback?.let { cb ->
@@ -140,7 +148,6 @@ class ProtectionService : Service() {
         private const val TAG = "FilterPhone"
         const val CHANNEL_ID = "protection"
         const val NOTIFICATION_ID = 7101
-        private const val HEALTH_EVERY_MS = 5 * 60_000L
         @Volatile private var running = false
 
         /** עדכון ההתראה הקבועה (למשל בתחילת/סוף השהיה) — רק כשהשירות רץ. */

@@ -114,7 +114,7 @@ class MainActivity : FlutterActivity() {
             }
             "connect" -> background(result) {
                 val state = TunnelManager.connect().get().name
-                Recovery.schedulePeriodic(this)
+                Recovery.scheduleDaily(this)
                 main.post { Recovery.startProtection(this) }
                 state
             }
@@ -201,7 +201,7 @@ class MainActivity : FlutterActivity() {
             }
             "setCredentials" -> background(result) {
                 GuardPolicy.setCredentials(this, call.argument<String>("api"), call.argument<String>("token"))
-                Recovery.schedulePeriodic(this)
+                Recovery.scheduleDaily(this)
                 true
             }
             // מצב ההגנה המלא — למסך הראשי

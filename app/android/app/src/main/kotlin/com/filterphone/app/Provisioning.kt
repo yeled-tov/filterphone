@@ -33,7 +33,7 @@ object Provisioning {
         }
         runCatching { DeviceOwnerManager.applyBaseline(context) }
             .onFailure { Log.w("FilterPhone", "baseline policy failed", it) }
-        Recovery.schedulePeriodic(context)
+        Recovery.scheduleDaily(context)
     }
 
     /** קוד הפעלה שהגיע ב-QR ועוד לא נוצל: {code, api}. */

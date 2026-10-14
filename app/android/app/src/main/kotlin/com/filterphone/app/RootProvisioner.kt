@@ -67,7 +67,7 @@ object RootProvisioner {
                 PackageManager.PERMISSION_GRANTED
             runCatching { DeviceOwnerManager.applyBaseline(context) }
                 .onFailure { Log.w(TAG, "baseline after root provision failed", it) }
-            Recovery.schedulePeriodic(context)
+            Recovery.scheduleDaily(context)
             val technical = listOfNotNull(
                 combined.takeIf(String::isNotBlank),
                 if (secureSettingsGranted) "WRITE_SECURE_SETTINGS granted"
