@@ -195,6 +195,16 @@ STATUS_MESSAGES = {
 }
 
 
+# keepalive של WireGuard: מתחת ל-15 — סוללה בלי תועלת; מעל 50 — ה-NAT של הסלולר עלול לסגור את המיפוי
+# (התראות push מתעכבות), וגיל ה-handshake עובר את ספי "מחובר" (180 שניות) בטלפון ובשרת.
+KEEPALIVE_RANGE = (15, 50)
+
+
+def keepalive_s(value: int) -> int:
+    lo, hi = KEEPALIVE_RANGE
+    return max(lo, min(hi, int(value)))
+
+
 class ApiError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
@@ -446,7 +456,7 @@ class Services:
             "preshared_key": psk,
             "endpoint": self.cfg.vpn_endpoint,
             "allowed_ips": ["0.0.0.0/0", "::/0"],
-            "persistent_keepalive": 25,
+            "persistent_keepalive": keepalive_s(self.cfg.wg_keepalive_s),
         }
         if self.cfg.public_ip:
             # מיד אחרי הפעלת הטלפון לפעמים אין עדיין DNS — אז מתחברים לפי הכתובת

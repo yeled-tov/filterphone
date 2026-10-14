@@ -207,3 +207,16 @@ def test_new_device_owner_defaults():
     assert DPC_DEFAULTS["suspend_blocked_apps"] is True
     assert DPC_DEFAULTS["disallow_tethering"] is True
     assert DPC_DEFAULTS["hide_blocked_apps"] is True               # גרסאות ישנות של האפליקציה ממשיכות להסתיר
+
+
+def test_wireguard_keepalive_is_server_tunable_within_a_safe_range(env):
+    """keepalive מהשרת (בלי גרסת אפליקציה חדשה), אבל רק בטווח שלא שובר push וספי "מחובר"."""
+    import dataclasses
+
+    from filterphone.api.service import keepalive_s
+    svc, client = env
+    assert keepalive_s(25) == 25 and keepalive_s(5) == 15 and keepalive_s(300) == 50
+    svc.cfg = dataclasses.replace(svc.cfg, wg_keepalive_s=40)
+    code = svc.create_code("x", 2, 1, 1)["code"]
+    j = client.post("/v1/enroll", json={"code": code, "public_key": wg_key(30), "name": "x"}).json()
+    assert j["vpn"]["persistent_keepalive"] == 40

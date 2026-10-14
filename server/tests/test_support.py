@@ -288,3 +288,4 @@ def test_wa_client_speaks_the_graph_api(monkeypatch):
         assert e.value.code == 132001 and "Template" in e.value.message
     finally:
         srv.shutdown()
+

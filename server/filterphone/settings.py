@@ -57,6 +57,7 @@ class Settings:
     vpn_network: str = "10.8.0.0/24"
     vpn_server_ip: str = "10.8.0.1"
     vpn_first_client: int = 10          # 10.8.0.2-9 שמורים ללקוחות הישנים
+    wg_keepalive_s: int = 25            # keepalive של WireGuard בטלפון: 15–50 (ראו docs/VPN_BATTERY.md)
     mitm_ca_cert: str = "/var/lib/filterphone/mitmproxy/mitmproxy-ca-cert.pem"
     register_enabled: bool = True       # הרשמה עצמית מהאפליקציה (בקשת הצטרפות)
     max_pending: int = 300              # תקרת בקשות ממתינות — הגנה מהצפה
