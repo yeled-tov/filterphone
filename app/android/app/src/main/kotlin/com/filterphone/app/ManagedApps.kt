@@ -101,6 +101,21 @@ object ManagedApps {
         return "started"
     }
 
+    /** הסרה שקטה במנהל מכשיר (בלי חלון). מחזיר started / not_installed / error. בלי מנהל מכשיר — MainActivity פותח חלון. */
+    fun uninstall(context: Context, pkg: String): String {
+        val app = context.applicationContext
+        if (installedVersion(app, pkg) == null) return "not_installed"
+        if (!DeviceOwnerManager.isDeviceOwner(app)) return "needs_dialog"
+        return runCatching {
+            val intent = Intent(app, UpdateReceiver::class.java).setAction(ACTION_RESULT).putExtra(EXTRA_PACKAGE, pkg)
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+            val pi = PendingIntent.getBroadcast(app, ("u" + pkg).hashCode(), intent, flags)
+            app.packageManager.packageInstaller.uninstall(pkg, pi.intentSender)
+            "started"
+        }.getOrElse { Log.w(TAG, "uninstall $pkg failed", it); "error" }
+    }
+
     /** installing / installed / failed:<סיבה> / null — לממשק החנות. */
     fun state(context: Context, pkg: String): String? =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(K_STATE + pkg, null)

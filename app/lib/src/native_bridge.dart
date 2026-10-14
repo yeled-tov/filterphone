@@ -217,6 +217,12 @@ abstract class NativeBridge {
   /// לכל חבילה: {installed_version, state (installing / installed / failed:...)}.
   Future<Map<String, Map<String, Object?>>> storeAppStates(List<String> packages);
 
+  /// הסרת אפליקציה: started (מנהל מכשיר, שקט) / dialog / not_installed / invalid / error.
+  Future<String> uninstallApp(String package);
+
+  /// פתיחת עמוד האפליקציה ב-Google Play (מתווך): true אם נפתח.
+  Future<bool> openPlay(String package, String? url);
+
   /// פתיחת אפליקציה מותקנת.
   Future<bool> openApp(String package);
 }
@@ -366,6 +372,13 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<String> installStoreApp(Map<String, Object?> item) =>
       _call<String>('installStoreApp', {'item': jsonEncode(item)});
+
+  @override
+  Future<String> uninstallApp(String package) => _call<String>('uninstallApp', {'package': package});
+
+  @override
+  Future<bool> openPlay(String package, String? url) =>
+      _call<bool>('openPlay', {'package': package, 'url': url});
 
   @override
   Future<Map<String, Map<String, Object?>>> storeAppStates(List<String> packages) async {

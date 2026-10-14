@@ -64,8 +64,9 @@ class FakeNative implements NativeBridge {
   Future<void> openVpnSettings() async {}
   @override
   Future<String> privateDnsMode() async => privateDns;
+  bool deviceOwner = false;
   @override
-  Future<bool> isDeviceOwner() async => false;
+  Future<bool> isDeviceOwner() async => deviceOwner;
   @override
   Future<void> reset() async {
     savedVpn = null;
@@ -211,6 +212,20 @@ class FakeNative implements NativeBridge {
   Future<String> installStoreApp(Map<String, Object?> item) async {
     installs.add(item['package'] as String);
     return 'started';
+  }
+
+  final storeUninstalls = <String>[];
+  @override
+  Future<String> uninstallApp(String package) async {
+    storeUninstalls.add(package);
+    return 'started';
+  }
+
+  final playOpens = <String>[];
+  @override
+  Future<bool> openPlay(String package, String? url) async {
+    playOpens.add(package);
+    return true;
   }
   @override
   Future<Map<String, Map<String, Object?>>> storeAppStates(List<String> packages) async =>
@@ -791,10 +806,52 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
         child: AppStoreScreen(controller: c))));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-    await tester.pump();
+    await tester.pumpAndSettle();
+    // הגריד מציג אריח לכל אפליקציה
     expect(find.text('פתקים'), findsOneWidget);
     expect(find.text('מפות'), findsOneWidget);
-    expect(find.text('בקשה'), findsWidgets);          // בלי מנהל מכשיר — בקשה מהמנהל
+    // לחיצה על אריח פותחת את עמוד האפליקציה; בלי מנהל מכשיר — כפתור "בקשה מהמנהל"
+    await tester.tap(find.text('מפות'));
+    await tester.pumpAndSettle();
+    expect(find.text('בקשה מהמנהל'), findsOneWidget);
+  });
+
+  testWidgets('device owner installs directly from the store detail page', (tester) async {
+    final native = FakeNative()
+      ..caInstalled = true
+      ..deviceOwner = true;
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      if (req.url.path == '/v1/device') {
+        return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+            'via_vpn': true, 'managed_apps': [
+              {'package': 'org.example.newapp', 'label': 'פתקים', 'category': 'כלים', 'url': 'https://api.test/v1/apps/n-4.apk',
+               'sha256': 'ab' * 32, 'version_code': 4, 'version_name': '1.4', 'added_at': 1,
+               'description': 'אפליקציית פתקים כשרה', 'screenshots': <String>[]},
+            ]}), 200, headers: json);
+      }
+      if (req.url.path == '/v1/device/vpn') return http.Response(jsonEncode(_vpn), 200, headers: json);
+      if (req.url.path == '/v1/enroll') {
+        return http.Response(jsonEncode({'token': 't', 'level': 1, 'level_name': 'מחמיר', 'vpn': _vpn,
+            'ca': {'pem': 'x'}}), 201, headers: json);
+      }
+      return http.Response('{}', 200, headers: json);
+    });
+    final c = makeController(native, server);
+    await tester.runAsync(() async {
+      await c.start();
+      await c.activate('ABCDE-FGHJK', '');
+      await c.refresh();
+    });
+    await tester.pumpWidget(MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
+        child: AppStoreScreen(controller: c))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('פתקים'));
+    await tester.pumpAndSettle();
+    expect(find.text('אפליקציית פתקים כשרה'), findsOneWidget);        // התיאור בעמוד
+    await tester.tap(find.text('התקנה'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    expect(native.installs, contains('org.example.newapp'));
   });
 
   group('support assistant', () {

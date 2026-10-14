@@ -185,6 +185,26 @@ class MainActivity : FlutterActivity() {
                 val launch = call.argument<String>("package")?.let { packageManager.getLaunchIntentForPackage(it) }
                 result.success(launch != null && tryStart(launch))
             }
+            // הסרה מהחנות: במנהל מכשיר — שקט; אחרת — חלון ההסרה של אנדרואיד. לא מסירים את FilterPhone עצמה.
+            "uninstallApp" -> {
+                val pkg = call.argument<String>("package").orEmpty()
+                when {
+                    pkg.isBlank() || pkg == packageName -> result.success("invalid")
+                    DeviceOwnerManager.isDeviceOwner(this) -> background(result) { ManagedApps.uninstall(this, pkg) }
+                    else -> result.success(
+                        if (tryStart(Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg")))) "dialog" else "error")
+                }
+            }
+            // מתווך ל-Google Play: פותח את העמוד של האפליקציה הספציפית ב-Play (גם כשה-Play מוסתר לכניסה).
+            "openPlay" -> {
+                val pkg = call.argument<String>("package").orEmpty()
+                val url = call.argument<String>("url")
+                val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg"))
+                    .setPackage("com.android.vending")
+                val web = Uri.parse(url?.takeIf { it.startsWith("https://") }
+                    ?: "https://play.google.com/store/apps/details?id=$pkg")
+                result.success(tryStart(market) || tryStart(Intent(Intent.ACTION_VIEW, web)))
+            }
             "isGuardEnabled" -> result.success(GuardPolicy.isServiceEnabled(this))
             "openGuardSettings" -> {
                 startSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))

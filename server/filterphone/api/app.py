@@ -304,6 +304,10 @@ class ManagedAppIn(BaseModel):
     label: str = Field(default="", max_length=60)
     category: str = Field(default="", max_length=40)
     note: str = Field(default="", max_length=200)
+    description: str = Field(default="", max_length=2000)
+    screenshots: list[str] = Field(default_factory=list, max_length=8)
+    icon_url: str = Field(default="", max_length=500)
+    play_url: str = Field(default="", max_length=500)
     apk_url: str = Field(default="", max_length=500)
     apk_sha256: str = Field(default="", max_length=64)
     version_code: int | None = None

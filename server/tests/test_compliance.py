@@ -330,7 +330,7 @@ def test_device_log_is_removed_with_device(env):
     assert client.delete(f"/v1/admin/devices/{did}", headers=h).status_code == 204
     with svc.db() as c:
         assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
-    assert db.VERSION == 8
+    assert db.VERSION == 9
 
 
 def test_rekey_keeps_address_and_policy_and_swaps_wireguard_peer(env):
@@ -669,6 +669,9 @@ def test_managed_app_catalog_crud_and_delivery(env):
     svc, client = env
     h = admin_headers(client)
     did, dh, _ = enroll(svc, client)
+    # מסירים את FilterTube שנזרע כברירת מחדל כדי לבדוק CRUD נקי
+    for a in client.get("/v1/admin/apps", headers=h).json()["apps"]:
+        client.delete(f"/v1/admin/apps/{a['id']}", headers=h)
     assert client.get("/v1/admin/apps", headers=h).json()["apps"] == []
 
     # אפליקציה מחנות (בלי APK) — להתקנה ידנית
@@ -765,3 +768,34 @@ def test_default_options_apply_to_code_enrolled_devices(env):
 def test_galaxy_store_is_in_the_catalog():
     from filterphone.api.catalog import CATALOG
     assert "com.sec.android.app.samsungapps" in CATALOG["galaxy_store"].apps
+
+
+def test_filtertube_is_seeded_into_the_store_with_description(env):
+    svc, client = env
+    h = admin_headers(client)
+    apps = {a["package"]: a for a in client.get("/v1/admin/apps", headers=h).json()["apps"]}
+    assert "com.filtertube.app" in apps and "com.filtertube.filtertube" in apps
+    store = apps["com.filtertube.filtertube"]
+    assert "שלוש רמות" in store["description"] and store["category"] == "וידאו"
+    assert store["play_url"].startswith("https://play.google.com/")
+    # הזריעה חד-פעמית: מחיקה לא גוררת זריעה מחדש
+    client.delete(f"/v1/admin/apps/{apps['com.filtertube.app']['id']}", headers=h)
+    svc.seed_store()
+    assert "com.filtertube.app" not in {a["package"] for a in client.get("/v1/admin/apps", headers=h).json()["apps"]}
+
+
+def test_store_app_description_and_screenshots_round_trip(env):
+    svc, client = env
+    h = admin_headers(client)
+    r = client.post("/v1/admin/apps", headers=h, json={
+        "package": "com.example.notes", "label": "פתקים", "description": "אפליקציית פתקים כשרה",
+        "screenshots": ["https://cdn.test/a.png", "http://bad/x.png", "https://cdn.test/b.png"],
+        "icon_url": "https://cdn.test/icon.png",
+        "play_url": "https://play.google.com/store/apps/details?id=com.example.notes"})
+    assert r.status_code == 201, r.text
+    a = next(x for x in client.get("/v1/admin/apps", headers=h).json()["apps"] if x["package"] == "com.example.notes")
+    assert a["description"] == "אפליקציית פתקים כשרה"
+    assert json.loads(a["screenshots"]) == ["https://cdn.test/a.png", "https://cdn.test/b.png"]   # http סונן
+    # קישור Play לא תקין נדחה
+    assert client.post("/v1/admin/apps", headers=h, json={"package": "com.x.bad",
+                                                          "play_url": "https://evil.com/x"}).status_code == 400

@@ -247,7 +247,14 @@ _V8 = """
 ALTER TABLE codes ADD COLUMN options TEXT NOT NULL DEFAULT '[]';   -- JSON: אפשרויות ברירת מחדל שהקוד מחיל
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8]
+_V9 = """
+ALTER TABLE managed_apps ADD COLUMN description TEXT NOT NULL DEFAULT '';   -- תיאור ארוך לעמוד האפליקציה
+ALTER TABLE managed_apps ADD COLUMN screenshots TEXT NOT NULL DEFAULT '[]'; -- JSON: רשימת כתובות צילומי מסך
+ALTER TABLE managed_apps ADD COLUMN icon_url TEXT NOT NULL DEFAULT '';      -- אייקון (https)
+ALTER TABLE managed_apps ADD COLUMN play_url TEXT NOT NULL DEFAULT '';      -- קישור Google Play (מתווך)
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9]
 VERSION = len(MIGRATIONS)
 
 

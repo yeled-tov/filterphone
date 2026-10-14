@@ -246,6 +246,7 @@ class Services:
             self.backfill_policy_checksums()
             self.refresh_stale_policies()
             self.seed_profiles()
+            self.seed_store()
         except sqlite3.Error as e:            # מסד ישן שעוד לא עבר הגירה (כלי שורת פקודה) — לא עוצרים
             log.warning("startup data step skipped: %s", e)
 
@@ -1429,6 +1430,40 @@ class Services:
                           "VALUES (?,?,?,1,?,?)", (name, level, s.dump(), t, t))
         log.info("seeded %d built-in profiles", len(SEED_PROFILES))
 
+    def seed_store(self) -> None:
+        """מזריע את FilterTube לחנות פעם אחת (דגל ב-meta). המנהל יכול לערוך/למחוק אחר כך."""
+        ft_desc = (
+            "FilterTube — יוטיוב עם סינון תוכן מובנה. עובד מחוץ ל-VPN (יוטיוב חוסם כתובות של שרתים), "
+            "והסינון מובנה בתוך האפליקציה עצמה — כך שהיא פועלת גם כשהסינון של FilterPhone פעיל.\n\n"
+            "שלוש רמות סינון:\n"
+            "• רמה 1 — מחמיר: רק ערוצים/תכנים מאושרים.\n"
+            "• רמה 2 — בינוני: חסימה רחבה של תוכן לא ראוי, חיפוש מוגבל.\n"
+            "• רמה 3 — בסיסי: חסימת תוכן בוטה בלבד.\n\n"
+            "את הרמה בוחרים בתוך FilterTube. היא מחליפה את יוטיוב הרגיל (שנחסם לפי ההגדרות שלכם)."
+        )
+        apps = [
+            {"package": "com.filtertube.filtertube", "label": "FilterTube — גרסת החנות", "category": "וידאו",
+             "note": "יוטיוב כשר עם 3 רמות סינון — מהחנות הרשמית.", "description": ft_desc,
+             "play_url": "https://play.google.com/store/apps/details?id=com.filtertube.filtertube", "sort": 1},
+            {"package": "com.filtertube.app", "label": "FilterTube", "category": "וידאו",
+             "note": "יוטיוב כשר עם 3 רמות סינון — הגרסה המלאה.", "description": ft_desc, "sort": 2},
+        ]
+        with self.db() as c, db.transaction(c):
+            if c.execute("SELECT value FROM meta WHERE key = 'store_seeded'").fetchone():
+                return
+            t = db.now()
+            for a in apps:
+                if c.execute("SELECT 1 FROM managed_apps WHERE package = ?", (a["package"],)).fetchone():
+                    continue
+                c.execute(
+                    "INSERT INTO managed_apps (package, label, category, note, description, play_url, sort,"
+                    " screenshots, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (a["package"], a["label"], a["category"], a["note"], a["description"],
+                     a.get("play_url", ""), a["sort"], "[]", t, t))
+            c.execute("INSERT INTO meta (key, value) VALUES ('store_seeded', '1')"
+                      " ON CONFLICT(key) DO UPDATE SET value = '1'")
+        log.info("seeded FilterTube into the store")
+
     def list_profiles(self) -> list[dict]:
         with self.db() as c:
             rows = c.execute("SELECT * FROM profiles ORDER BY builtin DESC, name").fetchall()
@@ -1516,7 +1551,9 @@ class Services:
         out = []
         for a in self.managed_apps(enabled_only=True):
             entry = {"package": a["package"], "label": a["label"], "category": a["category"],
-                     "note": a["note"], "required": bool(a["required"]), "added_at": a["created_at"],
+                     "note": a["note"], "description": a["description"], "icon_url": a["icon_url"],
+                     "screenshots": _json_list(a["screenshots"]), "play_url": a["play_url"],
+                     "required": bool(a["required"]), "added_at": a["created_at"],
                      "updated_at": a["updated_at"]}
             if a["apk_url"] and self._SHA256_RE.match(a["apk_sha256"] or "") and a["version_code"]:
                 entry.update(url=a["apk_url"], sha256=a["apk_sha256"], version_code=a["version_code"],
@@ -1536,10 +1573,19 @@ class Services:
             raise ApiError(400, "להתקנה אוטומטית צריך SHA-256 תקין (64 תווי hex) של קובץ ה-APK")
         vc = data.get("version_code")
         vc = int(vc) if isinstance(vc, int | float) and not isinstance(vc, bool) and 0 < vc < 2**31 else None
+        play = str(data.get("play_url", "")).strip()
+        if play and not re.match(r"^https://play\.google\.com/", play):
+            raise ApiError(400, "קישור Play חייב להתחיל ב-https://play.google.com/")
+        icon = str(data.get("icon_url", "")).strip()
+        if icon and not icon.startswith("https://"):
+            raise ApiError(400, "כתובת האייקון חייבת להיות https")
+        shots = [s for s in (data.get("screenshots") or []) if isinstance(s, str) and s.startswith("https://")][:8]
         fields = {
             "package": pkg, "label": security.clean_text(data.get("label"), 60) or pkg,
             "category": security.clean_text(data.get("category"), 40),
             "note": security.clean_text(data.get("note"), 200, multiline=True),
+            "description": security.clean_text(data.get("description"), 2000, multiline=True),
+            "screenshots": json.dumps(shots), "icon_url": icon, "play_url": play,
             "apk_url": url, "apk_sha256": sha if url else "", "version_code": vc if url else None,
             "required": 1 if data.get("required") else 0, "enabled": 0 if data.get("enabled") is False else 1,
             "sort": int(data.get("sort")) if isinstance(data.get("sort"), int) else 0,

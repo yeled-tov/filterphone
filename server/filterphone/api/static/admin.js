@@ -905,11 +905,19 @@ async function viewApps() {
   const pkg = el("input", { class: "ltr", placeholder: "com.example.app" });
   const label = el("input", { placeholder: "שם בחנות" });
   const category = el("input", { placeholder: "קטגוריה (כלים, ניווט...)" });
+  const playUrl = el("input", { class: "ltr", placeholder: "קישור Google Play (רשות) — https://play.google.com/..." });
   const addStoreOnly = el("button", { class: "ghost", onclick: async () => {
-    await attempt(() => api("/v1/admin/apps", { method: "POST", body: { package: pkg.value.trim(), label: label.value, category: category.value } }), "נוספה");
+    await attempt(() => api("/v1/admin/apps", { method: "POST", body: {
+      package: pkg.value.trim(), label: label.value, category: category.value, play_url: playUrl.value.trim() } }), "נוספה");
     render();
   } }, "הוספה בלי קובץ");
-  const save = (a, changes, msg) => attempt(() => api(`/v1/admin/apps/${a.id}`, { method: "PATCH", body: { ...a, ...changes } }), msg).then(render, () => {});
+  const save = (a, changes, msg) => {
+    const body = { ...a, ...changes };
+    if (typeof body.screenshots === "string") {
+      try { body.screenshots = JSON.parse(body.screenshots); } catch { body.screenshots = []; }
+    }
+    return attempt(() => api(`/v1/admin/apps/${a.id}`, { method: "PATCH", body }), msg).then(render, () => {});
+  };
   const rows = apps.map((a) => {
     const direct = Boolean(a.apk_url && a.version_code);
     const sw = (key, title, sub) => {
@@ -928,9 +936,20 @@ async function viewApps() {
         const l = el("input", { value: a.label || "" });
         const c = el("input", { value: a.category || "" });
         const n = el("textarea", { rows: 2, value: a.note || "" });
-        if (!await dialog("עריכה", el("div", { class: "stack" }, el("label", {}, "שם", l), el("label", {}, "קטגוריה", c),
-          el("label", {}, "תיאור קצר", n)), "שמירה")) return;
-        await save(a, { label: l.value, category: c.value, note: n.value }, "נשמר");
+        const desc = el("textarea", { rows: 5, value: a.description || "" });
+        const icon = el("input", { class: "ltr", value: a.icon_url || "", placeholder: "https://.../icon.png" });
+        const play = el("input", { class: "ltr", value: a.play_url || "", placeholder: "https://play.google.com/..." });
+        const shots = el("textarea", { rows: 4, class: "ltr",
+          value: (() => { try { return JSON.parse(a.screenshots || "[]").join("\n"); } catch { return ""; } })(),
+          placeholder: "כתובת צילום מסך בכל שורה (https)" });
+        if (!await dialog("עריכת אפליקציה", el("div", { class: "stack" },
+          el("label", {}, "שם", l), el("label", {}, "קטגוריה", c), el("label", {}, "תיאור קצר (רשימה)", n),
+          el("label", {}, "תיאור מלא (עמוד האפליקציה)", desc), el("label", {}, "אייקון (URL)", icon),
+          el("label", {}, "קישור Google Play", play),
+          el("label", {}, "צילומי מסך (URL בכל שורה, עד 8)", shots)), "שמירה")) return;
+        const screenshots = lines(shots.value).filter((u) => u.startsWith("https://")).slice(0, 8);
+        await save(a, { label: l.value, category: c.value, note: n.value, description: desc.value,
+          icon_url: icon.value.trim(), play_url: play.value.trim(), screenshots }, "נשמר");
       } }, "עריכה"),
       el("button", { class: "danger small", onclick: async () => {
         if (!await confirmDialog(`להסיר את ${a.label || a.package} מהחנות?`, "הטלפונים לא יציעו אותה יותר. אפליקציה שכבר הותקנה נשארת.", "הסרה", true)) return;
@@ -943,7 +962,7 @@ async function viewApps() {
       "מתקין ומעדכן ממנו ישירות, גם כשהתקנת אפליקציות חסומה בו. גרסה חדשה של אותה אפליקציה = עדכון אצל כולם.",
       el("div", { class: "row gap wrap" }, file, upload, progress)),
     card("אפליקציה בלי קובץ", "תופיע בחנות כ'בקשה' — למשל אפליקציה שמתקינים מ-Google Play באישורך.",
-      el("div", { class: "row gap wrap" }, pkg, label, category, addStoreOnly)),
+      el("div", { class: "row gap wrap" }, pkg, label, category, playUrl, addStoreOnly)),
     card(`בחנות (${apps.length})`, null, apps.length ? el("div", { class: "apps" }, rows) : empty("עוד אין אפליקציות בחנות.")),
   ];
 }

@@ -368,6 +368,10 @@ class StoreApp {
     required this.label,
     this.category = '',
     this.note = '',
+    this.description = '',
+    this.iconUrl = '',
+    this.playUrl = '',
+    this.screenshots = const [],
     this.versionCode,
     this.versionName = '',
     this.addedAt,
@@ -379,13 +383,21 @@ class StoreApp {
   final String label;
   final String category;
   final String note;
+  final String description;
+  final String iconUrl;
+  final String playUrl;
+  final List<String> screenshots;
   final int? versionCode;
   final String versionName;
   final DateTime? addedAt;
   final DateTime? updatedAt;
   final Map<String, Object?> raw;
 
+  /// התקנה ישירה (APK שמתארח אצלנו, דרך מנהל המכשיר).
   bool get directInstall => versionCode != null && (raw['url'] as String? ?? '').startsWith('https://');
+
+  /// התקנה דרך Google Play (מתווך): אין APK אצלנו אבל יש קישור Play.
+  bool get viaPlay => !directInstall && playUrl.startsWith('https://');
 
   static DateTime? _t(Object? v) =>
       v is num ? DateTime.fromMillisecondsSinceEpoch(v.toInt() * 1000) : null;
@@ -395,6 +407,10 @@ class StoreApp {
         label: (j['label'] as String?)?.isNotEmpty == true ? j['label'] as String : (j['package'] as String? ?? ''),
         category: j['category'] as String? ?? '',
         note: j['note'] as String? ?? '',
+        description: j['description'] as String? ?? '',
+        iconUrl: j['icon_url'] as String? ?? '',
+        playUrl: j['play_url'] as String? ?? '',
+        screenshots: [for (final s in (j['screenshots'] as List? ?? const [])) if (s is String) s],
         versionCode: (j['version_code'] as num?)?.toInt(),
         versionName: j['version_name'] as String? ?? '',
         addedAt: _t(j['added_at']),
