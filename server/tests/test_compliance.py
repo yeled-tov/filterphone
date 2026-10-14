@@ -330,7 +330,7 @@ def test_device_log_is_removed_with_device(env):
     assert client.delete(f"/v1/admin/devices/{did}", headers=h).status_code == 204
     with svc.db() as c:
         assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
-    assert db.VERSION == 7
+    assert db.VERSION == 8
 
 
 def test_rekey_keeps_address_and_policy_and_swaps_wireguard_peer(env):
@@ -738,3 +738,30 @@ def test_admin_uploads_apk_and_phones_get_a_verified_install(env):
     assert [p.name for p in svc.apps_dir().iterdir()] == ["org.example.kosher.notes-4207.apk"]
     # בלי הרשאת מנהל — אסור
     assert client.put("/v1/admin/apps/upload", content=data).status_code in (401, 403)
+
+
+def test_default_options_apply_to_code_enrolled_devices(env):
+    """קוד שנוצר מהדשבורד בלי אפשרויות → ברירת המחדל ללקוח חדש: מחמיר, רשתות, בלי דפדפן, חנויות חסומות."""
+    from filterphone.api.catalog import DEFAULT_OPTIONS
+    svc, client = env
+    h = admin_headers(client)
+    # יצירת קוד דרך ה-API בלי options → ברירת מחדל
+    r = client.post("/v1/admin/codes", headers=h, json={"label": "לקוח חדש", "level": 1, "uses": 1})
+    assert r.status_code == 201, r.text
+    code = r.json()["code"]
+    assert set(r.json()["options"]) == set(DEFAULT_OPTIONS)
+    # הפעלה בקוד — המכשיר מקבל את החסימות
+    e = client.post("/v1/enroll", json={"code": code, "public_key": wg_key(60), "name": "גלקסי",
+                                        "platform": "android", "app_version": "2.0.0"}).json()
+    me = client.get("/v1/device", headers={"Authorization": f"Bearer {e['token']}"}).json()
+    blocks = {b["id"] for b in me["blocks"]}
+    assert {"instagram", "tiktok", "browsers_all", "telegram", "youtube", "play_store", "galaxy_store"} <= blocks
+    assert me["level"] == 1
+    # קוד עם רשימה ריקה מפורשת → בלי חסימות
+    r2 = client.post("/v1/admin/codes", headers=h, json={"label": "ללא", "level": 2, "options": []})
+    assert r2.json()["options"] == []
+
+
+def test_galaxy_store_is_in_the_catalog():
+    from filterphone.api.catalog import CATALOG
+    assert "com.sec.android.app.samsungapps" in CATALOG["galaxy_store"].apps

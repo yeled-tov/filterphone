@@ -243,7 +243,11 @@ CREATE INDEX support_wa ON support_messages(wa_id) WHERE wa_id != '';
 CREATE INDEX support_ts ON support_messages(ts);
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7]
+_V8 = """
+ALTER TABLE codes ADD COLUMN options TEXT NOT NULL DEFAULT '[]';   -- JSON: אפשרויות ברירת מחדל שהקוד מחיל
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8]
 VERSION = len(MIGRATIONS)
 
 

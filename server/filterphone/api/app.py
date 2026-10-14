@@ -42,7 +42,7 @@ from pydantic import BaseModel, Field
 from .. import logs, metrics
 from ..settings import get_settings
 from . import db, observe, security
-from .catalog import admin_catalog, public_catalog
+from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
 from .security import RateLimiter
 from .service import LEVEL_NAMES, ApiError, Services
@@ -449,6 +449,7 @@ class CodeIn(BaseModel):
     level: int = 1
     uses: int = 1
     expires_days: int | None = 30
+    options: list[str] | None = Field(default=None, max_length=100)   # None = ברירת המחדל ללקוח חדש
 
 
 class TestImageIn(BaseModel):
@@ -825,7 +826,9 @@ def _routes(app: FastAPI) -> None:
 
     @app.post("/v1/admin/codes", status_code=201)
     def create_code(body: CodeIn, svc: SvcDep, admin: AdminRow):
-        r = svc.create_code(body.label, body.level, body.uses, body.expires_days)
+        # options לא נשלח = ברירת המחדל ללקוח חדש (מחמיר + רשתות + בלי דפדפן + חנויות חסומות)
+        opts = list(DEFAULT_OPTIONS) if body.options is None else body.options
+        r = svc.create_code(body.label, body.level, body.uses, body.expires_days, opts)
         svc.audit(admin["username"], "code", f"code:{r['id']}", f"{body.label} level:{body.level}")
         return r
 

@@ -1412,17 +1412,26 @@ function testResult(r, lv) {
 
 async function viewCodes() {
   const list = await api("/v1/admin/codes");
-  const form = el("form", { class: "grid three" },
-    el("label", {}, "שם הלקוח", el("input", { name: "label", placeholder: "למשל: משפחת כהן" })),
-    el("label", {}, "רמה", el("select", { name: "level" }, catalog.levels.filter((l) => l.level > 0).map((l) => el("option", { value: l.level }, `${l.level} · ${l.name}`)))),
-    el("label", {}, "מספר מכשירים", el("input", { name: "uses", type: "number", min: 1, max: 100, value: 1 })),
-    el("label", {}, "תוקף (ימים)", el("input", { name: "expires_days", type: "number", min: 1, max: 365, value: 30 })),
+  const def = catalog.defaults || { level: 1, options: [] };
+  const codeOpts = new Set(def.options);                 // ברירת המחדל ללקוח חדש — ניתן לערוך
+  const levelSel = el("select", { name: "level" }, catalog.levels.filter((l) => l.level > 0).map((l) =>
+    el("option", { value: l.level, selected: l.level === def.level }, `${l.level} · ${l.name}`)));
+  const form = el("form", { class: "stack" },
+    el("div", { class: "grid three" },
+      el("label", {}, "שם הלקוח", el("input", { name: "label", placeholder: "למשל: משפחת כהן" })),
+      el("label", {}, "רמה", levelSel),
+      el("label", {}, "מספר מכשירים", el("input", { name: "uses", type: "number", min: 1, max: 100, value: 1 })),
+      el("label", {}, "תוקף (ימים)", el("input", { name: "expires_days", type: "number", min: 1, max: 365, value: 30 }))),
+    el("details", { class: "policy-box" },
+      el("summary", {}, `חסימות ברירת המחדל (${def.options.length}) — אפשר לשנות לפני היצירה`),
+      policyEditor(codeOpts)),
     el("div", { class: "row end" }, el("button", { class: "primary", type: "submit" }, "צור קוד")));
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = new FormData(form);
     const r = await attempt(() => api("/v1/admin/codes", { method: "POST", body: {
-      label: f.get("label"), level: Number(f.get("level")), uses: Number(f.get("uses")), expires_days: Number(f.get("expires_days")),
+      label: f.get("label"), level: Number(f.get("level")), uses: Number(f.get("uses")),
+      expires_days: Number(f.get("expires_days")), options: [...codeOpts],
     } }));
     await dialog("קוד ההפעלה", el("div", { class: "stack" }, el("p", { class: "code" }, r.code),
       el("p", { class: "muted small" }, "מוצג פעם אחת בלבד. שולחים ללקוח יחד עם קישור ההורדה."),

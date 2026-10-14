@@ -306,10 +306,27 @@ OPTIONS: tuple[Option, ...] = (
                  "com.privateinternetaccess.android", "free.vpn.unblock.proxy.vpnmaster", "com.v2ray.ang",
                  "com.github.shadowsocks", "io.nekohasekai.sfa", "com.getsurfboard"),
            popular=True, needs_guard=True),
+    Option("galaxy_store", "protection", "חנות Galaxy (Samsung)",
+           "חנות האפליקציות של סמסונג — כדי שלא יתקינו ממנה אפליקציות בעקיפת החנות שלכם.",
+           apps=("com.sec.android.app.samsungapps", "com.samsung.android.app.galaxyfinder"),
+           popular=True, needs_guard=True),
 )
 
 CATALOG: dict[str, Option] = {o.id: o for o in OPTIONS}
 assert len(CATALOG) == len(OPTIONS), "duplicate option id"
+
+# ברירת המחדל ללקוח חדש (קוד הפעלה / הרשמה): מצב מחמיר, רשתות חברתיות, בלי דפדפן וטלגרם,
+# הסתרת יוטיוב (כולל YouTube Music) וחנויות האפליקציות, ומניעת עקיפה. המנהל יכול לשנות בכל רגע.
+DEFAULT_LEVEL = 1       # מחמיר
+DEFAULT_OPTIONS: tuple[str, ...] = (
+    *(o.id for o in OPTIONS if o.category == "social"),      # כל הרשתות החברתיות
+    "browsers_all",                                          # בלי דפדפן בכלל (כולל Chrome)
+    "telegram",
+    "youtube",                                               # כולל YouTube Music
+    "play_store", "galaxy_store",                            # חנויות — חסומות לכניסה
+    "apk_sites", "vpn_apps",                                 # מניעת עקיפת הסינון
+)
+assert all(o in CATALOG for o in DEFAULT_OPTIONS), "unknown default option"
 assert {o.category for o in OPTIONS} <= {c["id"] for c in CATEGORIES}
 
 # שרתים מוכרים לכל אפליקציה (מהקטלוג) — לחסימת אפליקציה "ברשת" גם כשהיא נבחרה בנפרד
@@ -419,7 +436,8 @@ def public_catalog() -> dict:
 def admin_catalog() -> dict:
     return {"levels": [{"level": k, **v} for k, v in LEVELS.items()],
             "categories": CATEGORIES,
-            "options": [o.admin() for o in OPTIONS]}
+            "options": [o.admin() for o in OPTIONS],
+            "defaults": {"level": DEFAULT_LEVEL, "options": list(DEFAULT_OPTIONS)}}
 
 
 def clean_host(raw: str) -> str | None:

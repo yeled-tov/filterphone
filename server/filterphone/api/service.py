@@ -38,6 +38,7 @@ from .adguard import AdGuard, build_rules
 from .apk import ApkError, read_apk
 from .catalog import (
     CATALOG,
+    DEFAULT_OPTIONS,
     KNOWN_APP_HOSTS,
     LEVELS,
     Compiled,
@@ -506,11 +507,15 @@ class Services:
                 raise ApiError(409, "המכשיר כבר רשום")
             ip = self._allocate_ip(c)
             t = db.now()
+            # הקוד נושא את אפשרויות ברירת המחדל (רשתות, דפדפן, חנויות...) — מחילים אותן על המכשיר
+            code_opts = sorted({o for o in _json_list(row["options"]) if o in CATALOG})
+            policy_json = DeviceSettings(options=code_opts).dump()
             cur = c.execute(
                 "INSERT INTO devices (name, label, platform, app_version, public_key, preshared_key, vpn_ip,"
-                " level, token_hash, code_id, device_uid, created_at, approved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " level, token_hash, code_id, device_uid, policy, created_at, approved_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (name, row["label"], platform[:20], app_version[:20], public_key, psk, ip, row["level"],
-                 security.token_hash(token), row["id"], self.clean_uid(device_uid), t, t))
+                 security.token_hash(token), row["id"], self.clean_uid(device_uid), policy_json, t, t))
             c.execute("UPDATE codes SET uses_left = uses_left - 1 WHERE id = ?", (row["id"],))
             device_id, level = cur.lastrowid, row["level"]
             self.bump_policy(c, device_id)
@@ -1658,19 +1663,22 @@ class Services:
 
     # ------------------------------------------------------------ קודי הפעלה
 
-    def create_code(self, label: str, level: int, uses: int, expires_days: int | None) -> dict:
+    def create_code(self, label: str, level: int, uses: int, expires_days: int | None,
+                    options: list[str] | None = None) -> dict:
         if level not in LEVEL_NAMES:
             raise ApiError(400, "רמה לא חוקית")
         uses = max(1, min(int(uses), 100))
+        opts = sorted({o for o in (options or []) if o in CATALOG})   # ברירת המחדל נקבעת בשכבת ה-API
         code = security.new_code()
         expires = db.now() + int(expires_days) * 86400 if expires_days else None
         with self.db() as c:
             cur = c.execute(
-                "INSERT INTO codes (code_hash, hint, label, level, uses_left, expires_at, created_at)"
-                " VALUES (?,?,?,?,?,?,?)",
-                (security.code_hash(code), code[-3:], label.strip()[:80], level, uses, expires, db.now()))
+                "INSERT INTO codes (code_hash, hint, label, level, uses_left, expires_at, created_at, options)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (security.code_hash(code), code[-3:], label.strip()[:80], level, uses, expires, db.now(),
+                 json.dumps(opts)))
         return {"id": cur.lastrowid, "code": code, "label": label, "level": level,
-                "uses_left": uses, "expires_at": expires}
+                "uses_left": uses, "expires_at": expires, "options": opts}
 
     def list_codes(self) -> list[dict]:
         with self.db() as c:
@@ -1767,7 +1775,9 @@ class Services:
         apk = Path(self.cfg.apk_dir) / "FilterPhone-universal.apk"
         if not apk.is_file():
             raise ApiError(409, "קובץ האפליקציה עוד לא פורסם בשרת (FilterPhone-universal.apk בדף ההורדה)")
-        code = self.create_code(security.clean_text(label, 60) or "Device Owner (QR)", level, 1, 2)
+        # הקמת QR מקבלת גם היא את ברירת המחדל ללקוח חדש (רשתות, דפדפן, חנויות חסומות)
+        code = self.create_code(security.clean_text(label, 60) or "Device Owner (QR)", level, 1, 2,
+                                options=list(DEFAULT_OPTIONS))
         base = f"https://{self.cfg.public_host}"
         extras = {"fp_api": base, "fp_code": code["code"]}
         payload: dict = {
