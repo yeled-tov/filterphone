@@ -6,7 +6,13 @@ on:
     paths: ["app/**", ".github/workflows/app.yml"]
   pull_request:
     paths: ["app/**", ".github/workflows/app.yml"]
+  # הפעלה ידנית: בדיקות + APK חתום. "release" — גם פרסום ב-GitHub Releases (בלי commit לאפליקציה)
   workflow_dispatch:
+    inputs:
+      release:
+        description: "לפרסם את ה-APK ב-GitHub Releases"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -98,7 +104,9 @@ jobs:
           ls -lh ../dist
 
       - name: פרסום APK לבדיקה ב-GitHub Releases
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[test-release]')
+        if: >-
+          (github.event_name == 'push' && contains(github.event.head_commit.message, '[test-release]')) ||
+          (github.event_name == 'workflow_dispatch' && inputs.release)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -112,7 +120,7 @@ jobs:
         if: always()
         run: rm -f android/upload.jks android/key.properties
 
-      # פרסום בדיקה מופעל רק באמצעות [test-release] בהודעת commit; אינו פורס שרת.
+      # פרסום בדיקה: [test-release] בהודעת commit, או הפעלה ידנית עם release; אינו פורס שרת.
       # תוצר ה-APK הוא מטמון נוחות בלבד. פריסת production בונה APK חתום מחדש
       # ישירות ב-deploy.yml, כדי שכשל במכסת Artifacts לא ימנע עדכון לשרת.
       - uses: actions/upload-artifact@v4
