@@ -10,5 +10,8 @@ class FilterPhoneApp : Application() {
         ProtectionService.createChannel(this)
         // המשימה התקופתית (דיווח + בדיקת VPN) — מתוזמנת פעם אחת ונשמרת גם אחרי אתחול
         if (TunnelManager.wantsConnection() || GuardPolicy.credentials(this) != null) Recovery.schedulePeriodic(this)
+        // מגן FilterPhone (נגישות) — אם יש הרשאה, חוזר מיד כשמכבים אותו
+        AccessibilityGuard.watch(this)
+        Recovery.runAsync(this) { AccessibilityGuard.ensureEnabled(this, "app start") }
     }
 }

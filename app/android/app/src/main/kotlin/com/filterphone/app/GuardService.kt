@@ -94,6 +94,7 @@ class GuardService : AccessibilityService() {
         }
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             markAlive()
+            if (guardSelf(pkg, event.className?.toString())) return
             trackForeground(pkg, policy)
             if (!policy.isEmpty) onWindow(pkg, event.className?.toString(), policy)
             if (scanKeywords) checkFocusedInput(pkg)
@@ -118,6 +119,35 @@ class GuardService : AccessibilityService() {
         }
         if (hit != null) blockKeyword(pkg, hit)
     }
+
+    /**
+     * הגנה עצמית: בהגדרות הנגישות אפשר להיכנס, אבל לא לדף של מגן FilterPhone (שם מכבים אותו).
+     * הדף מזוהה לפי התיאור שלנו (guard_description) — הוא מוצג רק שם. חלון "לעצור את השירות?"
+     * (כשהמגן פעיל) — נסגר. בהשהיה שהמנהל אישר, או כשהמכשיר לא רשום — לא חוסמים.
+     */
+    private fun guardSelf(pkg: String, cls: String?): Boolean {
+        if (pkg !in SETTINGS_PACKAGES || !AccessibilityGuard.wanted(this)) return false
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+        try {
+            if (root.packageName?.toString() !in SETTINGS_PACKAGES) return false
+            val ourPage = root.findAccessibilityNodeInfosByText(descriptionKey).also { it.forEach(::recycle) }.isNotEmpty()
+            val stopDialog = !ourPage && cls?.contains("dialog", ignoreCase = true) == true &&
+                GuardPolicy.isServiceEnabled(this) &&
+                root.findAccessibilityNodeInfosByText(getString(R.string.guard_label)).also { it.forEach(::recycle) }.isNotEmpty()
+            if (!ourPage && !stopDialog) return false
+            if (block(pkg, GLOBAL_ACTION_BACK, R.string.guard_self_protected, minGapMs = 700)) {
+                ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+            }
+            return true
+        } catch (e: Exception) {
+            return false
+        } finally {
+            recycle(root)
+        }
+    }
+
+    /** תחילת התיאור שלנו — מספיק ייחודי, וקצר כדי לעבור גם כשהטקסט מקוצר במסך. */
+    private val descriptionKey by lazy { getString(R.string.guard_description).take(32) }
 
     /** מסך נפתח עם טקסט שכבר מולא (למשל חזרה לתוצאות חיפוש): בודקים את שדה הקלט שבפוקוס. */
     private fun checkFocusedInput(pkg: String) {
@@ -300,6 +330,12 @@ class GuardService : AccessibilityService() {
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         instance = null
         Recovery.syncSoon(this)            // המגן כובה — לדווח לשרת
+        // כובה בהגדרות? עם ההרשאה (הקמה) — מדליקים מחדש מיד (לא בהשהיה שהמנהל אישר)
+        val app = applicationContext
+        // Handler נפרד: onDestroy מנקה את ה-main של השירות מיד אחרי onUnbind
+        Handler(Looper.getMainLooper()).postDelayed({
+            Recovery.runAsync(app) { AccessibilityGuard.ensureEnabled(app, "unbind") }
+        }, 500)
         return super.onUnbind(intent)
     }
 
@@ -313,6 +349,9 @@ class GuardService : AccessibilityService() {
         private const val TAG = "FilterPhone"
         private const val SCAN_EVERY_MS = 250L
         private const val MAX_NODES = 300
+        /** אפליקציות ההגדרות (כולל הגדרות הנגישות של סמסונג). */
+        private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.samsung.accessibility",
+            "com.samsung.android.accessibility", "com.coloros.accessibility")
 
         @Volatile private var instance: GuardService? = null
 

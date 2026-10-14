@@ -29,8 +29,6 @@ def test_full_enrollment_flow(env):
     assert me.json()["via_vpn"] is False        # לקוח הבדיקה לא מגיע מכתובת ה-VPN
 
 
-
-
 def test_enroll_rejects_bad_key_and_duplicates(env):
     svc, client = env
     code = svc.create_code("", level=1, uses=5, expires_days=None)["code"]

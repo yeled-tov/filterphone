@@ -29,18 +29,7 @@
 android.clients.google.com
 accounts.google.com
 play.google.com
-
-# --- YouTube: bypass TLS interception and image classification globally ---
-*.youtube.com
-*.youtube-nocookie.com
-*.youtu.be
-*.youtube.co.il
-*.ytimg.com
-*.ggpht.com
 *.googlevideo.com
-# YouTube channel thumbnails can also use this Google-hosted subdomain.
-yt3.googleusercontent.com
-
 *.firebaseio.com
 *.crashlytics.com
 *.app-measurement.com
@@ -111,6 +100,8 @@ api.termius.com
 *.tiktokcdn-us.com
 *.ibyteimg.com
 *.pinimg.com
+*.ytimg.com
+*.ggpht.com
 *.googleusercontent.com
 *.redd.it
 *.redditmedia.com

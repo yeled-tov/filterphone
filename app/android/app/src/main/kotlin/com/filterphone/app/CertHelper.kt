@@ -57,6 +57,21 @@ object CertHelper {
         return "settings"
     }
 
+    /** התקנה שקטה במנהל מכשיר (בלי מסך) — להקמה בלחיצה. false אם לא מנהל מכשיר או נכשל. */
+    fun installAsOwner(context: Context, pem: String): Boolean {
+        if (!DeviceOwnerManager.isDeviceOwner(context)) return false
+        val dpm = context.getSystemService(DevicePolicyManager::class.java) ?: return false
+        return runCatching { dpm.installCaCert(DeviceAdmin.component(context), pemToDer(pem)) }.getOrDefault(false)
+    }
+
+    /** הסרת התעודה ("הסרת הכול") — אפשרית רק למנהל מכשיר; אחרת המשתמש מסיר בהגדרות. */
+    fun uninstallAsOwner(context: Context, pem: String): Boolean {
+        if (!DeviceOwnerManager.isDeviceOwner(context)) return false
+        val dpm = context.getSystemService(DevicePolicyManager::class.java) ?: return false
+        dpm.uninstallCaCert(DeviceAdmin.component(context), pemToDer(pem))
+        return runCatching { !isInstalled(pem) }.getOrDefault(true)
+    }
+
     /** שומר את התעודה בתיקיית ההורדות (מחליף עותק קודם). */
     fun saveToDownloads(context: Context, pem: String) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return

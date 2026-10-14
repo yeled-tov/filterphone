@@ -21,6 +21,7 @@ object Recovery {
     const val JOB_PERIODIC = 4201
     const val JOB_NOW = 4202
     const val JOB_RETRY = 4203
+    const val JOB_RESUME = 4204          // סוף השהיה שהמנהל אישר — מחזירים את כל ההגנה בזמן
     private const val PERIOD_MS = 15 * 60_000L
 
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "fp-recovery").apply { isDaemon = true } }
@@ -76,7 +77,40 @@ object Recovery {
 
     fun cancelAll(context: Context) {
         val js = scheduler(context) ?: return
-        listOf(JOB_PERIODIC, JOB_NOW, JOB_RETRY).forEach { js.cancel(it) }
+        listOf(JOB_PERIODIC, JOB_NOW, JOB_RETRY, JOB_RESUME).forEach { js.cancel(it) }
+    }
+
+    /** בסוף ההשהיה (גם אם האפליקציה סגורה / הטלפון אותחל): VPN, מגן, מנהל מכשיר — הכול חוזר. */
+    fun scheduleResume(context: Context, delayMs: Long) {
+        val js = scheduler(context) ?: return
+        val job = JobInfo.Builder(JOB_RESUME, component(context))
+            .setMinimumLatency(delayMs.coerceAtLeast(1_000))
+            .setOverrideDeadline(delayMs.coerceAtLeast(1_000) + 60_000)
+            .setPersisted(true)
+            .build()
+        runCatching { js.schedule(job) }.onFailure { Log.w(TAG, "resume job not scheduled", it) }
+    }
+
+    /**
+     * ההשהיה התחילה / נגמרה (פקודת מנהל, פקיעת תוקף או "החזר הגנה" בטלפון). רץ ברקע.
+     * בהשהיה: המנהרה יורדת, המגן לא חוסם, מנהל המכשיר מרפה הכול (DeviceOwnerManager.PAUSED).
+     * בסיום: הכול מוחל מחדש ומתחבר מיד.
+     */
+    fun onPauseChanged(context: Context) {
+        val app = context.applicationContext
+        val paused = AdminState.isPaused(app)
+        runCatching { DeviceOwnerManager.apply(app, GuardPolicy.get(app)) }
+            .onFailure { Log.w(TAG, "device owner apply on pause change failed", it) }
+        GuardService.onPolicyChanged()
+        if (paused) {
+            TunnelManager.healthCheck()                          // מוריד את המנהרה (pausedGate)
+            scheduleResume(app, AdminState.pauseUntil(app) - System.currentTimeMillis() + 1_000)
+        } else {
+            scheduler(app)?.cancel(JOB_RESUME)
+            TunnelManager.ensureConnected("resume")
+            startProtection(app)
+        }
+        ProtectionService.refresh(app)
     }
 
     /**

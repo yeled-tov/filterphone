@@ -17,6 +17,7 @@ object ProtectionState {
     const val HEARTBEAT_OK = "heartbeat_ok_at"
     const val HEARTBEAT_ERROR = "heartbeat_error"
     const val GUARD_ALIVE = "guard_alive_at"          // שירות הנגישות רץ (מתעדכן כשהוא מתחבר ובאירועים)
+    const val GUARD_RESTORED = "guard_restored"        // כמה פעמים המגן כובה בהגדרות והוחזר לבד
     const val APPS_BLOCKED = "apps_blocked"
     const val SCREENS_BLOCKED = "screens_blocked"
     const val WA_PHOTOS_BLOCKED = "wa_photos_blocked"
@@ -42,6 +43,9 @@ object ProtectionState {
         prefs(context).edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
 
     fun string(context: Context, key: String): String? = prefs(context).getString(key, null)
+
+    /** "הסרת הכול": מוני חסימות, זמנים והתעודה — נמחקים. */
+    fun clearAll(context: Context) = prefs(context).edit().clear().apply()
 }
 
 /**

@@ -194,7 +194,8 @@ OPTIONS: tuple[Option, ...] = (
            hosts=("images.google.com",),
            paths=(("google.*", r"[?&](?:tbm=isch|udm=2)(?:&|$)"), ("bing.com", r"^/images/"))),
     Option("google_app", "google", "אפליקציית גוגל",
-           "האפליקציה עם הפיד והחיפוש הקולי. החיפוש בכרום ממשיך לעבוד.",
+           "האפליקציה עצמה — החיפוש והפיד. ג'מיני, Circle to Search, Lens והעוזר ממשיכים לעבוד (הם רצים "
+           "מתוך אותה אפליקציה), והחיפוש בכרום לא מושפע.",
            apps=("com.google.android.googlequicksearchbox",), needs_guard=True),
     Option("google_photos", "google", "Google Photos", "",
            hosts=("photos.google.com", "photos.app.goo.gl"), apps=("com.google.android.apps.photos",)),
@@ -209,7 +210,13 @@ OPTIONS: tuple[Option, ...] = (
            apps=("com.android.chrome", *BROWSERS_OTHER), needs_guard=True),
 
     # ------------------------------------------------------------ וידאו, מוזיקה ובידור
-    # YouTube blocking was globally retired during testing; it is intentionally absent.
+    Option("youtube", "video", "יוטיוב", "האפליקציה, האתר והסרטונים המוטמעים באתרים אחרים.",
+           hosts=("youtube.com", "youtu.be", "ytimg.com", "googlevideo.com", "youtube-nocookie.com",
+                  "youtubei.googleapis.com", "youtube.googleapis.com", "yt3.ggpht.com", "youtube.co.il"),
+           apps=("com.google.android.youtube", "com.google.android.apps.youtube.kids",
+                 "com.google.android.apps.youtube.music", "app.revanced.android.youtube",
+                 "com.vanced.android.youtube"), popular=True,
+           warn="FilterTube לא מושפעת: היא עובדת מחוץ ל-VPN ומסננת בעצמה (ראו 'אפליקציות מחוץ ל-VPN')."),
     Option("netflix", "video", "נטפליקס", "",
            hosts=("netflix.com", "netflix.net", "nflxvideo.net", "nflximg.net", "nflximg.com", "nflxext.com",
                   "nflxso.net"), apps=("com.netflix.mediaclient",)),
@@ -316,6 +323,21 @@ APP_MODES = ("network", "accessibility", "both")
 DEVICE_MODES = ("accessibility", "both")       # נאכף בטלפון
 NETWORK_MODES = ("network", "both")            # נאכף בשרת
 
+# חבילה אחת שמארחת כמה שירותים: חסימה שלה (באפשרות או בכרטיס האפליקציות) חוסמת רק את המסכים של
+# האפליקציה עצמה, ולא מוסתרת/מושבתת במנהל מכשיר — שאר השירותים תלויים בה. אפליקציית גוגל: החיפוש,
+# הפיד ושורת החיפוש חסומים; ג'מיני, Circle to Search, Lens והעוזר (שרצים מתוכה) — עובדים.
+# התבניות = חלק משם המסך (Activity), בלי תלות באותיות גדולות. מסך לא מוכר לא נחסם.
+SPLIT_APPS: dict[str, tuple[str, ...]] = {
+    "com.google.android.googlequicksearchbox": (
+        "googleappactivity",                    # המסך הראשי (גרסאות 2023 ואילך)
+        "googlequicksearchbox.searchactivity",  # כניסה מהאייקון
+        "searchnowactivity",                    # הפיד והחיפוש (גרסאות קודמות)
+        "velvetactivity",                       # תוצאות חיפוש (גרסאות ישנות)
+        "queryentryactivity",                   # שורת החיפוש / הווידג'ט
+        "searchresultsactivity",
+    ),
+}
+
 # הגנות מיוחדות בטלפון. ההגדרות (תבניות זיהוי) נשלחות מהשרת — כשוואטסאפ משנה את המסכים שלו,
 # מעדכנים כאן בלי לשחרר אפליקציה חדשה. האפליקציה מחזיקה גם ברירת מחדל זהה.
 PROTECTIONS: dict[str, dict] = {
@@ -352,6 +374,10 @@ DPC_DEFAULTS: dict[str, bool | list] = {
     "disallow_install_apps": False,     # אי אפשר להתקין אפליקציות בכלל (גם מהחנות)
     "disallow_modify_accounts": False,  # אי אפשר להוסיף / להסיר חשבונות
     "hide_blocked_apps": True,          # אפליקציות חסומות מוסתרות לגמרי (במקום חסימה בנגישות)
+    # אפליקציות חסומות "באפור": האייקון נשאר, לחיצה מציגה "חסום על ידי המנהל" (setPackagesSuspended).
+    # כשפעיל — גובר על ההסתרה (גרסאות ישנות של האפליקציה לא מכירות אותו וממשיכות להסתיר).
+    "suspend_blocked_apps": True,
+    "disallow_tethering": True,         # נקודה חמה / שיתוף אינטרנט (Wi-Fi, בלוטות', USB) — חסום ואפור
     "frp_accounts": [],                 # Factory Reset Protection: מזהי חשבון Google שיכולים לשחרר
     "lock_task_packages": [],           # אפליקציות שמותר להן מצב קיוסק (lock task)
 }
@@ -428,6 +454,49 @@ def resolve_keywords(cfg: dict | None) -> dict:
     return {"enabled": bool(enabled), "action": "back", "terms": terms}
 
 
+# אפליקציות מחוץ ל-VPN (פיצול מנהרה לפי אפליקציה): עוברות בחיבור הרגיל של הטלפון ולא דרך השרת.
+# FilterTube — שתי הגרסאות (הראשית, NewPipe, ו"גרסת החנות", Flutter) — מתחברת ליוטיוב ישירות מהטלפון,
+# ויוטיוב מסרב לבקשות שמגיעות מכתובת של שרת ("תאשר שאתה לא בוט"). מחוץ ל-VPN היא עובדת כרגיל.
+# המחיר: אפליקציה מוחרגת לא עוברת שום סינון של FilterPhone (גם לא DNS). לכן רק אפליקציות שמסננות
+# בעצמן, לפי שם חבילה מדויק, ואפשר לנעול לחתימה (SHA-256 של תעודת החתימה) — אז אפליקציה אחרת
+# עם אותו שם חבילה לא תוחרג. דפדפנים וחנויות לעולם לא מוחרגים.
+# הטלפון מחזיק ברירת מחדל זהה (VpnBypass.DEFAULTS) לשרת שעוד לא שולח את השדה.
+VPN_BYPASS_APPS: dict[str, str] = {
+    "com.filtertube.app": "FilterTube",
+    "com.filtertube.filtertube": "FilterTube — גרסת החנות",
+}
+VPN_BYPASS_DEFAULTS: dict = {"enabled": True}
+MAX_VPN_BYPASS = 20
+MAX_BYPASS_PINS = 3
+NEVER_BYPASS = frozenset({
+    "com.filterphone.app", "com.android.chrome", *BROWSERS_OTHER, "com.android.vending",
+    "com.google.android.googlequicksearchbox", "com.google.android.gms", "com.android.settings",
+})
+_CERT_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def clean_cert(raw) -> str | None:
+    """טביעת SHA-256 של תעודת חתימה: 64 תווי hex (מותר עם ':' ורווחים). None אם לא תקין."""
+    c = re.sub(r"[\s:]", "", str(raw)).lower()
+    return c if _CERT_RE.match(c) else None
+
+
+def resolve_vpn_bypass(cfg: dict | None) -> dict:
+    """ההגדרה האפקטיבית שנשלחת לטלפון: {enabled, apps: [{package, label, certs}]} — ברירת המחדל +
+    תוספות המנהל פחות מה שהוסר. certs ריק = לפי שם חבילה בלבד; אחרת רק חתימה תואמת מוחרגת."""
+    cfg = cfg if isinstance(cfg, dict) else {}
+    if cfg.get("enabled", VPN_BYPASS_DEFAULTS["enabled"]) is False:
+        return {"enabled": False, "apps": []}
+    removed = {p for p in map(clean_package, map(str, cfg.get("removed") or [])) if p}
+    extra = {p for p in map(clean_package, map(str, cfg.get("extra") or [])) if p}
+    pins = cfg.get("pins") if isinstance(cfg.get("pins"), dict) else {}
+    pkgs = sorted(((set(VPN_BYPASS_APPS) | extra) - removed) - NEVER_BYPASS)[:MAX_VPN_BYPASS]
+    return {"enabled": True, "apps": [
+        {"package": p, "label": VPN_BYPASS_APPS.get(p, ""),
+         "certs": sorted({c for c in map(clean_cert, pins.get(p) or []) if c})[:MAX_BYPASS_PINS]}
+        for p in pkgs]}
+
+
 # ---------------------------------------------------------------- מדיניות מכשיר
 
 @dataclass(slots=True)
@@ -440,6 +509,7 @@ class DeviceSettings:
     app_images: str = "auto"                    # auto = לפי הרמה (1–2 חסום, 3 מותר)
     dpc: dict = field(default_factory=dict)     # רק מה ששונה מ-DPC_DEFAULTS
     keywords: dict = field(default_factory=dict)  # חסימת מילות חיפוש: {enabled, extra, removed} מעל ברירת המחדל
+    vpn_bypass: dict = field(default_factory=dict)  # אפליקציות מחוץ ל-VPN: {enabled, extra, removed, pins}
 
     @property
     def custom_apps(self) -> list[str]:
@@ -508,6 +578,29 @@ class DeviceSettings:
                     out[key] = vals
         return out
 
+    @staticmethod
+    def _load_vpn_bypass(raw) -> dict:
+        if not isinstance(raw, dict):
+            return {}
+        out: dict = {}
+        if isinstance(raw.get("enabled"), bool) and raw["enabled"] != VPN_BYPASS_DEFAULTS["enabled"]:
+            out["enabled"] = raw["enabled"]
+        for key in ("extra", "removed"):
+            if isinstance(raw.get(key), list):
+                vals = sorted({p for p in map(clean_package, map(str, raw[key])) if p and p not in NEVER_BYPASS})
+                if vals:
+                    out[key] = vals[:MAX_VPN_BYPASS]
+        pins: dict = {}
+        if isinstance(raw.get("pins"), dict):
+            for pkg, certs in list(raw["pins"].items())[:MAX_VPN_BYPASS]:
+                p = clean_package(str(pkg))
+                good = sorted({c for c in map(clean_cert, certs if isinstance(certs, list) else []) if c})
+                if p and good:
+                    pins[p] = good[:MAX_BYPASS_PINS]
+        if pins:
+            out["pins"] = dict(sorted(pins.items()))
+        return out
+
     @classmethod
     def load(cls, raw: str | None) -> DeviceSettings:
         try:
@@ -524,6 +617,7 @@ class DeviceSettings:
             app_images=d.get("app_images") if d.get("app_images") in APP_IMAGES else "auto",
             dpc=cls._load_dpc(d.get("dpc")),
             keywords=cls._load_keywords(d.get("keywords")),
+            vpn_bypass=cls._load_vpn_bypass(d.get("vpn_bypass")),
         )
 
     def dump(self) -> str:
@@ -531,7 +625,7 @@ class DeviceSettings:
         return json.dumps({"options": self.options, "custom_hosts": self.custom_hosts,
                            "allow_hosts": self.allow_hosts, "custom_apps": self.custom_apps,
                            "app_rules": self.app_rules, "app_images": self.app_images, "dpc": self.dpc,
-                           "keywords": self.keywords},
+                           "keywords": self.keywords, "vpn_bypass": self.vpn_bypass},
                           ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
@@ -539,6 +633,8 @@ class DeviceSettings:
         d["dpc_effective"] = {**DPC_DEFAULTS, **self.dpc}
         d["keywords_effective"] = resolve_keywords(self.keywords)      # {enabled, action, terms}
         d["keyword_defaults_count"] = len(resolve_keywords({})["terms"])
+        d["vpn_bypass_effective"] = resolve_vpn_bypass(self.vpn_bypass)  # {enabled, apps}
+        d["vpn_bypass_defaults"] = [{"package": p, "label": t} for p, t in VPN_BYPASS_APPS.items()]
         return d
 
     def update(self, changes: dict) -> list[str]:
@@ -614,6 +710,46 @@ class DeviceSettings:
                         else:
                             merged[key] = [str(x) for x in kw[key]]
                 self.keywords = self._load_keywords(merged)
+        if changes.get("vpn_bypass") is not None:
+            errors += self._update_vpn_bypass(changes["vpn_bypass"])
+        return errors
+
+    def _update_vpn_bypass(self, vb) -> list[str]:
+        """{enabled?, extra?, removed?, pins?: {pkg: [sha256] | []}} — pins עם רשימה ריקה מבטל נעילה."""
+        if not isinstance(vb, dict):
+            return ["הגדרות 'מחוץ ל-VPN' לא תקינות"]
+        errors: list[str] = []
+        merged = {**self.vpn_bypass, "pins": dict(self.vpn_bypass.get("pins") or {})}
+        if isinstance(vb.get("enabled"), bool):
+            merged["enabled"] = vb["enabled"]
+        for key in ("extra", "removed"):
+            if vb.get(key) is None:
+                continue
+            if not isinstance(vb[key], list):
+                errors.append(f"רשימת אפליקציות לא תקינה ({key})")
+                continue
+            raw = [str(x).strip() for x in vb[key] if str(x).strip()]
+            bad = [x for x in raw if clean_package(x) is None]
+            if bad:
+                errors.append(f"שם חבילה לא תקין: {', '.join(bad[:5])}")
+            never = [x for x in raw if x in NEVER_BYPASS]
+            if key == "extra" and never:
+                errors.append(f"אי אפשר להוציא מהסינון דפדפן, חנות או רכיב מערכת: {', '.join(never[:5])}")
+            merged[key] = raw
+        if vb.get("pins") is not None:
+            if not isinstance(vb["pins"], dict):
+                errors.append("נעילת חתימה לא תקינה")
+            else:
+                for pkg, certs in vb["pins"].items():
+                    if not isinstance(certs, list) or any(clean_cert(c) is None for c in certs):
+                        errors.append(f"טביעת חתימה לא תקינה ל-{pkg} (צריך SHA-256 — 64 תווי hex)")
+                        continue
+                    if certs:
+                        merged["pins"][str(pkg)] = certs
+                    else:
+                        merged["pins"].pop(str(pkg), None)
+        if not errors:
+            self.vpn_bypass = self._load_vpn_bypass(merged)
         return errors
 
 
@@ -634,7 +770,9 @@ class Compiled:
     protections: tuple[str, ...] = ()
     dpc: dict = field(default_factory=dict)
     keywords: dict = field(default_factory=dict)  # {enabled, action, terms} — חסימת מילות חיפוש בנגישות
+    vpn_bypass: dict = field(default_factory=dict)  # {enabled, apps} — אפליקציות שעוברות מחוץ ל-VPN
     network_only_unknown: tuple[str, ...] = ()  # אפליקציות "ברשת" בלי שרתים ידועים — אין מה לחסום
+    split_apps: tuple[str, ...] = ()            # חסומות רק במסכים שלהן (SPLIT_APPS), לא כאפליקציה שלמה
 
     def proxy_json(self, level: int) -> str:
         """מה שהפרוקסי קורא (fp:policy ב-Redis)."""
@@ -659,6 +797,7 @@ class Compiled:
             "protections": {k: PROTECTIONS[k] for k in self.protections if k in PROTECTIONS},
             "dpc": self.dpc,
             "keywords": self.keywords,
+            "vpn_bypass": self.vpn_bypass,
         }
 
 
@@ -681,6 +820,10 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
     if app_images == "auto":
         app_images = "block" if level in (1, 2) else "allow"
     device_apps = {a for o in opts for a in o.apps} | {p for p, r in s.app_rules.items() if r["mode"] in DEVICE_MODES}
+    split = sorted(device_apps & set(SPLIT_APPS))
+    for pkg in split:                       # לא כאפליקציה שלמה — רק המסכים של האפליקציה עצמה
+        device_apps.discard(pkg)
+        screens.setdefault(pkg, set()).update(SPLIT_APPS[pkg])
     return Compiled(
         hosts=tuple(sorted(hosts)),
         apps=tuple(sorted(device_apps)),
@@ -693,7 +836,9 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         protections=tuple(sorted({k for o in opts for k in o.protections})),
         dpc={**DPC_DEFAULTS, **s.dpc},
         keywords=resolve_keywords(s.keywords),
+        vpn_bypass=resolve_vpn_bypass(s.vpn_bypass),
         network_only_unknown=tuple(unknown),
+        split_apps=tuple(split),
     )
 
 

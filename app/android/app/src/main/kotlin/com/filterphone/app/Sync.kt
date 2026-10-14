@@ -44,6 +44,8 @@ object Sync {
             .put("enabled", GuardPolicy.isServiceEnabled(context))
             .put("running", GuardService.isRunning)
             .put("required", needsAccessibility)
+            .put("self_heal", AccessibilityGuard.canHeal(context))
+            .put("restored", ProtectionState.count(context, ProtectionState.GUARD_RESTORED))
 
         val o = JSONObject()
             .put("app_version", runCatching { pm.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "")
@@ -71,6 +73,11 @@ object Sync {
             runCatching { CertHelper.isInstalled(pem) }.getOrNull()?.let { o.put("ca_installed", it) }
         }
         DeviceOwnerManager.report(context)?.let { o.put("dpc", it) }
+        runCatching {
+            val decision = VpnBypass.current(context)
+            o.put("vpn_bypass", VpnBypass.report(TunnelManager.appliedBypass, decision,
+                DeviceOwnerManager.lockdownConflict(context, decision.excluded)))
+        }
         SelfUpdate.report(context)?.let { o.put("update", it) }
         runCatching {
             val caps = Preflight.capabilities(context)
@@ -90,6 +97,7 @@ object Sync {
      */
     fun heartbeat(context: Context): Boolean {
         val (api, token) = GuardPolicy.credentials(context) ?: return false
+        runCatching { AccessibilityGuard.ensureEnabled(context, "sync") }
         val first = post(context, "$api/v1/device/heartbeat", token, collect(context)) ?: return false
         val policy = first.optJSONObject("policy")
         if (policy != null && first.optString("status") == "active") {
@@ -108,16 +116,24 @@ object Sync {
             runCatching { ManagedApps.sync(context, first.optJSONArray("managed_apps")) }
                 .onFailure { Log.w(TAG, "managed apps sync failed", it) }
         }
-        // פקודת מנהל: השהיית הגנה (מצב תחזוקה) או הסרת ניהול — מהערוץ המאומת בלבד
+        // פקודת מנהל: השהיית הגנה (הטלפון פתוח עד סוף התוקף) או הסרת ניהול — מהערוץ המאומת בלבד
         runCatching {
+            val wasPaused = AdminState.isPaused(context)
             val action = AdminState.apply(context, first.optJSONObject("admin"), first.optLong("server_time"))
-            when (action) {
-                AdminState.Action.UNMANAGE -> DeviceOwnerManager.clearManagement(context)
-                else -> DeviceOwnerManager.apply(context, GuardPolicy.get(context))   // מחיל/מרפה נעילה לפי ההשהיה
+            when {
+                action == AdminState.Action.UNMANAGE -> DeviceOwnerManager.clearManagement(context)
+                AdminState.isPaused(context) != wasPaused -> Recovery.onPauseChanged(context)
+                else -> DeviceOwnerManager.apply(context, GuardPolicy.get(context))
             }
             GuardService.onPolicyChanged()
         }.onFailure { Log.w(TAG, "admin command failed", it) }
         return true
+    }
+
+    /** בקשה קצרה לשרת בשם המכשיר (למשל "החזר הגנה" / "הסרת הכול"). true אם השרת אישר. */
+    fun notify(context: Context, path: String): Boolean {
+        val (api, token) = GuardPolicy.credentials(context) ?: return false
+        return post(context, "$api$path", token, JSONObject())?.optBoolean("ok", false) == true
     }
 
     private fun post(context: Context, url: String, token: String, body: JSONObject): JSONObject? {
@@ -162,6 +178,7 @@ class SyncJob : JobService() {
         executor.execute {
             try {
                 TunnelManager.init(app)
+                if (params.jobId == Recovery.JOB_RESUME) Recovery.onPauseChanged(app)   // סוף ההשהיה
                 TunnelManager.ensureConnected(if (params.jobId == Recovery.JOB_RETRY) "retry" else "job")
                 if (params.jobId != Recovery.JOB_RETRY) {
                     TunnelManager.healthCheck()

@@ -34,6 +34,8 @@ const DPC_LABELS = {
   disallow_install_apps: ["חסימת התקנת אפליקציות", "גם מהחנות — רק המנהל מוסיף אפליקציות."],
   disallow_modify_accounts: ["חסימת הוספת חשבונות", "אי אפשר להוסיף / להסיר חשבון Google ואחרים."],
   hide_blocked_apps: ["הסתרת אפליקציות חסומות", "אפליקציה חסומה נעלמת מהטלפון (במקום חסימה בנגישות)."],
+  suspend_blocked_apps: ["אפליקציות חסומות באפור", "האייקון נשאר אפור; לחיצה מציגה 'חסום על ידי מנהל הסינון'. כשפעיל — במקום הסתרה. Google Play נחסם כך בלי לגעת בשירותי Google."],
+  disallow_tethering: ["חסימת נקודה חמה", "שיתוף אינטרנט ב-Wi-Fi, בלוטות' ו-USB — אפור בהגדרות ובלוח המהיר."],
 };
 const ANDROID = { 26: "8.0", 27: "8.1", 28: "9", 29: "10", 30: "11", 31: "12", 32: "12L", 33: "13", 34: "14", 35: "15", 36: "16" };
 const LOG_KINDS = {
@@ -42,6 +44,9 @@ const LOG_KINDS = {
   management_removed: ["bad", "מנהל המכשיר הוסר"], battery_unrestricted: ["ok", "סוללה: ללא הגבלה"],
   battery_restricted: ["warn", "סוללה: מוגבלת"], outside_vpn: ["bad", "דיווח מחוץ למנהרה"], policy_error: ["warn", "שגיאת מדיניות"],
   app_updated: ["ok", "האפליקציה עודכנה"], app_update_failed: ["warn", "עדכון האפליקציה נכשל"],
+  paused: ["warn", "ההגנה הושהתה"], resumed: ["ok", "ההגנה חזרה"], unmanage_requested: ["warn", "נשלחה הסרת ניהול"],
+  management_cleared: ["warn", "הניהול הוסר"], uninstalled: ["bad", "הלקוח הסיר את ההגנה (בהשהיה)"],
+  uninstall_blocked: ["bad", "ניסיון הסרה בלי השהיה — נחסם"], transferred: ["warn", "הוחלף למכשיר אחר"],
 };
 const UPDATE_STATES = {
   available: ["warn", "גרסה חדשה זמינה — הטלפון צריך להתקין ידנית"],
@@ -684,6 +689,7 @@ async function viewDevice(id) {
   const logCard = deviceLogCard(d);
   const dpcCardEl = dpcCard(d, patch);
   const keywordCardEl = keywordCard(d, patch);
+  const bypassCardEl = vpnBypassCard(d, patch);
   const maintenanceCardEl = maintenanceCard(d);
 
   // --- סטטיסטיקה ואירועים
@@ -709,7 +715,7 @@ async function viewDevice(id) {
     complianceCardEl,
     el("div", { class: "grid two" }, customerCard, logCard),
     maintenanceCardEl,
-    levelCard, policyCard, appsCard, appImagesCard, customCard, keywordCardEl, dpcCardEl,
+    levelCard, policyCard, appsCard, appImagesCard, customCard, keywordCardEl, bypassCardEl, dpcCardEl,
     el("div", { class: "grid two" }, statsCard, learnedCard),
     eventsCard, historyCard];
 }
@@ -746,6 +752,9 @@ function complianceCard(d) {
         ["מגן FilterPhone (נגישות)", c.accessibility === "not_required" ? chip("לא נדרש") : c.accessibility === "on"
           ? chip(acc.running === false ? "מופעל אבל לא רץ" : "פעיל", acc.running === false ? "warn" : "ok")
           : c.accessibility === "off" ? chip("כבוי", "bad") : chip("לא דווח")],
+        ["החזרה אוטומטית של המגן", acc.self_heal === undefined ? chip("לא דווח")
+          : acc.self_heal ? chip(`פעילה${acc.restored ? ` · הוחזר ${num(acc.restored)} פעמים` : ""}`, "ok")
+            : chip("לא — דרושה הרשאה בהקמה (root / adb)", "warn")],
         ["חסימות שבוצעו בטלפון", hb.protections ? `${num(hb.protections.apps_blocked)} אפליקציות · ${num(hb.protections.screens_blocked)} מסכים · ${num(hb.protections.wa_profile_photo)} תמונות פרופיל · ${num(hb.protections.keywords_blocked)} מילות חיפוש` : "—"],
       ]),
       kv([
@@ -948,6 +957,66 @@ function keywordCard(d, patch) {
     el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
       await patch({ keywords: { extra: lines(extra.value), removed: lines(removed.value) } });
     } }, "שמירת מילים")));
+}
+
+function vpnBypassCard(d, patch) {
+  const cfg = d.settings.vpn_bypass || {};
+  const eff = d.settings.vpn_bypass_effective || { enabled: true, apps: [] };
+  const defaults = d.settings.vpn_bypass_defaults || [];
+  const rep = d.heartbeat?.vpn_bypass || {};
+  const applied = new Set(rep.applied || []);
+  const mismatch = new Set(rep.mismatch || []);
+  const reported = rep.certs || {};
+  const installed = new Map((d.apps || []).map((a) => [a.package, a.label]));
+  // השגיאה כבר מוצגת (attempt) — כאן רק לא משאירים הבטחה שנדחתה בלי טיפול
+  const save = (body, msg) => patch({ vpn_bypass: body }, msg).then(() => render(), () => {});
+  const toggle = el("input", { type: "checkbox", checked: eff.enabled !== false, "aria-label": "אפליקציות מחוץ ל-VPN",
+    onchange: async (e) => {
+      try { await patch({ vpn_bypass: { enabled: e.target.checked } }); render(); } catch (_) { e.target.checked = !e.target.checked; }
+    } });
+  const short = (c) => `${c.slice(0, 8)}…${c.slice(-6)}`;
+  const status = (a) => {
+    if (mismatch.has(a.package)) return chip("חתימה לא תואמת — נשארת בסינון", "bad");
+    if (applied.has(a.package)) return chip("מחוץ ל-VPN ✓", "ok");
+    if (reported[a.package]) return chip("מותקנת — תוחרג בחיבור הבא", "warn");
+    return installed.has(a.package) ? chip("מותקנת") : chip("לא מותקנת");
+  };
+  const rows = (eff.apps || []).map((a) => {
+    const pinned = (a.certs || []).length > 0;
+    const seen = reported[a.package];
+    const isDefault = defaults.some((x) => x.package === a.package);
+    return el("div", { class: "app-row" },
+      el("div", { class: "grow" }, el("b", {}, a.label || installed.get(a.package) || a.package),
+        el("small", { class: "ltr" }, a.package),
+        el("small", {}, pinned ? `נעול לחתימה ${short(a.certs[0])}` : seen ? `חתימה בטלפון: ${short(seen)} (לא נעול)` : "לא נעול לחתימה")),
+      status(a),
+      !pinned && seen ? el("button", { class: "ghost small", title: "רק אפליקציה בחתימה הזו תוחרג",
+        onclick: () => save({ pins: { [a.package]: [seen] } }, "ננעל לחתימה") }, "נעילה לחתימה") : null,
+      pinned ? el("button", { class: "ghost small", onclick: () => save({ pins: { [a.package]: [] } }, "הנעילה בוטלה") }, "ביטול נעילה") : null,
+      el("button", { class: "ghost small", onclick: () => isDefault
+        ? save({ removed: [...(cfg.removed || []), a.package] }, "הוחזרה לסינון")
+        : save({ extra: (cfg.extra || []).filter((p) => p !== a.package) }, "הוחזרה לסינון") }, "החזרה לסינון"));
+  });
+  const removedDefaults = defaults.filter((x) => (cfg.removed || []).includes(x.package));
+  const restore = removedDefaults.map((x) => el("button", { class: "ghost small",
+    onclick: () => save({ removed: (cfg.removed || []).filter((p) => p !== x.package) }, `${x.label} מחוץ ל-VPN`) }, `+ ${x.label}`));
+  const manual = el("input", { class: "ltr", placeholder: "com.example.app", list: `bypass-apps-${d.id}` });
+  const options = el("datalist", { id: `bypass-apps-${d.id}` }, (d.apps || []).map((a) => el("option", { value: a.package }, a.label)));
+  return card("אפליקציות מחוץ ל-VPN",
+    "אפליקציה כאן עוברת בחיבור הרגיל של הטלפון ולא דרך השרת — בלי שום סינון של FilterPhone (גם לא DNS). " +
+    "מיועד לאפליקציות שמסננות בעצמן ושלא עובדות דרך שרת, כמו FilterTube (יוטיוב מסרב לכתובת של שרת). " +
+    "דפדפנים וחנויות לא ניתנים להחרגה. מומלץ לנעול לחתימה — אז אפליקציה אחרת עם אותו שם לא תוחרג.",
+    el("div", { class: "app-row" }, el("label", { class: "switch" }, toggle, el("span")),
+      el("div", { class: "grow" }, el("b", {}, "פעיל"),
+        el("small", {}, eff.enabled === false ? "כבוי — כל האפליקציות עוברות בסינון." : `${(eff.apps || []).length} אפליקציות ברשימה`))),
+    rep.lockdown_conflict ? el("p", { class: "warn-text" }, "⚠ אנדרואיד 9 ומטה עם 'חסימה בלי VPN': האפליקציות המוחרגות יישארו בלי אינטרנט. בגרסה הזו צריך לבחור בין השניים.") : null,
+    eff.enabled === false ? null : el("div", { class: "apps" }, rows.length ? rows : empty("אין אפליקציות ברשימה.")),
+    restore.length ? el("div", { class: "row gap wrap" }, el("small", { class: "muted" }, "ברירות מחדל שהוחזרו לסינון:"), ...restore) : null,
+    eff.enabled === false ? null : el("div", { class: "row gap" }, manual, options, el("button", { class: "ghost small", onclick: () => {
+      const pkg = manual.value.trim();
+      if (!/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(pkg)) { toast("שם חבילה לא תקין", true); return; }
+      save({ extra: [...(cfg.extra || []), pkg] }, "נוספה — מחוץ ל-VPN");
+    } }, "הוספה")));
 }
 
 function phoneAppsCard(d, patch) {

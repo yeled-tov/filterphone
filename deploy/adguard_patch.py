@@ -16,6 +16,14 @@ import yaml
 
 BYPASS_LIST = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh-vpn-proxy-bypass.txt"
 CANARY_RULE = "||use-application-dns.net^$dnsrewrite=NXDOMAIN"
+# חריגים גלובליים ש"תיקון ה-DNS" מ-12/10/2026 הוסיף ליוטיוב. בגלל $important הם גברו על כל חסימה —
+# גם על חסימת YouTube שהמנהל בחר למכשיר מסוים. מוסרים (רק השורות המדויקות האלה; כל השאר נשאר).
+_YOUTUBE_HOTFIX_HOSTS = (
+    "youtube.com", "youtube-nocookie.com", "youtu.be", "googlevideo.com", "ytimg.com",
+    "youtubei.googleapis.com", "youtube.googleapis.com", "youtubeembeddedplayer.googleapis.com",
+    "youtube.co.il", "ggpht.com", "yt3.googleusercontent.com",
+)
+STALE_RULES = frozenset(f"@@||{h}^$important" for h in _YOUTUBE_HOTFIX_HOSTS)
 
 
 def find_key(node, key):
@@ -39,11 +47,9 @@ def main(path: str, api_user: str = "", api_hash: str = "") -> None:
     holder = find_key(doc, "safe_search")
     if holder is not None and isinstance(holder["safe_search"], dict):
         holder["safe_search"]["enabled"] = True
-        # YouTube must pass through normally during testing; do not rewrite its
-        # internal API requests to SafeSearch, which can interfere with playback.
-        for engine in ("bing", "duckduckgo", "ecosia", "google", "pixabay", "yandex"):
+        # כולל YouTube (מצב מוגבל). FilterTube לא מושפעת: היא מחוץ ל-VPN ולא משתמשת ב-DNS הזה.
+        for engine in ("bing", "duckduckgo", "ecosia", "google", "pixabay", "yandex", "youtube"):
             holder["safe_search"][engine] = True
-        holder["safe_search"]["youtube"] = False
 
     filters = doc.setdefault("filters", []) or []
     if not any(f.get("url") == BYPASS_LIST for f in filters):
@@ -53,6 +59,10 @@ def main(path: str, api_user: str = "", api_hash: str = "") -> None:
     doc["filters"] = filters
 
     rules = doc.setdefault("user_rules", []) or []
+    stale = [r for r in rules if str(r).strip().lower() in STALE_RULES]
+    if stale:
+        rules = [r for r in rules if str(r).strip().lower() not in STALE_RULES]
+        print(f"  הוסרו {len(stale)} חריגי YouTube גלובליים (מתיקון 12/10) — חסימת YouTube לפי מכשיר חוזרת לעבוד")
     if CANARY_RULE not in rules:
         rules.append(CANARY_RULE)
     doc["user_rules"] = rules

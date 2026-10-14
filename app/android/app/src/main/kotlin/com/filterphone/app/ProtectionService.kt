@@ -49,8 +49,10 @@ class ProtectionService : Service() {
         TunnelManager.init(this)
         createChannel(this)
         startInForeground()
+        running = true
         TunnelManager.addListener(tunnelListener)
         registerNetworkCallback()
+        PackageWatch.register(this)          // FilterTube הותקנה/הוסרה — המנהרה נבנית מחדש מיד
         main.postDelayed(healthTick, HEALTH_EVERY_MS)
     }
 
@@ -121,7 +123,9 @@ class ProtectionService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         main.removeCallbacks(healthTick)
+        PackageWatch.unregister(this)
         TunnelManager.removeListener(tunnelListener)
         networkCallback?.let { cb ->
             runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) }
@@ -137,6 +141,15 @@ class ProtectionService : Service() {
         const val CHANNEL_ID = "protection"
         const val NOTIFICATION_ID = 7101
         private const val HEALTH_EVERY_MS = 5 * 60_000L
+        @Volatile private var running = false
+
+        /** עדכון ההתראה הקבועה (למשל בתחילת/סוף השהיה) — רק כשהשירות רץ. */
+        fun refresh(context: Context) {
+            if (!running) return
+            runCatching {
+                context.getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, buildNotification(context))
+            }
+        }
 
         fun createChannel(context: Context) {
             val nm = context.getSystemService(NotificationManager::class.java) ?: return
@@ -151,6 +164,7 @@ class ProtectionService : Service() {
 
         fun buildNotification(context: Context): Notification {
             val text = when {
+                AdminState.isPaused(context) -> R.string.protection_paused
                 !TunnelManager.isPermissionGranted() -> R.string.protection_needs_permission
                 TunnelManager.state == Tunnel.State.UP -> R.string.protection_on
                 else -> R.string.protection_reconnecting

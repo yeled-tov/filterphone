@@ -150,11 +150,11 @@ def test_change_request_from_active_device(env):
     assert len(pend) == 1 and pend[0]["kind"] == "change"
     assert set(pend[0]["current"]["options"]) == {"play_store", "whatsapp_profile"}
     client.post(f"/v1/admin/requests/{pend[0]['id']}/approve", headers=h,
-                json={"options": ["play_store", "whatsapp_profile", "tiktok"]})
+                json={"options": ["play_store", "whatsapp_profile", "youtube", "tiktok"]})
     dev = client.get("/v1/admin/devices", headers=h).json()[0]
     assert dev["level"] == 2                                # הלקוח לא משנה רמה לבד
     pol = json.loads(svc.redis.hget("fp:policy", dev["vpn_ip"]))
-    assert "googlevideo.com" not in pol["hosts"] and "tiktok.com" in pol["hosts"]
+    assert "googlevideo.com" in pol["hosts"] and "tiktok.com" in pol["hosts"]
 
 
 def test_admin_edits_policy_and_device_reports_apps(env):

@@ -125,24 +125,19 @@ class MainActivity : FlutterActivity() {
                 "active" to AdminState.isPaused(this),
                 "until" to AdminState.pauseUntil(this),
             ))
+            // "החזר הגנה" בזמן השהיה: הכול חוזר מיד (VPN, מגן, מנהל מכשיר), וגם בשרת ההשהיה נגמרת
             "resumeProtectionLocally" -> background(result) {
                 AdminState.dismissCurrentPause(this)
-                DeviceOwnerManager.applyBaseline(this)
-                GuardService.onPolicyChanged()
+                Recovery.onPauseChanged(this)
+                runCatching { Sync.notify(this, "/v1/device/resume") }
                 Recovery.syncSoon(this)
                 true
             }
-            "removeManagementLocally" -> background(result) {
-                val removed = DeviceOwnerManager.clearManagement(this)
-                if (removed) {
-                    AdminState.dismissCurrentPause(this)
-                    runCatching { TunnelManager.reset() }
-                    GuardPolicy.clear(this)
-                    Recovery.cancelAll(this)
-                    stopService(Intent(this, ProtectionService::class.java))
-                    GuardService.onPolicyChanged()
-                }
-                removed
+            // "הסרת הכול" — רק בהשהיה שהמנהל אישר (נבדק כאן, לא רק בממשק). אחר כך: requestSelfUninstall
+            "uninstallEverything", "removeManagementLocally" -> background(result) { Uninstall.everything(this) }
+            "requestSelfUninstall" -> {
+                val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:$packageName"))
+                result.success(tryStart(intent))
             }
             "preflight" -> background(result) { Preflight.report(this) }
             "provisionRoot" -> background(result) { RootProvisioner.provision(this).toMap() }
@@ -194,7 +189,7 @@ class MainActivity : FlutterActivity() {
                     result.error("SupportNumberMissing", "מספר התמיכה לא הוגדר", null)
                     return
                 }
-                val uri = Uri.parse("https://wa.me/\${number}?text=\${Uri.encode(message)}")
+                val uri = Uri.parse("https://wa.me/$number?text=${Uri.encode(message)}")
                 if (tryStart(Intent(Intent.ACTION_VIEW, uri))) {
                     result.success(true)
                 } else {

@@ -1,6 +1,0 @@
-{
-  "action": "deploy-youtube-vpn-bypass",
-  "scope": "filterphone-apk-only",
-  "purpose": "Publish the tested FilterPhone APK that excludes only the official YouTube app (com.google.android.youtube) from the VPN tunnel and Android lockdown blocklist; FilterTube remains inside FilterPhone VPN.",
-  "safety": "Build and run Flutter tests, Kotlin unit tests, lint, APK checks, and release-signature verification before any upload; require a successful app.yml build for the exact main commit; upload APKs and FilterPhone.json only; do not deploy server code or modify the FilterTube repository."
-}

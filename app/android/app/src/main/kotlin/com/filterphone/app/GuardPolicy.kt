@@ -75,6 +75,8 @@ object GuardPolicy {
         val waProfile: WaDetector? = null,
         val keywords: KeywordRule? = null,
         val dpc: JSONObject? = null,
+        /** אפליקציות מחוץ ל-VPN (FilterTube וכו'). שרת שעוד לא שולח את השדה → ברירת המחדל. */
+        val vpnBypass: List<VpnBypass.App> = VpnBypass.DEFAULTS,
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null
     }
@@ -108,6 +110,8 @@ object GuardPolicy {
         ProtectionState.mark(context, ProtectionState.POLICY_SYNC)
         runCatching { DeviceOwnerManager.apply(context, policy) }.onFailure { Log.w(TAG, "device owner apply failed", it) }
         GuardService.onPolicyChanged()
+        // רשימת "מחוץ ל-VPN" אולי השתנתה — המנהרה נבנית מחדש רק אם יש הבדל
+        runCatching { if (TunnelManager.isInitialized) TunnelManager.refreshBypass("policy") }
         return true
     }
 
@@ -163,6 +167,7 @@ object GuardPolicy {
             waProfile = wa,
             keywords = parseKeywords(o.opt("keywords")),
             dpc = dpc,
+            vpnBypass = VpnBypass.parse(o.opt("vpn_bypass")),
         )
     }
 

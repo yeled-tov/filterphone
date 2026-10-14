@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.admin.DevicePolicyManager
 import android.app.admin.FactoryResetProtectionPolicy
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.UserManager
 import android.util.Log
@@ -25,6 +26,7 @@ object DeviceOwnerManager {
     private const val TAG = "FilterPhone"
     private const val PREFS = "fp_dpc"
     private const val K_HIDDEN = "hidden_by_owner"
+    private const val K_SUSPENDED = "suspended_by_owner"
     private const val K_RESULT = "last_result"
 
     /** הגדרות ברירת מחדל — זהות ל-DPC_DEFAULTS בשרת (server/filterphone/api/catalog.py). */
@@ -41,7 +43,17 @@ object DeviceOwnerManager {
         "disallow_install_apps" to false,
         "disallow_modify_accounts" to false,
         "hide_blocked_apps" to true,
+        "suspend_blocked_apps" to true,     // אפור + "חסום על ידי המנהל" — גובר על ההסתרה
+        "disallow_tethering" to true,       // נקודה חמה / שיתוף אינטרנט (Wi-Fi, בלוטות', USB)
     )
+
+    /**
+     * השהיה שהמנהל אישר = הטלפון פתוח לגמרי: בלי VPN, בלי הגבלות, אפליקציות חסומות חוזרות.
+     * רק ההגנה מפני הסרת FilterPhone נשארת — להסרה מלאה יש כפתור מפורש (עם אזהרה).
+     */
+    private val PAUSED: Map<String, Boolean> = DEFAULTS.mapValues { (k, _) -> k == "block_uninstall" }
+
+    private enum class AppMode { NONE, HIDE, SUSPEND }
 
     /** הגבלות משתמש (UserManager) לפי מפתח. */
     private val RESTRICTIONS: Map<String, List<String>> by lazy {
@@ -60,6 +72,7 @@ object DeviceOwnerManager {
             put("disallow_debugging", listOf(UserManager.DISALLOW_DEBUGGING_FEATURES))
             put("disallow_install_apps", listOf(UserManager.DISALLOW_INSTALL_APPS))
             put("disallow_modify_accounts", listOf(UserManager.DISALLOW_MODIFY_ACCOUNTS))
+            put("disallow_tethering", listOf(UserManager.DISALLOW_CONFIG_TETHERING))
         }
     }
 
@@ -85,23 +98,37 @@ object DeviceOwnerManager {
     }
 
     /**
-     * מרענן את רשימת החריגים של lockdown לפני חיבור WireGuard.
-     * Android חוסם תעבורה שאינה ב-VPN במצב lockdown, אלא אם החבילה ברשימת החריגים.
-     * לכן צריך לעדכן את הרשימה גם אחרי עדכון APK/התקנת YouTube, לפני הקמת המנהרה.
+     * רשימת ההיתר של "חסימה בלי VPN" (lockdown) = האפליקציות שמחוץ למנהרה (VpnBypass). אחרת אנדרואיד
+     * חוסם להן את הרשת. נקרא לפני כל הקמה של המנהרה. אנדרואיד 10+ בלבד; משנה רק כשיש הבדל.
      */
-    fun refreshYouTubeLockdownBypass(context: Context) {
+    fun refreshLockdownAllowlist(context: Context, packages: Set<String>) {
         if (!isDeviceOwner(context) || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         val dpm = dpm(context) ?: return
         val admin = DeviceAdmin.component(context)
-        if (runCatching { dpm.getAlwaysOnVpnPackage(admin) }.getOrNull() != context.packageName) return
+        if (dpm.getAlwaysOnVpnPackage(admin) != context.packageName || !dpm.isAlwaysOnVpnLockdownEnabled(admin)) return
+        val current = runCatching { dpm.getAlwaysOnVpnLockdownWhitelist(admin) }.getOrNull().orEmpty()
+        if (current == packages) return
+        setAlwaysOn(dpm, admin, context.packageName, lockdown = true, packages)
+    }
 
-        val lockdown = runCatching { dpm.isAlwaysOnVpnLockdownEnabled(admin) }.getOrNull() ?: return
-        val bypassPackages = if (lockdown) {
-            VpnConfigFactory.installedYouTubePackages(context)
-        } else {
-            emptySet()
+    /** אנדרואיד 9 ומטה: lockdown בלי רשימת היתר — אפליקציה שמחוץ ל-VPN נשארת בלי רשת (מדווח לשרת). */
+    fun lockdownConflict(context: Context, excluded: Set<String>): Boolean =
+        excluded.isNotEmpty() && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && isDeviceOwner(context) &&
+            effective(GuardPolicy.get(context).dpc).getValue("always_on_vpn") && !AdminState.isPaused(context)
+
+    /** VPN תמיד מופעל; עם רשימת היתר (10+). חבילה שהוסרה ברגע זה — מנסים שוב בלי הרשימה (לא נכשלים). */
+    private fun setAlwaysOn(dpm: DevicePolicyManager, admin: android.content.ComponentName, pkg: String,
+                            lockdown: Boolean, allow: Set<String>) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            dpm.setAlwaysOnVpnPackage(admin, pkg, lockdown)
+            return
         }
-        dpm.setAlwaysOnVpnPackage(admin, context.packageName, lockdown, bypassPackages)
+        try {
+            dpm.setAlwaysOnVpnPackage(admin, pkg, lockdown, if (lockdown) allow else emptySet())
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.w(TAG, "lockdown allowlist: a package is gone — applying without it")
+            dpm.setAlwaysOnVpnPackage(admin, pkg, lockdown, emptySet())
+        }
     }
 
     data class Result(val applied: List<String>, val failed: List<String>, val pending: List<String> = emptyList()) {
@@ -121,8 +148,8 @@ object DeviceOwnerManager {
         if (!isDeviceOwner(context)) return null
         val dpm = dpm(context) ?: return null
         val admin = DeviceAdmin.component(context)
-        val want = effective(policy.dpc)
-        val paused = AdminState.isPaused(context)   // מצב תחזוקה — נעילת ה-VPN מורפה זמנית
+        val paused = AdminState.isPaused(context)   // השהיה שהמנהל אישר — הטלפון פתוח (PAUSED)
+        val want = if (paused) PAUSED else effective(policy.dpc)
         val applied = mutableListOf<String>()
         val failed = mutableListOf<String>()
         val pending = mutableListOf<String>()
@@ -136,36 +163,28 @@ object DeviceOwnerManager {
             }
         }
 
-        step("block_uninstall") { dpm.setUninstallBlocked(admin, context.packageName, want.getValue("block_uninstall")) }
-        // lockdown: אין חיבור ישיר מחוץ ל-VPN, מלבד FilterPhone ו-YouTube שהוחרגו במפורש.
+        step("block_uninstall") {
+            dpm.setUninstallBlocked(admin, context.packageName, want.getValue("block_uninstall"))
+            // אנדרואיד 11+: גם "עצירה בכוח" וניקוי נתונים של FilterPhone חסומים (אחרת עוצרים את המגן)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                dpm.setUserControlDisabledPackages(admin,
+                    if (want.getValue("block_uninstall")) listOf(context.packageName) else emptyList())
+            }
+        }
+        // lockdown: אין חיבור ישיר מחוץ ל-VPN, מלבד FilterPhone והאפליקציות שהוחרגו במפורש (VpnBypass).
         // לפני שיש הגדרות VPN (מיד אחרי ההקמה, לפני ההפעלה בקוד) לא נועלים — ממתינים להגדרות.
+        // בהשהיה: "תמיד מופעל" מבוטל לגמרי (ה-VPN כבוי) וחוזר בסוף ההשהיה.
         val vpnReady = TunnelManager.isInitialized && TunnelManager.hasConfig()
         if (want.getValue("always_on_vpn") && !vpnReady) {
             pending += "always_on_vpn"
         } else {
             step("always_on_vpn") {
-                // דורש ששירות ה-VPN של האפליקציה תומך ב"תמיד מופעל" (WireGuard תומך).
-                // בהשהיה (מצב תחזוקה) משאירים VPN תמיד-מופעל אבל בלי נעילה (lockdown=false), כדי שיהיה
-                // אינטרנט גם אם מכבים את ה-VPN לרגע. בפקיעת ההשהיה החלה חוזרת ומחזירה את הנעילה.
                 if (want.getValue("always_on_vpn")) {
-                    val lockdownEnabled = !paused
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        // Android 10+: גם במצב lockdown, אפשר ל-YouTube הרשמית לצאת ישירות מה-VPN.
-                        // הרשימה מכילה רק את YouTube הרשמית אם היא מותקנת, כדי לא לשבור הקמה.
-                        val directNetworkPackages = if (lockdownEnabled) {
-                            VpnConfigFactory.installedYouTubePackages(context)
-                        } else {
-                            emptySet()
-                        }
-                        dpm.setAlwaysOnVpnPackage(
-                            admin, context.packageName, lockdownEnabled, directNetworkPackages
-                        )
-                    } else {
-                        // Android 9 ומטה לא תומך ברשימת bypass ל-lockdown.
-                        dpm.setAlwaysOnVpnPackage(admin, context.packageName, lockdownEnabled)
-                    }
+                    val bypass = runCatching { VpnBypass.current(context).excluded }.getOrDefault(emptySet())
+                    setAlwaysOn(dpm, admin, context.packageName, lockdown = true, bypass)
+                } else if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) {
+                    dpm.setAlwaysOnVpnPackage(admin, null, false)
                 }
-                else if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) dpm.setAlwaysOnVpnPackage(admin, null, false)
             }
         }
         for ((key, restrictions) in RESTRICTIONS) {
@@ -179,7 +198,11 @@ object DeviceOwnerManager {
             // מכבה DNS פרטי שכבר הוגדר (ההגבלה רק מונעת שינוי מעכשיו)
             step("private_dns_mode") { dpm.setGlobalPrivateDnsModeOpportunistic(admin) }
         }
-        step("hide_blocked_apps") { hideApps(context, dpm, policy, want.getValue("hide_blocked_apps")) }
+        step("hide_blocked_apps") { applyBlockedApps(context, dpm, policy, appMode(want)) }
+        step("support_message") {
+            dpm.setShortSupportMessage(admin, context.getString(R.string.admin_support_short))
+            dpm.setLongSupportMessage(admin, context.getString(R.string.admin_support_long))
+        }
         step("lock_task_packages") {
             val pk = policy.dpc?.optJSONArray("lock_task_packages")?.let { a -> (0 until a.length()).map { a.optString(it) } }
                 ?: emptyList()
@@ -211,15 +234,37 @@ object DeviceOwnerManager {
         return result
     }
 
-    /** אפליקציות חסומות (בטלפון) מוסתרות לגמרי; מה שהוסר מהרשימה — חוזר. */
-    private fun hideApps(context: Context, dpm: DevicePolicyManager, policy: GuardPolicy.Policy, hide: Boolean) {
+    private fun appMode(want: Map<String, Boolean>): AppMode = when {
+        want["suspend_blocked_apps"] == true -> AppMode.SUSPEND
+        want["hide_blocked_apps"] == true -> AppMode.HIDE
+        else -> AppMode.NONE
+    }
+
+    /**
+     * אפליקציות חסומות (בטלפון): "אפור" (setPackagesSuspended — האייקון נשאר, לחיצה מציגה "חסום על ידי
+     * המנהל" עם ההודעה שלנו) או מוסתרות לגמרי. מה שהוסר מהרשימה — חוזר. אפליקציה שעוד לא מותקנת לא
+     * נרשמת כ"הוחלה", כדי שתיחסם ברגע שתותקן (PackageWatch / הסנכרון התקופתי).
+     */
+    private fun applyBlockedApps(context: Context, dpm: DevicePolicyManager, policy: GuardPolicy.Policy, mode: AppMode) {
         val admin = DeviceAdmin.component(context)
         val p = prefs(context)
-        val before = p.getStringSet(K_HIDDEN, emptySet())!!.toSet()
-        val wanted = if (hide) policy.apps - GuardPolicy.untouchable(context) else emptySet()
-        for (pkg in wanted - before) runCatching { dpm.setApplicationHidden(admin, pkg, true) }
-        for (pkg in before - wanted) runCatching { dpm.setApplicationHidden(admin, pkg, false) }
-        p.edit().putStringSet(K_HIDDEN, wanted).apply()
+        val hiddenBefore = p.getStringSet(K_HIDDEN, emptySet())!!.toSet()
+        val suspendedBefore = p.getStringSet(K_SUSPENDED, emptySet())!!.toSet()
+        val blocked = policy.apps - GuardPolicy.untouchable(context)
+        val wantHidden = if (mode == AppMode.HIDE) blocked else emptySet()
+        val wantSuspended = if (mode == AppMode.SUSPEND) blocked else emptySet()
+        for (pkg in hiddenBefore - wantHidden) runCatching { dpm.setApplicationHidden(admin, pkg, false) }
+        (suspendedBefore - wantSuspended).takeIf { it.isNotEmpty() }?.let { off ->
+            runCatching { dpm.setPackagesSuspended(admin, off.toTypedArray(), false) }
+        }
+        val hidden = wantHidden.filterTo(HashSet()) { pkg ->
+            runCatching { dpm.setApplicationHidden(admin, pkg, true) || dpm.isApplicationHidden(admin, pkg) }
+                .getOrDefault(false)
+        }
+        val notSuspended = if (wantSuspended.isEmpty()) emptySet() else
+            runCatching { dpm.setPackagesSuspended(admin, wantSuspended.toTypedArray(), true).toSet() }
+                .getOrDefault(wantSuspended)
+        p.edit().putStringSet(K_HIDDEN, hidden).putStringSet(K_SUSPENDED, wantSuspended - notSuspended).apply()
     }
 
     /** ברירת המחדל מיד בסיום ההקמה (לפני שיש מדיניות מהשרת). */
@@ -234,14 +279,16 @@ object DeviceOwnerManager {
         if (!isDeviceOwner(context)) return true
         val dpm = dpm(context) ?: return false
         val admin = DeviceAdmin.component(context)
-        // לפני clearDeviceOwnerApp צריך לבטל גם אפליקציות שהוחבאו על ידי DPC; אחרי ההסרה
-        // כבר לא ניתן לשנות את מצב ההסתרה שלהן באמצעות DevicePolicyManager.
-        runCatching { hideApps(context, dpm, GuardPolicy.get(context), false) }
-            .onFailure { Log.w(TAG, "unhide apps before removing management failed", it) }
+        // לפני clearDeviceOwnerApp: מחזירים אפליקציות שהוסתרו/הושבתו — אחרי ההסרה כבר אי אפשר.
+        runCatching { applyBlockedApps(context, dpm, GuardPolicy.get(context), AppMode.NONE) }
+            .onFailure { Log.w(TAG, "restore blocked apps before removing management failed", it) }
         runCatching {
             RESTRICTIONS.values.flatten().forEach { dpm.clearUserRestriction(admin, it) }
             if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) dpm.setAlwaysOnVpnPackage(admin, null, false)
             dpm.setUninstallBlocked(admin, context.packageName, false)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) dpm.setUserControlDisabledPackages(admin, emptyList())
+            dpm.setShortSupportMessage(admin, null)
+            dpm.setLongSupportMessage(admin, null)
         }
         return try {
             @Suppress("DEPRECATION")

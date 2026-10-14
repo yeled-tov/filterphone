@@ -41,6 +41,7 @@ from .catalog import (
     LEVELS,
     Compiled,
     DeviceSettings,
+    clean_cert,
     clean_package,
     compile_settings,
     policy_checksum,
@@ -76,7 +77,8 @@ _HB_BOOL = ("device_owner", "device_admin", "battery_unrestricted", "background_
 _HB_SECTIONS = {
     "vpn": {"state": str, "handshake_age_s": int, "always_on": bool, "lockdown": bool, "last_health_ok": int,
             "reconnects": int, "error": str},
-    "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool},
+    "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool,
+                      "self_heal": bool, "restored": int},
     "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
     "dpc": {"applied": list, "failed": list, "always_on_vpn": str, "lockdown": bool, "frp": bool},
     "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int,
@@ -125,7 +127,30 @@ def sanitize_heartbeat(hb: dict) -> dict:
             sec = {f: v for f, t in fields.items() if (v := _clip(raw.get(f), t)) is not None}
             if sec:
                 out[section] = sec
+    if (bypass := _clean_bypass_report(hb.get("vpn_bypass"))) is not None:
+        out["vpn_bypass"] = bypass
     return out
+
+
+def _clean_bypass_report(raw) -> dict | None:
+    """דיווח 'מחוץ ל-VPN': applied (מוחרגות עכשיו), mismatch (חתימה לא תואמת לנעילה),
+    certs (חבילה → SHA-256 של תעודת החתימה — מידע ציבורי שבכל APK), lockdown_conflict (אנדרואיד 9-)."""
+    if not isinstance(raw, dict):
+        return None
+    out: dict = {}
+    for k in ("applied", "mismatch"):
+        if isinstance(raw.get(k), list):
+            out[k] = sorted({p for p in (clean_package(str(x)) for x in raw[k][:20]) if p})
+    if isinstance(raw.get("certs"), dict):
+        certs = {}
+        for pkg, cert in list(raw["certs"].items())[:20]:
+            p, c = clean_package(str(pkg)), clean_cert(cert)
+            if p and c:
+                certs[p] = c
+        out["certs"] = certs
+    if isinstance(raw.get("lockdown_conflict"), bool):
+        out["lockdown_conflict"] = raw["lockdown_conflict"]
+    return out or None
 
 
 def _dig(d: dict, path: tuple[str, ...]):
@@ -206,6 +231,7 @@ class Services:
         self.pool = db.Pool(self.cfg.db_path, size=self.cfg.db_pool_size)
         try:
             self.backfill_policy_checksums()
+            self.refresh_stale_policies()
             self.seed_profiles()
         except sqlite3.Error as e:            # מסד ישן שעוד לא עבר הגירה (כלי שורת פקודה) — לא עוצרים
             log.warning("startup data step skipped: %s", e)
@@ -276,6 +302,20 @@ class Services:
                           " WHERE id = ? AND policy_checksum = ''",
                           (policy_checksum(r["level"], self.compiled(r)), db.now(), r["id"]))
         return len(rows)
+
+    def refresh_stale_policies(self) -> int:
+        """אחרי עדכון שרת שמשנה את מה שהטלפון אוכף (קטלוג, ברירות מחדל): גרסת מדיניות חדשה רק
+        למכשירים שהטביעה שלהם השתנתה — כדי שיקבלו את השינוי בדיווח הבא. דטרמיניסטי: בלי שינוי אין גרסה."""
+        bumped = 0
+        with self.db() as c, db.transaction(c):
+            rows = c.execute("SELECT id, level, policy, policy_checksum FROM devices WHERE policy_checksum != ''")
+            for r in rows.fetchall():
+                if policy_checksum(r["level"], self.compiled(r)) != r["policy_checksum"]:
+                    self.bump_policy(c, r["id"])
+                    bumped += 1
+        if bumped:
+            log.info("policy refreshed for %d devices after a catalog change", bumped)
+        return bumped
 
     def device_policy(self, row: sqlite3.Row) -> dict:
         """המדיניות לטלפון, עם גרסה וטביעה (הטלפון מאשר את הגרסה שהחיל)."""
@@ -1019,7 +1059,7 @@ class Services:
         out = self._device_row_out(r, peers, self.daily_stats(), db.now())
         settings = DeviceSettings.load(r["policy"])
         comp = compile_settings(r["level"], settings)
-        blocked = set(comp.apps)
+        blocked = set(comp.apps) | set(comp.split_apps)
         out.update({
             "settings": settings.as_dict(),
             "known_app_hosts": {p: list(KNOWN_APP_HOSTS.get(p, ())) for p in
@@ -1029,7 +1069,8 @@ class Services:
                          "video": comp.video, "app_images": comp.app_images,
                          "needs_guard": any(CATALOG[o].needs_guard for o in settings.options)
                          or any(r["mode"] != "network" for r in settings.app_rules.values()),
-                         "protections": list(comp.protections), "dpc": comp.dpc},
+                         "protections": list(comp.protections), "dpc": comp.dpc,
+                         "split_apps": list(comp.split_apps), "vpn_bypass": comp.vpn_bypass},
             "customer": dict(cust) if cust else None,
             "requests": [{**dict(q), "options": _json_list(q["options"])} for q in reqs],
             "apps": [{**a, "blocked": a["package"] in blocked} for a in _json_list(r["apps"])],
@@ -1054,7 +1095,7 @@ class Services:
         if "status" in allowed and allowed["status"] not in ("active", "disabled"):
             raise ApiError(400, "סטטוס לא חוקי")
         policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc",
-                       "keywords")
+                       "keywords", "vpn_bypass")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
@@ -1120,6 +1161,40 @@ class Services:
             new = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
         self.push_device(new)      # פרוקסי → מדיניות מלאה שוב
         return self.device_detail(device_id)
+
+    def device_resume(self, row: sqlite3.Row) -> dict:
+        """הלקוח לחץ "החזר הגנה" בזמן השהיה: גם בשרת ההשהיה מסתיימת מיד (אחרת הפרוקסי היה נשאר
+        "שקוף" עד סוף התוקף). תמיד מותר — זה רק מחזיר הגנה."""
+        with self.db() as c, db.transaction(c):
+            cur = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
+            was_paused = self.is_paused(cur)
+            c.execute("UPDATE devices SET pause_until = NULL, pause_reason = '', pause_nonce = '' WHERE id = ?",
+                      (row["id"],))
+            if was_paused:
+                self.log_device(c, row["id"], "resumed", "הלקוח החזיר את ההגנה מהטלפון")
+                self.audit(f"device:{row['id']}", "resume", f"device:{row['id']}", "from phone", c)
+            new = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
+        self.push_device(new)
+        return {"ok": True, "was_paused": was_paused}
+
+    def device_uninstalled(self, row: sqlite3.Row) -> dict:
+        """הלקוח בחר "הסרת הכול" בזמן השהיה מאושרת: הטלפון מסיר את הניהול, ה-VPN, התעודה והאפליקציה.
+        בשרת — המכשיר מושבת (הכתובת והאסימון לא עובדים יותר) ונרשם ביומן. התקנה מחדש = שחזור לפי
+        מספר הטלפון. בלי השהיה בתוקף — נדחה ונרשם כניסיון עקיפה."""
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            cur = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
+            if not self.is_paused(cur, t):
+                self.log_device(c, row["id"], "uninstall_blocked", "ניסיון הסרה בלי השהיה מאושרת")
+                raise ApiError(409, "הסרה אפשרית רק בזמן השהיה שהמנהל אישר")
+            c.execute("UPDATE devices SET status = 'disabled', pause_until = NULL, pause_reason = '', "
+                      "pause_nonce = '', token_hash = NULL WHERE id = ?", (row["id"],))
+            self.log_device(c, row["id"], "uninstalled", "הלקוח הסיר את ההגנה מהטלפון (בזמן השהיה)")
+            self.audit(f"device:{row['id']}", "uninstall", f"device:{row['id']}", "during authorized pause", c)
+            new = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()
+        self.wg.remove_peer(new["public_key"])
+        self.push_device(new)
+        return {"ok": True}
 
     def request_unmanage(self, device_id: int, admin: str) -> dict:
         """בקשה מאושרת להסרת ניהול: הטלפון יסיר את עצמו כ-Device Owner בדיווח הבא (clearDeviceOwnerApp).

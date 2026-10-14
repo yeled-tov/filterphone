@@ -63,7 +63,7 @@ def seed(svc: Services) -> None:
     people = [
         ("משה כהן", "050-1234567", "moshe@example.com", 1, ["whatsapp_profile", "whatsapp_status", "play_store",
                                                            "browsers_other", "apk_sites"], "גם לחסום את אתר X בבקשה"),
-        ("שרה לוי", "052-7654321", "", 2, ["instagram", "tiktok", "facebook"], ""),
+        ("שרה לוי", "052-7654321", "", 2, ["instagram", "tiktok", "facebook", "youtube"], ""),
         ("יעקב פרידמן", "053-1112223", "yf@example.org", 2, ["whatsapp_media", "video_off"],
          "יש לי ילדים בבית — הכי מחמיר שאפשר בוואטסאפ"),
         ("אברהם ברגר", "054-9998887", "", 3, ["aliexpress", "temu", "shein"], ""),
@@ -88,8 +88,8 @@ def seed(svc: Services) -> None:
         {"package": "com.king.candycrushsaga", "label": "Candy Crush"}, {"package": "il.co.mot.rav_kav", "label": "רב-קו"},
     ], {"accessibility": True, "device_owner": False, "always_on": True, "lockdown": True, "ca_installed": True,
         "private_dns": "off"})
-    svc.device_request_change(svc.device_row(galaxy["id"]), 2, ["whatsapp_profile", "play_store"],
-                              "אפשר לעבור לרמה 2?")
+    svc.device_request_change(svc.device_row(galaxy["id"]), 2, ["whatsapp_profile", "play_store", "youtube"],
+                              "אפשר לעבור לרמה 2? וגם לחסום יוטיוב")
     code = svc.create_code("משפחת וייס", 1, 3, 30)
     svc.enroll(code["code"], key(40), "הטלפון של אמא", "android", "1.1.0")
     # אירועים וסטטיסטיקה

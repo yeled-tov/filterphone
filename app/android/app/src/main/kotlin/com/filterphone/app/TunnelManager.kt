@@ -13,8 +13,6 @@ import com.wireguard.config.Config
 import com.wireguard.crypto.Key
 import com.wireguard.crypto.KeyPair
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.StringReader
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -55,6 +53,9 @@ object TunnelManager {
     @Volatile var lastError: String? = null
         private set
     @Volatile private var upSince = 0L
+    /** האפליקציות שהוחרגו מהמנהרה בחיבור הנוכחי (VpnBypass) — כדי לזהות שצריך לבנות מחדש. */
+    @Volatile var appliedBypass: Set<String> = emptySet()
+        private set
 
     private val tunnel = object : Tunnel {
         override fun getName() = TUNNEL_NAME
@@ -94,7 +95,7 @@ object TunnelManager {
     fun saveConfig(vpnJson: String) {
         val privateKey = store.get(K_PRIVATE_KEY) ?: throw IllegalStateException("no private key")
         val vpn = JSONObject(vpnJson)
-        VpnConfigFactory.build(vpn, privateKey, appContext)
+        VpnConfigFactory.build(vpn, privateKey)
         store.put(K_VPN_JSON, vpn.toString())
         store.put(K_CONFIG, null)
     }
@@ -103,13 +104,13 @@ object TunnelManager {
 
     fun hasPrivateKey(): Boolean = store.get(K_PRIVATE_KEY) != null
 
-    private fun loadConfig(useFallback: Boolean): Config? {
+    private fun loadConfig(useFallback: Boolean, excluded: Set<String>): Config? {
         val json = store.get(K_VPN_JSON)
         val privateKey = store.get(K_PRIVATE_KEY)
         if (json != null && privateKey != null) {
-            return VpnConfigFactory.build(JSONObject(json), privateKey, appContext, useFallback)
+            return VpnConfigFactory.build(JSONObject(json), privateKey, excluded, useFallback)
         }
-        return store.get(K_CONFIG)?.let { VpnConfigFactory.buildLegacy(it, appContext) }
+        return store.get(K_CONFIG)?.let { VpnConfigFactory.buildLegacy(it, excluded) }
     }
 
     private fun hasFallback(): Boolean =
@@ -129,24 +130,42 @@ object TunnelManager {
     fun connect(): Future<Tunnel.State> = worker.submit<Tunnel.State> {
         setWanted(true)
         backoff.succeeded()
-        bringUp()
+        if (AdminState.isPaused(appContext)) state else bringUp()   // בהשהיה מאושרת — ה-VPN כבוי
+    }
+
+    /**
+     * השהיה שהמנהל אישר: הטלפון פתוח — המנהרה יורדת (הרצון לחיבור נשמר, כדי שבסוף ההשהיה הכול
+     * יחזור לבד). רץ בחוט של המנהרה. מחזיר true אם ההשהיה בתוקף.
+     */
+    private fun pausedGate(): Boolean {
+        if (!AdminState.isPaused(appContext)) return false
+        if (state != Tunnel.State.DOWN) {
+            runCatching { worker.submit<Tunnel.State> { backend.setState(tunnel, Tunnel.State.DOWN, null) }.get(10, TimeUnit.SECONDS) }
+                .onFailure { Log.w(TAG, "tunnel down for pause failed", it) }
+            appliedBypass = emptySet()
+            Log.i(TAG, "protection paused by the administrator — tunnel down until the pause ends")
+        }
+        return true
     }
 
     private fun bringUp(): Tunnel.State {
-        // Must refresh the Device Owner lockdown allowlist before reconnecting the full-tunnel VPN.
-        // Failure to update this optional bypass must not prevent the VPN itself from connecting.
-        runCatching { DeviceOwnerManager.refreshYouTubeLockdownBypass(appContext) }
-            .onFailure { Log.w(TAG, "YouTube lockdown bypass refresh failed", it) }
-        val config = loadConfig(useFallback = false) ?: throw IllegalStateException("no vpn config")
+        // האפליקציות שמחוץ למנהרה (FilterTube וכו') — רק מה שמותקן ועבר את בדיקת החתימה.
+        // קודם רשימת ההיתר של lockdown (אחרת אנדרואיד חוסם להן את הרשת), ואז המנהרה עצמה.
+        // כשל בהחרגה לעולם לא מונע את ה-VPN: במקרה הגרוע — בלי החרגה (הכול בסינון).
+        val bypass = runCatching { VpnBypass.current(appContext) }
+            .onFailure { Log.w(TAG, "vpn bypass check failed", it) }.getOrDefault(VpnBypass.Decision.NONE)
+        runCatching { DeviceOwnerManager.refreshLockdownAllowlist(appContext, bypass.excluded) }
+            .onFailure { Log.w(TAG, "lockdown allowlist refresh failed", it) }
+        val config = loadConfig(useFallback = false, bypass.excluded) ?: throw IllegalStateException("no vpn config")
         try {
             val s = backend.setState(tunnel, Tunnel.State.UP, config)
-            onConnected()
+            onConnected(bypass.excluded)
             return s
         } catch (e: Exception) {
             if (e.isDnsFailure() && hasFallback()) {
                 Log.w(TAG, "endpoint name did not resolve — using the fallback address")
-                val s = backend.setState(tunnel, Tunnel.State.UP, loadConfig(useFallback = true)!!)
-                onConnected()
+                val s = backend.setState(tunnel, Tunnel.State.UP, loadConfig(useFallback = true, bypass.excluded)!!)
+                onConnected(bypass.excluded)
                 return s
             }
             lastError = e.message ?: e.javaClass.simpleName
@@ -156,10 +175,29 @@ object TunnelManager {
         }
     }
 
-    private fun onConnected() {
+    private fun onConnected(excluded: Set<String>) {
         lastError = null
+        appliedBypass = excluded
         backoff.succeeded()
         ProtectionState.setString(appContext, ProtectionState.VPN_ERROR, null)
+    }
+
+    /**
+     * רשימת האפליקציות שמחוץ למנהרה השתנתה (מדיניות חדשה, התקנה/הסרה/עדכון של FilterTube) —
+     * בונים את החיבור מחדש. GoBackend מוריד ומעלה עם ההגדרה החדשה; ב-lockdown אין דליפה בזמן הזה.
+     * לא עושה כלום אם המנהרה למטה (החיבור הבא ייבנה ממילא עם הרשימה העדכנית) או שאין שינוי.
+     */
+    fun refreshBypass(reason: String) {
+        if (!isInitialized || state != Tunnel.State.UP || !wantsConnection()) return
+        val want = runCatching { VpnBypass.current(appContext).excluded }.getOrNull() ?: return
+        if (want == appliedBypass) return
+        Log.i(TAG, "vpn bypass changed ($reason): ${appliedBypass.size} → ${want.size} apps — reconnecting")
+        worker.execute {
+            runCatching { bringUp() }.onFailure {
+                Log.w(TAG, "reconnect after bypass change failed", it)
+                Recovery.scheduleRetry(appContext, backoff.failed())
+            }
+        }
     }
 
     private fun Throwable.isDnsFailure(): Boolean =
@@ -178,6 +216,7 @@ object TunnelManager {
             return state == Tunnel.State.UP
         }
         if (!wantsConnection() || !hasConfig()) return false
+        if (pausedGate()) return false
         if (!isPermissionGranted()) {
             // בלי אישור VPN מהמשתמש אין מה לעשות ברקע — מוצג באפליקציה ובהתראה
             ProtectionState.setString(appContext, ProtectionState.VPN_ERROR, "vpn permission revoked")
@@ -207,10 +246,12 @@ object TunnelManager {
      */
     fun healthCheck(): Boolean {
         if (!isInitialized || !wantsConnection() || !hasConfig()) return false
+        if (pausedGate()) return true                        // מושהה בכוונה — "תקין"
         if (state != Tunnel.State.UP) return ensureConnected("health")
         val age = handshakeAgeMs()
         if (age != null && age < STALE_HANDSHAKE_MS) {
             ProtectionState.mark(appContext, ProtectionState.VPN_HEALTH_OK)
+            refreshBypass("health")            // רשת ביטחון: התקנה/הסרה שלא נקלטה בזמן אמת
             return true
         }
         val upFor = SystemClock.elapsedRealtime() - upSince
@@ -253,6 +294,7 @@ object TunnelManager {
 
     fun disconnect(): Future<Tunnel.State> = worker.submit<Tunnel.State> {
         setWanted(false)
+        appliedBypass = emptySet()
         backend.setState(tunnel, Tunnel.State.DOWN, null)
     }
 
@@ -283,6 +325,7 @@ object TunnelManager {
             "error" to (lastError ?: ProtectionState.string(appContext, ProtectionState.VPN_ERROR)),
             "lastHealthOkMs" to ProtectionState.time(appContext, ProtectionState.VPN_HEALTH_OK),
             "reconnects" to ProtectionState.count(appContext, ProtectionState.VPN_RECONNECTS),
+            "bypass" to appliedBypass.toList(),
         )
     }
 

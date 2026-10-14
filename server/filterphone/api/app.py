@@ -346,6 +346,7 @@ class DevicePatch(BaseModel):
     app_images: str | None = None
     dpc: dict | None = None
     keywords: dict | None = None
+    vpn_bypass: dict | None = None
 
 
 class PauseIn(BaseModel):
@@ -482,6 +483,18 @@ def _routes(app: FastAPI) -> None:
         if len(str(raw)) > 20_000:
             raise ApiError(413, "הדיווח גדול מדי")
         return svc.heartbeat(row, raw, client_ip(request))
+
+    @app.post("/v1/device/resume")
+    def device_resume(svc: SvcDep, row: DeviceRow):
+        """"החזר הגנה" מהטלפון בזמן השהיה — ההשהיה מסתיימת גם בשרת."""
+        _limit(device_limiter, f"res:{row['id']}")
+        return svc.device_resume(row)
+
+    @app.post("/v1/device/uninstalled")
+    def device_uninstalled(svc: SvcDep, row: DeviceRow):
+        """"הסרת הכול" מהטלפון — רק בזמן השהיה שהמנהל אישר."""
+        _limit(device_limiter, f"uni:{row['id']}")
+        return svc.device_uninstalled(row)
 
     @app.get("/v1/ca.crt")
     def ca(svc: SvcDep):

@@ -3,7 +3,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Granted only through the explicit root provisioning flow; not a normal runtime permission. -->
+    <!-- לא הרשאה רגילה: ניתנת רק בהקמה (root / adb: pm grant). מאפשרת להחזיר את מגן FilterPhone
+         מיד אם מכבים אותו בהגדרות הנגישות (AccessibilityGuard). בלעדיה — רק דיווח למנהל. -->
     <uses-permission
         android:name="android.permission.WRITE_SECURE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
@@ -14,6 +15,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- בקשה מהמשתמש לפטור מאופטימיזציית סוללה (חלון של המערכת — המשתמש מאשר) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- "הסרת הכול" (רק בהשהיה מאושרת): פתיחת חלון הסרת האפליקציה של אנדרואיד — המשתמש מאשר -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
 
     <application
         android:name=".FilterPhoneApp"
@@ -140,8 +143,9 @@
     </application>
 
     <queries>
-        <!-- נראות חבילה נדרשת כדי להחריג רק את אפליקציית YouTube הרשמית מה-VPN. FilterTube נשארת בתוך ה-VPN. -->
-        <package android:name="com.google.android.youtube" />
+        <!-- אפליקציות שמחוץ ל-VPN כברירת מחדל (VpnBypass): שתי הגרסאות של FilterTube -->
+        <package android:name="com.filtertube.app" />
+        <package android:name="com.filtertube.filtertube" />
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
@@ -157,4 +161,3 @@
         </intent>
     </queries>
 </manifest>
-

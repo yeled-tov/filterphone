@@ -6,12 +6,17 @@
     <string name="guard_screen_blocked">המסך הזה חסום בטלפון הזה (FilterPhone)</string>
     <string name="guard_profile_photo_blocked">תמונות פרופיל חסומות בטלפון הזה (FilterPhone)</string>
     <string name="guard_keyword_blocked">החיפוש הזה חסום בטלפון הזה (FilterPhone)</string>
+    <string name="guard_self_protected">ההגדרה הזו מוגנת על ידי מנהל הסינון (FilterPhone)</string>
     <string name="protection_channel">הגנת FilterPhone</string>
     <string name="protection_channel_desc">התראה קבועה כל עוד הסינון פעיל — כדי שאנדרואיד לא יעצור את ההגנה ברקע.</string>
     <string name="protection_title">FilterPhone</string>
     <string name="protection_on">הסינון פעיל</string>
     <string name="protection_reconnecting">מתחבר מחדש לסינון…</string>
     <string name="protection_needs_permission">נדרש אישור חיבור VPN — פתחו את FilterPhone</string>
+    <string name="protection_paused">ההגנה מושהית באישור המנהל — הטלפון פתוח עד לסיום ההשהיה</string>
+    <!-- מוצג על ידי אנדרואיד כשלוחצים על אפליקציה "אפורה" או על הגדרה שנחסמה (מנהל מכשיר) -->
+    <string name="admin_support_short">חסום על ידי מנהל הסינון (FilterPhone). לבקשת שינוי — באפליקציית FilterPhone.</string>
+    <string name="admin_support_long">הטלפון מנוהל על ידי FilterPhone. אפליקציות והגדרות מסוימות חסומות לפי המדיניות שנקבעה עם מנהל הסינון. כדי לבקש שינוי, פתחו את אפליקציית FilterPhone ובחרו "בקשת שינוי" או "תמיכה".</string>
     <string name="admin_add_explanation">מקשה על הסרת FilterPhone: כדי להסיר צריך קודם לבטל כאן את מנהל המכשיר, והמנהל מקבל על כך הודעה. (זה לא נועל את הטלפון — לנעילה מלאה יש הקמה כמנהל מכשיר מלא.)</string>
     <string name="admin_disable_warning">ביטול מנהל המכשיר מאפשר להסיר את FilterPhone. המנהל יקבל על כך הודעה.</string>
 </resources>

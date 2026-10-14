@@ -223,8 +223,10 @@ def test_app_rules_network_accessibility_both(env):
     r = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"app_rules": rules})
     assert r.status_code == 200, r.text
     pol = client.get("/v1/device", headers=dh).json()["device_policy"]
-    # בטלפון: רק accessibility / both. רשימת מחרוזות — גם גרסה ישנה של האפליקציה מבינה
-    assert pol["blocked_apps"] == ["com.example.chat", "com.google.android.googlequicksearchbox"]
+    # בטלפון: רק accessibility / both. רשימת מחרוזות — גם גרסה ישנה של האפליקציה מבינה.
+    # אפליקציית גוגל — רק המסכים שלה (ג'מיני ו-Circle to Search רצים מתוכה וממשיכים לעבוד)
+    assert pol["blocked_apps"] == ["com.example.chat"]
+    assert "com.google.android.googlequicksearchbox" in {s["package"] for s in pol["blocked_screens"]}
     assert {r_["package"]: r_["mode"] for r_ in pol["app_rules"]}["com.zhiliaoapp.musically"] == "network"
     # ברשת: השרתים של טיקטוק ושל האפליקציה עם הכתובת הידנית — בפרוקסי וב-AdGuard
     proxy = json.loads(svc.redis.hget("fp:policy", ip))
