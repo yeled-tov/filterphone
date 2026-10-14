@@ -1,10 +1,12 @@
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../api_client.dart';
 import '../app_controller.dart';
-import '../theme.dart';
 import '../config.dart';
+import '../theme.dart';
 import 'change_request_screen.dart';
 import 'home_screen.dart';
 
@@ -146,87 +148,144 @@ class AppStoreScreen extends StatefulWidget {
   State<AppStoreScreen> createState() => _AppStoreScreenState();
 }
 
+enum _StoreTab { all, updates, fresh }
+
+/// החנות של FilterPhone: רק אפליקציות שהמנהל אישר (מהשרת). בטלפון מנוהל (מנהל מכשיר) ההתקנה
+/// והעדכון נעשים ישירות דרך FilterPhone — גם כשהתקנת אפליקציות חסומה בטלפון. בלי מנהל מכשיר,
+/// או לאפליקציה בלי קובץ אצלנו — שולחים בקשה למנהל.
 class _AppStoreScreenState extends State<AppStoreScreen> {
+  _StoreTab _tab = _StoreTab.all;
   String _category = 'הכול';
   String _query = '';
-  late Future<List<Map<String, Object?>>> _installedFuture;
   final _search = TextEditingController();
+  Map<String, Map<String, Object?>> _states = {};
+  Timer? _poll;
 
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  static const _apps = <_StoreApp>[
-    _StoreApp('Waze', 'ניווט וחניה', 'com.waze', 'ניווט', Icons.navigation_rounded),
-    _StoreApp('Google Maps', 'מפות וניווט', 'com.google.android.apps.maps', 'ניווט', Icons.map_rounded),
-    _StoreApp('Spotify', 'מוזיקה והאזנה', 'com.spotify.music', 'מוזיקה', Icons.music_note_rounded),
-    _StoreApp('YouTube Music', 'מוזיקה וספריות', 'com.google.android.apps.youtube.music', 'מוזיקה', Icons.library_music_rounded),
-    _StoreApp('WhatsApp', 'הודעות ושיחות', 'com.whatsapp', 'תקשורת', Icons.chat_rounded),
-    _StoreApp('Gemini', 'עוזר AI', 'com.google.android.apps.bard', 'כלים', Icons.auto_awesome_rounded),
-    _StoreApp('Files', 'ניהול קבצים', 'com.google.android.documentsui', 'כלים', Icons.folder_rounded),
-  ];
+  AppController get c => widget.controller;
 
   @override
   void initState() {
     super.initState();
-    _installedFuture = widget.controller.native.installedApps();
+    c.addListener(_onController);
+    _loadStates();
+  }
+
+  @override
+  void dispose() {
+    c.removeListener(_onController);
+    _poll?.cancel();
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<StoreApp> get _apps => c.device?.storeApps ?? const [];
+
+  void _onController() => _loadStates();
+
+  Future<void> _loadStates() async {
+    final pkgs = _apps.map((a) => a.package).toList();
+    if (pkgs.isEmpty) return;
+    try {
+      final states = await c.native.storeAppStates(pkgs);
+      if (!mounted) return;
+      setState(() => _states = states);
+      final installing = states.values.any((s) => s['state'] == 'installing');
+      _poll?.cancel();
+      if (installing) _poll = Timer(const Duration(seconds: 2), _loadStates);
+    } on PlatformException catch (e) {
+      debugPrint('store states failed: $e');
+    }
+  }
+
+  int? _installed(StoreApp a) => (_states[a.package]?['installed_version'] as num?)?.toInt();
+  String? _state(StoreApp a) => _states[a.package]?['state'] as String?;
+  bool _hasUpdate(StoreApp a) {
+    final v = _installed(a);
+    return v != null && a.versionCode != null && v < a.versionCode!;
+  }
+
+  bool _isFresh(StoreApp a) {
+    final now = DateTime.now();
+    return (a.addedAt != null && now.difference(a.addedAt!).inDays < 30) ||
+        (a.updatedAt != null && now.difference(a.updatedAt!).inDays < 14);
   }
 
   Future<void> _reload() async {
-    setState(() {
-      _installedFuture = widget.controller.native.installedApps();
-    });
-    await _installedFuture;
+    await c.refresh(forceSync: true);
+    await _loadStates();
   }
 
-  Future<void> _requestInstall(_StoreApp app) async {
+  Future<void> _install(StoreApp a) async {
     final messenger = ScaffoldMessenger.of(context);
-    if (!(widget.controller.device?.isActive ?? false)) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('החנות זמינה לאחר שהמכשיר פעיל ומאושר.')),
-      );
+    try {
+      final r = await c.native.installStoreApp(a.raw);
+      final text = switch (r) {
+        'started' => 'מתקין את ${a.label}…',
+        'up_to_date' => '${a.label} כבר מעודכנת',
+        'busy' => 'התקנה אחרת בתהליך — נסו שוב בעוד רגע',
+        'not_owner' => 'בטלפון הזה ההתקנה נעשית דרך המנהל — נשלחת בקשה',
+        _ => 'לא ניתן להתקין את ${a.label} כרגע',
+      };
+      messenger.showSnackBar(SnackBar(content: Text(text)));
+      if (r == 'not_owner') await _request(a);
+    } on PlatformException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('ההתקנה נכשלה: ${e.message ?? e.code}')));
+    }
+    await _loadStates();
+  }
+
+  Future<void> _request(StoreApp? a) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!(c.device?.isActive ?? false)) {
+      messenger.showSnackBar(const SnackBar(content: Text('החנות זמינה לאחר שהמכשיר פעיל ומאושר.')));
       return;
     }
-
-    final ok = await widget.controller.requestChange(
-      note: 'בקשת התקנת אפליקציה: ${app.name} (${app.packageName})',
-    );
-    if (!mounted) return;
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? 'הבקשה ל${app.name} נשלחה. לאחר אישור, ההתקנה תבוצע דרך המנגנון המנוהל המתאים למכשיר.'
-              : (widget.controller.error ?? 'לא הצלחנו לשלוח את הבקשה.'),
+    var note = a == null ? '' : 'בקשת התקנת אפליקציה: ${a.label} (${a.package})';
+    if (a == null) {
+      final input = TextEditingController();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('בקשת אפליקציה'),
+          content: TextField(
+            controller: input,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'שם האפליקציה (ולמה היא נחוצה)'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ביטול')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('שליחה')),
+          ],
         ),
-      ),
-    );
+      );
+      if (ok != true || input.text.trim().isEmpty) return;
+      note = 'בקשת אפליקציה חדשה לחנות: ${input.text.trim()}';
+    }
+    final ok = await c.requestChange(note: note);
+    if (!mounted) return;
+    messenger.showSnackBar(SnackBar(
+        content: Text(ok ? 'הבקשה נשלחה למנהל. נעדכן כשהיא תטופל.' : (c.error ?? 'לא הצלחנו לשלוח את הבקשה.'))));
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final categories = ['הכול', ...{for (final app in _apps) app.category}];
-    final visible = _apps.where((app) {
-      final inCategory = _category == 'הכול' || app.category == _category;
-      final q = _query.trim().toLowerCase();
-      final matchesQuery = q.isEmpty ||
-          app.name.toLowerCase().contains(q) ||
-          app.subtitle.toLowerCase().contains(q) ||
-          app.category.toLowerCase().contains(q);
-      return inCategory && matchesQuery;
+    final apps = _apps;
+    final updates = apps.where(_hasUpdate).length;
+    final categories = ['הכול', ...{for (final a in apps) if (a.category.isNotEmpty) a.category}];
+    final q = _query.trim().toLowerCase();
+    final visible = apps.where((a) {
+      if (_tab == _StoreTab.updates && !_hasUpdate(a)) return false;
+      if (_tab == _StoreTab.fresh && !_isFresh(a)) return false;
+      if (_category != 'הכול' && a.category != _category) return false;
+      return q.isEmpty || a.label.toLowerCase().contains(q) || a.package.contains(q) ||
+          a.note.toLowerCase().contains(q);
     }).toList();
 
     return _SectionScaffold(
       title: 'חנות אפליקציות',
       actions: [
-        IconButton(
-          tooltip: 'רענון',
-          onPressed: _reload,
-          icon: const Icon(Icons.refresh_rounded),
-        ),
+        IconButton(tooltip: 'בקשת אפליקציה', onPressed: () => _request(null), icon: const Icon(Icons.add_circle_outline)),
+        IconButton(tooltip: 'רענון', onPressed: _reload, icon: const Icon(Icons.refresh_rounded)),
       ],
       child: RefreshIndicator(
         onRefresh: _reload,
@@ -236,7 +295,22 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: _StoreHero(controller: widget.controller),
+                child: _StoreHero(controller: c),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: SegmentedButton<_StoreTab>(
+                  segments: [
+                    const ButtonSegment(value: _StoreTab.all, label: Text('הכול'), icon: Icon(Icons.apps_rounded)),
+                    ButtonSegment(value: _StoreTab.updates, label: Text(updates > 0 ? 'עדכונים ($updates)' : 'עדכונים'),
+                        icon: const Icon(Icons.system_update_rounded)),
+                    const ButtonSegment(value: _StoreTab.fresh, label: Text('חדשות'), icon: Icon(Icons.fiber_new_rounded)),
+                  ],
+                  selected: {_tab},
+                  onSelectionChanged: (s) => setState(() => _tab = s.first),
+                ),
               ),
             ),
             SliverToBoxAdapter(
@@ -245,95 +319,91 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
                 child: TextField(
                   controller: _search,
                   onChanged: (value) => setState(() => _query = value),
-                  textDirection: TextDirection.rtl,
-                  decoration: const InputDecoration(
-                    hintText: 'חיפוש אפליקציות...',
-                    prefixIcon: Icon(Icons.search_rounded),
-                    suffixIcon: Icon(Icons.tune_rounded),
+                  decoration: const InputDecoration(hintText: 'חיפוש אפליקציות...', prefixIcon: Icon(Icons.search_rounded)),
+                ),
+              ),
+            ),
+            if (categories.length > 1)
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 58,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    scrollDirection: Axis.horizontal,
+                    itemBuilder: (context, index) => ChoiceChip(
+                      label: Text(categories[index]),
+                      selected: _category == categories[index],
+                      onSelected: (_) => setState(() => _category = categories[index]),
+                    ),
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemCount: categories.length,
                   ),
                 ),
               ),
-            ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 58,
-                child: ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  scrollDirection: Axis.horizontal,
-                  itemBuilder: (context, index) {
-                    final label = categories[index];
-                    final selected = _category == label;
-                    return ChoiceChip(
-                      label: Text(label),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _category = label),
-                      avatar: label == 'הכול' ? const Icon(Icons.apps_rounded, size: 18) : null,
-                    );
-                  },
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemCount: categories.length,
+            if (_tab == _StoreTab.updates && updates > 1 && c.deviceOwner)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: FilledButton.tonalIcon(
+                    onPressed: () async {
+                      for (final a in apps.where(_hasUpdate)) {
+                        await _install(a);
+                      }
+                    },
+                    icon: const Icon(Icons.update_rounded),
+                    label: const Text('עדכון הכול'),
+                  ),
                 ),
               ),
-            ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Text(
-                  'אפליקציות זמינות',
-                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-                ),
-              ),
-            ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              sliver: FutureBuilder<List<Map<String, Object?>>>(
-                future: _installedFuture,
-                builder: (context, snapshot) {
-                  final installed = <String>{
-                    for (final app in snapshot.data ?? const [])
-                      (app['package'] as String? ?? '').trim(),
-                  };
-                  if (visible.isEmpty) {
-                    return SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 36),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.search_off_rounded,
-                              size: 44,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'לא נמצאה אפליקציה מתאימה',
-                              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'נסה חיפוש אחר או קטגוריה אחרת.',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }
-                  return SliverList.separated(
-                    itemCount: visible.length,
-                    itemBuilder: (context, index) => _StoreAppCard(
-                      app: visible[index],
-                      installed: installed.contains(visible[index].packageName),
-                      onInstall: () => _requestInstall(visible[index]),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              sliver: visible.isEmpty
+                  ? SliverToBoxAdapter(child: _StoreEmpty(
+                      text: apps.isEmpty
+                          ? 'המנהל עוד לא הוסיף אפליקציות לחנות. אפשר לבקש אפליקציה בכפתור למטה.'
+                          : _tab == _StoreTab.updates ? 'כל האפליקציות מעודכנות ✓' : 'לא נמצאה אפליקציה מתאימה.',
+                      onRequest: () => _request(null)))
+                  : SliverList.separated(
+                      itemCount: visible.length,
+                      itemBuilder: (context, i) {
+                        final a = visible[i];
+                        return _StoreAppCard(
+                          app: a,
+                          installedVersion: _installed(a),
+                          state: _state(a),
+                          canInstall: c.deviceOwner && a.directInstall,
+                          onInstall: () => _install(a),
+                          onRequest: () => _request(a),
+                          onOpen: () => c.native.openApp(a.package),
+                        );
+                      },
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
                     ),
-                    separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  );
-                },
-              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _StoreEmpty extends StatelessWidget {
+  const _StoreEmpty({required this.text, required this.onRequest});
+  final String text;
+  final VoidCallback onRequest;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Column(children: [
+        Icon(Icons.storefront_outlined, size: 44, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(height: 10),
+        Text(text, textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(onPressed: onRequest, icon: const Icon(Icons.add), label: const Text('בקשת אפליקציה')),
+      ]),
     );
   }
 }
@@ -346,6 +416,7 @@ class _StoreHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final active = controller.device?.isActive ?? false;
+    final managed = controller.deviceOwner;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -353,10 +424,7 @@ class _StoreHero extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [
-            theme.colorScheme.primaryContainer,
-            theme.colorScheme.surface,
-          ],
+          colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surface],
         ),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
@@ -365,10 +433,7 @@ class _StoreHero extends StatelessWidget {
           Container(
             width: 52,
             height: 52,
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-              shape: BoxShape.circle,
-            ),
+            decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
             child: const Icon(Icons.verified_rounded, color: Colors.white, size: 28),
           ),
           const SizedBox(width: 14),
@@ -376,13 +441,13 @@ class _StoreHero extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  active ? 'אפליקציות באישור FilterPhone' : 'האפליקציות זמינות לאחר אישור המכשיר',
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
-                ),
+                Text(active ? 'אפליקציות באישור FilterPhone' : 'האפליקציות זמינות לאחר אישור המכשיר',
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
                 Text(
-                  'קטלוג בסיסי. בהמשך ניתן לחבר אותו לקטלוג האפליקציות המנוהל מהשרת.',
+                  managed
+                      ? 'התקנה ועדכונים ישירות מכאן — גם כשהתקנת אפליקציות חסומה בטלפון.'
+                      : 'בוחרים אפליקציה ושולחים בקשה — המנהל מאשר ומתקין.',
                   style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
@@ -397,17 +462,46 @@ class _StoreHero extends StatelessWidget {
 class _StoreAppCard extends StatelessWidget {
   const _StoreAppCard({
     required this.app,
-    required this.installed,
+    required this.installedVersion,
+    required this.state,
+    required this.canInstall,
     required this.onInstall,
+    required this.onRequest,
+    required this.onOpen,
   });
 
-  final _StoreApp app;
-  final bool installed;
+  final StoreApp app;
+  final int? installedVersion;
+  final String? state;
+  final bool canInstall;
   final VoidCallback onInstall;
+  final VoidCallback onRequest;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final installed = installedVersion != null;
+    final update = installed && app.versionCode != null && installedVersion! < app.versionCode!;
+    final installing = state == 'installing';
+    final failed = state?.startsWith('failed') == true;
+    final Widget action;
+    if (installing) {
+      action = const SizedBox(width: 84, child: Center(child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))));
+    } else if (update && canInstall) {
+      action = FilledButton(onPressed: onInstall, child: const Text('עדכון'));
+    } else if (installed) {
+      action = OutlinedButton(onPressed: onOpen, child: const Text('פתיחה'));
+    } else if (canInstall) {
+      action = FilledButton(onPressed: onInstall, child: const Text('התקנה'));
+    } else {
+      action = FilledButton.tonal(onPressed: onRequest, child: const Text('בקשה'));
+    }
+    final details = [
+      if (app.category.isNotEmpty) app.category,
+      if (app.versionName.isNotEmpty) 'גרסה ${app.versionName}',
+      if (update) 'יש עדכון',
+    ].join(' · ');
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
@@ -417,50 +511,33 @@ class _StoreAppCard extends StatelessWidget {
             Container(
               width: 52,
               height: 52,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(app.icon, size: 28, color: theme.colorScheme.primary),
+              decoration: BoxDecoration(color: theme.colorScheme.primaryContainer, borderRadius: BorderRadius.circular(16)),
+              child: Icon(Icons.android_rounded, size: 28, color: theme.colorScheme.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(app.name, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
-                  Text(app.subtitle, style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 5),
-                  Text(app.category, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+                  Text(app.label, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  if (app.note.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(app.note, style: theme.textTheme.bodySmall),
+                  ],
+                  if (details.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(details, style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary)),
+                  ],
+                  if (failed) ...[
+                    const SizedBox(height: 4),
+                    Text('ההתקנה האחרונה נכשלה — אפשר לנסות שוב',
+                        style: theme.textTheme.labelSmall?.copyWith(color: StatusColors.bad(context))),
+                  ],
                 ],
               ),
             ),
             const SizedBox(width: 8),
-            if (installed)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-                decoration: BoxDecoration(
-                  color: StatusColors.ok(context).withValues(alpha: .10),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'מותקן',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: StatusColors.ok(context),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              )
-            else
-              FilledButton(
-                onPressed: onInstall,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(84, 42),
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                ),
-                child: const Text('בקש התקנה'),
-              ),
+            action,
           ],
         ),
       ),
@@ -1030,15 +1107,6 @@ class _ProtectionRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _StoreApp {
-  const _StoreApp(this.name, this.subtitle, this.packageName, this.category, this.icon);
-  final String name;
-  final String subtitle;
-  final String packageName;
-  final String category;
-  final IconData icon;
 }
 
 class _ChatMessage {

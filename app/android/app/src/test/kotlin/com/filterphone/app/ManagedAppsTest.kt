@@ -54,4 +54,13 @@ class ManagedAppsTest {
         assertFalse(ManagedApps.needsInstall(a, installedVersion = 12))
         assertFalse(ManagedApps.needsInstall(a, installedVersion = 13))   // לא מורידים גרסה
     }
+
+    @Test
+    fun storeItemNeedsEverythingForASafeInstall() {
+        val ok = ManagedApps.fromStoreItem(app(required = false))
+        assertEquals("org.example.app", ok?.pkg)                     // מהחנות — גם בלי "חובה"
+        assertEquals(null, ManagedApps.fromStoreItem(app(url = "http://x/a.apk")))
+        assertEquals(null, ManagedApps.fromStoreItem(app(hash = "zz")))
+        assertEquals(null, ManagedApps.fromStoreItem(JSONObject().put("package", "store.only")))
+    }
 }

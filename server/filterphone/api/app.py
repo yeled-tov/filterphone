@@ -22,8 +22,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import hashlib
 import logging
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -60,6 +62,8 @@ device_limiter = RateLimiter(limit=30, window_s=600)       # בקשות שינו
 heartbeat_limiter = RateLimiter(limit=40, window_s=600)    # דיווח תקופתי: כל 15 דקות + רענון ידני
 rekey_limiter = RateLimiter(limit=3, window_s=86400)       # החלפת מפתח VPN — נדיר מאוד
 restore_limiter = RateLimiter(limit=8, window_s=3600)      # שחזור לפי מספר טלפון — לכל כתובת ולכל מספר
+MAX_APK_UPLOAD = 300 * 1024 * 1024
+_APK_FILE = re.compile(r"^[A-Za-z][A-Za-z0-9_.]{2,199}-\d{1,10}\.apk$")
 
 
 def build_services() -> Services:
@@ -656,6 +660,38 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/admin/apps", status_code=201)
     def create_app(body: ManagedAppIn, svc: SvcDep, admin: AdminRow):
         return svc.save_managed_app(admin["username"], body.model_dump())
+
+    @app.put("/v1/admin/apps/upload", status_code=201)
+    async def upload_apk(request: Request, svc: SvcDep, admin: AdminRow):
+        """העלאת APK לחנות (גוף הבקשה = הקובץ). השרת קורא ממנו שם חבילה וגרסה, מחשב SHA-256,
+        ושומר — ואז טלפונים במנהל מכשיר מתקינים/מעדכנים ממנו (גם כשההתקנות חסומות בטלפון)."""
+        d = svc.apps_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = d / f".upload-{os.getpid()}-{time.time_ns()}"
+        digest = hashlib.sha256()
+        total = 0
+        try:
+            with open(tmp, "wb") as f:
+                async for chunk in request.stream():
+                    total += len(chunk)
+                    if total > MAX_APK_UPLOAD:
+                        raise ApiError(413, "הקובץ גדול מדי (עד 300MB)")
+                    digest.update(chunk)
+                    f.write(chunk)
+            if total == 0:
+                raise ApiError(400, "לא התקבל קובץ")
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        return await asyncio.to_thread(svc.store_apk, admin["username"], tmp, digest.hexdigest())
+
+    @app.get("/v1/apps/{name}")
+    def apk_file(name: str, svc: SvcDep):
+        """קובצי ה-APK של החנות (ציבורי — האפליקציות שהמנהל אישר; הטלפון בודק SHA-256 לפני התקנה)."""
+        path = svc.apps_dir() / name
+        if not _APK_FILE.match(name) or not path.is_file():
+            raise ApiError(404, "הקובץ לא נמצא")
+        return FileResponse(path, media_type="application/vnd.android.package-archive", filename=name)
 
     @app.patch("/v1/admin/apps/{app_id}")
     def update_app(app_id: int, body: ManagedAppIn, svc: SvcDep, admin: AdminRow):

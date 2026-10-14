@@ -25,6 +25,19 @@ __PUBLIC_HOST__ {
         respond 404
     }
 
+    # העלאת APK לחנות מהממשק (עד 300MB; ה-API בודק הרשאת מנהל ומגביל בעצמו)
+    handle /v1/admin/apps/upload {
+        request_body {
+            max_size 300MB
+        }
+        reverse_proxy 127.0.0.1:8090 {
+            transport http {
+                read_timeout 10m
+                write_timeout 10m
+            }
+        }
+    }
+
     handle {
         # תמונה לבדיקה בממשק הניהול: עד ~17MB (base64). כל השאר — ה-API מגביל לבד
         request_body {

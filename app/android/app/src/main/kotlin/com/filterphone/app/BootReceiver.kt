@@ -20,6 +20,9 @@ class BootReceiver : BroadcastReceiver() {
             // עדכון עצמי במנהל מכשיר: מחזירים מיד חסימות ששוחררו לזמן ההתקנה
             Recovery.runAsync(context) { SelfUpdate.restoreRestrictions(context) }
         }
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            Recovery.runAsync(context) { ManagedApps.restoreRestrictions(context) }
+        }
         if (!TunnelManager.wantsConnection() || !TunnelManager.hasConfig()) return
         if (!Recovery.startProtection(context)) {
             // השירות הקדמי לא הותר — מחברים ברקע, ואם נכשל JobScheduler ינסה שוב

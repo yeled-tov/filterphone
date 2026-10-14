@@ -35,6 +35,7 @@ from ..proxy.policy import LEVELS_KEY, POLICY_KEY, POLICY_REV_KEY
 from ..settings import Settings
 from . import compliance, db, security
 from .adguard import AdGuard, build_rules
+from .apk import ApkError, read_apk
 from .catalog import (
     CATALOG,
     KNOWN_APP_HOSTS,
@@ -1500,9 +1501,11 @@ class Services:
         out = []
         for a in self.managed_apps(enabled_only=True):
             entry = {"package": a["package"], "label": a["label"], "category": a["category"],
-                     "note": a["note"], "required": bool(a["required"])}
+                     "note": a["note"], "required": bool(a["required"]), "added_at": a["created_at"],
+                     "updated_at": a["updated_at"]}
             if a["apk_url"] and self._SHA256_RE.match(a["apk_sha256"] or "") and a["version_code"]:
-                entry.update(url=a["apk_url"], sha256=a["apk_sha256"], version_code=a["version_code"])
+                entry.update(url=a["apk_url"], sha256=a["apk_sha256"], version_code=a["version_code"],
+                             version_name=a["version_name"])
             out.append(entry)
         return out
 
@@ -1546,6 +1549,51 @@ class Services:
                           "WHERE id = ?", (*fields.values(), t, app_id))
                 self.audit(admin, "app_update", f"app:{app_id}", pkg, c)
         return {"id": app_id, "package": pkg}
+
+    APK_KEEP = 2                        # כמה גרסאות לשמור לכל אפליקציה (הנוכחית + הקודמת)
+
+    def apps_dir(self) -> Path:
+        return Path(self.cfg.data_dir) / "apps"
+
+    def store_apk(self, admin: str, tmp: Path, sha256: str) -> dict:
+        """המנהל העלה APK: קוראים ממנו את שם החבילה והגרסה, שומרים אותו אצלנו (https, עם SHA-256),
+        ומוסיפים/מעדכנים בקטלוג. טלפונים במנהל מכשיר יוכלו להתקין ולעדכן גם כשההתקנות חסומות."""
+        try:
+            info = read_apk(str(tmp))
+        except ApkError as e:
+            tmp.unlink(missing_ok=True)
+            raise ApiError(400, str(e)) from e
+        pkg = clean_package(info.package)
+        if not pkg or pkg == "com.filterphone.app":
+            tmp.unlink(missing_ok=True)
+            raise ApiError(400, "לא ניתן להוסיף את האפליקציה הזו לחנות")
+        name = f"{pkg}-{info.version_code}.apk"
+        dest = self.apps_dir() / name
+        os.replace(tmp, dest)
+        dest.chmod(0o644)
+        old = sorted(self.apps_dir().glob(f"{pkg}-*.apk"), key=lambda f: f.stat().st_mtime, reverse=True)
+        for f in old[self.APK_KEEP:]:
+            f.unlink(missing_ok=True)
+        url = f"https://{self.cfg.public_host}/v1/apps/{name}"
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM managed_apps WHERE package = ?", (pkg,)).fetchone()
+            if row is None:
+                app_id = c.execute(
+                    "INSERT INTO managed_apps (package, label, apk_url, apk_sha256, version_code, version_name,"
+                    " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                    (pkg, security.clean_text(info.label, 60) or pkg, url, sha256, info.version_code,
+                     security.clean_text(info.version_name, 40), t, t)).lastrowid
+                self.audit(admin, "app_upload", f"app:{app_id}", f"{pkg} {info.version_code} new", c)
+            else:
+                app_id = row["id"]
+                c.execute("UPDATE managed_apps SET apk_url = ?, apk_sha256 = ?, version_code = ?, version_name = ?,"
+                          " updated_at = ? WHERE id = ?",
+                          (url, sha256, info.version_code, security.clean_text(info.version_name, 40), t, app_id))
+                self.audit(admin, "app_upload", f"app:{app_id}", f"{pkg} {info.version_code}", c)
+        log.info("apk uploaded: %s %s (%s)", pkg, info.version_code, sha256[:12])
+        return {"id": app_id, "package": pkg, "label": info.label, "version_code": info.version_code,
+                "version_name": info.version_name, "sha256": sha256, "url": url}
 
     def delete_managed_app(self, app_id: int, admin: str) -> None:
         with self.db() as c, db.transaction(c):

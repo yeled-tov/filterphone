@@ -52,10 +52,12 @@ object SelfUpdate {
     private const val K_FIRST_SEEN = "first_seen"
     private const val K_STATE_AT = "state_at"
     private const val K_RELAXED = "relaxed_install_apps"
+    private const val K_RELAXED_AT = "relaxed_at"
     const val ACTION_RESULT = "com.filterphone.app.UPDATE_RESULT"
     const val MAX_BYTES = 200L * 1024 * 1024
     private const val METERED_AFTER_MS = 3L * 24 * 3600 * 1000
     private const val INSTALL_STALE_MS = 30L * 60 * 1000
+    private const val INSTALL_WINDOW_MS = 5L * 60 * 1000
     private val STEPS = longArrayOf(3_600_000, 3 * 3_600_000, 6 * 3_600_000, 12 * 3_600_000, 24 * 3_600_000)
     private val SHA_HEX = Regex("^[0-9a-f]{64}$")
 
@@ -160,7 +162,7 @@ object SelfUpdate {
 
         try {
             if (context.getSystemService(UserManager::class.java)?.hasUserRestriction(UserManager.DISALLOW_INSTALL_APPS) == true) {
-                prefs(context).edit().putBoolean(K_RELAXED, true).commit()
+                prefs(context).edit().putBoolean(K_RELAXED, true).putLong(K_RELAXED_AT, System.currentTimeMillis()).commit()
                 context.getSystemService(DevicePolicyManager::class.java)
                     ?.clearUserRestriction(DeviceAdmin.component(context), UserManager.DISALLOW_INSTALL_APPS)
             }
@@ -288,9 +290,16 @@ object SelfUpdate {
     fun restoreRestrictions(context: Context) {
         val p = prefs(context)
         if (!p.getBoolean(K_RELAXED, false)) return
+        p.edit().remove(K_RELAXED).remove(K_RELAXED_AT).commit()      // קודם — כדי ש-apply לא ידלג
         runCatching { DeviceOwnerManager.apply(context, GuardPolicy.get(context)) }
             .onFailure { Log.w(TAG, "restore restrictions failed", it) }
-        p.edit().remove(K_RELAXED).apply()
+    }
+
+    /** ההתקנה שחררה עכשיו את חסימת ההתקנות (לכמה דקות לכל היותר) — DeviceOwnerManager לא מחזיר אותה באמצע. */
+    fun installWindowOpen(context: Context): Boolean {
+        val p = prefs(context)
+        return p.getBoolean(K_RELAXED, false) &&
+            System.currentTimeMillis() - p.getLong(K_RELAXED_AT, 0L) < INSTALL_WINDOW_MS
     }
 
     private fun setState(context: Context, state: String, error: String?) {
@@ -340,9 +349,12 @@ class UpdateReceiver : BroadcastReceiver() {
                     }
                 }
             }
-            // התקנת אפליקציה מאושרת (קטלוג) — רק רישום; אין מצב לשחזר
-            ManagedApps.ACTION_RESULT -> android.util.Log.i("FilterPhone",
-                "managed install result: status=$status ${message.orEmpty().take(80)}")
+            // התקנה מהחנות / מהקטלוג: מחזירים את חסימת ההתקנות ומעדכנים את המצב
+            ManagedApps.ACTION_RESULT -> {
+                if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) return   // לא קורה במנהל מכשיר
+                ManagedApps.onResult(context.applicationContext, intent.getStringExtra(ManagedApps.EXTRA_PACKAGE),
+                    status == PackageInstaller.STATUS_SUCCESS, message)
+            }
         }
     }
 }

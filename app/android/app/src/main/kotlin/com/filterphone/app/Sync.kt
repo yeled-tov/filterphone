@@ -113,6 +113,8 @@ object Sync {
         if (first.optString("status") == "active") {
             runCatching { SelfUpdate.consider(context, first.optJSONObject("app_update")) }
                 .onFailure { Log.w(TAG, "self-update check failed", it) }
+            // התקנה מהחנות שהתוצאה שלה לא הגיעה — מחזירים את חסימת ההתקנות
+            runCatching { ManagedApps.restoreRestrictions(context, staleOnly = true) }
             // קטלוג מאושר: אפליקציות "חובה" חסרות מותקנות בשקט (רק במנהל מכשיר)
             runCatching { ManagedApps.sync(context, first.optJSONArray("managed_apps")) }
                 .onFailure { Log.w(TAG, "managed apps sync failed", it) }

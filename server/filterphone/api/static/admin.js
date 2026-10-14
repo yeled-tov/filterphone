@@ -337,6 +337,7 @@ const ROUTES = {
   devices: ["מכשירים", viewDevices],
   customers: ["לקוחות", viewCustomers],
   profiles: ["פרופילים מוכנים", viewProfiles],
+  apps: ["חנות אפליקציות", viewApps],
   events: ["חסימות אחרונות", viewEvents],
   test: ["בדיקת תמונה", viewTest],
   codes: ["קודי הפעלה", viewCodes],
@@ -869,6 +870,76 @@ function dpcCard(d, patch) {
     el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
       await patch({ dpc: { frp_accounts: lines(frp.value) } });
     } }, "שמירת FRP")));
+}
+
+/** החנות: אפליקציות שהמנהל אישר. העלאת APK = התקנה ועדכון ישירים בטלפונים מנוהלים. */
+async function viewApps() {
+  const { apps } = await api("/v1/admin/apps");
+  const file = el("input", { type: "file", accept: ".apk,application/vnd.android.package-archive" });
+  const progress = el("span", { class: "muted small" });
+  const upload = el("button", { class: "primary", onclick: async () => {
+    const f = file.files?.[0];
+    if (!f) { toast("בחרו קובץ APK", true); return; }
+    upload.disabled = true;
+    progress.textContent = `מעלה ${(f.size / 1048576).toFixed(1)}MB…`;
+    try {
+      const res = await fetch("/v1/admin/apps/upload", { method: "PUT", body: f,
+        headers: { "Content-Type": "application/vnd.android.package-archive", Authorization: `Bearer ${token}` } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `שגיאה ${res.status}`);
+      toast(`${data.label || data.package} ${data.version_name || ""} נוספה לחנות`);
+      render();
+    } catch (e) {
+      toast(e.message, true);
+    } finally {
+      upload.disabled = false;
+      progress.textContent = "";
+    }
+  } }, "העלאה");
+  const pkg = el("input", { class: "ltr", placeholder: "com.example.app" });
+  const label = el("input", { placeholder: "שם בחנות" });
+  const category = el("input", { placeholder: "קטגוריה (כלים, ניווט...)" });
+  const addStoreOnly = el("button", { class: "ghost", onclick: async () => {
+    await attempt(() => api("/v1/admin/apps", { method: "POST", body: { package: pkg.value.trim(), label: label.value, category: category.value } }), "נוספה");
+    render();
+  } }, "הוספה בלי קובץ");
+  const save = (a, changes, msg) => attempt(() => api(`/v1/admin/apps/${a.id}`, { method: "PATCH", body: { ...a, ...changes } }), msg).then(render, () => {});
+  const rows = apps.map((a) => {
+    const direct = Boolean(a.apk_url && a.version_code);
+    const sw = (key, title, sub) => {
+      const input = el("input", { type: "checkbox", checked: Boolean(a[key]), "aria-label": title,
+        onchange: (e) => save(a, { [key]: e.target.checked }, "נשמר") });
+      return el("label", { class: "row gap nowrap small", title: sub }, el("span", { class: "switch" }, input, el("span")), title);
+    };
+    return el("div", { class: "app-row" },
+      el("div", { class: "grow" }, el("b", {}, a.label || a.package), el("small", { class: "ltr" }, a.package),
+        el("small", {}, [a.category, direct ? `גרסה ${a.version_name || a.version_code} · התקנה ישירה` : "בלי קובץ — בקשה / התקנה ידנית",
+          `עודכן ${date(a.updated_at)}`].filter(Boolean).join(" · "))),
+      direct ? chip("APK אצלנו", "ok") : chip("ידני"),
+      sw("enabled", "מוצגת", "מופיעה בחנות בטלפונים"),
+      direct ? sw("required", "חובה", "מותקנת אוטומטית בכל טלפון מנוהל") : null,
+      el("button", { class: "ghost small", onclick: async () => {
+        const l = el("input", { value: a.label || "" });
+        const c = el("input", { value: a.category || "" });
+        const n = el("textarea", { rows: 2, value: a.note || "" });
+        if (!await dialog("עריכה", el("div", { class: "stack" }, el("label", {}, "שם", l), el("label", {}, "קטגוריה", c),
+          el("label", {}, "תיאור קצר", n)), "שמירה")) return;
+        await save(a, { label: l.value, category: c.value, note: n.value }, "נשמר");
+      } }, "עריכה"),
+      el("button", { class: "danger small", onclick: async () => {
+        if (!await confirmDialog(`להסיר את ${a.label || a.package} מהחנות?`, "הטלפונים לא יציעו אותה יותר. אפליקציה שכבר הותקנה נשארת.", "הסרה", true)) return;
+        await attempt(() => api(`/v1/admin/apps/${a.id}`, { method: "DELETE" }), "הוסרה");
+        render();
+      } }, "הסרה"));
+  });
+  return [
+    card("העלאת אפליקציה", "מעלים קובץ APK — השרת קורא ממנו את שם החבילה והגרסה ובודק אותו. טלפון מנוהל (מנהל מכשיר) " +
+      "מתקין ומעדכן ממנו ישירות, גם כשהתקנת אפליקציות חסומה בו. גרסה חדשה של אותה אפליקציה = עדכון אצל כולם.",
+      el("div", { class: "row gap wrap" }, file, upload, progress)),
+    card("אפליקציה בלי קובץ", "תופיע בחנות כ'בקשה' — למשל אפליקציה שמתקינים מ-Google Play באישורך.",
+      el("div", { class: "row gap wrap" }, pkg, label, category, addStoreOnly)),
+    card(`בחנות (${apps.length})`, null, apps.length ? el("div", { class: "apps" }, rows) : empty("עוד אין אפליקציות בחנות.")),
+  ];
 }
 
 async function viewProfiles() {

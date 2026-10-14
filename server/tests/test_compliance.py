@@ -701,3 +701,36 @@ def test_managed_app_catalog_crud_and_delivery(env):
     client.delete(f"/v1/admin/apps/{r2.json()['id']}", headers=h)
     assert client.get("/v1/admin/apps", headers=h).json()["apps"][0]["package"] == "com.whatsapp"
     assert any(a["action"] == "app_add" for a in svc.list_audit())
+
+
+# ------------------------------------------------------------------ חנות: העלאת APK
+
+
+def test_admin_uploads_apk_and_phones_get_a_verified_install(env):
+    from pathlib import Path
+    svc, client = env
+    h = admin_headers(client)
+    data = (Path(__file__).parent / "fixtures" / "mini.apk").read_bytes()
+    r = client.put("/v1/admin/apps/upload", headers={**h, "Content-Type": "application/vnd.android.package-archive"},
+                   content=data)
+    assert r.status_code == 201, r.text
+    j = r.json()
+    assert (j["package"], j["version_code"], j["version_name"], j["label"]) == ("org.example.kosher.notes", 4207,
+                                                                                   "3.1.4", "Notes")
+    assert j["sha256"] == hashlib.sha256(data).hexdigest()
+    assert j["url"].endswith("/v1/apps/org.example.kosher.notes-4207.apk")
+    # הקובץ מוגש, ושם קובץ לא חוקי — לא
+    got = client.get("/v1/apps/org.example.kosher.notes-4207.apk")
+    assert got.status_code == 200 and got.content == data
+    assert client.get("/v1/apps/..%2Fetc%2Fpasswd").status_code == 404
+    # הטלפון מקבל את פרטי ההתקנה בקטלוג
+    did, dh, _ = enroll(svc, client)
+    store = client.get("/v1/device", headers=dh).json()["managed_apps"]
+    app = next(a for a in store if a["package"] == "org.example.kosher.notes")
+    assert app["sha256"] == j["sha256"] and app["version_code"] == 4207 and app["url"] == j["url"]
+    # קובץ שאינו APK — נדחה, בלי להשאיר שאריות
+    bad = client.put("/v1/admin/apps/upload", headers=h, content=b"not an apk")
+    assert bad.status_code == 400
+    assert [p.name for p in svc.apps_dir().iterdir()] == ["org.example.kosher.notes-4207.apk"]
+    # בלי הרשאת מנהל — אסור
+    assert client.put("/v1/admin/apps/upload", content=data).status_code in (401, 403)

@@ -271,6 +271,7 @@ class DeviceStatus {
     this.guardPolicy = const {},
     this.appsReportNeeded = false,
     this.customer,
+    this.storeApps = const [],
   });
 
   final int id;
@@ -289,6 +290,9 @@ class DeviceStatus {
   final Map<String, Object?> guardPolicy;
   final bool appsReportNeeded;
   final CustomerInfo? customer;
+
+  /// קטלוג החנות מהשרת (אפליקציות שהמנהל אישר).
+  final List<StoreApp> storeApps;
 
   bool get isActive => status == 'active';
   bool get isPending => status == 'pending';
@@ -322,8 +326,55 @@ class DeviceStatus {
       guardPolicy: Map<String, Object?>.from(j['device_policy'] as Map? ?? const {}),
       appsReportNeeded: j['apps_report_needed'] as bool? ?? false,
       customer: customer,
+      storeApps: [
+        for (final a in (j['managed_apps'] as List? ?? const []))
+          if (a is Map) StoreApp.fromJson(Map<String, Object?>.from(a)),
+      ],
     );
   }
+}
+
+/// אפליקציה בחנות של FilterPhone. עם [raw] (url + sha256 + version_code) — ניתנת להתקנה ישירה
+/// דרך מנהל המכשיר; בלי — בקשה מהמנהל / התקנה מהחנות הרגילה.
+class StoreApp {
+  StoreApp({
+    required this.package,
+    required this.label,
+    this.category = '',
+    this.note = '',
+    this.versionCode,
+    this.versionName = '',
+    this.addedAt,
+    this.updatedAt,
+    this.raw = const {},
+  });
+
+  final String package;
+  final String label;
+  final String category;
+  final String note;
+  final int? versionCode;
+  final String versionName;
+  final DateTime? addedAt;
+  final DateTime? updatedAt;
+  final Map<String, Object?> raw;
+
+  bool get directInstall => versionCode != null && (raw['url'] as String? ?? '').startsWith('https://');
+
+  static DateTime? _t(Object? v) =>
+      v is num ? DateTime.fromMillisecondsSinceEpoch(v.toInt() * 1000) : null;
+
+  factory StoreApp.fromJson(Map<String, Object?> j) => StoreApp(
+        package: j['package'] as String? ?? '',
+        label: (j['label'] as String?)?.isNotEmpty == true ? j['label'] as String : (j['package'] as String? ?? ''),
+        category: j['category'] as String? ?? '',
+        note: j['note'] as String? ?? '',
+        versionCode: (j['version_code'] as num?)?.toInt(),
+        versionName: j['version_name'] as String? ?? '',
+        addedAt: _t(j['added_at']),
+        updatedAt: _t(j['updated_at']),
+        raw: j,
+      );
 }
 
 class ApiClient {

@@ -203,6 +203,17 @@ abstract class NativeBridge {
 
   /// פתיחת ערוץ התמיכה ב-WhatsApp עם מזהה המכשיר ותקציר מצב ההגנה.
   Future<void> openSupportWhatsApp(String number, String message);
+
+  // --- החנות ---
+
+  /// התקנה / עדכון דרך מנהל המכשיר: started / not_owner / busy / invalid / up_to_date.
+  Future<String> installStoreApp(Map<String, Object?> item);
+
+  /// לכל חבילה: {installed_version, state (installing / installed / failed:...)}.
+  Future<Map<String, Map<String, Object?>>> storeAppStates(List<String> packages);
+
+  /// פתיחת אפליקציה מותקנת.
+  Future<bool> openApp(String package);
 }
 
 /// מימוש דרך MethodChannel (אנדרואיד היום; אייפון — כשנוסיף את ה-Network Extension).
@@ -340,4 +351,17 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<void> openSupportWhatsApp(String number, String message) =>
       _call<bool>('openSupportWhatsApp', {'number': number, 'message': message});
+
+  @override
+  Future<String> installStoreApp(Map<String, Object?> item) =>
+      _call<String>('installStoreApp', {'item': jsonEncode(item)});
+
+  @override
+  Future<Map<String, Map<String, Object?>>> storeAppStates(List<String> packages) async {
+    final m = await _call<Map<Object?, Object?>>('storeAppStates', {'packages': packages});
+    return m.map((k, v) => MapEntry(k as String, Map<String, Object?>.from(v as Map)));
+  }
+
+  @override
+  Future<bool> openApp(String package) => _call<bool>('openApp', {'package': package});
 }

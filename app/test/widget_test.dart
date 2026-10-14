@@ -6,6 +6,7 @@ import 'package:filterphone/main.dart';
 import 'package:filterphone/src/api_client.dart';
 import 'package:filterphone/src/app_controller.dart';
 import 'package:filterphone/src/native_bridge.dart';
+import 'package:filterphone/src/screens/app_shell.dart';
 import 'package:filterphone/src/screens/home_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -191,6 +192,18 @@ class FakeNative implements NativeBridge {
 
   @override
   Future<void> openSupportWhatsApp(String number, String message) async {}
+
+  final installs = <String>[];
+  @override
+  Future<String> installStoreApp(Map<String, Object?> item) async {
+    installs.add(item['package'] as String);
+    return 'started';
+  }
+  @override
+  Future<Map<String, Map<String, Object?>>> storeAppStates(List<String> packages) async =>
+      {for (final p in packages) p: {'installed_version': p == 'org.example.notes' ? 3 : null, 'state': null}};
+  @override
+  Future<bool> openApp(String package) async => true;
 }
 
 class MemoryStore implements KeyValueStore {
@@ -732,6 +745,43 @@ void main() {
     expect(requested, 'swap:3');
     expect(c2.phase, Phase.pending);
     expect(await store.read('device_token'), 'swap-token');
+  });
+
+  testWidgets('store shows the server catalog with install, update and request actions', (tester) async {
+    final native = FakeNative()..caInstalled = true;
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      if (req.url.path == '/v1/device') {
+        return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+            'via_vpn': true, 'managed_apps': [
+              {'package': 'org.example.notes', 'label': 'פתקים', 'category': 'כלים', 'url': 'https://api.test/v1/apps/n-4.apk',
+               'sha256': 'ab' * 32, 'version_code': 4, 'version_name': '1.4', 'added_at': 1},
+              {'package': 'org.example.maps', 'label': 'מפות', 'category': 'ניווט'},
+            ]}), 200, headers: json);
+      }
+      if (req.url.path == '/v1/device/vpn') return http.Response(jsonEncode(_vpn), 200, headers: json);
+      if (req.url.path == '/v1/enroll') {
+        return http.Response(jsonEncode({'token': 't', 'level': 1, 'level_name': 'מחמיר', 'vpn': _vpn,
+            'ca': {'pem': 'x'}}), 201, headers: json);
+      }
+      return http.Response('{}', 200, headers: json);
+    });
+    final c = makeController(native, server);
+    await tester.runAsync(() async {
+      await c.start();
+      await c.activate('ABCDE-FGHJK', '');
+      await c.refresh();
+    });
+    expect(c.device!.storeApps.map((a) => a.label), ['פתקים', 'מפות']);
+    expect(c.device!.storeApps.first.directInstall, isTrue);
+    expect(c.device!.storeApps.last.directInstall, isFalse);
+    await tester.pumpWidget(MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
+        child: AppStoreScreen(controller: c))));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(find.text('פתקים'), findsOneWidget);
+    expect(find.text('מפות'), findsOneWidget);
+    expect(find.text('בקשה'), findsWidgets);          // בלי מנהל מכשיר — בקשה מהמנהל
   });
 
   test('lost VPN config (same key) is saved again from the server', () async {

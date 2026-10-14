@@ -158,6 +158,20 @@ class MainActivity : FlutterActivity() {
             }
             // מגן FilterPhone — חסימת אפליקציות ומסכים בטלפון
             "installedApps" -> background(result) { GuardPolicy.installedApps(this) }
+            // החנות: התקנה/עדכון דרך מנהל המכשיר, מצב לכל אפליקציה, ופתיחה
+            "installStoreApp" -> background(result) {
+                ManagedApps.installNow(this, org.json.JSONObject(call.argument<String>("item") ?: "{}"))
+            }
+            "storeAppStates" -> background(result) {
+                (call.argument<List<String>>("packages") ?: emptyList()).associateWith { pkg ->
+                    mapOf("installed_version" to ManagedApps.installedVersion(this, pkg),
+                        "state" to ManagedApps.state(this, pkg))
+                }
+            }
+            "openApp" -> {
+                val launch = call.argument<String>("package")?.let { packageManager.getLaunchIntentForPackage(it) }
+                result.success(launch != null && tryStart(launch))
+            }
             "isGuardEnabled" -> result.success(GuardPolicy.isServiceEnabled(this))
             "openGuardSettings" -> {
                 startSettings(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))

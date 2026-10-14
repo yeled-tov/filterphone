@@ -187,7 +187,14 @@ object DeviceOwnerManager {
                 }
             }
         }
+        // התקנה שקטה באמצע (עדכון עצמי / חנות): חסימת ההתקנות חוזרת כשהיא מסתיימת, לא עכשיו
+        val installWindow = runCatching { SelfUpdate.installWindowOpen(context) || ManagedApps.installWindowOpen(context) }
+            .getOrDefault(false)
         for ((key, restrictions) in RESTRICTIONS) {
+            if (key == "disallow_install_apps" && want[key] == true && installWindow) {
+                pending += key
+                continue
+            }
             step(key) {
                 for (r in restrictions) {
                     if (want[key] == true) dpm.addUserRestriction(admin, r) else dpm.clearUserRestriction(admin, r)

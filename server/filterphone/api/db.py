@@ -220,6 +220,7 @@ CREATE TABLE swaps (
     resolved_by   TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX swaps_status ON swaps(status);
+ALTER TABLE managed_apps ADD COLUMN version_name TEXT NOT NULL DEFAULT '';  -- מה-APK שהמנהל העלה
 """
 
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6]
