@@ -327,16 +327,22 @@ object SelfUpdate {
 /** תוצאת ההתקנה מ-PackageInstaller (לא חשוף לאפליקציות אחרות — רק ה-PendingIntent שלנו). */
 class UpdateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != SelfUpdate.ACTION_RESULT) return
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-        val pending = goAsync()
-        Recovery.runAsync(context) {
-            try {
-                SelfUpdate.onResult(context.applicationContext, status, message)
-            } finally {
-                pending.finish()
+        when (intent.action) {
+            SelfUpdate.ACTION_RESULT -> {
+                val pending = goAsync()
+                Recovery.runAsync(context) {
+                    try {
+                        SelfUpdate.onResult(context.applicationContext, status, message)
+                    } finally {
+                        pending.finish()
+                    }
+                }
             }
+            // התקנת אפליקציה מאושרת (קטלוג) — רק רישום; אין מצב לשחזר
+            ManagedApps.ACTION_RESULT -> android.util.Log.i("FilterPhone",
+                "managed install result: status=$status ${message.orEmpty().take(80)}")
         }
     }
 }

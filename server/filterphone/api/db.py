@@ -184,7 +184,26 @@ CREATE TABLE profiles (
 );
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4]
+# גרסה 5 — קטלוג אפליקציות מאושרות (המנהל מאשר; במנהל מכשיר אפשר להתקין APK שמתארח אצלנו)
+_V5 = """
+CREATE TABLE managed_apps (
+    id           INTEGER PRIMARY KEY,
+    package      TEXT NOT NULL UNIQUE,
+    label        TEXT NOT NULL DEFAULT '',
+    category     TEXT NOT NULL DEFAULT '',
+    note         TEXT NOT NULL DEFAULT '',
+    apk_url      TEXT NOT NULL DEFAULT '',   -- ריק = התקנה ידנית מחנות Play; אחרת APK שמתארח אצלנו
+    apk_sha256   TEXT NOT NULL DEFAULT '',
+    version_code INTEGER,
+    required     INTEGER NOT NULL DEFAULT 0, -- מותקן אוטומטית במנהל מכשיר
+    enabled      INTEGER NOT NULL DEFAULT 1,
+    sort         INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL
+);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5]
 VERSION = len(MIGRATIONS)
 
 

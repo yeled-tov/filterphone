@@ -258,6 +258,19 @@ class ApplyProfileIn(BaseModel):
     profile_id: int
 
 
+class ManagedAppIn(BaseModel):
+    package: str = Field(min_length=3, max_length=200)
+    label: str = Field(default="", max_length=60)
+    category: str = Field(default="", max_length=40)
+    note: str = Field(default="", max_length=200)
+    apk_url: str = Field(default="", max_length=500)
+    apk_sha256: str = Field(default="", max_length=64)
+    version_code: int | None = None
+    required: bool = False
+    enabled: bool = True
+    sort: int = 0
+
+
 class TransferIn(BaseModel):
     token: str = Field(min_length=10, max_length=80)
     public_key: str = Field(min_length=44, max_length=44)
@@ -571,6 +584,24 @@ def _routes(app: FastAPI) -> None:
     @app.delete("/v1/admin/profiles/{profile_id}", status_code=204)
     def delete_profile(profile_id: int, svc: SvcDep, admin: AdminRow):
         svc.delete_profile(profile_id, admin["username"])
+
+    # --- ניהול: קטלוג אפליקציות מאושרות ---
+
+    @app.get("/v1/admin/apps")
+    def list_apps(svc: SvcDep, _: AdminRow):
+        return {"apps": svc.managed_apps()}
+
+    @app.post("/v1/admin/apps", status_code=201)
+    def create_app(body: ManagedAppIn, svc: SvcDep, admin: AdminRow):
+        return svc.save_managed_app(admin["username"], body.model_dump())
+
+    @app.patch("/v1/admin/apps/{app_id}")
+    def update_app(app_id: int, body: ManagedAppIn, svc: SvcDep, admin: AdminRow):
+        return svc.save_managed_app(admin["username"], body.model_dump(), app_id)
+
+    @app.delete("/v1/admin/apps/{app_id}", status_code=204)
+    def delete_app(app_id: int, svc: SvcDep, admin: AdminRow):
+        svc.delete_managed_app(app_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/reset-apps")
     def reset_apps(device_id: int, svc: SvcDep, admin: AdminRow):

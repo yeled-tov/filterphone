@@ -41,6 +41,7 @@ from .catalog import (
     LEVELS,
     Compiled,
     DeviceSettings,
+    clean_package,
     compile_settings,
     policy_checksum,
     summary,
@@ -647,6 +648,7 @@ class Services:
                               "updated_at": row["policy_updated_at"], "checksum": row["policy_checksum"],
                               "revision": row["policy_revision"]},
             "apps_report_needed": not row["apps_at"] or db.now() - row["apps_at"] > 86400,
+            "managed_apps": self.device_managed_apps(),
             "heartbeat_interval_s": self.cfg.heartbeat_interval_s,
         })
         return out
@@ -719,6 +721,8 @@ class Services:
             out["policy"] = self.device_policy(fresh)
         if fresh["status"] == "active" and (release := self.app_release()):
             out["app_update"] = release     # הטלפון מחליט: עדכון שקט במנהל מכשיר, אחרת הודעה בלבד
+        if fresh["status"] == "active":
+            out["managed_apps"] = self.device_managed_apps()   # קטלוג מאושר; required יותקנו אוטומטית במנהל מכשיר
         return out
 
     def _admin_command(self, row: sqlite3.Row, t: int) -> dict | None:
@@ -1212,6 +1216,78 @@ class Services:
             new = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
         self.push_device(new)
         return self.device_detail(device_id)
+
+    # ------------------------------------------------------------ קטלוג אפליקציות מאושרות
+
+    _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+    def managed_apps(self, enabled_only: bool = False) -> list[dict]:
+        with self.db() as c:
+            q = "SELECT * FROM managed_apps"
+            if enabled_only:
+                q += " WHERE enabled = 1"
+            q += " ORDER BY sort, label, package"
+            return [dict(r) for r in c.execute(q).fetchall()]
+
+    def device_managed_apps(self) -> list[dict]:
+        """מה שהטלפון מקבל: רק אפליקציות מאושרות, עם שדות ההתקנה (בלי נתוני ניהול פנימיים)."""
+        out = []
+        for a in self.managed_apps(enabled_only=True):
+            entry = {"package": a["package"], "label": a["label"], "category": a["category"],
+                     "note": a["note"], "required": bool(a["required"])}
+            if a["apk_url"] and self._SHA256_RE.match(a["apk_sha256"] or "") and a["version_code"]:
+                entry.update(url=a["apk_url"], sha256=a["apk_sha256"], version_code=a["version_code"])
+            out.append(entry)
+        return out
+
+    def save_managed_app(self, admin: str, data: dict, app_id: int | None = None) -> dict:
+        pkg = clean_package(str(data.get("package", "")))
+        if not pkg:
+            raise ApiError(400, "שם חבילה לא תקין")
+        url = str(data.get("apk_url", "")).strip()
+        sha = str(data.get("apk_sha256", "")).strip().lower()
+        if url and not url.startswith("https://"):
+            raise ApiError(400, "כתובת ה-APK חייבת להיות https")
+        if url and not self._SHA256_RE.match(sha):
+            raise ApiError(400, "להתקנה אוטומטית צריך SHA-256 תקין (64 תווי hex) של קובץ ה-APK")
+        vc = data.get("version_code")
+        vc = int(vc) if isinstance(vc, int | float) and not isinstance(vc, bool) and 0 < vc < 2**31 else None
+        fields = {
+            "package": pkg, "label": security.clean_text(data.get("label"), 60) or pkg,
+            "category": security.clean_text(data.get("category"), 40),
+            "note": security.clean_text(data.get("note"), 200, multiline=True),
+            "apk_url": url, "apk_sha256": sha if url else "", "version_code": vc if url else None,
+            "required": 1 if data.get("required") else 0, "enabled": 0 if data.get("enabled") is False else 1,
+            "sort": int(data.get("sort")) if isinstance(data.get("sort"), int) else 0,
+        }
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            if app_id is None:
+                if c.execute("SELECT 1 FROM managed_apps WHERE package = ?", (pkg,)).fetchone():
+                    raise ApiError(409, "האפליקציה כבר בקטלוג")
+                cols = ", ".join(fields) + ", created_at, updated_at"
+                cur = c.execute(f"INSERT INTO managed_apps ({cols}) VALUES ({', '.join('?' * (len(fields) + 2))})",
+                                (*fields.values(), t, t))
+                app_id = cur.lastrowid
+                self.audit(admin, "app_add", f"app:{app_id}", pkg, c)
+            else:
+                if c.execute("SELECT 1 FROM managed_apps WHERE id = ?", (app_id,)).fetchone() is None:
+                    raise ApiError(404, "אפליקציה לא נמצאה")
+                dup = c.execute("SELECT 1 FROM managed_apps WHERE package = ? AND id != ?", (pkg, app_id)).fetchone()
+                if dup:
+                    raise ApiError(409, "האפליקציה כבר בקטלוג")
+                c.execute(f"UPDATE managed_apps SET {', '.join(f'{k} = ?' for k in fields)}, updated_at = ? "
+                          "WHERE id = ?", (*fields.values(), t, app_id))
+                self.audit(admin, "app_update", f"app:{app_id}", pkg, c)
+        return {"id": app_id, "package": pkg}
+
+    def delete_managed_app(self, app_id: int, admin: str) -> None:
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT package FROM managed_apps WHERE id = ?", (app_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "אפליקציה לא נמצאה")
+            c.execute("DELETE FROM managed_apps WHERE id = ?", (app_id,))
+            self.audit(admin, "app_delete", f"app:{app_id}", row["package"], c)
 
     def delete_device(self, device_id: int, admin: str = "admin") -> None:
         with self.db() as c, db.transaction(c):

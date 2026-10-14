@@ -324,7 +324,7 @@ def test_device_log_is_removed_with_device(env):
     assert client.delete(f"/v1/admin/devices/{did}", headers=h).status_code == 204
     with svc.db() as c:
         assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
-    assert db.VERSION == 4
+    assert db.VERSION == 5
 
 
 def test_rekey_keeps_address_and_policy_and_swaps_wireguard_peer(env):
@@ -654,3 +654,48 @@ def test_profile_rejects_bad_settings(env):
                        json={"name": "רע", "level": 2, "settings": {"options": ["no_such_option"]}}).status_code == 400
     assert client.post("/v1/admin/profiles", headers=h,
                        json={"name": "רע", "level": 9, "settings": {}}).status_code == 400
+
+
+# ------------------------------------------------------------------ קטלוג אפליקציות מאושרות
+
+
+def test_managed_app_catalog_crud_and_delivery(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    assert client.get("/v1/admin/apps", headers=h).json()["apps"] == []
+
+    # אפליקציה מחנות (בלי APK) — להתקנה ידנית
+    r1 = client.post("/v1/admin/apps", headers=h, json={"package": "com.whatsapp", "label": "וואטסאפ",
+                                                        "category": "תקשורת"})
+    assert r1.status_code == 201, r1.text
+    # אפליקציה עם APK שמתארח אצלנו — להתקנה אוטומטית במנהל מכשיר
+    sha = "a" * 64
+    r2 = client.post("/v1/admin/apps", headers=h, json={
+        "package": "com.example.kosher", "label": "אפליקציה מאושרת", "required": True,
+        "apk_url": "https://api.filterphone.com/apps/kosher.apk", "apk_sha256": sha.upper(), "version_code": 5})
+    assert r2.status_code == 201, r2.text
+
+    # הטלפון מקבל את הקטלוג המאושר
+    apps = client.get("/v1/device", headers=dh).json()["managed_apps"]
+    by_pkg = {a["package"]: a for a in apps}
+    assert "url" not in by_pkg["com.whatsapp"]                      # התקנה ידנית — בלי שדות התקנה
+    assert by_pkg["com.example.kosher"]["required"] is True
+    assert by_pkg["com.example.kosher"]["sha256"] == sha and by_pkg["com.example.kosher"]["version_code"] == 5
+    assert by_pkg["com.example.kosher"]["url"].startswith("https://")
+
+    # כפילות נדחית; http (לא https) נדחה; sha חסר לאפליקציה עם url נדחה
+    assert client.post("/v1/admin/apps", headers=h, json={"package": "com.whatsapp"}).status_code == 409
+    assert client.post("/v1/admin/apps", headers=h, json={"package": "com.x.y",
+                                                          "apk_url": "http://x/a.apk", "apk_sha256": sha,
+                                                          "version_code": 1}).status_code == 400
+    assert client.post("/v1/admin/apps", headers=h, json={"package": "com.x.z",
+                                                          "apk_url": "https://x/a.apk"}).status_code == 400
+
+    # כיבוי אפליקציה מסיר אותה מהקטלוג של הטלפון
+    app_id = r1.json()["id"]
+    client.patch(f"/v1/admin/apps/{app_id}", headers=h, json={"package": "com.whatsapp", "enabled": False})
+    assert "com.whatsapp" not in {a["package"] for a in client.get("/v1/device", headers=dh).json()["managed_apps"]}
+    client.delete(f"/v1/admin/apps/{r2.json()['id']}", headers=h)
+    assert client.get("/v1/admin/apps", headers=h).json()["apps"][0]["package"] == "com.whatsapp"
+    assert any(a["action"] == "app_add" for a in svc.list_audit())

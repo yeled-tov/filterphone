@@ -104,6 +104,9 @@ object Sync {
         if (first.optString("status") == "active") {
             runCatching { SelfUpdate.consider(context, first.optJSONObject("app_update")) }
                 .onFailure { Log.w(TAG, "self-update check failed", it) }
+            // קטלוג מאושר: אפליקציות "חובה" חסרות מותקנות בשקט (רק במנהל מכשיר)
+            runCatching { ManagedApps.sync(context, first.optJSONArray("managed_apps")) }
+                .onFailure { Log.w(TAG, "managed apps sync failed", it) }
         }
         // פקודת מנהל: השהיית הגנה (מצב תחזוקה) או הסרת ניהול — מהערוץ המאומת בלבד
         runCatching {
