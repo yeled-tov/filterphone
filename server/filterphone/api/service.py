@@ -183,6 +183,7 @@ SEED_PROFILES: list[tuple[str, int, list[str], dict]] = [
 ]
 _RELEASE_NAME = re.compile(r"^FilterPhone[A-Za-z0-9._-]{0,40}\.apk$")
 _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
+_UID_RE = re.compile(r"^[0-9a-f]{16,64}$")
 _ABI = re.compile(r"^[a-z0-9_-]{1,20}$")
 MAX_APK_BYTES = 200 * 1024 * 1024
 
@@ -479,7 +480,8 @@ class Services:
 
     # ------------------------------------------------------------ הפעלה בקוד
 
-    def enroll(self, code: str, public_key: str, name: str, platform: str, app_version: str) -> dict:
+    def enroll(self, code: str, public_key: str, name: str, platform: str, app_version: str,
+               device_uid: str = "") -> dict:
         if not security.is_wg_key(public_key):
             raise ApiError(400, "מפתח ציבורי לא תקין")
         name = (name or "").strip()[:60] or "מכשיר"
@@ -495,9 +497,9 @@ class Services:
             t = db.now()
             cur = c.execute(
                 "INSERT INTO devices (name, label, platform, app_version, public_key, preshared_key, vpn_ip,"
-                " level, token_hash, code_id, created_at, approved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                " level, token_hash, code_id, device_uid, created_at, approved_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (name, row["label"], platform[:20], app_version[:20], public_key, psk, ip, row["level"],
-                 security.token_hash(token), row["id"], t, t))
+                 security.token_hash(token), row["id"], self.clean_uid(device_uid), t, t))
             c.execute("UPDATE codes SET uses_left = uses_left - 1 WHERE id = ?", (row["id"],))
             device_id, level = cur.lastrowid, row["level"]
             self.bump_policy(c, device_id)
@@ -536,7 +538,8 @@ class Services:
             self.audit(admin, "transfer_start", f"device:{device_id}", "", c)
         return {"token": token, "expires_at": db.now() + self.TRANSFER_TTL_S}
 
-    def transfer_enroll(self, token: str, public_key: str, name: str, platform: str, app_version: str) -> dict:
+    def transfer_enroll(self, token: str, public_key: str, name: str, platform: str, app_version: str,
+                        device_uid: str = "") -> dict:
         """הטלפון החדש נרשם עם טוקן ההחלפה: מקבל כתובת ומפתחות חדשים, יורש לקוח/רמה/מדיניות מהישן,
         והישן מושבת (anti-replay: הטוקן חד-פעמי ונמחק, ובדיקת תוקף)."""
         if not security.is_wg_key(public_key):
@@ -555,14 +558,15 @@ class Services:
             t = db.now()
             cur = c.execute(
                 "INSERT INTO devices (name, label, platform, app_version, public_key, preshared_key, vpn_ip,"
-                " level, policy, customer_id, token_hash, code_id, created_at, approved_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " level, policy, customer_id, token_hash, code_id, device_uid, created_at, approved_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (name, old["label"], platform[:20], app_version[:20], public_key, psk, ip, old["level"],
-                 old["policy"], old["customer_id"], security.token_hash(new_token), old["code_id"], t, t))
+                 old["policy"], old["customer_id"], security.token_hash(new_token), old["code_id"],
+                 self.clean_uid(device_uid), t, t))
             new_id = cur.lastrowid
             # הישן: מושבת, הטוקן נשרף (חד-פעמי), והחיבור שלו מוסר
-            c.execute("UPDATE devices SET status = 'disabled', transfer_token = '', transfer_expires = NULL "
-                      "WHERE id = ?", (old["id"],))
+            c.execute("UPDATE devices SET status = 'disabled', disabled_reason = 'transferred', transfer_token = '',"
+                      " transfer_expires = NULL WHERE id = ?", (old["id"],))
             self.bump_policy(c, new_id)
             self.log_device(c, old["id"], "transfer_done", f"→ מכשיר {new_id}")
             self.log_device(c, new_id, "transfer_in", f"← מכשיר {old['id']}")
@@ -579,10 +583,192 @@ class Services:
                 "level_name": LEVEL_NAMES.get(old["level"], str(old["level"])),
                 "vpn": self.vpn_config(ip, psk), "ca": self.ca_info()}
 
+    # ------------------------------------------------------------ שחזור לפי מספר טלפון / החלפת מכשיר
+
+    @staticmethod
+    def clean_uid(raw) -> str:
+        """מזהה המכשיר מהטלפון: hash (hex) של ANDROID_ID — יציב בהסרה והתקנה מחדש, משתנה באיפוס יצרן
+        או בטלפון אחר. לא מידע מזהה בעצמו. ריק אם לא תקין."""
+        uid = str(raw or "").strip().lower()
+        return uid if _UID_RE.match(uid) else ""
+
+    def _customer_by_phone(self, c: sqlite3.Connection, phone: str) -> sqlite3.Row:
+        phone_n = security.normalize_phone(phone)
+        if not phone_n:
+            raise ApiError(400, "מספר הטלפון לא תקין")
+        cust = c.execute("SELECT * FROM customers WHERE phone = ? ORDER BY id LIMIT 1", (phone_n,)).fetchone()
+        if cust is None:
+            raise ApiError(404, "לא נמצא חשבון עם המספר הזה. אפשר להירשם כלקוח חדש.")
+        return cust
+
+    def restore_lookup(self, *, phone: str, device_uid: str, public_key: str, name: str, platform: str,
+                       app_version: str) -> dict:
+        """הלקוח הזין מספר טלפון במסך הפתיחה (אחרי הסרה והתקנה מחדש, איפוס או טלפון חדש):
+          - אותו טלפון (אותו מזהה מכשיר) → ההגנה חוזרת מיד: מפתח ואסימון חדשים, אותה כתובת ומדיניות.
+          - טלפון אחר → מחזירים את המכשירים בחשבון, והאפליקציה שואלת "להעביר את ההגנה לטלפון הזה?"
+            (או מכשיר נוסף, בתשלום) — וזה הולך לאישור המנהל (restore_request).
+        מכשיר שהמנהל השבית לא חוזר לבד."""
+        uid = self.clean_uid(device_uid)
+        if not uid:
+            raise ApiError(400, "מזהה המכשיר חסר — עדכנו את האפליקציה")
+        if not security.is_wg_key(public_key):
+            raise ApiError(400, "מפתח ציבורי לא תקין")
+        with self.db() as c, db.transaction(c):
+            cust = self._customer_by_phone(c, phone)
+            devices = c.execute("SELECT * FROM devices WHERE customer_id = ? AND status != 'rejected' ORDER BY id",
+                                (cust["id"],)).fetchall()
+            same = next((d for d in devices if d["device_uid"] == uid and d["vpn_ip"] and (
+                d["status"] == "active" or (d["status"] == "disabled" and d["disabled_reason"] == "uninstalled"))),
+                None)
+            if same is None:
+                pending_same = next((d for d in devices if d["device_uid"] == uid and d["status"] == "pending"), None)
+                if pending_same is not None:
+                    return {"status": "pending", "message": "כבר נשלחה בקשה מהטלפון הזה — היא ממתינה לאישור."}
+                admin_off = next((d for d in devices if d["device_uid"] == uid and d["status"] == "disabled"), None)
+                if admin_off is not None:
+                    raise ApiError(403, "ההגנה בטלפון הזה הושבתה על ידי המנהל. פנו לתמיכה.")
+                return {"status": "needs_choice", "customer_name": cust["name"],
+                        "devices": [{"id": d["id"], "name": d["name"], "status": d["status"],
+                                     "last_seen_at": d["last_seen_at"]}
+                                    for d in devices if d["status"] in ("active", "disabled")],
+                        "message": "לחשבון הזה יש הגנה על טלפון אחר."}
+            if c.execute("SELECT 1 FROM devices WHERE public_key = ? AND id != ?", (public_key, same["id"])).fetchone():
+                raise ApiError(409, "המכשיר כבר רשום")
+            token = security.new_token()
+            psk = security.new_preshared_key()
+            c.execute("UPDATE devices SET public_key = ?, preshared_key = ?, token_hash = ?, status = 'active',"
+                      " disabled_reason = '', name = ?, platform = ?, app_version = ?, pause_until = NULL,"
+                      " unmanage_at = NULL WHERE id = ?",
+                      (public_key, psk, security.token_hash(token), (name or same["name"]).strip()[:60] or same["name"],
+                       platform[:20], app_version[:20], same["id"]))
+            self.log_device(c, same["id"], "restored", "הלקוח שחזר את ההגנה לפי מספר הטלפון (אותו טלפון)")
+            self.audit(f"customer:{cust['id']}", "restore", f"device:{same['id']}", "same device_uid", c)
+            if same["public_key"] and same["public_key"] != public_key:
+                try:
+                    self.wg.remove_peer(same["public_key"])
+                except WireGuardError as e:
+                    log.warning("old peer removal failed (reconcile will fix): %s", e)
+            self.wg.add_peer(public_key, psk, same["vpn_ip"])
+            fresh = c.execute("SELECT * FROM devices WHERE id = ?", (same["id"],)).fetchone()
+        self.push_device(fresh)
+        log.info("device %s restored by phone (customer %s)", fresh["id"], cust["id"])
+        return {"status": "active", "device_id": fresh["id"], "token": token, "level": fresh["level"],
+                "level_name": LEVEL_NAMES.get(fresh["level"], str(fresh["level"])),
+                "vpn": self.vpn_config(fresh["vpn_ip"], psk), "ca": self.ca_info()}
+
+    def restore_request(self, *, phone: str, device_uid: str, public_key: str, name: str, platform: str,
+                        app_version: str, mode: str, old_device_id: int | None) -> dict:
+        """טלפון חדש לחשבון קיים: "העברת ההגנה לטלפון הזה" (swap — הישן יתנתק) או "מכשיר נוסף"
+        (additional — חשבון נוסף בתשלום). נוצר מכשיר ממתין, והמנהל מאשר בדף הבקשות."""
+        if mode not in ("swap", "additional"):
+            raise ApiError(400, "סוג הבקשה לא תקין")
+        uid = self.clean_uid(device_uid)
+        if not uid:
+            raise ApiError(400, "מזהה המכשיר חסר — עדכנו את האפליקציה")
+        if not security.is_wg_key(public_key):
+            raise ApiError(400, "מפתח ציבורי לא תקין")
+        token = security.new_token()
+        with self.db() as c, db.transaction(c):
+            cust = self._customer_by_phone(c, phone)
+            if c.execute("SELECT 1 FROM devices WHERE public_key = ?", (public_key,)).fetchone():
+                raise ApiError(409, "המכשיר כבר רשום")
+            if c.execute("SELECT 1 FROM devices WHERE customer_id = ? AND device_uid = ? AND status = 'pending'",
+                         (cust["id"], uid)).fetchone():
+                raise ApiError(409, "כבר נשלחה בקשה מהטלפון הזה — היא ממתינה לאישור")
+            source = None
+            if old_device_id is not None:
+                source = c.execute("SELECT * FROM devices WHERE id = ? AND customer_id = ?",
+                                   (old_device_id, cust["id"])).fetchone()
+                if source is None:
+                    raise ApiError(404, "המכשיר הקודם לא נמצא בחשבון")
+            if mode == "swap" and source is None:
+                raise ApiError(400, "בחרו איזה טלפון מוחלף")
+            if source is None:      # מכשיר נוסף: מתחילים מהמדיניות של המכשיר האחרון בחשבון
+                source = c.execute("SELECT * FROM devices WHERE customer_id = ? AND status IN ('active', 'disabled')"
+                                   " ORDER BY id DESC LIMIT 1", (cust["id"],)).fetchone()
+            t = db.now()
+            dev_name = security.clean_text(name, 60) or cust["name"]
+            new_id = c.execute(
+                "INSERT INTO devices (name, label, platform, app_version, public_key, level, status, token_hash,"
+                " customer_id, policy, device_uid, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (dev_name, cust["name"], platform[:20], app_version[:20], public_key,
+                 source["level"] if source else 2, "pending", security.token_hash(token), cust["id"],
+                 source["policy"] if source else DeviceSettings().dump(), uid, t)).lastrowid
+            swap_id = c.execute("INSERT INTO swaps (customer_id, new_device_id, old_device_id, mode, created_at)"
+                                " VALUES (?,?,?,?,?)",
+                                (cust["id"], new_id, source["id"] if mode == "swap" else None, mode, t)).lastrowid
+            self.bump_policy(c, new_id)
+            self.audit(f"device:{new_id}", f"{mode}_request", f"swap:{swap_id}", f"customer:{cust['id']}", c)
+        log.info("%s request %s for customer %s (new device %s)", mode, swap_id, cust["id"], new_id)
+        msg = ("הבקשה להעברת ההגנה לטלפון הזה נשלחה למנהל. ברגע שיאשר — ההגנה תעבור לכאן והטלפון הקודם יתנתק."
+               if mode == "swap" else "הבקשה למכשיר נוסף נשלחה למנהל. נעדכן כאן ברגע שיאושר.")
+        return {"device_id": new_id, "token": token, "status": "pending", "swap_id": swap_id, "message": msg}
+
+    def list_swaps(self, status: str = "pending") -> list[dict]:
+        with self.db() as c:
+            rows = c.execute(
+                "SELECT s.*, cu.name AS customer_name, cu.phone AS customer_phone,"
+                " n.name AS new_name, n.platform AS new_platform, o.name AS old_name, o.status AS old_status,"
+                " o.last_seen_at AS old_last_seen FROM swaps s JOIN customers cu ON cu.id = s.customer_id"
+                " JOIN devices n ON n.id = s.new_device_id LEFT JOIN devices o ON o.id = s.old_device_id"
+                " WHERE s.status = ? ORDER BY s.id DESC LIMIT 200", (status,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def resolve_swap(self, swap_id: int, approve: bool, admin: str, as_additional: bool = False) -> dict:
+        """אישור החלפה: הטלפון החדש פעיל עם הלקוח, הרמה והמדיניות; הישן מתנתק (מושבת, "הוחלף").
+        אישור כמכשיר נוסף: החדש פעיל, הישן ממשיך. דחייה: החדש נדחה."""
+        with self.db() as c, db.transaction(c):
+            sw = c.execute("SELECT * FROM swaps WHERE id = ?", (swap_id,)).fetchone()
+            if sw is None:
+                raise ApiError(404, "הבקשה לא נמצאה")
+            if sw["status"] != "pending":
+                raise ApiError(409, "הבקשה כבר טופלה")
+            new = c.execute("SELECT * FROM devices WHERE id = ?", (sw["new_device_id"],)).fetchone()
+            if new is None or new["status"] != "pending":
+                raise ApiError(409, "המכשיר החדש כבר לא ממתין")
+            t = db.now()
+            if not approve:
+                c.execute("UPDATE devices SET status = 'rejected' WHERE id = ?", (new["id"],))
+                c.execute("UPDATE swaps SET status = 'rejected', resolved_at = ?, resolved_by = ? WHERE id = ?",
+                          (t, admin[:60], swap_id))
+                self.audit(admin, "swap_reject", f"swap:{swap_id}", "", c)
+                return {"ok": True, "status": "rejected"}
+            ip = self._allocate_ip(c)
+            psk = security.new_preshared_key()
+            c.execute("UPDATE devices SET status = 'active', vpn_ip = ?, preshared_key = ?, approved_at = ?"
+                      " WHERE id = ?", (ip, psk, t, new["id"]))
+            old = None
+            swap = sw["mode"] == "swap" and not as_additional and sw["old_device_id"]
+            if swap:
+                old = c.execute("SELECT * FROM devices WHERE id = ?", (sw["old_device_id"],)).fetchone()
+                if old is not None:
+                    c.execute("UPDATE devices SET status = 'disabled', disabled_reason = 'transferred' WHERE id = ?",
+                              (old["id"],))
+                    self.log_device(c, old["id"], "transferred", f"ההגנה עברה לטלפון חדש (מכשיר {new['id']})")
+                    self.log_device(c, new["id"], "transfer_in", f"← מכשיר {old['id']}")
+            c.execute("UPDATE swaps SET status = 'approved', resolved_at = ?, resolved_by = ?, mode = ? WHERE id = ?",
+                      (t, admin[:60], "swap" if swap else "additional", swap_id))
+            self.bump_policy(c, new["id"])
+            self.audit(admin, "swap_approve", f"swap:{swap_id}",
+                       f"{'swap' if swap else 'additional'} new:{new['id']} old:{old['id'] if old else '-'}", c)
+            self.wg.add_peer(new["public_key"], psk, ip)
+            if old is not None and old["public_key"]:
+                try:
+                    self.wg.remove_peer(old["public_key"])
+                except WireGuardError as e:
+                    log.warning("old peer removal failed (reconcile will fix): %s", e)
+            fresh_new = c.execute("SELECT * FROM devices WHERE id = ?", (new["id"],)).fetchone()
+            fresh_old = c.execute("SELECT * FROM devices WHERE id = ?", (old["id"],)).fetchone() if old else None
+        self.push_device(fresh_new)
+        if fresh_old is not None:
+            self.push_device(fresh_old)
+        return {"ok": True, "status": "approved", "mode": "swap" if swap else "additional",
+                "device_id": fresh_new["id"]}
+
     # ------------------------------------------------------------ הרשמה מהאפליקציה
 
     def register(self, *, name: str, phone: str, email: str, level: int, options: list[str], note: str,
-                 public_key: str, device_name: str, platform: str, app_version: str) -> dict:
+                 public_key: str, device_name: str, platform: str, app_version: str, device_uid: str = "") -> dict:
         """בקשת הצטרפות: לקוח + מכשיר "ממתין" (בלי VPN). המנהל מאשר אחרי תשלום."""
         if not self.cfg.register_enabled:
             raise ApiError(403, "ההרשמה סגורה כרגע. פנו אלינו לקבלת קוד הפעלה.")
@@ -621,9 +807,10 @@ class Services:
             dev_name = security.clean_text(device_name, 60) or name
             device_id = c.execute(
                 "INSERT INTO devices (name, label, platform, app_version, public_key, level, status, token_hash,"
-                " customer_id, policy, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " customer_id, policy, device_uid, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (dev_name, name, platform[:20], app_version[:20], public_key, level, "pending",
-                 security.token_hash(token), customer_id, DeviceSettings(options=opts).dump(), t)).lastrowid
+                 security.token_hash(token), customer_id, DeviceSettings(options=opts).dump(),
+                 self.clean_uid(device_uid), t)).lastrowid
             request_id = c.execute(
                 "INSERT INTO requests (kind, device_id, customer_id, level, options, note, created_at)"
                 " VALUES ('join',?,?,?,?,?,?)",
@@ -709,6 +896,8 @@ class Services:
             if cur is None:
                 raise ApiError(401, "המכשיר לא מזוהה")
             sets = {"heartbeat": json.dumps(hb, ensure_ascii=False), "heartbeat_at": t, "last_seen_at": t}
+            if (uid := self.clean_uid(raw.get("device_uid"))) and uid != row["device_uid"]:
+                sets["device_uid"] = uid          # מכשירים ותיקים: המזהה נרשם בדיווח הראשון אחרי העדכון
             if isinstance(hb.get("app_version"), str):
                 sets["app_version"] = hb["app_version"][:20]
             if isinstance(acked, int):
@@ -1109,6 +1298,8 @@ class Services:
                 if errors:
                     raise ApiError(400, "; ".join(errors))
                 allowed["policy"] = settings.dump()
+            if "status" in allowed:     # השבתה ע"י המנהל לא "חוזרת לבד" בשחזור לפי מספר טלפון
+                allowed["disabled_reason"] = "admin" if allowed["status"] == "disabled" else ""
             if allowed:
                 sets = ", ".join(f"{k} = ?" for k in allowed)
                 c.execute(f"UPDATE devices SET {sets} WHERE id = ?", (*allowed.values(), device_id))
@@ -1187,8 +1378,8 @@ class Services:
             if not self.is_paused(cur, t):
                 self.log_device(c, row["id"], "uninstall_blocked", "ניסיון הסרה בלי השהיה מאושרת")
                 raise ApiError(409, "הסרה אפשרית רק בזמן השהיה שהמנהל אישר")
-            c.execute("UPDATE devices SET status = 'disabled', pause_until = NULL, pause_reason = '', "
-                      "pause_nonce = '', token_hash = NULL WHERE id = ?", (row["id"],))
+            c.execute("UPDATE devices SET status = 'disabled', disabled_reason = 'uninstalled', pause_until = NULL,"
+                      " pause_reason = '', pause_nonce = '', token_hash = NULL WHERE id = ?", (row["id"],))
             self.log_device(c, row["id"], "uninstalled", "הלקוח הסיר את ההגנה מהטלפון (בזמן השהיה)")
             self.audit(f"device:{row['id']}", "uninstall", f"device:{row['id']}", "during authorized pause", c)
             new = c.execute("SELECT * FROM devices WHERE id = ?", (row["id"],)).fetchone()

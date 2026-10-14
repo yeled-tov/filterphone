@@ -14,3 +14,14 @@ class CertHelperTest {
         assertEquals("2b0b70bf", CertHelper.subjectHashOld(subject))
     }
 }
+
+class DeviceIdTest {
+    @Test
+    fun stableHashedAndScopedToThePackage() {
+        val a = DeviceId.of("9774d56d682e549c", "com.filterphone.app")
+        assertEquals(32, a.length)
+        assertEquals(a, DeviceId.of("9774d56d682e549c", "com.filterphone.app"))
+        org.junit.Assert.assertNotEquals(a, DeviceId.of("9774d56d682e549c", "other.app"))
+        org.junit.Assert.assertFalse(a.contains("9774d56d682e549c"))
+    }
+}

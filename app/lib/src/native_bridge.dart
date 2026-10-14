@@ -123,6 +123,9 @@ class ProtectionStatus {
 /// ממשק לקוד הנייטיבי. מופרד לממשק כדי שאפשר יהיה להחליף בבדיקות ובאייפון.
 abstract class NativeBridge {
   Future<Map<String, Object?>> deviceInfo();
+
+  /// מזהה יציב של הטלפון (hash) — לשחזור לפי מספר טלפון. אותו טלפון אחרי התקנה מחדש = אותו מזהה.
+  Future<String> deviceUid();
   Future<String> generateKeyPair();
   Future<String?> publicKey();
   Future<void> saveVpnConfig(Map<String, Object?> vpn);
@@ -215,6 +218,9 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<Map<String, Object?>> deviceInfo() async =>
       Map<String, Object?>.from(await _call<Map<Object?, Object?>>('deviceInfo'));
+
+  @override
+  Future<String> deviceUid() => _call<String>('deviceUid');
 
   @override
   Future<String> generateKeyPair() => _call<String>('generateKeyPair');

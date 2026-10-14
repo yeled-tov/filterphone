@@ -12,7 +12,8 @@ import 'native_bridge.dart';
 /// השלבים של האפליקציה:
 ///   welcome → register (טופס) → pending (מחכה לאישור המנהל) → home
 ///   welcome → activation (קוד) → home
-enum Phase { loading, welcome, register, activation, pending, home, unsupported }
+///   welcome → restore (מספר טלפון) → home (אותו טלפון) / pending (טלפון אחר — החלפה באישור המנהל)
+enum Phase { loading, welcome, register, activation, restore, pending, home, unsupported }
 
 /// סעיף ברשימת "מה צריך כדי שהטלפון יהיה מוגן".
 enum Check { vpn, certificate, alwaysOn, privateDns, guard, battery }
@@ -90,6 +91,10 @@ class AppController extends ChangeNotifier {
 
   /// מה נשלח בבקשת ההצטרפות — מוצג במסך ההמתנה.
   Map<String, Object?>? pendingSummary;
+
+  /// שחזור לפי מספר טלפון: התשובה האחרונה (טלפון אחר → בחירה בין החלפה למכשיר נוסף).
+  RestoreLookup? restoreResult;
+  String restorePhone = '';
 
   Timer? _timer;
   StreamSubscription<String>? _vpnSub;
@@ -216,6 +221,13 @@ class AppController extends ChangeNotifier {
     if (catalog == null) await loadCatalog();
   }
 
+  void openRestore() {
+    error = null;
+    restoreResult = null;
+    phase = Phase.restore;
+    notifyListeners();
+  }
+
   void backToWelcome() {
     error = null;
     phase = Phase.welcome;
@@ -255,6 +267,7 @@ class AppController extends ChangeNotifier {
           publicKey: publicKey,
           platform: 'android',
           appVersion: '${info['appVersion'] ?? ''}',
+          deviceUid: await _deviceUid(),
         );
         _token = r.token;
         await store.write(_kToken, r.token);
@@ -351,32 +364,103 @@ class AppController extends ChangeNotifier {
       final appVersion = '${info['appVersion'] ?? ''}';
       // קוד החלפת מכשיר (קידומת FPT-) נרשם דרך /v1/transfer ויורש מהמכשיר הישן; אחרת קוד הפעלה רגיל.
       final isTransfer = trimmed.toUpperCase().startsWith('FPT-');
+      final uid = await _deviceUid();
       final e = isTransfer
           ? await api.transfer(token: trimmed, publicKey: publicKey, name: deviceName,
-              platform: 'android', appVersion: appVersion)
+              platform: 'android', appVersion: appVersion, deviceUid: uid)
           : await api.enroll(code: trimmed, publicKey: publicKey, name: deviceName,
-              platform: 'android', appVersion: appVersion);
-      await native.saveVpnConfig(e.vpn);
-      await store.write(_kToken, e.token);
-      await store.write(_kCa, e.caPem);
-      await store.write(_kVpnHash, _hash(e.vpn));
-      _token = e.token;
-      _caPem = e.caPem;
-      phase = Phase.home;
-      notifyListeners();
-      _listenVpn();
-      _startTimer(refresh);
-      await _nativeCredentials();
-      unawaited(_askNotifications());
-      try {
-        await _connect();
-      } on _UserMessage catch (e) {
-        notice = e.message; // ההפעלה הצליחה; את ה-VPN אפשר לאשר מהמסך הראשי
-      } on PlatformException catch (e) {
-        notice = 'החיבור לא הושלם: ${e.message ?? e.code}. נסו שוב מהמסך הראשי.';
-      }
+              platform: 'android', appVersion: appVersion, deviceUid: uid);
+      await _finishEnrollment(e);
     });
   }
+
+  /// אחרי הפעלה / החלפה / שחזור: שומרים הגדרות ומתחברים לסינון.
+  Future<void> _finishEnrollment(Enrollment e) async {
+    await native.saveVpnConfig(e.vpn);
+    await store.write(_kToken, e.token);
+    await store.write(_kCa, e.caPem);
+    await store.write(_kVpnHash, _hash(e.vpn));
+    _token = e.token;
+    _caPem = e.caPem;
+    phase = Phase.home;
+    notifyListeners();
+    _listenVpn();
+    _startTimer(refresh);
+    await _nativeCredentials();
+    unawaited(_askNotifications());
+    try {
+      await _connect();
+    } on _UserMessage catch (e) {
+      notice = e.message; // ההפעלה הצליחה; את ה-VPN אפשר לאשר מהמסך הראשי
+    } on PlatformException catch (e) {
+      notice = 'החיבור לא הושלם: ${e.message ?? e.code}. נסו שוב מהמסך הראשי.';
+    }
+  }
+
+  Future<String> _deviceUid() async {
+    try {
+      return await native.deviceUid();
+    } on PlatformException catch (e) {
+      debugPrint('device uid unavailable: $e');
+      return '';
+    }
+  }
+
+  // ------------------------------------------------------------------ שחזור לפי מספר טלפון
+
+  /// הלקוח מזין את מספר הטלפון של החשבון. אותו טלפון (אחרי הסרה/התקנה) → ההגנה חוזרת מיד.
+  /// טלפון אחר → [restoreResult] עם המכשירים בחשבון, והמסך שואל "להעביר את ההגנה לטלפון הזה?".
+  Future<bool> restoreByPhone(String phone) => _guard(() async {
+        final info = await native.deviceInfo();
+        final uid = await _deviceUid();
+        if (uid.isEmpty) throw const _UserMessage('לא ניתן לזהות את הטלפון. עדכנו את האפליקציה ונסו שוב.');
+        final publicKey = await native.generateKeyPair();
+        restorePhone = phone.trim();
+        final r = await api.restore(
+          phone: restorePhone,
+          deviceUid: uid,
+          publicKey: publicKey,
+          name: '${info['manufacturer'] ?? ''} ${info['model'] ?? ''}'.trim(),
+          platform: 'android',
+          appVersion: '${info['appVersion'] ?? ''}',
+        );
+        if (r.enrollment != null) {
+          notice = 'ההגנה שוחזרה — זה אותו טלפון, הכול חזר כמו שהיה.';
+          await _finishEnrollment(r.enrollment!);
+          return;
+        }
+        restoreResult = r;
+        if (r.status == 'pending') notice = r.message;
+      });
+
+  /// "העברת ההגנה לטלפון הזה" (swap, הישן יתנתק) או "מכשיר נוסף" (additional, בתשלום) — למנהל.
+  Future<bool> requestRestore({required String mode, int? oldDeviceId}) => _guard(() async {
+        final info = await native.deviceInfo();
+        final publicKey = await native.publicKey() ?? await native.generateKeyPair();
+        final r = await api.restoreRequest(
+          phone: restorePhone,
+          deviceUid: await _deviceUid(),
+          publicKey: publicKey,
+          name: '${info['manufacturer'] ?? ''} ${info['model'] ?? ''}'.trim(),
+          platform: 'android',
+          appVersion: '${info['appVersion'] ?? ''}',
+          mode: mode,
+          oldDeviceId: oldDeviceId,
+        );
+        _token = r.token;
+        await store.write(_kToken, r.token);
+        pendingSummary = {
+          'name': restoreResult?.customerName ?? '',
+          'phone': restorePhone,
+          'note': r.message,
+          'sent_at': DateTime.now().millisecondsSinceEpoch,
+        };
+        await store.write(_kSummary, jsonEncode(pendingSummary));
+        restoreResult = null;
+        phase = Phase.pending;
+        notifyListeners();
+        _startTimer(refreshPending);
+      });
 
   // ------------------------------------------------------------------ פעולות
 

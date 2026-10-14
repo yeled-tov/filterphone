@@ -7,6 +7,7 @@ import 'src/screens/activation_screen.dart';
 import 'src/screens/app_shell.dart';
 import 'src/screens/pending_screen.dart';
 import 'src/screens/register_screen.dart';
+import 'src/screens/restore_screen.dart';
 import 'src/screens/welcome_screen.dart';
 import 'src/theme.dart';
 
@@ -66,6 +67,7 @@ class _FilterPhoneAppState extends State<FilterPhoneApp> with WidgetsBindingObse
           Phase.welcome => WelcomeScreen(controller: widget.controller),
           Phase.register => RegisterScreen(controller: widget.controller),
           Phase.activation => ActivationScreen(controller: widget.controller),
+          Phase.restore => RestoreScreen(controller: widget.controller),
           Phase.pending => PendingScreen(controller: widget.controller),
           Phase.home => AppShell(controller: widget.controller),
           Phase.unsupported => const _Unsupported(),

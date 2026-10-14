@@ -203,7 +203,26 @@ CREATE TABLE managed_apps (
 );
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5]
+# גרסה 6 — שחזור לפי מספר טלפון + מזהה מכשיר, ובקשות החלפת מכשיר / מכשיר נוסף לאישור המנהל
+_V6 = """
+ALTER TABLE devices ADD COLUMN device_uid TEXT NOT NULL DEFAULT '';      -- מזהה יציב של הטלפון (hash)
+ALTER TABLE devices ADD COLUMN disabled_reason TEXT NOT NULL DEFAULT ''; -- admin / uninstalled / transferred
+CREATE INDEX devices_uid ON devices(device_uid);
+CREATE TABLE swaps (
+    id            INTEGER PRIMARY KEY,
+    customer_id   INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    new_device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    old_device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL,
+    mode          TEXT NOT NULL CHECK (mode IN ('swap', 'additional')),
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at    INTEGER NOT NULL,
+    resolved_at   INTEGER,
+    resolved_by   TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX swaps_status ON swaps(status);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6]
 VERSION = len(MIGRATIONS)
 
 

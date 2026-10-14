@@ -50,6 +50,7 @@ object Sync {
         val o = JSONObject()
             .put("app_version", runCatching { pm.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "")
             .put("sdk", Build.VERSION.SDK_INT)
+            .put("device_uid", DeviceId.get(context))
             .put("policy_version", policy.version)
             .put("vpn", vpn)
             .put("accessibility", accessibility)

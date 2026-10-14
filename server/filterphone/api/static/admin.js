@@ -47,6 +47,8 @@ const LOG_KINDS = {
   paused: ["warn", "ההגנה הושהתה"], resumed: ["ok", "ההגנה חזרה"], unmanage_requested: ["warn", "נשלחה הסרת ניהול"],
   management_cleared: ["warn", "הניהול הוסר"], uninstalled: ["bad", "הלקוח הסיר את ההגנה (בהשהיה)"],
   uninstall_blocked: ["bad", "ניסיון הסרה בלי השהיה — נחסם"], transferred: ["warn", "הוחלף למכשיר אחר"],
+  restored: ["ok", "ההגנה שוחזרה (אותו טלפון)"], transfer_in: ["ok", "הועבר מטלפון קודם"],
+  transfer_started: ["warn", "נוצר קוד החלפה"], transfer_done: ["warn", "הוחלף למכשיר אחר"], rekey: ["", "מפתח VPN חודש"],
 };
 const UPDATE_STATES = {
   available: ["warn", "גרסה חדשה זמינה — הטלפון צריך להתקין ידנית"],
@@ -450,8 +452,43 @@ async function viewRequests(_, query) {
   const tabs = el("div", { class: "row gap" },
     [["pending", "ממתינות"], ["approved", "אושרו"], ["rejected", "נדחו"], ["all", "הכול"]].map(([k, t]) =>
       el("a", { href: `#/requests?status=${k}` }, el("button", { class: k === status ? "primary small" : "ghost small" }, t))));
-  if (!list.length) return [tabs, card(null, null, empty(status === "pending" ? "אין בקשות שמחכות לאישור." : "אין בקשות."))];
-  return [tabs, ...list.map((r) => requestCard(r))];
+  const swapStatus = status === "all" ? "pending" : status;
+  const { swaps } = await api(`/v1/admin/swaps?status=${swapStatus}`);
+  const swapCards = swaps.map((s) => swapCard(s));
+  if (!list.length && !swapCards.length) {
+    return [tabs, card(null, null, empty(status === "pending" ? "אין בקשות שמחכות לאישור." : "אין בקשות."))];
+  }
+  return [tabs, ...swapCards, ...list.map((r) => requestCard(r))];
+}
+
+/** בקשת החלפת מכשיר / מכשיר נוסף — מהטלפון החדש, אחרי שחזור לפי מספר טלפון. */
+function swapCard(s) {
+  const pending = s.status === "pending";
+  const act = async (body, msg) => {
+    await attempt(() => api(`/v1/admin/swaps/${s.id}`, { method: "POST", body }), msg);
+    render();
+  };
+  const isSwap = s.mode === "swap";
+  return card(isSwap ? "החלפת מכשיר" : "מכשיר נוסף לחשבון קיים",
+    isSwap ? "הלקוח התקין את FilterPhone בטלפון אחר וביקש להעביר אליו את ההגנה. באישור — הטלפון החדש מקבל את " +
+      "הרמה והחסימות, והישן מתנתק." : "הלקוח מבקש להגן על מכשיר נוסף באותו חשבון (חשבון נוסף בתשלום).",
+    kv([
+      ["לקוח", el("span", { class: "row gap" }, s.customer_name, telLink(s.customer_phone))],
+      ["טלפון חדש", s.new_name || "—"],
+      isSwap ? ["טלפון קודם", el("span", { class: "row gap" }, s.old_name || "—",
+        s.old_status ? chip(s.old_status === "active" ? `פעיל · ${ago(s.old_last_seen)}` : "מנותק", s.old_status === "active" ? "warn" : "") : null)] : null,
+      ["נשלחה", dateTime(s.created_at)],
+      !pending ? ["סטטוס", chip(s.status === "approved" ? "אושרה" : "נדחתה", s.status === "approved" ? "ok" : "bad")] : null,
+    ]),
+    pending ? el("div", { class: "row gap wrap end" },
+      el("button", { class: "primary", onclick: () => act({ approve: true }, isSwap ? "ההגנה הועברה לטלפון החדש" : "המכשיר הנוסף אושר") },
+        isSwap ? "אישור החלפה" : "אישור מכשיר נוסף"),
+      isSwap ? el("button", { class: "ghost", onclick: () => act({ approve: true, as_additional: true }, "אושר כמכשיר נוסף") },
+        "לאשר כמכשיר נוסף (הישן נשאר)") : null,
+      el("button", { class: "danger", onclick: async () => {
+        if (!await confirmDialog("לדחות את הבקשה?", "הטלפון החדש לא יקבל הגנה.", "לדחות", true)) return;
+        await act({ approve: false }, "הבקשה נדחתה");
+      } }, "דחייה")) : null);
 }
 
 function requestCard(r) {

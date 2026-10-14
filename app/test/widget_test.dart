@@ -20,6 +20,9 @@ class FakeNative implements NativeBridge {
   Map<String, Object?>? savedVpn;
   final _states = StreamController<String>.broadcast();
 
+  String uid = 'ab' * 16;
+  @override
+  Future<String> deviceUid() async => uid;
   @override
   Future<Map<String, Object?>> deviceInfo() async =>
       {'model': 'Pixel 9', 'manufacturer': 'Google', 'sdk': 36, 'appVersion': '1.0.0'};
@@ -678,6 +681,57 @@ void main() {
     expect(native.uninstalls, 1);
     expect(c.phase, Phase.welcome);
     expect(await store.read('device_token'), isNull);
+  });
+
+  test('restore by phone: same phone comes back by itself, another phone asks to transfer', () async {
+    String? requested;
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      final body = req.body.isEmpty ? <String, Object?>{} : jsonDecode(req.body) as Map;
+      switch (req.url.path) {
+        case '/v1/restore':
+          expect(body['phone'], '050-1234567');
+          if (body['device_uid'] == 'ab' * 16) {
+            return http.Response(jsonEncode({'status': 'active', 'device_id': 3, 'token': 'restored-token', 'level': 2,
+                'level_name': 'בינוני', 'vpn': _vpn,
+                'ca': {'pem': '-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n'}}), 200, headers: json);
+          }
+          return http.Response(jsonEncode({'status': 'needs_choice', 'customer_name': 'משה',
+              'devices': [{'id': 3, 'name': 'גלקסי ישן', 'status': 'active', 'last_seen_at': 1}]}), 200, headers: json);
+        case '/v1/restore/request':
+          requested = '${body['mode']}:${body['old_device_id']}';
+          return http.Response(jsonEncode({'device_id': 9, 'token': 'swap-token', 'status': 'pending',
+              'message': 'נשלח למנהל'}), 201, headers: json);
+        case '/v1/device':
+          return http.Response(jsonEncode({'name': 'Pixel', 'status': 'pending', 'level': 2, 'level_name': 'בינוני'}),
+              200, headers: json);
+      }
+      return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 2, 'level_name': 'בינוני'}),
+          200, headers: json);
+    });
+    // אותו טלפון
+    final same = FakeNative();
+    final c1 = makeController(same, server);
+    await c1.start();
+    c1.openRestore();
+    expect(c1.phase, Phase.restore);
+    expect(await c1.restoreByPhone('050-1234567'), isTrue);
+    expect(c1.phase, Phase.home);
+    expect(same.savedVpn, isNotNull);
+    // טלפון אחר
+    final other = FakeNative()..uid = 'cd' * 16;
+    final store = MemoryStore();
+    final c2 = makeController(other, server, store);
+    await c2.start();
+    c2.openRestore();
+    await c2.restoreByPhone('050-1234567');
+    expect(c2.phase, Phase.restore);
+    expect(c2.restoreResult?.status, 'needs_choice');
+    expect(c2.restoreResult?.devices.single.name, 'גלקסי ישן');
+    expect(await c2.requestRestore(mode: 'swap', oldDeviceId: 3), isTrue);
+    expect(requested, 'swap:3');
+    expect(c2.phase, Phase.pending);
+    expect(await store.read('device_token'), 'swap-token');
   });
 
   test('lost VPN config (same key) is saved again from the server', () async {

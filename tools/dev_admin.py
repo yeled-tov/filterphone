@@ -92,6 +92,13 @@ def seed(svc: Services) -> None:
                               "אפשר לעבור לרמה 2? וגם לחסום יוטיוב")
     code = svc.create_code("משפחת וייס", 1, 3, 30)
     svc.enroll(code["code"], key(40), "הטלפון של אמא", "android", "1.1.0")
+    # בקשת החלפת מכשיר: הלקוח התקין בטלפון חדש ושחזר לפי מספר טלפון
+    with svc.db() as c:
+        moshe = c.execute("SELECT d.id FROM devices d JOIN customers cu ON cu.id = d.customer_id"
+                          " WHERE cu.phone = '0501234567' AND d.status = 'active' ORDER BY d.id LIMIT 1").fetchone()
+    if moshe is not None:
+        svc.restore_request(phone=people[0][1], device_uid="cd" * 16, public_key=key(41), name="Pixel 9 (חדש)",
+                            platform="android", app_version="2.1.0", mode="swap", old_device_id=moshe["id"])
     # אירועים וסטטיסטיקה
     active = [d for d in svc.list_devices() if d["status"] == "active"]
     hosts = [("www.ynet.co.il", "image"), ("ae-pic-a1.aliexpress-media.com", "image"), ("www.google.com", "inline"),

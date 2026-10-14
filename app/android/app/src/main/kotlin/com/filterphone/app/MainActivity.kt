@@ -75,6 +75,7 @@ class MainActivity : FlutterActivity() {
                 "sdk" to Build.VERSION.SDK_INT,
                 "appVersion" to packageManager.getPackageInfo(packageName, 0).versionName,
             ))
+            "deviceUid" -> result.success(DeviceId.get(this))
             "generateKeyPair" -> background(result) { TunnelManager.newKeyPair() }
             "publicKey" -> background(result) { TunnelManager.publicKey() }
             "saveVpnConfig" -> background(result) {

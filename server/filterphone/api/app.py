@@ -39,7 +39,7 @@ from pydantic import BaseModel, Field
 
 from .. import logs, metrics
 from ..settings import get_settings
-from . import db, observe
+from . import db, observe, security
 from .catalog import admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
 from .security import RateLimiter
@@ -59,6 +59,7 @@ login_limiter = RateLimiter(limit=8, window_s=600)
 device_limiter = RateLimiter(limit=30, window_s=600)       # בקשות שינוי / דיווחים מהטלפון
 heartbeat_limiter = RateLimiter(limit=40, window_s=600)    # דיווח תקופתי: כל 15 דקות + רענון ידני
 rekey_limiter = RateLimiter(limit=3, window_s=86400)       # החלפת מפתח VPN — נדיר מאוד
+restore_limiter = RateLimiter(limit=8, window_s=3600)      # שחזור לפי מספר טלפון — לכל כתובת ולכל מספר
 
 
 def build_services() -> Services:
@@ -246,6 +247,26 @@ class EnrollIn(BaseModel):
     name: str = Field(default="", max_length=60)
     platform: str = Field(default="", max_length=20)
     app_version: str = Field(default="", max_length=20)
+    device_uid: str = Field(default="", max_length=64)
+
+
+class RestoreIn(BaseModel):
+    phone: str = Field(min_length=1, max_length=30)
+    device_uid: str = Field(min_length=16, max_length=64)
+    public_key: str = Field(min_length=44, max_length=44)
+    name: str = Field(default="", max_length=60)
+    platform: str = Field(default="", max_length=20)
+    app_version: str = Field(default="", max_length=20)
+
+
+class RestoreRequestIn(RestoreIn):
+    mode: str = Field(pattern="^(swap|additional)$")
+    old_device_id: int | None = None
+
+
+class SwapDecision(BaseModel):
+    approve: bool
+    as_additional: bool = False
 
 
 class ProfileIn(BaseModel):
@@ -277,6 +298,7 @@ class TransferIn(BaseModel):
     name: str = Field(default="", max_length=60)
     platform: str = Field(default="", max_length=20)
     app_version: str = Field(default="", max_length=20)
+    device_uid: str = Field(default="", max_length=64)
 
 
 class RegisterIn(BaseModel):
@@ -290,6 +312,7 @@ class RegisterIn(BaseModel):
     device_name: str = Field(default="", max_length=60)
     platform: str = Field(default="", max_length=20)
     app_version: str = Field(default="", max_length=20)
+    device_uid: str = Field(default="", max_length=64)
 
 
 class ChangeIn(BaseModel):
@@ -436,17 +459,35 @@ def _routes(app: FastAPI) -> None:
         _limit(register_limiter, client_ip(request))
         return svc.register(name=body.name, phone=body.phone, email=body.email, level=body.level,
                             options=body.options, note=body.note, public_key=body.public_key,
-                            device_name=body.device_name, platform=body.platform, app_version=body.app_version)
+                            device_name=body.device_name, platform=body.platform, app_version=body.app_version,
+                            device_uid=body.device_uid)
 
     @app.post("/v1/enroll", status_code=201)
     def enroll(body: EnrollIn, request: Request, svc: SvcDep):
         _limit(enroll_limiter, client_ip(request))
-        return svc.enroll(body.code, body.public_key, body.name, body.platform, body.app_version)
+        return svc.enroll(body.code, body.public_key, body.name, body.platform, body.app_version, body.device_uid)
 
     @app.post("/v1/transfer", status_code=201)
     def transfer(body: TransferIn, request: Request, svc: SvcDep):
         _limit(enroll_limiter, client_ip(request))
-        return svc.transfer_enroll(body.token, body.public_key, body.name, body.platform, body.app_version)
+        return svc.transfer_enroll(body.token, body.public_key, body.name, body.platform, body.app_version,
+                                   body.device_uid)
+
+    @app.post("/v1/restore")
+    def restore(body: RestoreIn, request: Request, svc: SvcDep):
+        """שחזור לפי מספר טלפון: אותו טלפון — חוזר מיד; טלפון אחר — רשימת המכשירים לבחירה."""
+        _limit(restore_limiter, client_ip(request))
+        _limit(restore_limiter, "phone:" + security.normalize_phone(body.phone))
+        return svc.restore_lookup(phone=body.phone, device_uid=body.device_uid, public_key=body.public_key,
+                                  name=body.name, platform=body.platform, app_version=body.app_version)
+
+    @app.post("/v1/restore/request", status_code=201)
+    def restore_request(body: RestoreRequestIn, request: Request, svc: SvcDep):
+        """"העברת ההגנה לטלפון הזה" / "מכשיר נוסף" — לאישור המנהל."""
+        _limit(register_limiter, client_ip(request))
+        return svc.restore_request(phone=body.phone, device_uid=body.device_uid, public_key=body.public_key,
+                                   name=body.name, platform=body.platform, app_version=body.app_version,
+                                   mode=body.mode, old_device_id=body.old_device_id)
 
     @app.get("/v1/device")
     def device(request: Request, svc: SvcDep, row: DeviceRow):
@@ -525,6 +566,14 @@ def _routes(app: FastAPI) -> None:
     @app.get("/v1/admin/requests")
     def requests_(svc: SvcDep, _: AdminRow, status: str = "pending"):
         return svc.list_requests(None if status == "all" else status)
+
+    @app.get("/v1/admin/swaps")
+    def swaps(svc: SvcDep, _: AdminRow, status: str = "pending"):
+        return {"swaps": svc.list_swaps(status if status in ("pending", "approved", "rejected") else "pending")}
+
+    @app.post("/v1/admin/swaps/{swap_id}")
+    def resolve_swap(swap_id: int, body: SwapDecision, svc: SvcDep, admin: AdminRow):
+        return svc.resolve_swap(swap_id, body.approve, admin["username"], body.as_additional)
 
     @app.post("/v1/admin/requests/{request_id}/approve")
     def approve(request_id: int, body: Decision, svc: SvcDep, admin: AdminRow):

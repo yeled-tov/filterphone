@@ -52,6 +52,12 @@ class WelcomeScreen extends StatelessWidget {
                     icon: const Icon(Icons.vpn_key_outlined),
                     label: const Text('יש לי קוד הפעלה'),
                   ),
+                  const SizedBox(height: 4),
+                  TextButton.icon(
+                    onPressed: controller.openRestore,
+                    icon: const Icon(Icons.restore_rounded),
+                    label: const Text('כבר יש לי חשבון — שחזור לפי מספר טלפון'),
+                  ),
                   const SizedBox(height: 24),
                   Text(
                     'ההצטרפות: ממלאים פרטים ובוחרים מה לחסום → הבקשה מגיעה אלינו → '

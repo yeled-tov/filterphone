@@ -160,6 +160,47 @@ class Enrollment {
       );
 }
 
+/// תשובת "שחזור לפי מספר טלפון": אותו טלפון → [enrollment]; טלפון אחר → רשימת המכשירים בחשבון.
+class RestoreLookup {
+  RestoreLookup({required this.status, this.enrollment, this.devices = const [], this.message = '', this.customerName = ''});
+  final String status; // active / needs_choice / pending
+  final Enrollment? enrollment;
+  final List<AccountDevice> devices;
+  final String message;
+  final String customerName;
+
+  factory RestoreLookup.fromJson(Map<String, Object?> j) {
+    final status = j['status'] as String? ?? '';
+    return RestoreLookup(
+      status: status,
+      enrollment: status == 'active' ? Enrollment.fromJson(j) : null,
+      devices: [
+        for (final d in (j['devices'] as List? ?? const []))
+          AccountDevice.fromJson(Map<String, Object?>.from(d as Map)),
+      ],
+      message: j['message'] as String? ?? '',
+      customerName: j['customer_name'] as String? ?? '',
+    );
+  }
+}
+
+class AccountDevice {
+  AccountDevice({required this.id, required this.name, required this.status, this.lastSeen});
+  final int id;
+  final String name;
+  final String status;
+  final DateTime? lastSeen;
+
+  factory AccountDevice.fromJson(Map<String, Object?> j) => AccountDevice(
+        id: (j['id'] as num).toInt(),
+        name: j['name'] as String? ?? '',
+        status: j['status'] as String? ?? '',
+        lastSeen: (j['last_seen_at'] as num?) == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch((j['last_seen_at'] as num).toInt() * 1000),
+      );
+}
+
 class VpnBundle {
   VpnBundle(this.vpn, this.caPem);
   final Map<String, Object?> vpn;
@@ -303,6 +344,7 @@ class ApiClient {
     required String publicKey,
     required String platform,
     required String appVersion,
+    String deviceUid = '',
   }) async =>
       Registration.fromJson(await _send('POST', '/v1/register', body: {
         'name': form.name.trim(),
@@ -315,6 +357,7 @@ class ApiClient {
         'public_key': publicKey,
         'platform': platform,
         'app_version': appVersion,
+        if (deviceUid.isNotEmpty) 'device_uid': deviceUid,
       }));
 
   Future<Enrollment> enroll({
@@ -323,6 +366,7 @@ class ApiClient {
     required String name,
     required String platform,
     required String appVersion,
+    String deviceUid = '',
   }) async {
     final j = await _send('POST', '/v1/enroll', body: {
       'code': code,
@@ -330,9 +374,50 @@ class ApiClient {
       'name': name,
       'platform': platform,
       'app_version': appVersion,
+      if (deviceUid.isNotEmpty) 'device_uid': deviceUid,
     });
     return Enrollment.fromJson(j);
   }
+
+  /// שחזור לפי מספר טלפון (אחרי הסרה והתקנה, איפוס או טלפון חדש).
+  Future<RestoreLookup> restore({
+    required String phone,
+    required String deviceUid,
+    required String publicKey,
+    required String name,
+    required String platform,
+    required String appVersion,
+  }) async =>
+      RestoreLookup.fromJson(await _send('POST', '/v1/restore', body: {
+        'phone': phone.trim(),
+        'device_uid': deviceUid,
+        'public_key': publicKey,
+        'name': name,
+        'platform': platform,
+        'app_version': appVersion,
+      }));
+
+  /// "העברת ההגנה לטלפון הזה" (swap) או "מכשיר נוסף" (additional) — לאישור המנהל.
+  Future<Registration> restoreRequest({
+    required String phone,
+    required String deviceUid,
+    required String publicKey,
+    required String name,
+    required String platform,
+    required String appVersion,
+    required String mode,
+    int? oldDeviceId,
+  }) async =>
+      Registration.fromJson(await _send('POST', '/v1/restore/request', body: {
+        'phone': phone.trim(),
+        'device_uid': deviceUid,
+        'public_key': publicKey,
+        'name': name,
+        'platform': platform,
+        'app_version': appVersion,
+        'mode': mode,
+        'old_device_id': oldDeviceId,
+      }));
 
   /// הפעלה בקוד החלפת מכשיר: הטלפון החדש יורש את הלקוח, הרמה והמדיניות מהישן.
   Future<Enrollment> transfer({
@@ -341,6 +426,7 @@ class ApiClient {
     required String name,
     required String platform,
     required String appVersion,
+    String deviceUid = '',
   }) async {
     final j = await _send('POST', '/v1/transfer', body: {
       'token': token,
@@ -348,6 +434,7 @@ class ApiClient {
       'name': name,
       'platform': platform,
       'app_version': appVersion,
+      if (deviceUid.isNotEmpty) 'device_uid': deviceUid,
     });
     return Enrollment.fromJson(j);
   }
