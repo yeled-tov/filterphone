@@ -1,0 +1,19 @@
+{
+  "name": "filterphone-whatsapp-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "גשר וואטסאפ לא-רשמי ל-FilterPhone: מענה ללקוחות, handoff למנהל, ופעולות CRM מדורגות.",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "groq-sdk": "^0.7.0",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -39,8 +39,8 @@ _DIAG: dict[str, type] = {
 
 # הגדרות וואטסאפ: משתנה סביבה FP_WA_* גובר; אחרת מה שהמנהל שמר בממשק (טבלת meta)
 _WA_FIELDS = ("token", "phone_number_id", "admin_number", "verify_token", "app_secret", "template",
-              "template_lang", "public_number", "graph_version")
-_WA_SECRET = {"token", "app_secret"}
+              "template_lang", "public_number", "graph_version", "bot_token")
+_WA_SECRET = {"token", "app_secret", "bot_token"}
 
 
 class WaError(Exception):
@@ -61,6 +61,7 @@ class WaConfig:
     template_lang: str = "he"
     public_number: str = ""         # המספר שלקוחות עם וואטסאפ יכולים לכתוב אליו ישירות
     graph_version: str = "v23.0"
+    bot_token: str = ""          # טוקן משותף לשירות בוט הוואטסאפ הלא-רשמי (whatsapp-web.js)
 
     @property
     def can_send(self) -> bool:
@@ -266,6 +267,7 @@ class SupportDesk:
         shown = {f: getattr(cfg, f) for f in _WA_FIELDS if f not in _WA_SECRET}
         return shown | {
             "token_set": bool(cfg.token), "app_secret_set": bool(cfg.app_secret),
+            "bot_token_set": bool(cfg.bot_token),
             "token_hint": f"…{cfg.token[-4:]}" if len(cfg.token) > 8 else "",
             "can_send": cfg.can_send, "can_receive": cfg.can_receive,
             "webhook_url": f"https://{self.svc.cfg.public_host}/v1/whatsapp/webhook",
@@ -405,7 +407,8 @@ class SupportDesk:
     def notify_admin(self, message_id: int) -> None:
         """שולח את הפנייה לוואטסאפ של המנהל (רץ ברקע). כשלון לא מאבד את ההודעה — היא בממשק."""
         cfg = self.wa_config()
-        if not cfg.can_send:
+        # כשמוגדר בוט לא-רשמי (whatsapp-web.js) — הוא מושך מה-outbox ושולח; לא שולחים גם דרך Cloud API
+        if cfg.bot_token or not cfg.can_send:
             return
         with self.svc.db() as c:
             m = c.execute("SELECT m.*, d.name AS device_name, cu.name AS customer FROM support_messages m"

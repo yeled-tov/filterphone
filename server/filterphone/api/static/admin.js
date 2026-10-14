@@ -1539,10 +1539,16 @@ function whatsappCard(wa) {
   } }, "יצירה");
   const [pub, pubL] = f("public_number", "מספר לפנייה ישירה בוואטסאפ (רשות — מוצג ללקוחות)", { class: "ltr", inputmode: "tel" });
   const [tpl, tplL] = f("template", "תבנית להתראה אחרי 24 שעות (רשות)", { class: "ltr", placeholder: "support_message" });
+  const botIn = el("input", { type: "password", class: "ltr", autocomplete: "off",
+    placeholder: wa.bot_token_set ? "מוגדר — השאירו ריק בלי שינוי" : "טוקן לשירות בוט הוואטסאפ (whatsapp-web.js)" });
+  const genBot = el("button", { class: "ghost small", type: "button", onclick: () => {
+    const b = new Uint8Array(24); crypto.getRandomValues(b);
+    botIn.type = "text"; botIn.value = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  } }, "יצירה");
   const save = async () => {
     await attempt(() => api("/v1/admin/whatsapp", { method: "PUT", body: {
       admin_number: adminNumber.value, phone_number_id: phoneId.value, token: tokenIn.value, app_secret: secretIn.value,
-      verify_token: verify.value, public_number: pub.value, template: tpl.value } }), "נשמר");
+      verify_token: verify.value, public_number: pub.value, template: tpl.value, bot_token: botIn.value } }), "נשמר");
     render();
   };
   const copy = (v) => navigator.clipboard?.writeText(v).then(() => toast("הועתק"));
@@ -1557,6 +1563,9 @@ function whatsappCard(wa) {
       el("div", { class: "row gap end" }, el("div", { class: "grow" }, verifyL), gen), pubL, tplL),
     el("div", { class: "row gap wrap" }, el("span", { class: "muted small" }, "כתובת ה-Webhook:"),
       el("code", { class: "ltr" }, wa.webhook_url), el("button", { class: "ghost small", onclick: () => copy(wa.webhook_url) }, "העתקה")),
+    el("details", {}, el("summary", {}, `בוט וואטסאפ לא-רשמי (whatsapp-web.js)${wa.bot_token_set ? " — מוגדר ✓" : ""}`),
+      el("p", { class: "muted small" }, "חלופה ל-Cloud API: בוט שמחובר לוואטסאפ הרגיל שלך ב-QR, עונה ללקוחות כשאינך זמין ועוצר כשאתה נכנס. דורש הרצת שירות ה-Node (deploy/whatsapp-bot). שימו לב: API לא-רשמי, בסיכון חסימת מספר."),
+      el("div", { class: "row gap end" }, el("label", { class: "grow" }, "טוקן בוט", botIn), genBot)),
     el("details", {}, el("summary", {}, "איך מחברים (פעם אחת, כרבע שעה)"),
       el("ol", { class: "small steps" },
         el("li", {}, "ב-developers.facebook.com: My Apps → Create app → Business, ומוסיפים את המוצר WhatsApp."),

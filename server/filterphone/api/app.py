@@ -42,6 +42,7 @@ from pydantic import BaseModel, Field
 from .. import logs, metrics
 from ..settings import get_settings
 from . import db, observe, security
+from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
 from .security import RateLimiter
@@ -233,8 +234,16 @@ def support_dep(request: Request) -> SupportDesk:
     return request.app.state.support
 
 
+def bot_dep(request: Request, authorization: Annotated[str | None, Header()] = None) -> BotDesk:
+    desk = BotDesk(request.app.state.svc)
+    if not desk.authorized(_bearer(authorization)):
+        raise ApiError(401, "בוט לא מזוהה")
+    return desk
+
+
 SvcDep = Annotated[Services, Depends(svc_dep)]
 DeskDep = Annotated[SupportDesk, Depends(support_dep)]
+BotDep = Annotated[BotDesk, Depends(bot_dep)]
 DeviceRow = Annotated[Any, Depends(device_dep)]
 AdminRow = Annotated[Any, Depends(admin_dep)]
 AuthHeader = Annotated[str | None, Header()]
@@ -376,6 +385,28 @@ class SupportReplyIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class BotReplyIn(BaseModel):
+    device_id: int
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class BotForwardedIn(BaseModel):
+    ids: list[int] = Field(max_length=100)
+    wa_ids: dict[int, str] | None = None
+
+
+class BotBlockIn(BaseModel):
+    device_id: int
+    options: list[str] = Field(min_length=1, max_length=100)
+
+
+class BotEscalateIn(BaseModel):
+    device_id: int
+    note: str = Field(default="", max_length=1500)
+    level: int | None = None
+    options: list[str] | None = Field(default=None, max_length=100)
+
+
 class WhatsAppIn(BaseModel):
     token: str | None = Field(default=None, max_length=1024)
     phone_number_id: str | None = Field(default=None, max_length=40)
@@ -386,6 +417,7 @@ class WhatsAppIn(BaseModel):
     template_lang: str | None = Field(default=None, max_length=10)
     public_number: str | None = Field(default=None, max_length=40)
     graph_version: str | None = Field(default=None, max_length=10)
+    bot_token: str | None = Field(default=None, max_length=200)
     clear_secrets: bool = False
 
 
@@ -647,6 +679,32 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/admin/whatsapp/test")
     def whatsapp_test(desk: DeskDep, _: AdminRow):
         return desk.send_test()
+
+    # --- בוט וואטסאפ לא-רשמי (שירות נפרד, מאומת בטוקן בוט) ---
+
+    @app.get("/v1/bot/customer")
+    def bot_customer(phone: str, bot: BotDep):
+        return bot.customer(phone)
+
+    @app.get("/v1/bot/outbox")
+    def bot_outbox(bot: BotDep, after: int = 0):
+        return {"messages": bot.outbox(after)}
+
+    @app.post("/v1/bot/forwarded")
+    def bot_forwarded(body: BotForwardedIn, bot: BotDep):
+        return {"marked": bot.mark_forwarded(body.ids, body.wa_ids)}
+
+    @app.post("/v1/bot/reply")
+    def bot_reply(body: BotReplyIn, bot: BotDep):
+        return bot.reply(body.device_id, body.text)
+
+    @app.post("/v1/bot/block")
+    def bot_block(body: BotBlockIn, bot: BotDep):
+        return bot.block(body.device_id, body.options)
+
+    @app.post("/v1/bot/escalate", status_code=201)
+    def bot_escalate(body: BotEscalateIn, bot: BotDep):
+        return bot.escalate(body.device_id, body.note, body.level, body.options)
 
     @app.get("/v1/whatsapp/webhook")
     def whatsapp_verify(request: Request, desk: DeskDep):

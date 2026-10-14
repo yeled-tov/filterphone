@@ -85,6 +85,7 @@ class Settings:
     wa_template_lang: str = ""
     wa_public_number: str = ""
     wa_graph_version: str = ""
+    wa_bot_token: str = ""
 
     @property
     def engine_socket(self) -> str:
