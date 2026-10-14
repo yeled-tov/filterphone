@@ -95,6 +95,7 @@ class GuardService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             markAlive()
             if (guardSelf(pkg, event.className?.toString())) return
+            if (guardCritical(pkg)) return
             trackForeground(pkg, policy)
             if (!policy.isEmpty) onWindow(pkg, event.className?.toString(), policy)
             if (scanKeywords) checkFocusedInput(pkg)
@@ -144,6 +145,54 @@ class GuardService : AccessibilityService() {
         } finally {
             recycle(root)
         }
+    }
+
+    /**
+     * מסך בהגדרות שבו אפשר לפגוע ב-FilterPhone עצמה — עצירה כפויה, ניקוי נתונים, הסרה, או ביטול מנהל
+     * המכשיר. מקפיץ למסך הבית לפני שהמשתמש מספיק ללחוץ. (באנדרואיד 16 "אילוץ עצירה" מכבה נגישות +
+     * VPN — זה החור שנסגר.) בהשהיה שהמנהל אישר כבר לא מגיעים לכאן (נבדק למעלה).
+     */
+    private fun guardCritical(pkg: String): Boolean {
+        if (pkg !in SETTINGS_PACKAGES || !AccessibilityGuard.wanted(this)) return false
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+        try {
+            if (root.packageName?.toString() !in SETTINGS_PACKAGES) return false
+            val texts = collectTexts(root)
+            if (!SelfProtect.isCriticalScreen(texts, appLabel)) return false
+            if (block(pkg, GLOBAL_ACTION_HOME, R.string.guard_self_protected, minGapMs = 700)) {
+                ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+            }
+            return true
+        } catch (e: Exception) {
+            return false
+        } finally {
+            recycle(root)
+        }
+    }
+
+    /** כל הטקסטים הגלויים בחלון (text + contentDescription), עד MAX_NODES — ל-SelfProtect. */
+    private fun collectTexts(root: AccessibilityNodeInfo): List<String> {
+        val out = ArrayList<String>(64)
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var seen = 0
+        while (queue.isNotEmpty() && seen < MAX_NODES) {
+            val node = queue.removeFirst()
+            seen++
+            node.text?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
+            node.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
+            for (i in 0 until node.childCount) {
+                runCatching { node.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+            if (node !== root) recycle(node)      // את root משחררים אצל הקורא
+        }
+        queue.forEach { if (it !== root) recycle(it) }
+        return out
+    }
+
+    // שם האפליקציה כפי שמוצג ב-Settings (בדיוק מה שמופיע בכותרת דף פרטי האפליקציה)
+    private val appLabel by lazy {
+        runCatching { packageManager.getApplicationLabel(applicationInfo).toString() }.getOrDefault("FilterPhone")
     }
 
     /** תחילת התיאור שלנו — מספיק ייחודי, וקצר כדי לעבור גם כשהטקסט מקוצר במסך. */
