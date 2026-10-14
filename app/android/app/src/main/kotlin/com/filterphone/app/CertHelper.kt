@@ -12,6 +12,7 @@ import android.provider.Settings
 import android.security.KeyChain
 import android.util.Base64
 import java.security.KeyStore
+import java.security.MessageDigest
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 
@@ -62,6 +63,29 @@ object CertHelper {
         if (!DeviceOwnerManager.isDeviceOwner(context)) return false
         val dpm = context.getSystemService(DevicePolicyManager::class.java) ?: return false
         return runCatching { dpm.installCaCert(DeviceAdmin.component(context), pemToDer(pem)) }.getOrDefault(false)
+    }
+
+    /**
+     * root בלי מנהל מכשיר: כותבים את התעודה למאגר התעודות של המשתמש — אותו מקום שאליו ההגדרות
+     * שומרות "התקנת אישור CA" (לא מאגר המערכת, ובלי לגעת בקבצי מערכת). מאומת בסוף מול המאגר.
+     */
+    fun installWithRoot(pem: String): Boolean {
+        val der = pemToDer(pem)
+        val cert = CertificateFactory.getInstance("X.509").generateCertificate(der.inputStream()) as X509Certificate
+        val dir = "/data/misc/user/0/cacerts-added"
+        val file = "$dir/${subjectHashOld(cert.subjectX500Principal.encoded)}.0"
+        val b64 = Base64.encodeToString(der, Base64.NO_WRAP)
+        RootProvisioner.runSu("mkdir -p $dir && echo $b64 | base64 -d > $file && chmod 644 $file && " +
+            "chown system:system $file; restorecon $file 2>/dev/null; true", 20)
+        return runCatching { isInstalled(pem) }.getOrDefault(false)
+    }
+
+    /** שם הקובץ במאגר: X509_NAME_hash_old — MD5 של ה-subject (DER), 4 בתים ראשונים little-endian. טהור. */
+    fun subjectHashOld(subjectDer: ByteArray): String {
+        val md = MessageDigest.getInstance("MD5").digest(subjectDer)
+        val v = (md[0].toLong() and 0xff) or ((md[1].toLong() and 0xff) shl 8) or
+            ((md[2].toLong() and 0xff) shl 16) or ((md[3].toLong() and 0xff) shl 24)
+        return "%08x".format(v)
     }
 
     /** הסרת התעודה ("הסרת הכול") — אפשרית רק למנהל מכשיר; אחרת המשתמש מסיר בהגדרות. */

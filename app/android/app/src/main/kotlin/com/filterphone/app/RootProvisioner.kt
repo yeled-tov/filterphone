@@ -97,9 +97,13 @@ object RootProvisioner {
         }
     }
 
-    private data class Shell(val code: Int, val out: String, val err: String)
+    internal data class Shell(val code: Int, val out: String, val err: String)
 
-    private fun runSu(cmd: String, timeoutS: Long): Shell {
+    /** יש root מאושר (su מחזיר uid=0). בפעם הראשונה אפליקציית ה-root שואלת את המשתמש. */
+    fun hasRoot(): Boolean = runSu("id", 20).let { it.code == 0 && it.out.contains("uid=0") }
+
+    /** פקודה אחת כ-root (חוסם — חוט רקע). */
+    internal fun runSu(cmd: String, timeoutS: Long): Shell {
         return try {
             val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
             // Drain output while su is running. Waiting before reading can fill the process pipe

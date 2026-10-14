@@ -17,6 +17,9 @@ enum Phase { loading, welcome, register, activation, pending, home, unsupported 
 /// סעיף ברשימת "מה צריך כדי שהטלפון יהיה מוגן".
 enum Check { vpn, certificate, alwaysOn, privateDns, guard, battery }
 
+/// הצעד שההקמה בלחיצה אחת מחכה לו (חלון של אנדרואיד שהמשתמש צריך לאשר).
+enum SetupStep { automatic, vpn, certificate, battery, guard, done }
+
 /// אחסון קטן ומאובטח (Keystore באנדרואיד / Keychain באייפון).
 abstract class KeyValueStore {
   Future<String?> read(String key);
@@ -67,7 +70,13 @@ class AppController extends ChangeNotifier {
   bool serverReachable = true;
   bool deviceRemoved = false;
   bool adminPauseActive = false;
+  DateTime? pauseUntil;
   bool rootProvisioning = false;
+
+  /// הקמה בלחיצה אחת: הצעד הנוכחי (null = לא רצה), ומה בוצע אוטומטית (root / מנהל מכשיר).
+  SetupStep? setupStep;
+  Map<String, Object?>? setupReport;
+  final Set<SetupStep> _setupTried = {};
 
   /// סוללה, מנהל מכשיר, סנכרון אחרון, בדיקת VPN אחרונה — מהקוד הנייטיבי.
   ProtectionStatus protection = ProtectionStatus.unknown;
@@ -511,6 +520,8 @@ class AppController extends ChangeNotifier {
     try {
       final pauseState = await native.adminPauseStatus();
       adminPauseActive = pauseState['active'] == true;
+      final until = (pauseState['until'] as num?)?.toInt() ?? 0;
+      pauseUntil = adminPauseActive && until > 0 ? DateTime.fromMillisecondsSinceEpoch(until) : null;
     } on PlatformException catch (e) {
       debugPrint('pause status failed: $e');
     }
@@ -530,39 +541,149 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// מחזיר את ההגנה מקומית, גם אם השרת לא זמין. nonce ההשהיה נדחה מקומית כדי שלא
-  /// יופעל שוב בסנכרון הבא; השהיה חדשה מהשרת תקבל nonce אחר ותוצג מחדש.
-  Future<bool> resumeProtectionLocally() async {
+  /// "החזרת ההגנה" בזמן השהיה: VPN, מגן ומנהל מכשיר חוזרים מיד — וגם בשרת ההשהיה נגמרת.
+  /// עובד גם בלי שרת (המקור הוא הטלפון); השהיה חדשה מהמנהל תוצג שוב.
+  Future<bool> resumeProtection() => _guard(() async {
+        if (!await native.resumeProtectionLocally()) {
+          throw const _UserMessage('הטלפון לא הצליח להחזיר את ההגנה. נסו שוב.');
+        }
+        adminPauseActive = false;
+        pauseUntil = null;
+        notice = 'ההגנה חזרה במלואה ✓';
+        await refresh(forceSync: true);
+      });
+
+  /// "הסרת הכול" — רק בזמן השהיה שהמנהל אישר (נבדק גם בטלפון): ניהול המכשיר, ה-VPN, התעודה
+  /// והנתונים נמחקים, השרת מעודכן, ואז נפתח חלון הסרת האפליקציה של אנדרואיד. אין דרך חזרה.
+  /// מחזיר דוח (למשל אם התעודה הוסרה או שצריך להסיר אותה ידנית בהגדרות).
+  Future<Map<String, Object?>?> uninstallEverything() async {
+    if (busy) return null;
+    busy = true;
+    error = null;
+    notifyListeners();
     try {
-      final ok = await native.resumeProtectionLocally();
-      if (!ok) throw StateError('הטלפון לא הצליח לשחזר את ההגנה');
+      final report = await native.uninstallEverything();
+      _timer?.cancel();
+      await _vpnSub?.cancel();
+      _vpnSub = null;
+      for (final k in [_kToken, _kCa, _kVpnHash, _kGuardHash, _kReport, _kSummary]) {
+        await store.write(k, null);
+      }
+      _token = null;
+      _caPem = null;
+      device = null;
       adminPauseActive = false;
-      error = null;
-      notice = 'ההגנה שוחזרה מקומית בטלפון.';
-      await refresh(forceSync: true);
-      return !adminPauseActive;
-    } catch (e) {
-      error = 'לא ניתן לשחזר את ההגנה: $e';
+      pauseUntil = null;
+      vpn = VpnStatus.down;
+      phase = Phase.welcome;
+      try {
+        await native.requestSelfUninstall();
+      } on PlatformException catch (e) {
+        debugPrint('self uninstall dialog failed: $e');
+      }
+      return report;
+    } on PlatformException catch (e) {
+      error = 'ההסרה לא הושלמה: ${e.message ?? e.code}';
+      return null;
+    } finally {
+      busy = false;
       notifyListeners();
-      return false;
     }
   }
 
-  /// מסלול חירום מקומי: משחרר Device Owner, מסיר את מדיניות החסימה המקומית ומפסיק VPN.
-  /// לאחר מכן האפליקציה חוזרת למסך הפעלה וניתן להסיר אותה דרך הגדרות Android.
-  Future<bool> removeManagementLocally() async {
+  // ------------------------------------------------------------------ הקמה בלחיצה אחת
+
+  /// לוחצים פעם אחת: קודם כל מה שהטלפון יכול לעשות לבד (root / מנהל מכשיר — מנהל מכשיר, מגן,
+  /// תעודה, סוללה, VPN), ואז — רק מה שעוד חסר — חלונות האישור של אנדרואיד, אחד אחרי השני.
+  /// כשחוזרים מחלון (onAppResumed) ממשיכים לצעד הבא. צעד שהמשתמש דילג עליו לא נפתח שוב בלולאה.
+  Future<void> oneTapSetup() async {
+    if (setupStep != null && setupStep != SetupStep.done) return;
+    _setupTried.clear();
+    setupStep = SetupStep.automatic;
+    error = null;
+    notice = null;
+    notifyListeners();
     try {
-      final ok = await native.removeManagementLocally();
-      if (!ok) throw StateError('Android לא אפשר להסיר את ניהול המכשיר');
-      adminPauseActive = false;
-      await resetDevice();
-      return true;
-    } catch (e) {
-      error = 'הסרת הניהול לא הושלמה: $e';
-      notifyListeners();
-      return false;
+      setupReport = await native.setupAll(_caPem);
+    } on PlatformException catch (e) {
+      debugPrint('automatic setup failed: $e');
+      setupReport = {'error': e.message ?? e.code};
+    }
+    await _continueSetup();
+  }
+
+  /// האפליקציה חזרה לחזית (המשתמש סיים עם חלון של אנדרואיד) — ממשיכים בהקמה, ומרעננים.
+  Future<void> onAppResumed() async {
+    if (setupStep != null && setupStep != SetupStep.done) {
+      await _continueSetup();
+    } else if (phase == Phase.home) {
+      await refresh();
     }
   }
+
+  void dismissSetup() {
+    setupStep = null;
+    notifyListeners();
+  }
+
+  Future<void> _continueSetup() async {
+    await refresh();
+    final next = <SetupStep, bool>{
+      SetupStep.vpn: !vpn.isUp,
+      SetupStep.certificate: !caInstalled && _caPem != null,
+      SetupStep.battery: !protection.backgroundOk,
+      SetupStep.guard: guardNeeded && !guardEnabled,
+    }.entries.where((e) => e.value).map((e) => e.key).toList();
+    if (next.isEmpty) {
+      setupStep = SetupStep.done;
+      notice = 'ההקמה הושלמה — הטלפון מוגן ✓';
+      notifyListeners();
+      return;
+    }
+    final step = next.first;
+    if (_setupTried.contains(step)) {
+      // המשתמש חזר בלי לאשר — לא פותחים שוב בלולאה; אפשר ללחוץ שוב על הכפתור
+      setupStep = null;
+      notice = 'ההקמה נעצרה ב"${setupStepTitle(step)}". אפשר ללחוץ שוב על "הקמה בלחיצה אחת" או לאשר מהרשימה למטה.';
+      notifyListeners();
+      return;
+    }
+    _setupTried.add(step);
+    setupStep = step;
+    notifyListeners();
+    switch (step) {
+      case SetupStep.vpn:
+        try {
+          await _connect();
+          await _continueSetup();                 // אושר מיד (או כבר היה) — ממשיכים
+        } on _UserMessage catch (e) {
+          notice = e.message;
+          notifyListeners();
+        } on PlatformException catch (e) {
+          notice = 'החיבור לא הושלם: ${e.message ?? e.code}';
+          notifyListeners();
+        }
+      case SetupStep.certificate:
+        await installCertificate();
+        if (caInstalled) await _continueSetup();
+      case SetupStep.battery:
+        await requestBatteryExemption();
+      case SetupStep.guard:
+        await openGuardSettings();
+      case SetupStep.automatic:
+      case SetupStep.done:
+        break;
+    }
+  }
+
+  static String setupStepTitle(SetupStep s) => switch (s) {
+        SetupStep.automatic => 'הגדרות אוטומטיות',
+        SetupStep.vpn => 'אישור חיבור הסינון (VPN)',
+        SetupStep.certificate => 'התקנת תעודת הסינון',
+        SetupStep.battery => 'פעולה ברקע (סוללה)',
+        SetupStep.guard => 'הפעלת מגן FilterPhone (נגישות)',
+        SetupStep.done => 'הושלם',
+      };
 
   /// ניסיון ההקמה התקני דרך su במכשיר שכבר יש בו Root; לא עוקף מגבלות Android.
   Future<Map<String, Object?>> provisionRoot() async {

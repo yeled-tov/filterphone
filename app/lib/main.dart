@@ -40,7 +40,8 @@ class _FilterPhoneAppState extends State<FilterPhoneApp> with WidgetsBindingObse
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    if (widget.controller.phase == Phase.home) widget.controller.refresh();
+    // חזרה מחלון של אנדרואיד (אישור VPN / תעודה / סוללה / נגישות): ממשיכים בהקמה ומרעננים
+    if (widget.controller.phase == Phase.home) widget.controller.onAppResumed();
     if (widget.controller.phase == Phase.pending) widget.controller.refreshPending();
   }
 

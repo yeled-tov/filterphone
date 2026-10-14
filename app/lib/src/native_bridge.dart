@@ -136,10 +136,22 @@ abstract class NativeBridge {
   Future<String> privateDnsMode();
   Future<bool> isDeviceOwner();
   Future<void> reset();
+  /// השהיה שהמנהל אישר: {active, until (מילישניות)}.
   Future<Map<String, Object?>> adminPauseStatus();
+
+  /// "החזרת ההגנה" בזמן השהיה — הכול חוזר מיד (גם בשרת).
   Future<bool> resumeProtectionLocally();
-  Future<bool> removeManagementLocally();
+
+  /// "הסרת הכול" — רק בזמן השהיה מאושרת: ניהול, VPN, תעודה (במנהל מכשיר), נתונים. מחזיר דוח.
+  Future<Map<String, Object?>> uninstallEverything();
+
+  /// חלון הסרת האפליקציה של אנדרואיד (אחרי uninstallEverything).
+  Future<bool> requestSelfUninstall();
+
   Future<Map<String, Object?>> provisionRoot();
+
+  /// הקמה בלחיצה אחת: כל מה שאפשר בלי מגע (root / מנהל מכשיר). מחזיר מה הושלם.
+  Future<Map<String, Object?>> setupAll(String? caPem);
 
   // --- מגן FilterPhone: חסימת אפליקציות ומסכים בטלפון עצמו ---
 
@@ -254,7 +266,15 @@ class ChannelNativeBridge implements NativeBridge {
   Future<bool> resumeProtectionLocally() => _call<bool>('resumeProtectionLocally');
 
   @override
-  Future<bool> removeManagementLocally() => _call<bool>('removeManagementLocally');
+  Future<Map<String, Object?>> uninstallEverything() async =>
+      Map<String, Object?>.from(await _call<Map<Object?, Object?>>('uninstallEverything'));
+
+  @override
+  Future<bool> requestSelfUninstall() => _call<bool>('requestSelfUninstall');
+
+  @override
+  Future<Map<String, Object?>> setupAll(String? caPem) async =>
+      Map<String, Object?>.from(await _call<Map<Object?, Object?>>('setupAll', {'ca': caPem}));
 
   @override
   Future<Map<String, Object?>> provisionRoot() async =>

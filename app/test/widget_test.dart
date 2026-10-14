@@ -67,12 +67,28 @@ class FakeNative implements NativeBridge {
     state = 'DOWN';
   }
 
+  bool paused = false;
+  int resumes = 0;
   @override
-  Future<Map<String, Object?>> adminPauseStatus() async => {'active': false, 'until': 0};
+  Future<Map<String, Object?>> adminPauseStatus() async =>
+      {'active': paused, 'until': paused ? DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch : 0};
   @override
-  Future<bool> resumeProtectionLocally() async => true;
+  Future<bool> resumeProtectionLocally() async {
+    resumes++;
+    paused = false;
+    return true;
+  }
+  int uninstalls = 0;
   @override
-  Future<bool> removeManagementLocally() async => true;
+  Future<Map<String, Object?>> uninstallEverything() async {
+    uninstalls++;
+    return {'ok': true, 'ca_removed': false, 'server_notified': true};
+  }
+  @override
+  Future<bool> requestSelfUninstall() async => true;
+  Map<String, Object?> setupResult = {'root': false, 'device_owner': false, 'secure_settings': false};
+  @override
+  Future<Map<String, Object?>> setupAll(String? caPem) async => setupResult;
   @override
   Future<Map<String, Object?>> provisionRoot() async => {
         'ok': false, 'code': 'ENROLL-ROOT-001', 'result': 'no_root', 'technical': ''
@@ -608,6 +624,60 @@ void main() {
     expect(native.savedVpn?['address'], '10.8.0.10/32');
     expect(native.state, 'UP');
     c.dispose();
+  });
+
+  test('one-tap setup opens each remaining approval in turn and finishes', () async {
+    final native = FakeNative()
+      ..batteryUnrestricted = false;
+    final c = makeController(native, fakeServer());
+    await c.start();
+    await c.activate('ABCDE-FGHJK', '');
+    expect(c.vpn.isUp, isTrue);
+    await c.oneTapSetup();
+    expect(c.setupStep, SetupStep.certificate);         // VPN כבר מחובר — הצעד הבא: תעודה
+    native.caInstalled = true;                          // המשתמש התקין בהגדרות וחזר
+    await c.onAppResumed();
+    expect(c.setupStep, SetupStep.battery);
+    expect(native.batteryRequests, 1);
+    native.batteryUnrestricted = true;                  // אישר את חלון הסוללה
+    await c.onAppResumed();
+    expect(c.setupStep, SetupStep.done);
+    expect(c.isProtected, isTrue);
+    expect(c.notice, contains('הושלמה'));
+  });
+
+  test('one-tap setup does not reopen a skipped approval in a loop', () async {
+    final native = FakeNative();
+    final c = makeController(native, fakeServer());
+    await c.start();
+    await c.activate('ABCDE-FGHJK', '');
+    await c.oneTapSetup();
+    expect(c.setupStep, SetupStep.certificate);
+    await c.onAppResumed();                              // חזר בלי להתקין
+    expect(c.setupStep, isNull);
+    expect(c.notice, contains('נעצרה'));
+  });
+
+  test('authorized pause: restore brings protection back; remove-all wipes the phone', () async {
+    final native = FakeNative()..paused = true;
+    final store = MemoryStore();
+    final c = makeController(native, fakeServer(), store);
+    await c.start();
+    await c.activate('ABCDE-FGHJK', '');
+    await c.refresh();
+    expect(c.adminPauseActive, isTrue);
+    expect(c.pauseUntil, isNotNull);
+    expect(await c.resumeProtection(), isTrue);
+    expect(native.resumes, 1);
+    expect(c.adminPauseActive, isFalse);
+
+    native.paused = true;
+    await c.refresh();
+    final report = await c.uninstallEverything();
+    expect(report?['ok'], isTrue);
+    expect(native.uninstalls, 1);
+    expect(c.phase, Phase.welcome);
+    expect(await store.read('device_token'), isNull);
   });
 
   test('lost VPN config (same key) is saved again from the server', () async {

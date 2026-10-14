@@ -5,28 +5,13 @@ import '../theme.dart';
 import 'change_request_screen.dart';
 
 /// המסך הראשי: האם הטלפון מוגן, ומה עוד צריך לעשות.
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.controller});
   final AppController controller;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  bool _pausePromptShowing = false;
-
-  @override
   Widget build(BuildContext context) {
-    final c = widget.controller;
-    if (c.adminPauseActive && !_pausePromptShowing) {
-      _pausePromptShowing = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _showPausePrompt(c);
-      });
-    } else if (!c.adminPauseActive) {
-      _pausePromptShowing = false;
-    }
+    final c = controller;
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -64,6 +49,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.block,
                 text: 'המכשיר הושבת על ידי המנהל. פנו ל-FilterPhone.',
               ),
+              if (c.adminPauseActive) ...[
+                _PauseCard(controller: c),
+                const SizedBox(height: 16),
+              ],
               _StatusHero(controller: c),
               const SizedBox(height: 4),
               if (c.protection.updateAvailable != null) ...[
@@ -73,6 +62,10 @@ class _HomeScreenState extends State<HomeScreen> {
               if (c.notice != null || c.error != null) ...[
                 const SizedBox(height: 16),
                 _Message(controller: c),
+              ],
+              if (!c.adminPauseActive && (!c.isProtected || !c.deviceOwner || c.setupStep != null)) ...[
+                const SizedBox(height: 16),
+                _OneTapCard(controller: c),
               ],
               const SizedBox(height: 16),
               _Checklist(controller: c),
@@ -84,167 +77,216 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
               const SizedBox(height: 16),
               _ServerProof(controller: c),
-              if (!c.deviceOwner) ...[
-                const SizedBox(height: 16),
-                _RootProvisionCard(controller: c),
-              ],
             ],
           ),
         ),
       ),
     );
   }
+}
 
-  Future<void> _showPausePrompt(AppController c) async {
-    if (!mounted || !c.adminPauseActive) {
-      _pausePromptShowing = false;
-      return;
-    }
-    await showDialog<void>(
+/// השהיה שהמנהל אישר: הטלפון פתוח לגמרי עד הזמן שנקבע. שתי אפשרויות — להחזיר את ההגנה מיד,
+/// או להסיר הכול (רק עכשיו אפשר, ועם אזהרה ברורה שאין דרך חזרה).
+class _PauseCard extends StatelessWidget {
+  const _PauseCard({required this.controller});
+  final AppController controller;
+
+  static String _two(int n) => n.toString().padLeft(2, '0');
+
+  Future<void> _confirmUninstall(BuildContext context) async {
+    final c = controller;
+    var understood = false;
+    final ok = await showDialog<bool>(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        bool working = false;
-        String? actionError;
-        return StatefulBuilder(
-          builder: (dialogContext, setDialogState) => PopScope(
-            canPop: false,
-            child: AlertDialog(
-              title: const Text('החסימה הושהתה'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('בחר מה לעשות בטלפון הזה. הבחירה פועלת מקומית ואינה תלויה בכך שהשרת זמין.'),
-                  if (actionError != null) ...[
-                    const SizedBox(height: 12),
-                    Text(actionError!, style: TextStyle(color: Theme.of(dialogContext).colorScheme.error)),
-                  ],
-                  if (working) ...[
-                    const SizedBox(height: 12),
-                    const Center(child: CircularProgressIndicator()),
-                  ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          icon: Icon(Icons.warning_amber_rounded, color: StatusColors.bad(dialogContext), size: 36),
+          title: const Text('להסיר את כל ההגנה מהטלפון?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('זה יסיר הכול — כאילו FilterPhone לא היה בטלפון:'),
+                const SizedBox(height: 8),
+                const Text('• הצריבה (ניהול המכשיר) תימחק — ולא יהיה אפשר להחזיר אותה בלי הקמה מחדש.\n'
+                    '• ה-VPN והסינון יוסרו.\n'
+                    '• תעודת הסינון תוסר.\n'
+                    '• האפליקציה עצמה תוסר.'),
+                if (!c.deviceOwner) ...[
+                  const SizedBox(height: 8),
+                  const Text('בטלפון הזה את תעודת הסינון מוחקים ידנית: הגדרות ← אבטחה ← הצפנה ופרטי כניסה ← '
+                      'אישורים מהימנים ← משתמש ← FilterPhone CA ← הסרה.'),
                 ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: working ? null : () async {
-                    setDialogState(() { working = true; actionError = null; });
-                    final ok = await c.resumeProtectionLocally();
-                    if (!mounted || !dialogContext.mounted) return;
-                    if (ok) {
-                      Navigator.of(dialogContext).pop();
-                    } else {
-                      setDialogState(() { working = false; actionError = c.error ?? 'השחזור נכשל.'; });
-                    }
-                  },
-                  child: const Text('החזר חסימה'),
-                ),
-                FilledButton.tonal(
-                  onPressed: working ? null : () async {
-                    final confirmed = await showDialog<bool>(
-                      context: dialogContext,
-                      barrierDismissible: false,
-                      builder: (confirmContext) => AlertDialog(
-                        title: const Text('הסרת ניהול מהמכשיר'),
-                        content: const Text('פעולה זו משחררת את מגבלות Device Owner, מפסיקה את ה-VPN ומסירה את מדיניות החסימה המקומית. לאחר מכן ניתן להסיר את FilterPhone דרך הגדרות Android. ההגנה תיפסק.'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.of(confirmContext).pop(false), child: const Text('ביטול')),
-                          FilledButton(onPressed: () => Navigator.of(confirmContext).pop(true), child: const Text('אשר הסרה')),
-                        ],
-                      ),
-                    );
-                    if (confirmed != true || !mounted || !dialogContext.mounted) return;
-                    setDialogState(() { working = true; actionError = null; });
-                    final ok = await c.removeManagementLocally();
-                    if (!mounted || !dialogContext.mounted) return;
-                    if (ok) {
-                      Navigator.of(dialogContext).pop();
-                    } else {
-                      setDialogState(() { working = false; actionError = c.error ?? 'הסרת הניהול נכשלה.'; });
-                    }
-                  },
-                  child: const Text('הסר ניהול'),
+                const SizedBox(height: 12),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: understood,
+                  onChanged: (v) => setState(() => understood = v ?? false),
+                  title: const Text('הבנתי — אין דרך חזרה'),
                 ),
               ],
             ),
           ),
-        );
-      },
+          actions: [
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('ביטול')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: StatusColors.bad(dialogContext)),
+              onPressed: understood ? () => Navigator.of(dialogContext).pop(true) : null,
+              child: const Text('הסרת הכול'),
+            ),
+          ],
+        ),
+      ),
     );
-    _pausePromptShowing = false;
-    if (mounted) setState(() {});
-  }
-}
-
-class _RootProvisionCard extends StatelessWidget {
-  const _RootProvisionCard({required this.controller});
-  final AppController controller;
-
-  String _message(Map<String, Object?> result) {
-    switch (result['result']) {
-      case 'device_owner_set':
-        final technical = result['technical'] as String? ?? '';
-        if (technical.contains('WRITE_SECURE_SETTINGS grant failed')) {
-          return 'Device Owner הוגדר, אבל Android לא אישר את WRITE_SECURE_SETTINGS. צריך לבדוק את Root ולנסות שוב.';
-        }
-        return 'ההקמה הצליחה. המכשיר הוגדר כמנוהל.';
-      case 'already_managed': return 'ניהול המכשיר כבר פעיל.';
-      case 'no_root': return 'לא נמצא Root מאושר במכשיר. לא בוצע שינוי.';
-      case 'root_denied': return 'בקשת Root נדחתה או לא קיבלה הרשאת מנהל. אפשר לאשר את בקשת su ואז לנסות שוב.';
-      case 'requires_factory_reset': return 'Android אינו מאפשר להגדיר Device Owner במצב הנוכחי. אין כאן מעקף בטוח; בדרך התקנית נדרשת בדרך כלל הקמה בזמן ההתקנה הראשונית או לאחר איפוס. לא בוצע איפוס.';
-      case 'accounts_present': return 'יש חשבונות במכשיר שמונעים את ההקמה דרך Root. לא בוצע שינוי.';
-      case 'already_has_device_owner': return 'כבר מוגדר מנהל מכשיר אחר. FilterPhone לא החליף אותו.';
-      default: return 'ההקמה לא הושלמה (${result['code'] ?? 'שגיאה'}). לא נעשה מעקף אבטחה.';
-    }
+    if (ok == true) await c.uninstallEverything();
   }
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text('הקמה מתקדמת — Root / מנהל מכשיר', style: TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                const Text('ניסיון דרך Root יעבוד רק במכשיר שיש בו Root מאושר, ורק אם Android מאפשר להגדיר Device Owner. לא מבוצע איפוס אוטומטי.'),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: controller.rootProvisioning ? null : () async {
-                    final result = await controller.provisionRoot();
-                    if (!context.mounted) return;
-                    await showDialog<void>(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        title: Text(result['ok'] == true ? 'ההקמה הצליחה' : 'תוצאת בדיקת Root'),
-                        content: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_message(result)),
-                            if ((result['technical'] as String? ?? '').trim().isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              SelectableText((result['technical'] as String).trim()),
-                            ],
-                          ],
-                        ),
-                        actions: [FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('סגירה'))],
-                      ),
-                    );
-                  },
-                  icon: controller.rootProvisioning
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.admin_panel_settings_rounded),
-                  label: Text(controller.rootProvisioning ? 'בודק ומנסה להקים...' : 'בדוק Root והקם בלחיצה'),
-                ),
-              ],
+  Widget build(BuildContext context) {
+    final c = controller;
+    final theme = Theme.of(context);
+    final until = c.pauseUntil;
+    final untilText = until == null ? '' : ' עד ${_two(until.hour)}:${_two(until.minute)}';
+    return Card(
+      color: theme.colorScheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Icon(Icons.pause_circle_filled_rounded, size: 36, color: theme.colorScheme.onTertiaryContainer),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('ההגנה מושהית$untilText', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  const Text('המנהל אישר השהיה: הטלפון פתוח לגמרי — בלי סינון ובלי חסימות. בסוף הזמן הכול חוזר לבד.'),
+                ]),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: c.busy ? null : c.resumeProtection,
+              icon: const Icon(Icons.shield_rounded),
+              label: const Text('החזרת ההגנה עכשיו'),
             ),
-          ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(foregroundColor: StatusColors.bad(context)),
+              onPressed: c.busy ? null : () => _confirmUninstall(context),
+              icon: const Icon(Icons.delete_forever_rounded),
+              label: const Text('הסרת הכול מהטלפון'),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
+}
+
+/// הקמה בלחיצה אחת: עם root — הכול לבד; בלי root — כל אישור של אנדרואיד נפתח בתורו.
+class _OneTapCard extends StatelessWidget {
+  const _OneTapCard({required this.controller});
+  final AppController controller;
+
+  static const _howTo = {
+    SetupStep.automatic: 'מגדיר את מה שאפשר לבד… אם מופיע חלון של אפליקציית Root — לחצו "אפשר".',
+    SetupStep.vpn: 'בחלון שנפתח לחצו "אישור" — זה החיבור לסינון.',
+    SetupStep.certificate: 'בהגדרות שנפתחו: "התקנת אישור" ← "אישור CA" ← "התקן בכל זאת" ← בחרו את הקובץ FilterPhone-CA.crt.',
+    SetupStep.battery: 'בחלון שנפתח לחצו "אפשר" — כדי שאנדרואיד לא יעצור את הסינון ברקע.',
+    SetupStep.guard: 'ברשימה בחרו "מגן FilterPhone" ← הפעלה ← "אפשר". אחר כך חזרו לכאן.',
+    SetupStep.done: 'הכול מוכן.',
+  };
+
+  static String _result(Map<String, Object?> r) {
+    switch (r['device_owner_result']) {
+      case 'accounts_present':
+        return 'כדי שהטלפון יהיה מנוהל לגמרי (צריבה) אנדרואיד דורש שלא יהיו חשבונות בטלפון. '
+            'אפשר להסיר זמנית את החשבונות (הגדרות ← חשבונות) וללחוץ שוב, או להקים אחרי איפוס עם קוד QR.';
+      case 'already_has_device_owner':
+        return 'בטלפון כבר מוגדרת אפליקציית ניהול אחרת — FilterPhone לא מחליף אותה.';
+      case 'requires_factory_reset':
+      case 'provisioning_blocked':
+        return 'אנדרואיד מאפשר צריבה רק אחרי איפוס (עם קוד QR). כל השאר הוגדר.';
+    }
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    final theme = Theme.of(context);
+    final step = c.setupStep;
+    final running = step != null && step != SetupStep.done;
+    final r = c.setupReport;
+    Widget mark(String label, Object? ok) => Chip(
+          visualDensity: VisualDensity.compact,
+          avatar: Icon(ok == true ? Icons.check_circle : Icons.remove_circle_outline,
+              size: 18, color: ok == true ? StatusColors.ok(context) : theme.colorScheme.outline),
+          label: Text(label),
+        );
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: theme.colorScheme.primary,
+                child: const Icon(Icons.bolt_rounded, color: Colors.white),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('הקמה בלחיצה אחת', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 2),
+                  const Text('FilterPhone מגדיר הכול לבד: צריבת ניהול, מגן, תעודה, סוללה וחיבור לסינון. '
+                      'בטלפון עם Root — בלי שום אישור נוסף. בלי Root — כל אישור נפתח בתורו, רק ללחוץ "אישור".'),
+                ]),
+              ),
+            ]),
+            if (running) ...[
+              const SizedBox(height: 14),
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              Text('עכשיו: ${AppController.setupStepTitle(step)}',
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text(_howTo[step] ?? ''),
+            ],
+            if (r != null && r['error'] == null) ...[
+              const SizedBox(height: 12),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                mark('Root', r['root']),
+                mark('צריבה (מנהל מכשיר)', r['device_owner']),
+                mark('מגן חוזר לבד', r['secure_settings']),
+                mark('מגן FilterPhone', c.guardEnabled),
+                mark('תעודה', c.caInstalled),
+                mark('סוללה', c.protection.backgroundOk),
+                mark('VPN', c.vpn.isUp),
+              ]),
+              if (_result(r).isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(_result(r), style: theme.textTheme.bodySmall),
+              ],
+            ],
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: running || c.busy ? null : c.oneTapSetup,
+              icon: running
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.bolt_rounded),
+              label: Text(running ? 'מגדיר…' : (step == SetupStep.done ? 'בדיקה והקמה שוב' : 'הקמה בלחיצה אחת')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _StatusHero extends StatelessWidget {
@@ -538,22 +580,45 @@ class _CheckTile extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  /// הכפתור צמוד להסבר שלו (מתחת לטקסט, באותו צד) — לא "מרחף" בצד השני של השורה.
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final color = ok
         ? StatusColors.ok(context)
         : optional
             ? StatusColors.warn(context)
             : StatusColors.bad(context);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      leading: Icon(ok ? Icons.check_circle : Icons.error_outline, color: color),
-      title: Text(title),
-      subtitle: Text(ok ? okText : todo),
-      isThreeLine: !ok,
-      trailing: ok || actionLabel == null
-          ? null
-          : OutlinedButton(onPressed: onAction, child: Text(actionLabel!)),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(ok ? Icons.check_circle : Icons.error_outline, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(ok ? okText : todo, style: theme.textTheme.bodyMedium),
+                if (!ok && actionLabel != null) ...[
+                  const SizedBox(height: 8),
+                  FilledButton.tonal(
+                    onPressed: onAction,
+                    style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                    child: Text(actionLabel!),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

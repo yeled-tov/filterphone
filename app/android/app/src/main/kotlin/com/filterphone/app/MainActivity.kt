@@ -140,6 +140,12 @@ class MainActivity : FlutterActivity() {
                 result.success(tryStart(intent))
             }
             "preflight" -> background(result) { Preflight.report(this) }
+            // הקמה בלחיצה אחת: מה שאפשר בלי מגע (root / מנהל מכשיר); השאר — הממשק מוביל
+            "setupAll" -> background(result) {
+                val report = OneTapSetup.run(this, call.argument<String>("ca"))
+                main.post { Recovery.startProtection(this) }
+                report
+            }
             "provisionRoot" -> background(result) { RootProvisioner.provision(this).toMap() }
             "reset" -> background(result) {
                 AdminState.clear(this)

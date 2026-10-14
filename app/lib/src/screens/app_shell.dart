@@ -932,7 +932,7 @@ class ProfileScreen extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: controller.openUpdatePage,
                 icon: const Icon(Icons.system_update_rounded),
-                label: Text('עדכון FilterPhone \${controller.protection.updateAvailable}'),
+                label: Text('עדכון FilterPhone ${controller.protection.updateAvailable}'),
               ),
           ],
         ),

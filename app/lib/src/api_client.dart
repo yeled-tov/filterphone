@@ -410,7 +410,7 @@ class ApiClient {
 
     final message = decoded is Map && decoded['error'] is String
         ? decoded['error'] as String
-        : 'שגיאה בשרת (\${res.statusCode})';
+        : 'שגיאה בשרת (${res.statusCode})';
 
     throw ApiException(res.statusCode, message);
   }
