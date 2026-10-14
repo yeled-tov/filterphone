@@ -80,6 +80,8 @@ kotlin {
 
 dependencies {
     implementation("com.wireguard.android:tunnel:1.0.20260102")
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
 }

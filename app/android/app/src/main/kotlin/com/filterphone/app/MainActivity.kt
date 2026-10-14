@@ -161,6 +161,15 @@ class MainActivity : FlutterActivity() {
                 report
             }
             "provisionRoot" -> background(result) { RootProvisioner.provision(this).toMap() }
+            // Shizuku (ניפוי אלחוטי / adb): מצב החיבור, ובקשת ההרשאה (חלון של אפליקציית Shizuku)
+            "shizukuStatus" -> result.success(mapOf(
+                "available" to ShizukuSetup.isAvailable(),
+                "permitted" to ShizukuSetup.hasPermission(),
+                "version" to ShizukuSetup.version(),
+            ))
+            "shizukuRequestPermission" -> ShizukuSetup.requestPermission { granted ->
+                main.post { result.success(mapOf("available" to ShizukuSetup.isAvailable(), "permitted" to granted)) }
+            }
             "reset" -> background(result) {
                 AdminState.clear(this)
                 TunnelManager.reset()

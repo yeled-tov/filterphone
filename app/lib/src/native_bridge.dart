@@ -153,7 +153,13 @@ abstract class NativeBridge {
 
   Future<Map<String, Object?>> provisionRoot();
 
-  /// הקמה בלחיצה אחת: כל מה שאפשר בלי מגע (root / מנהל מכשיר). מחזיר מה הושלם.
+  /// מצב Shizuku (ניפוי אלחוטי / adb): {available, permitted, version}.
+  Future<Map<String, Object?>> shizukuStatus();
+
+  /// מבקש הרשאת Shizuku (חלון של אפליקציית Shizuku). מחזיר {available, permitted}.
+  Future<Map<String, Object?>> shizukuRequestPermission();
+
+  /// הקמה בלחיצה אחת: כל מה שאפשר בלי מגע (root / Shizuku / מנהל מכשיר). מחזיר מה הושלם.
   Future<Map<String, Object?>> setupAll(String? caPem);
 
   // --- מגן FilterPhone: חסימת אפליקציות ומסכים בטלפון עצמו ---
@@ -307,6 +313,14 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<Map<String, Object?>> provisionRoot() async =>
       Map<String, Object?>.from(await _call<Map<Object?, Object?>>('provisionRoot'));
+
+  @override
+  Future<Map<String, Object?>> shizukuStatus() async =>
+      Map<String, Object?>.from(await _call<Map<Object?, Object?>>('shizukuStatus'));
+
+  @override
+  Future<Map<String, Object?>> shizukuRequestPermission() async =>
+      Map<String, Object?>.from(await _call<Map<Object?, Object?>>('shizukuRequestPermission'));
 
   @override
   Future<List<Map<String, Object?>>> installedApps() async {

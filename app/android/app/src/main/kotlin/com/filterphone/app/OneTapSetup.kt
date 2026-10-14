@@ -26,25 +26,42 @@ object OneTapSetup {
     fun run(context: Context, caPem: String?): Map<String, Any?> {
         val pkg = context.packageName
         val out = LinkedHashMap<String, Any?>()
+        // ערוץ מורשה להקמה: קודם root (su), ואם אין — Shizuku (shell, ניפוי אלחוטי/adb). שניהם מריצים
+        // את אותן הפקודות הרשמיות; מה שאנדרואיד לא מתיר מדווח ככשל.
         val root = runCatching { RootProvisioner.hasRoot() }.getOrDefault(false)
+        val shizuku = !root && runCatching { ShizukuSetup.isReady() }.getOrDefault(false)
         out["root"] = root
-        if (root && !DeviceOwnerManager.isDeviceOwner(context)) {
-            val r = RootProvisioner.provision(context)
-            out["device_owner_result"] = r.resultKey
-            out["technical"] = r.technical
+        out["shizuku"] = shizuku
+        if (!DeviceOwnerManager.isDeviceOwner(context)) {
+            val r = when {
+                root -> RootProvisioner.provision(context)
+                shizuku -> ShizukuSetup.provision(context)
+                else -> null
+            }
+            if (r != null) {
+                out["device_owner_result"] = r.resultKey
+                out["technical"] = r.technical
+            }
         }
         val owner = DeviceOwnerManager.isDeviceOwner(context)
         out["device_owner"] = owner
-        if (root) {
+        // פקודה מורשה אחת, בלי קשר לערוץ (root/Shizuku). אין ערוץ — לא עוקפים כלום, הממשק מוביל.
+        fun privileged(cmd: String, timeoutS: Long) {
+            when {
+                root -> RootProvisioner.runSu(cmd, timeoutS)
+                shizuku -> ShizukuSetup.exec(cmd, timeoutS)
+            }
+        }
+        if (root || shizuku) {
             if (!AccessibilityGuard.canHeal(context)) {
-                RootProvisioner.runSu("pm grant $pkg android.permission.WRITE_SECURE_SETTINGS", 20)
+                privileged("pm grant $pkg android.permission.WRITE_SECURE_SETTINGS", 20)
             }
             // סוללה: מחוץ ל-Doze ובלי הגבלת רקע — כדי שאנדרואיד לא יעצור את הסינון
-            RootProvisioner.runSu("dumpsys deviceidle whitelist +$pkg; cmd appops set $pkg RUN_IN_BACKGROUND allow; " +
+            privileged("dumpsys deviceidle whitelist +$pkg; cmd appops set $pkg RUN_IN_BACKGROUND allow; " +
                 "cmd appops set $pkg RUN_ANY_IN_BACKGROUND allow", 20)
-            if (!owner) RootProvisioner.runSu("appops set $pkg ACTIVATE_VPN allow", 15)
+            if (!owner) privileged("appops set $pkg ACTIVATE_VPN allow", 15)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                RootProvisioner.runSu("pm grant $pkg android.permission.POST_NOTIFICATIONS", 15)
+                privileged("pm grant $pkg android.permission.POST_NOTIFICATIONS", 15)
             }
         }
         out["secure_settings"] = AccessibilityGuard.canHeal(context)

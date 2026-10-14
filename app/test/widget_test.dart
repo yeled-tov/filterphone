@@ -100,6 +100,16 @@ class FakeNative implements NativeBridge {
         'ok': false, 'code': 'ENROLL-ROOT-001', 'result': 'no_root', 'technical': ''
       };
 
+  Map<String, Object?> shizuku = {'available': false, 'permitted': false, 'version': 0};
+  int shizukuRequests = 0;
+  @override
+  Future<Map<String, Object?>> shizukuStatus() async => shizuku;
+  @override
+  Future<Map<String, Object?>> shizukuRequestPermission() async {
+    shizukuRequests++;
+    return {'available': shizuku['available'], 'permitted': shizuku['permitted']};
+  }
+
   bool guard = false;
   Map<String, Object?>? guardPolicy;
   String? guardToken;

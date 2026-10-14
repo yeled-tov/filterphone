@@ -695,6 +695,18 @@ class AppController extends ChangeNotifier {
     error = null;
     notice = null;
     notifyListeners();
+    // בלי root ובלי מנהל מכשיר: אם Shizuku פעיל אך עדיין לא אושר — מבקשים הרשאה (חלון Shizuku),
+    // כדי שההקמה הבאה תוכל להשתמש בו (ניפוי אלחוטי / adb) בדיוק כמו ב-root.
+    if (!deviceOwner) {
+      try {
+        final sz = await native.shizukuStatus();
+        if (sz['available'] == true && sz['permitted'] != true) {
+          await native.shizukuRequestPermission();
+        }
+      } catch (e) {
+        debugPrint('shizuku permission step skipped: $e');
+      }
+    }
     try {
       setupReport = await native.setupAll(_caPem);
     } on PlatformException catch (e) {
