@@ -223,7 +223,27 @@ CREATE INDEX swaps_status ON swaps(status);
 ALTER TABLE managed_apps ADD COLUMN version_name TEXT NOT NULL DEFAULT '';  -- מה-APK שהמנהל העלה
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6]
+_V7 = """
+CREATE TABLE support_messages (
+    id        INTEGER PRIMARY KEY,
+    device_id INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    sender    TEXT NOT NULL CHECK (sender IN ('customer', 'support')),
+    via       TEXT NOT NULL DEFAULT 'app',      -- app / dashboard / whatsapp
+    author    TEXT NOT NULL DEFAULT '',         -- מי מהמנהלים ענה
+    body      TEXT NOT NULL,
+    diag      TEXT,                             -- JSON: מצב טכני ברגע הפנייה (בלי תוכן אישי)
+    ts        INTEGER NOT NULL,
+    read_at   INTEGER,                          -- נקרא ע"י הצד השני
+    wa_id     TEXT NOT NULL DEFAULT '',         -- מזהה ההודעה בוואטסאפ (מיפוי "השב" ללקוח)
+    wa_error  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX support_device ON support_messages(device_id, id);
+CREATE INDEX support_unread ON support_messages(sender, read_at);
+CREATE INDEX support_wa ON support_messages(wa_id) WHERE wa_id != '';
+CREATE INDEX support_ts ON support_messages(ts);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7]
 VERSION = len(MIGRATIONS)
 
 

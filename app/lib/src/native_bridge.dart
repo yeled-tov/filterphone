@@ -204,6 +204,11 @@ abstract class NativeBridge {
   /// פתיחת ערוץ התמיכה ב-WhatsApp עם מזהה המכשיר ותקציר מצב ההגנה.
   Future<void> openSupportWhatsApp(String number, String message);
 
+  /// נפתחנו מהתראה ("יש תשובה מהתמיכה")? מחזיר 'support' פעם אחת, אחרת null.
+  Future<String?> launchTarget();
+
+  Future<void> clearSupportNotification();
+
   // --- החנות ---
 
   /// התקנה / עדכון דרך מנהל המכשיר: started / not_owner / busy / invalid / up_to_date.
@@ -351,6 +356,12 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<void> openSupportWhatsApp(String number, String message) =>
       _call<bool>('openSupportWhatsApp', {'number': number, 'message': message});
+
+  @override
+  Future<String?> launchTarget() => _channel.invokeMethod<String>('launchTarget');
+
+  @override
+  Future<void> clearSupportNotification() => _call<bool>('clearSupportNotification');
 
   @override
   Future<String> installStoreApp(Map<String, Object?> item) =>

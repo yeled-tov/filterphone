@@ -8,6 +8,7 @@ import 'package:filterphone/src/app_controller.dart';
 import 'package:filterphone/src/native_bridge.dart';
 import 'package:filterphone/src/screens/app_shell.dart';
 import 'package:filterphone/src/screens/home_screen.dart';
+import 'package:filterphone/src/support_bot.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -190,8 +191,20 @@ class FakeNative implements NativeBridge {
     provisioningCleared = true;
   }
 
+  final whatsappOpens = <String>[];
   @override
-  Future<void> openSupportWhatsApp(String number, String message) async {}
+  Future<void> openSupportWhatsApp(String number, String message) async => whatsappOpens.add(number);
+
+  String? launch;
+  int supportNotificationClears = 0;
+  @override
+  Future<String?> launchTarget() async {
+    final t = launch;
+    launch = null;
+    return t;
+  }
+  @override
+  Future<void> clearSupportNotification() async => supportNotificationClears++;
 
   final installs = <String>[];
   @override
@@ -782,6 +795,144 @@ void main() {
     expect(find.text('פתקים'), findsOneWidget);
     expect(find.text('מפות'), findsOneWidget);
     expect(find.text('בקשה'), findsWidgets);          // בלי מנהל מכשיר — בקשה מהמנהל
+  });
+
+  group('support assistant', () {
+    const healthy = BotContext(vpnUp: true, caInstalled: true, batteryOk: true, levelName: 'מחמיר');
+
+    test('answers from the real phone state and offers the fix', () {
+      final down = SupportBot.answer('האינטרנט לא עובד', const BotContext(vpnUp: false));
+      expect(down.topic, 'vpn');
+      expect(down.text, contains('מנותק'));
+      expect(down.actions.first, BotAction.reconnectVpn);
+      final battery = SupportBot.answer('ה-VPN מתנתק כל הזמן', const BotContext(vpnUp: true, batteryOk: false));
+      expect(battery.actions, [BotAction.battery]);
+      final fine = SupportBot.answer('vpn', healthy);
+      expect(fine.text, contains('תקין'));
+      final paused = SupportBot.answer('אין סינון', const BotContext(paused: true));
+      expect(paused.text, contains('מושהית'));
+    });
+
+    test('picks the specific topic before the general one', () {
+      expect(SupportBot.answer('יש לי אפליקציה אפורה', healthy).topic, 'grey_app');
+      expect(SupportBot.answer('איך מתקינים אפליקציה?', healthy).topic, 'install');
+      expect(SupportBot.answer('אתר נחסם בטעות', healthy).topic, 'blocked');
+      expect(SupportBot.answer('FilterTube לא נטען', healthy).topic, 'youtube');
+      // "תודה" בתוך תלונה — עונים על התלונה, לא על התודה
+      expect(SupportBot.answer('תודה, אבל ה-VPN עדיין לא עובד', const BotContext()).topic, 'vpn');
+      expect(SupportBot.answer('תודה רבה!', healthy).topic, 'thanks');
+      expect(SupportBot.answer('שלום', healthy).topic, 'greeting');
+    });
+
+    test('guard and WhatsApp answers depend on whether the guard is on', () {
+      const off = BotContext(guardNeeded: true, guardOn: false);
+      expect(SupportBot.answer('הנגישות נכבתה', off).actions, [BotAction.openGuard]);
+      expect(SupportBot.answer('רואים תמונות פרופיל בוואטסאפ', off).actions, [BotAction.openGuard]);
+      expect(SupportBot.answer('וואטסאפ', const BotContext(guardNeeded: true, guardOn: true)).actions, isEmpty);
+    });
+
+    test('unknown questions and explicit asks go to a representative', () {
+      expect(SupportBot.answer('קשקוש בלבוש', healthy).actions, [BotAction.human]);
+      expect(SupportBot.answer('אני רוצה לדבר עם נציג', healthy).actions, [BotAction.human]);
+      expect(SupportBot.answer('איך משהים את ההגנה?', healthy).actions, [BotAction.human]);
+    });
+  });
+
+  test('chat with a representative: diagnostics attached, replies arrive, unread from the server', () async {
+    final native = FakeNative()..caInstalled = true;
+    final sent = <Map<String, Object?>>[];
+    final replies = <Map<String, Object?>>[];
+    var unread = 0;
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      switch (req.url.path) {
+        case '/v1/enroll':
+          return http.Response(jsonEncode({'token': 't', 'level': 1, 'level_name': 'מחמיר', 'vpn': _vpn,
+              'ca': {'pem': 'x'}}), 201, headers: json);
+        case '/v1/device/vpn':
+          return http.Response(jsonEncode(_vpn), 200, headers: json);
+        case '/v1/device':
+          return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+              'via_vpn': true, 'support': {'unread': unread, 'whatsapp': '972521112233'}}), 200, headers: json);
+        case '/v1/device/support' when req.method == 'POST':
+          final body = Map<String, Object?>.from(jsonDecode(req.body) as Map);
+          sent.add(body);
+          return http.Response(jsonEncode({'id': sent.length, 'from': 'customer', 'text': body['text'], 'ts': 1000}),
+              201, headers: json);
+        case '/v1/device/support':
+          final after = int.parse(req.url.queryParameters['after'] ?? '0');
+          final all = [
+            for (var i = 0; i < sent.length; i++) {'id': i + 1, 'from': 'customer', 'text': sent[i]['text'], 'ts': 1000},
+            ...replies,
+          ].where((m) => (m['id'] as int) > after).toList();
+          unread = 0;
+          return http.Response(jsonEncode({'messages': all}), 200, headers: json);
+      }
+      return http.Response('{}', 200, headers: json);
+    });
+    final c = makeController(native, server);
+    await c.start();
+    await c.activate('ABCDE-FGHJK', '');
+    expect(c.supportWhatsApp, '972521112233');                      // מהשרת — לא מהבנייה
+    expect(await c.sendSupport('ה-VPN לא מתחבר', topic: 'vpn'), isNull);
+    final diag = Map<String, Object?>.from(sent.single['diag'] as Map);
+    expect(diag['topic'], 'vpn');
+    expect(diag['app_version'], '1.0.0');
+    expect(diag.keys, isNot(contains('contacts')));
+    expect(c.supportThread!.single.text, 'ה-VPN לא מתחבר');
+    // הנציג ענה (מוואטסאפ) — מגיע בטעינה הבאה, רק החדשות
+    replies.add({'id': 2, 'from': 'support', 'text': 'תפעיל מחדש 🙂', 'ts': 1100});
+    unread = 1;
+    await c.refresh();
+    expect(c.supportUnread, 1);
+    await c.loadSupport();
+    expect(c.supportThread!.map((m) => m.fromSupport), [false, true]);
+    expect(c.supportThread!.last.text, 'תפעיל מחדש 🙂');
+    c.dispose();
+  });
+
+  testWidgets('support tab: instant assistant with quick check, then a representative', (tester) async {
+    final native = FakeNative()
+      ..caInstalled = true
+      ..batteryUnrestricted = false;
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      return switch (req.url.path) {
+        '/v1/enroll' => http.Response(jsonEncode({'token': 't', 'level': 1, 'level_name': 'מחמיר', 'vpn': _vpn,
+            'ca': {'pem': 'x'}}), 201, headers: json),
+        '/v1/device/vpn' => http.Response(jsonEncode(_vpn), 200, headers: json),
+        '/v1/device' => http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1,
+            'level_name': 'מחמיר', 'via_vpn': true}), 200, headers: json),
+        '/v1/device/support' => http.Response(jsonEncode({'messages': [
+            {'id': 1, 'from': 'support', 'text': 'שלום, איך אפשר לעזור?', 'ts': 1000}]}), 200, headers: json),
+        _ => http.Response('{}', 200, headers: json),
+      };
+    });
+    final c = makeController(native, server);
+    await tester.runAsync(() async {
+      await c.start();
+      await c.activate('ABCDE-FGHJK', '');
+    });
+    await tester.pumpWidget(MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
+        child: SupportScreen(controller: c))));
+    await tester.pump();
+    // בדיקה מהירה: הסוללה מוגבלת → כפתור תיקון
+    expect(find.text('אנדרואיד מגביל את FilterPhone ברקע'), findsOneWidget);
+    await tester.tap(find.text('תיקון').first);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    expect(native.batteryRequests, 1);
+    // העוזר עונה מיד, בלי שרת
+    await tester.tap(find.text('איך מתקינים אפליקציה?'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('לשונית "אפליקציות"'), findsOneWidget);
+    // מעבר לנציג: השיחה נטענת מהשרת וההתראה נמחקת
+    await tester.tap(find.text('נציג'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(find.text('שלום, איך אפשר לעזור?'), findsOneWidget);
+    expect(native.supportNotificationClears, 1);
+    await tester.pumpWidget(const SizedBox());                        // עוצר את הרענון התקופתי
+    c.dispose();
   });
 
   test('lost VPN config (same key) is saved again from the server', () async {

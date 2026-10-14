@@ -272,6 +272,8 @@ class DeviceStatus {
     this.appsReportNeeded = false,
     this.customer,
     this.storeApps = const [],
+    this.supportUnread = 0,
+    this.supportWhatsApp = '',
   });
 
   final int id;
@@ -294,6 +296,10 @@ class DeviceStatus {
   /// קטלוג החנות מהשרת (אפליקציות שהמנהל אישר).
   final List<StoreApp> storeApps;
 
+  /// תשובות מהתמיכה שעוד לא נקראו, ומספר וואטסאפ לפנייה ישירה (אם המנהל הגדיר).
+  final int supportUnread;
+  final String supportWhatsApp;
+
   bool get isActive => status == 'active';
   bool get isPending => status == 'pending';
   bool get isRejected => status == 'rejected';
@@ -308,6 +314,7 @@ class DeviceStatus {
     final req = j['request'] is Map ? Map<String, Object?>.from(j['request'] as Map) : null;
     final customer =
         j['customer'] is Map ? CustomerInfo.fromJson(Map<String, Object?>.from(j['customer'] as Map)) : null;
+    final support = Map<String, Object?>.from(j['support'] as Map? ?? const {});
 
     return DeviceStatus(
       id: (j['device_id'] as num?)?.toInt() ?? 0,
@@ -330,8 +337,27 @@ class DeviceStatus {
         for (final a in (j['managed_apps'] as List? ?? const []))
           if (a is Map) StoreApp.fromJson(Map<String, Object?>.from(a)),
       ],
+      supportUnread: (support['unread'] as num?)?.toInt() ?? 0,
+      supportWhatsApp: support['whatsapp'] as String? ?? '',
     );
   }
+}
+
+/// הודעה בשיחה עם נציג (נשמרת בשרת; המנהל עונה מהממשק או מהוואטסאפ שלו).
+class SupportMessage {
+  SupportMessage({required this.id, required this.fromSupport, required this.text, required this.time});
+
+  final int id;
+  final bool fromSupport;
+  final String text;
+  final DateTime time;
+
+  factory SupportMessage.fromJson(Map<String, Object?> j) => SupportMessage(
+        id: (j['id'] as num?)?.toInt() ?? 0,
+        fromSupport: j['from'] == 'support',
+        text: j['text'] as String? ?? '',
+        time: DateTime.fromMillisecondsSinceEpoch(((j['ts'] as num?)?.toInt() ?? 0) * 1000),
+      );
 }
 
 /// אפליקציה בחנות של FilterPhone. עם [raw] (url + sha256 + version_code) — ניתנת להתקנה ישירה
@@ -510,6 +536,22 @@ class ApiClient {
       _send('POST', '/v1/device/report', token: token, body: {'apps': ?apps, 'guard': ?guard});
 
   Future<void> cancel(String token) => _send('DELETE', '/v1/device', token: token);
+
+  /// השיחה עם הנציג — הודעות אחרי [after] (0 = הכול). מסמן את התשובות כנקראו.
+  Future<List<SupportMessage>> supportMessages(String token, {int after = 0}) async {
+    final j = await _send('GET', '/v1/device/support?after=$after', token: token);
+    return [
+      for (final m in (j['messages'] as List? ?? const []))
+        if (m is Map) SupportMessage.fromJson(Map<String, Object?>.from(m)),
+    ];
+  }
+
+  /// הודעה לנציג, עם מצב טכני קצר של הטלפון (בלי שום תוכן אישי).
+  Future<SupportMessage> sendSupport(String token, String text, Map<String, Object?> diag) async =>
+      SupportMessage.fromJson(await _send('POST', '/v1/device/support', token: token, body: {
+        'text': text,
+        'diag': diag,
+      }));
 
   Future<Map<String, Object?>> _send(
     String method,

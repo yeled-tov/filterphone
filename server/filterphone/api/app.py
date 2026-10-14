@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import redis
-from fastapi import Depends, FastAPI, Header, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
@@ -46,6 +46,7 @@ from .catalog import admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
 from .security import RateLimiter
 from .service import LEVEL_NAMES, ApiError, Services
+from .support import SupportDesk
 from .wg import WireGuard, WireGuardError
 
 log = logging.getLogger("filterphone.api")
@@ -62,6 +63,7 @@ device_limiter = RateLimiter(limit=30, window_s=600)       # בקשות שינו
 heartbeat_limiter = RateLimiter(limit=40, window_s=600)    # דיווח תקופתי: כל 15 דקות + רענון ידני
 rekey_limiter = RateLimiter(limit=3, window_s=86400)       # החלפת מפתח VPN — נדיר מאוד
 restore_limiter = RateLimiter(limit=8, window_s=3600)      # שחזור לפי מספר טלפון — לכל כתובת ולכל מספר
+support_limiter = RateLimiter(limit=20, window_s=600)     # הודעות לתמיכה מטלפון אחד
 MAX_APK_UPLOAD = 300 * 1024 * 1024
 _APK_FILE = re.compile(r"^[A-Za-z][A-Za-z0-9_.]{2,199}-\d{1,10}\.apk$")
 
@@ -81,6 +83,7 @@ def build_services() -> Services:
 
 RECONCILE_EVERY_S = 60
 ADGUARD_EVERY_S = 300
+PRUNE_EVERY_S = 86400
 
 
 async def _keep_in_sync(svc: Services) -> None:
@@ -95,6 +98,7 @@ async def _keep_in_sync(svc: Services) -> None:
             log.warning("initial sync attempt %d failed: %s", attempt, e)
             await asyncio.sleep(3)
     last_wg = last_dns = time.monotonic()
+    last_prune = time.monotonic() - PRUNE_EVERY_S       # ניקוי הודעות תמיכה ישנות — גם מיד בעלייה
     while True:
         dirty = await asyncio.to_thread(svc.dirty.wait, 2.0)
         now = time.monotonic()
@@ -110,6 +114,12 @@ async def _keep_in_sync(svc: Services) -> None:
                 await asyncio.to_thread(svc.sync_redis_if_needed)
             except Exception as e:
                 log.error("redis policy resync failed: %s", e)
+        if now - last_prune >= PRUNE_EVERY_S:
+            last_prune = now
+            try:
+                await asyncio.to_thread(SupportDesk(svc).prune)
+            except Exception as e:
+                log.error("support prune failed: %s", e)
         if dirty or now - last_dns >= ADGUARD_EVERY_S:
             svc.dirty.clear()
             last_dns = now
@@ -142,6 +152,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     app.state.svc = svc or build_services()
+    app.state.support = SupportDesk(app.state.svc)
     cfg = app.state.svc.cfg
 
     @app.exception_handler(ApiError)
@@ -218,7 +229,12 @@ def admin_dep(svc: Annotated[Services, Depends(svc_dep)],
     return svc.admin_by_token(_bearer(authorization))
 
 
+def support_dep(request: Request) -> SupportDesk:
+    return request.app.state.support
+
+
 SvcDep = Annotated[Services, Depends(svc_dep)]
+DeskDep = Annotated[SupportDesk, Depends(support_dep)]
 DeviceRow = Annotated[Any, Depends(device_dep)]
 AdminRow = Annotated[Any, Depends(admin_dep)]
 AuthHeader = Annotated[str | None, Header()]
@@ -345,6 +361,28 @@ class HeartbeatIn(BaseModel):
     model_config = {"extra": "allow"}
     policy_version: int | None = Field(default=None, ge=0, le=10**9)
     want_policy: bool = False
+
+
+class SupportIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    diag: dict[str, bool | int | float | str] | None = None
+
+
+class SupportReplyIn(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class WhatsAppIn(BaseModel):
+    token: str | None = Field(default=None, max_length=1024)
+    phone_number_id: str | None = Field(default=None, max_length=40)
+    admin_number: str | None = Field(default=None, max_length=40)
+    verify_token: str | None = Field(default=None, max_length=200)
+    app_secret: str | None = Field(default=None, max_length=200)
+    template: str | None = Field(default=None, max_length=512)
+    template_lang: str | None = Field(default=None, max_length=10)
+    public_number: str | None = Field(default=None, max_length=40)
+    graph_version: str | None = Field(default=None, max_length=10)
+    clear_secrets: bool = False
 
 
 class ProvisionIn(BaseModel):
@@ -494,8 +532,10 @@ def _routes(app: FastAPI) -> None:
                                    mode=body.mode, old_device_id=body.old_device_id)
 
     @app.get("/v1/device")
-    def device(request: Request, svc: SvcDep, row: DeviceRow):
-        return svc.device_status(row, client_ip(request))
+    def device(request: Request, svc: SvcDep, desk: DeskDep, row: DeviceRow):
+        out = svc.device_status(row, client_ip(request))
+        out["support"] = desk.device_unread(row["id"]) | {"whatsapp": desk.wa_config().public_number}
+        return out
 
     @app.delete("/v1/device", status_code=204)
     def device_cancel(svc: SvcDep, row: DeviceRow):
@@ -527,7 +567,23 @@ def _routes(app: FastAPI) -> None:
         raw = body.model_dump()
         if len(str(raw)) > 20_000:
             raise ApiError(413, "הדיווח גדול מדי")
-        return svc.heartbeat(row, raw, client_ip(request))
+        out = svc.heartbeat(row, raw, client_ip(request))
+        unread = request.app.state.support.device_unread(row["id"])
+        if unread["unread"]:
+            out["support"] = unread          # הטלפון מציג התראה "יש תשובה מהתמיכה"
+        return out
+
+    @app.post("/v1/device/support", status_code=201)
+    def device_support(body: SupportIn, tasks: BackgroundTasks, desk: DeskDep, row: DeviceRow):
+        """הודעה מהלקוח לתמיכה (צ'אט באפליקציה). נשמרת, ונשלחת לוואטסאפ של המנהל ברקע."""
+        _limit(support_limiter, f"sup:{row['id']}")
+        msg = desk.device_post(row, body.text, body.diag)
+        tasks.add_task(desk.notify_admin, msg["id"])
+        return msg
+
+    @app.get("/v1/device/support")
+    def device_support_list(desk: DeskDep, row: DeviceRow, after: int = 0):
+        return desk.device_messages(row, after)
 
     @app.post("/v1/device/resume")
     def device_resume(svc: SvcDep, row: DeviceRow):
@@ -558,8 +614,49 @@ def _routes(app: FastAPI) -> None:
         svc.admin_logout(_bearer(authorization))
 
     @app.get("/v1/admin/overview")
-    def overview(svc: SvcDep, admin: AdminRow):
-        return {**svc.overview(), "admin": admin["username"]}
+    def overview(svc: SvcDep, desk: DeskDep, admin: AdminRow):
+        return {**svc.overview(), "admin": admin["username"], "support_unread": desk.admin_unread()}
+
+    # --- תמיכה ---
+
+    @app.get("/v1/admin/support")
+    def support_threads(desk: DeskDep, _: AdminRow):
+        return {"threads": desk.threads(), "unread": desk.admin_unread(), "whatsapp": desk.wa_status()["can_send"]}
+
+    @app.get("/v1/admin/support/{device_id}")
+    def support_thread(device_id: int, desk: DeskDep, _: AdminRow):
+        return desk.thread(device_id)
+
+    @app.post("/v1/admin/support/{device_id}", status_code=201)
+    def support_reply(device_id: int, body: SupportReplyIn, desk: DeskDep, admin: AdminRow):
+        return desk.reply(device_id, admin["username"], body.text)
+
+    @app.get("/v1/admin/whatsapp")
+    def whatsapp_settings(desk: DeskDep, _: AdminRow):
+        return desk.wa_status()
+
+    @app.put("/v1/admin/whatsapp")
+    def whatsapp_save(body: WhatsAppIn, desk: DeskDep, admin: AdminRow):
+        return desk.save_wa_config(admin["username"], body.model_dump())
+
+    @app.post("/v1/admin/whatsapp/test")
+    def whatsapp_test(desk: DeskDep, _: AdminRow):
+        return desk.send_test()
+
+    @app.get("/v1/whatsapp/webhook")
+    def whatsapp_verify(request: Request, desk: DeskDep):
+        """אימות ה-webhook מול Meta (פעם אחת, בהגדרה)."""
+        q = request.query_params
+        return PlainTextResponse(desk.verify_webhook(q.get("hub.mode"), q.get("hub.verify_token"),
+                                                     q.get("hub.challenge")))
+
+    @app.post("/v1/whatsapp/webhook")
+    async def whatsapp_incoming(request: Request, tasks: BackgroundTasks, desk: DeskDep):
+        """תשובות המנהל מוואטסאפ → ללקוח באפליקציה. רק עם חתימה תקינה ורק מהמספר של המנהל."""
+        body = await request.body()
+        follow = await asyncio.to_thread(desk.handle_webhook, body, request.headers.get("x-hub-signature-256"))
+        tasks.add_task(desk.run_followups, follow)
+        return {"ok": True}
 
     @app.get("/v1/admin/catalog")
     def catalog_admin(_: AdminRow):

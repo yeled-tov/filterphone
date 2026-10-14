@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 
 import '../api_client.dart';
 import '../app_controller.dart';
-import '../config.dart';
+import '../support_bot.dart';
 import '../theme.dart';
 import 'change_request_screen.dart';
 import 'home_screen.dart';
+
+part 'support_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key, required this.controller});
@@ -19,41 +21,67 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  static const _supportTab = 2;
   int _index = 0;
   AppController get c => widget.controller;
 
   @override
+  void initState() {
+    super.initState();
+    c.addListener(_onController);
+    if (c.takeRequestedTab() == 'support') _index = _supportTab;
+  }
+
+  @override
+  void dispose() {
+    c.removeListener(_onController);
+    super.dispose();
+  }
+
+  /// נפתחנו מהתראה "יש תשובה מהתמיכה" — ישר לצ'אט.
+  void _onController() {
+    if (c.takeRequestedTab() == 'support' && mounted) setState(() => _index = _supportTab);
+  }
+
+  void _openTab(int i) => setState(() => _index = i);
+
+  @override
   Widget build(BuildContext context) {
+    final unread = c.supportUnread;
     return Scaffold(
       body: IndexedStack(
         index: _index,
         children: [
           HomeScreen(controller: c),
           AppStoreScreen(controller: c),
-          SupportScreen(controller: c),
+          SupportScreen(controller: c, visible: _index == _supportTab, onOpenTab: _openTab),
           ProfileScreen(controller: c),
         ],
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
-        destinations: const [
-          NavigationDestination(
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.shield_outlined),
             selectedIcon: Icon(Icons.shield),
             label: 'סינון',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.apps_outlined),
             selectedIcon: Icon(Icons.apps),
             label: 'אפליקציות',
           ),
           NavigationDestination(
-            icon: Icon(Icons.support_agent_outlined),
-            selectedIcon: Icon(Icons.support_agent),
+            icon: Badge(
+              isLabelVisible: unread > 0,
+              label: Text('$unread'),
+              child: const Icon(Icons.support_agent_outlined),
+            ),
+            selectedIcon: const Icon(Icons.support_agent),
             label: 'תמיכה',
           ),
-          NavigationDestination(
+          const NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: 'פרופיל',
@@ -545,291 +573,6 @@ class _StoreAppCard extends StatelessWidget {
   }
 }
 
-class SupportScreen extends StatefulWidget {
-  const SupportScreen({super.key, required this.controller});
-  final AppController controller;
-
-  @override
-  State<SupportScreen> createState() => _SupportScreenState();
-}
-
-class _SupportScreenState extends State<SupportScreen> {
-  final _text = TextEditingController();
-  final _scroll = ScrollController();
-
-  final List<_ChatMessage> _messages = [
-    const _ChatMessage(
-      fromBot: true,
-      text: 'שלום 👋 אני העוזר של FilterPhone. אני יכול לעזור בהגנה, VPN, חסימות, אפליקציות והגדרות. במה לעזור?',
-    ),
-  ];
-
-  final _quick = const [
-    'הסינון לא עובד',
-    'ה-VPN לא מתחבר',
-    'איך מתקינים אפליקציה?',
-    'אני צריך נציג',
-  ];
-
-  @override
-  void dispose() {
-    _text.dispose();
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  Future<void> _send([String? preset]) async {
-    final value = (preset ?? _text.text).trim();
-    if (value.isEmpty) return;
-    _text.clear();
-    setState(() => _messages.add(_ChatMessage(fromBot: false, text: value)));
-
-    await Future<void>.delayed(const Duration(milliseconds: 220));
-    if (!mounted) return;
-    setState(() => _messages.add(_ChatMessage(fromBot: true, text: _botReply(value))));
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-
-    if (_scroll.hasClients) {
-      await _scroll.animateTo(
-        _scroll.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
-  String _botReply(String input) {
-    final t = input.toLowerCase();
-    final c = widget.controller;
-
-    if (t.contains('vpn')) {
-      return c.vpn.isUp
-          ? 'ה-VPN מחובר כרגע ✅ אם עדיין יש בעיה, כתוב לי מה בדיוק לא נפתח.'
-          : 'אני רואה שה-VPN לא מחובר. עבור ללשונית "סינון" ולחץ על "חיבור". אם זה נכשל, שלח לי את הודעת השגיאה.';
-    }
-    if (t.contains('אפליקציה')) {
-      return 'בלשונית "אפליקציות" תראה את האפליקציות המאושרות. כרגע אפליקציה שלא מותקנת מוגשת כבקשת התקנה למנהל.';
-    }
-    if (t.contains('נציג') || t.contains('אדם') || t.contains('וואטסאפ')) {
-      return 'אפשר לעבור עכשיו לנציג. אכין את הפנייה עם מזהה המכשיר והמצב הנוכחי כדי שהטיפול יהיה מהיר.';
-    }
-    if (t.contains('חסימה') || t.contains('מסונן') || t.contains('סינון')) {
-      final level = c.device?.levelName;
-      return level == null
-          ? 'אני צריך שהמכשיר יהיה פעיל כדי לבדוק את רמת הסינון.'
-          : 'רמת הסינון הפעילה כרגע היא "$level". בלשונית "סינון" אפשר לראות את כל מצב ההגנה והחסימות.';
-    }
-    return 'אני כאן כדי לעזור. כתוב למשל "ה-VPN לא מתחבר", "החסימה לא עובדת", או "אני צריך נציג".';
-  }
-
-  Future<void> _openWhatsApp() async {
-    final d = widget.controller.device;
-    final message = [
-      'שלום, אני צריך עזרה ב-FilterPhone.',
-      'מזהה מכשיר: ${d?.id.toString() ?? 'לא ידוע'}',
-      'מכשיר: ${d?.name ?? 'לא ידוע'}',
-      'רמת סינון: ${d?.levelName ?? 'לא ידוע'}',
-      'VPN: ${widget.controller.vpn.isUp ? 'פעיל' : 'לא פעיל'}',
-    ].join('\n');
-
-    if (supportWhatsAppNumber.trim().isEmpty) {
-      if (!mounted) return;
-      showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('חיבור לנציג'),
-          content: const Text(
-            'מספר התמיכה עדיין לא הוגדר בבניית האפליקציה. '
-            'הבוט זמין כבר עכשיו; לאחר הגדרת מספר WhatsApp ייפתח צ\'אט ישיר לנציג.',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('סגור')),
-          ],
-        ),
-      );
-      return;
-    }
-
-    try {
-      await widget.controller.native.openSupportWhatsApp(
-        supportWhatsAppNumber,
-        message,
-      );
-    } on PlatformException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('לא ניתן לפתוח WhatsApp: ${e.message ?? e.code}')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionScaffold(
-      title: 'שירות ותמיכה',
-      actions: [
-        IconButton(
-          tooltip: 'נציג WhatsApp',
-          onPressed: _openWhatsApp,
-          icon: const Icon(Icons.chat_rounded),
-        ),
-      ],
-      child: Column(
-        children: [
-          Expanded(
-            child: ListView(
-              controller: _scroll,
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
-              children: [
-                _SupportHeader(onHuman: _openWhatsApp),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final prompt in _quick)
-                      ActionChip(
-                        label: Text(prompt),
-                        onPressed: () => _send(prompt),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                for (final message in _messages) ...[
-                  _ChatBubble(message: message),
-                  const SizedBox(height: 10),
-                ],
-              ],
-            ),
-          ),
-          _ChatComposer(controller: _text, onSend: _send),
-        ],
-      ),
-    );
-  }
-}
-
-class _SupportHeader extends StatelessWidget {
-  const _SupportHeader({required this.onHuman});
-  final VoidCallback onHuman;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer,
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: theme.colorScheme.primary,
-            child: const Icon(Icons.support_agent, color: Colors.white, size: 29),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('תמיכה חכמה', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 3),
-                Text('הבוט זמין 24/7. צריך אותי? עוברים לנציג.', style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'נציג',
-            onPressed: onHuman,
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChatComposer extends StatelessWidget {
-  const _ChatComposer({required this.controller, required this.onSend});
-  final TextEditingController controller;
-  final Future<void> Function() onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                minLines: 1,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  hintText: 'כתבו הודעה...',
-                  prefixIcon: const Icon(Icons.message_outlined),
-                  suffixIcon: IconButton(
-                    onPressed: () => FocusScope.of(context).unfocus(),
-                    icon: Icon(Icons.keyboard_hide_rounded, color: theme.colorScheme.outline),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Material(
-              color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                onTap: () async => onSend(),
-                borderRadius: BorderRadius.circular(16),
-                child: const SizedBox(
-                  width: 54,
-                  height: 54,
-                  child: Icon(Icons.send_rounded, color: Colors.white),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.message});
-  final _ChatMessage message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final bg = message.fromBot ? theme.colorScheme.surfaceContainerHighest : theme.colorScheme.primaryContainer;
-    return Align(
-      alignment: message.fromBot ? AlignmentDirectional.centerStart : AlignmentDirectional.centerEnd,
-      child: Container(
-        constraints: const BoxConstraints(maxWidth: 340),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(message.fromBot ? 5 : 18),
-            bottomRight: Radius.circular(message.fromBot ? 18 : 5),
-          ),
-        ),
-        child: Text(message.text),
-      ),
-    );
-  }
-}
-
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key, required this.controller});
   final AppController controller;
@@ -1107,10 +850,4 @@ class _ProtectionRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _ChatMessage {
-  const _ChatMessage({required this.fromBot, required this.text});
-  final bool fromBot;
-  final String text;
 }

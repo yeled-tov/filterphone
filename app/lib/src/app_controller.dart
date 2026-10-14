@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_client.dart';
 import 'config.dart';
 import 'native_bridge.dart';
+import 'support_bot.dart';
 
 /// השלבים של האפליקציה:
 ///   welcome → register (טופס) → pending (מחכה לאישור המנהל) → home
@@ -96,6 +97,12 @@ class AppController extends ChangeNotifier {
   RestoreLookup? restoreResult;
   String restorePhone = '';
 
+  /// השיחה עם הנציג (מהשרת). null = עוד לא נטענה.
+  List<SupportMessage>? supportThread;
+  bool supportSending = false;
+  String? _requestedTab;
+  String _appVersion = '';
+
   Timer? _timer;
   StreamSubscription<String>? _vpnSub;
 
@@ -134,7 +141,7 @@ class AppController extends ChangeNotifier {
 
   Future<void> start() async {
     try {
-      await native.deviceInfo();
+      _appVersion = '${(await native.deviceInfo())['appVersion'] ?? ''}';
     } on MissingPluginException {
       phase = Phase.unsupported; // אייפון — עד שה-Network Extension יתווסף
       notifyListeners();
@@ -169,6 +176,7 @@ class AppController extends ChangeNotifier {
     await _nativeCredentials();
     await refresh();
     unawaited(_syncVpnConfig());
+    unawaited(checkLaunchTarget());          // נפתחנו מהתראה "יש תשובה מהתמיכה"
     _startTimer(refresh);
   }
 
@@ -698,11 +706,116 @@ class AppController extends ChangeNotifier {
 
   /// האפליקציה חזרה לחזית (המשתמש סיים עם חלון של אנדרואיד) — ממשיכים בהקמה, ומרעננים.
   Future<void> onAppResumed() async {
+    unawaited(checkLaunchTarget());
     if (setupStep != null && setupStep != SetupStep.done) {
       await _continueSetup();
     } else if (phase == Phase.home) {
       await refresh();
     }
+  }
+
+  // ------------------------------------------------------------------ תמיכה
+
+  int get supportUnread => device?.supportUnread ?? 0;
+
+  /// מספר לפנייה ישירה בוואטסאפ: מה שהמנהל הגדיר בשרת, ואם אין — מה שנקבע בבניית האפליקציה.
+  String get supportWhatsApp {
+    final fromServer = device?.supportWhatsApp ?? '';
+    return fromServer.isNotEmpty ? fromServer : supportWhatsAppNumber;
+  }
+
+  /// שיחה עם נציג דרך השרת — אחרי הרשמה / הפעלה (יש אסימון).
+  bool get canChatWithSupport => _token != null;
+
+  /// המצב שהעוזר האוטומטי מסתכל עליו.
+  BotContext get botContext => BotContext(
+        active: device?.isActive ?? false,
+        vpnUp: vpn.isUp,
+        guardNeeded: guardNeeded,
+        guardOn: checks[Check.guard]!,
+        deviceOwner: deviceOwner,
+        batteryOk: protection.backgroundOk,
+        caInstalled: caInstalled,
+        paused: adminPauseActive,
+        levelName: device?.levelName ?? '',
+        updateAvailable: protection.updateAvailable != null,
+      );
+
+  /// מצב טכני שמצורף לפנייה לנציג (כדי שלא יצטרך לשאול) — בלי שום תוכן אישי.
+  Map<String, Object?> supportDiag({String topic = ''}) => {
+        'vpn': vpn.state,
+        'vpn_error': ?vpn.error,
+        'accessibility': guardEnabled,
+        'device_owner': deviceOwner,
+        'battery_unrestricted': ?protection.batteryUnrestricted,
+        'ca_installed': caInstalled,
+        'paused': adminPauseActive,
+        'policy_version': protection.policyVersion,
+        'level': ?device?.level,
+        if (_appVersion.isNotEmpty) 'app_version': _appVersion,
+        if (topic.isNotEmpty) 'topic': topic,
+      };
+
+  /// טוען את השיחה (רק הודעות חדשות). שקט בכשל — הצ'אט מציג את מה שכבר יש.
+  Future<void> loadSupport() async {
+    final token = _token;
+    if (token == null) return;
+    final have = supportThread ?? const <SupportMessage>[];
+    try {
+      final fresh = await api.supportMessages(token, after: have.isEmpty ? 0 : have.last.id);
+      if (fresh.isEmpty && supportThread != null) return;
+      supportThread = [...have, ...fresh];
+      if (fresh.any((m) => m.fromSupport) && device != null) unawaited(refresh());   // מונה "לא נקראו"
+      notifyListeners();
+    } on ApiException catch (e) {
+      debugPrint('support load failed: ${e.message}');
+    }
+  }
+
+  /// שולח לנציג. מחזיר הודעת שגיאה למשתמש, או null אם נשלח.
+  Future<String?> sendSupport(String text, {String topic = ''}) async {
+    final token = _token;
+    final body = text.trim();
+    if (token == null || body.isEmpty || supportSending) return null;
+    supportSending = true;
+    notifyListeners();
+    try {
+      await loadSupport();
+      final sent = await api.sendSupport(token, body, supportDiag(topic: topic));
+      supportThread = [...?supportThread, sent];
+      return null;
+    } on ApiException catch (e) {
+      return e.status == 0 ? 'אין חיבור לשרת — ההודעה לא נשלחה. נסו שוב כשיש אינטרנט.' : e.message;
+    } finally {
+      supportSending = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> clearSupportNotification() async {
+    try {
+      await native.clearSupportNotification();
+    } on PlatformException catch (_) {
+      // לא קריטי
+    }
+  }
+
+  /// נפתחנו מהתראה של התמיכה → AppShell עובר ללשונית (פעם אחת).
+  Future<void> checkLaunchTarget() async {
+    try {
+      final t = await native.launchTarget();
+      if (t == null) return;
+      _requestedTab = t;
+      notifyListeners();
+    } on PlatformException catch (_) {
+      // לא קריטי
+    }
+  }
+
+  String? takeRequestedTab() {
+    final t = _requestedTab;
+    _requestedTab = null;
+    return t;
   }
 
   void dismissSetup() {

@@ -15,6 +15,10 @@
     <string name="protection_needs_permission">נדרש אישור חיבור VPN — פתחו את FilterPhone</string>
     <string name="protection_paused">ההגנה מושהית באישור המנהל — הטלפון פתוח עד לסיום ההשהיה</string>
     <!-- מוצג על ידי אנדרואיד כשלוחצים על אפליקציה "אפורה" או על הגדרה שנחסמה (מנהל מכשיר) -->
+    <string name="support_channel">תשובות מהתמיכה</string>
+    <string name="support_title">FilterPhone — תמיכה</string>
+    <string name="support_reply">יש תשובה חדשה מהתמיכה. לחצו לקריאה.</string>
+    <string name="support_replies">יש %1$d תשובות חדשות מהתמיכה. לחצו לקריאה.</string>
     <string name="admin_support_short">חסום על ידי מנהל הסינון (FilterPhone). לבקשת שינוי — באפליקציית FilterPhone.</string>
     <string name="admin_support_long">הטלפון מנוהל על ידי FilterPhone. אפליקציות והגדרות מסוימות חסומות לפי המדיניות שנקבעה עם מנהל הסינון. כדי לבקש שינוי, פתחו את אפליקציית FilterPhone ובחרו "בקשת שינוי" או "תמיכה".</string>
     <string name="admin_add_explanation">מקשה על הסרת FilterPhone: כדי להסיר צריך קודם לבטל כאן את מנהל המכשיר, והמנהל מקבל על כך הודעה. (זה לא נועל את הטלפון — לנעילה מלאה יש הקמה כמנהל מכשיר מלא.)</string>

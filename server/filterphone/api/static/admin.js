@@ -334,6 +334,7 @@ $("#menu").addEventListener("click", () => $("#side").classList.toggle("open"));
 const ROUTES = {
   overview: ["סקירה", viewOverview],
   requests: ["בקשות הצטרפות ושינוי", viewRequests],
+  support: ["תמיכה", viewSupport],
   devices: ["מכשירים", viewDevices],
   customers: ["לקוחות", viewCustomers],
   profiles: ["פרופילים מוכנים", viewProfiles],
@@ -380,6 +381,9 @@ async function updateBadge() {
     const b = $("#badge-requests");
     b.hidden = !n;
     b.textContent = n;
+    const sb = $("#badge-support");
+    sb.hidden = !o.support_unread;
+    sb.textContent = o.support_unread || "";
     $("#whoami").textContent = o.admin;
   } catch (_) { /* לא קריטי */ }
 }
@@ -628,6 +632,7 @@ async function viewDevice(id) {
   };
   const back = el("a", { href: "#/devices", class: "row gap" }, el("span", { class: "ico ico-back" }), "כל המכשירים");
   const active = d.status === "active";
+  topAction("שיחת תמיכה", () => { location.hash = `#/support/${id}`; });
 
   // --- כותרת
   const header = el("section", { class: "card" },
@@ -940,6 +945,93 @@ async function viewApps() {
       el("div", { class: "row gap wrap" }, pkg, label, category, addStoreOnly)),
     card(`בחנות (${apps.length})`, null, apps.length ? el("div", { class: "apps" }, rows) : empty("עוד אין אפליקציות בחנות.")),
   ];
+}
+
+// ---------------------------------------------------------------- תמיכה
+
+const VIA = { app: "באפליקציה", dashboard: "מהממשק", whatsapp: "מוואטסאפ" };
+
+function diagText(d) {
+  if (!d) return "";
+  const yes = (v) => (v ? "✓" : "✗");
+  return [
+    d.vpn !== undefined ? `VPN: ${d.vpn}` : null,
+    d.accessibility !== undefined ? `נגישות ${yes(d.accessibility)}` : null,
+    d.device_owner !== undefined ? `מנהל מכשיר ${yes(d.device_owner)}` : null,
+    d.battery_unrestricted !== undefined ? `סוללה ${d.battery_unrestricted ? "ללא הגבלה" : "מוגבלת"}` : null,
+    d.paused ? "בהשהיה" : null,
+    d.app_version ? `גרסה ${d.app_version}` : null,
+    d.sdk ? `Android ${ANDROID[d.sdk] || d.sdk}` : null,
+    d.topic ? `נושא: ${d.topic}` : null,
+    d.vpn_error ? `שגיאה: ${d.vpn_error}` : null,
+  ].filter(Boolean).join(" · ");
+}
+
+function bubble(m) {
+  const mine = m.from === "support";
+  const meta = [dateTime(m.ts), mine ? VIA[m.via] || m.via : null,
+    mine && m.author && m.author !== "whatsapp" ? m.author : null].filter(Boolean).join(" · ");
+  return el("div", { class: `bubble ${mine ? "out" : "in"}` },
+    el("div", { class: "text" }, m.text),
+    !mine && m.diag ? el("div", { class: "diag" }, diagText(m.diag)) : null,
+    el("small", { class: "meta" }, meta),
+    m.wa_error ? el("small", { class: "error" }, `לא נשלח לוואטסאפ: ${m.wa_error}`) : null);
+}
+
+async function viewSupport(arg) {
+  if (arg) return viewSupportThread(Number(arg));
+  const s = await api("/v1/admin/support");
+  autoRefresh(render, 15000);
+  topAction("רענון", render);
+  const rows = s.threads.map((t) => el("a", { class: `thread-row${t.unread ? " unread" : ""}`, href: `#/support/${t.device_id}` },
+    el("span", { class: "avatar" }, (t.customer || t.device_name || "?").slice(0, 1)),
+    el("div", { class: "grow" },
+      el("div", { class: "row between" }, el("b", {}, t.customer || t.device_name || `מכשיר #${t.device_id}`), el("small", { class: "muted" }, ago(t.last_ts))),
+      el("small", { class: "muted" }, `${t.device_name || ""} · #${t.device_id}`),
+      el("p", { class: "last" }, (t.last_from === "support" ? "↩ " : "") + t.last_text)),
+    t.unread ? el("b", { class: "badge" }, t.unread) : null));
+  return [
+    s.whatsapp ? null : el("div", { class: "note" }, "פניות מגיעות לכאן. כדי לקבל אותן גם בוואטסאפ שלך ולענות משם — ",
+      el("a", { href: "#/system" }, "מערכת ← וואטסאפ"), "."),
+    card(`פניות (${s.threads.length})`, s.unread ? `${s.unread} שיחות מחכות לתשובה` : null,
+      rows.length ? el("div", { class: "threads" }, rows) : empty("עוד אין פניות. כשלקוח יכתוב בצ'אט באפליקציה — זה יופיע כאן.")),
+  ];
+}
+
+async function viewSupportThread(id) {
+  let t = await api(`/v1/admin/support/${id}`);
+  $("#title").textContent = `תמיכה · ${t.device.customer || t.device.name}`;
+  topAction("כל הפניות", () => { location.hash = "#/support"; });
+  topAction("לדף המכשיר", () => { location.hash = `#/devices/${id}`; });
+  const box = el("div", { class: "chat" });
+  const paint = () => {
+    box.replaceChildren(...(t.messages.length ? t.messages.map(bubble) : [empty("אין הודעות.")]));
+    box.scrollTop = box.scrollHeight;
+  };
+  const text = el("textarea", { rows: 3, maxlength: 2000, placeholder: "תשובה ללקוח… (Ctrl+Enter לשליחה)" });
+  const send = el("button", { class: "primary", onclick: async () => {
+    const v = text.value.trim();
+    if (!v) return;
+    send.disabled = true;
+    try {
+      await attempt(() => api(`/v1/admin/support/${id}`, { method: "POST", body: { text: v } }), "נשלח — יופיע אצל הלקוח באפליקציה");
+      text.value = "";
+      t = await api(`/v1/admin/support/${id}`);
+      paint();
+    } catch (_) { /* הודעת השגיאה כבר הוצגה */ } finally {
+      send.disabled = false;
+    }
+  } }, "שליחה");
+  text.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send.click(); });
+  // רענון שקט: רק ההודעות, בלי לגעת במה שמוקלד
+  autoRefresh(async () => {
+    const fresh = await api(`/v1/admin/support/${id}`).catch(() => null);
+    if (fresh && fresh.messages.length !== t.messages.length) { t = fresh; paint(); }
+  }, 10000);
+  paint();
+  setTimeout(() => { box.scrollTop = box.scrollHeight; }, 0);
+  return card(`${t.device.customer || t.device.name} · מכשיר #${id}`, "התשובה מגיעה לאפליקציה של הלקוח (והתראה בטלפון בדיווח הבא).",
+    box, el("div", { class: "composer" }, text, send));
 }
 
 async function viewProfiles() {
@@ -1395,9 +1487,66 @@ async function viewAudit() {
 
 // ---------------------------------------------------------------- מערכת
 
+function whatsappCard(wa) {
+  if (!wa) return null;
+  const f = (key, label, attrs = {}) => {
+    const input = el("input", { value: wa[key] || "", ...attrs });
+    return [input, el("label", {}, label, input)];
+  };
+  const [adminNumber, adminL] = f("admin_number", "הוואטסאפ שלך (לשם יגיעו הפניות)", { class: "ltr", placeholder: "0501234567", inputmode: "tel" });
+  const [phoneId, phoneIdL] = f("phone_number_id", "Phone number ID (מ-WhatsApp Manager)", { class: "ltr", inputmode: "numeric" });
+  const tokenIn = el("input", { type: "password", class: "ltr", autocomplete: "off",
+    placeholder: wa.token_set ? `שמור (${wa.token_hint || "…"}) — השאירו ריק בלי שינוי` : "Access token (System user, קבוע)" });
+  const secretIn = el("input", { type: "password", class: "ltr", autocomplete: "off",
+    placeholder: wa.app_secret_set ? "שמור — השאירו ריק בלי שינוי" : "App Secret (App settings → Basic)" });
+  const [verify, verifyL] = f("verify_token", "Verify token (מחרוזת שתדביקו גם ב-Meta)", { class: "ltr" });
+  const gen = el("button", { class: "ghost small", type: "button", onclick: () => {
+    const b = new Uint8Array(18); crypto.getRandomValues(b);
+    verify.value = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  } }, "יצירה");
+  const [pub, pubL] = f("public_number", "מספר לפנייה ישירה בוואטסאפ (רשות — מוצג ללקוחות)", { class: "ltr", inputmode: "tel" });
+  const [tpl, tplL] = f("template", "תבנית להתראה אחרי 24 שעות (רשות)", { class: "ltr", placeholder: "support_message" });
+  const save = async () => {
+    await attempt(() => api("/v1/admin/whatsapp", { method: "PUT", body: {
+      admin_number: adminNumber.value, phone_number_id: phoneId.value, token: tokenIn.value, app_secret: secretIn.value,
+      verify_token: verify.value, public_number: pub.value, template: tpl.value } }), "נשמר");
+    render();
+  };
+  const copy = (v) => navigator.clipboard?.writeText(v).then(() => toast("הועתק"));
+  return card("תמיכה בוואטסאפ", "פניות מהצ'אט באפליקציה נשלחות לוואטסאפ שלך. עונים ב\"השב\" על ההודעה — והתשובה מגיעה ללקוח באפליקציה (גם ללקוח בלי וואטסאפ).",
+    el("div", { class: "chips" },
+      chip(wa.can_send ? "שליחה אליך: פעיל" : "שליחה אליך: לא מוגדר", wa.can_send ? "ok" : "warn"),
+      chip(wa.can_receive ? "תשובות מוואטסאפ: פעיל" : "תשובות מוואטסאפ: לא מוגדר", wa.can_receive ? "ok" : "warn"),
+      wa.last_ok ? chip(`נשלח בהצלחה ${ago(wa.last_ok)}`) : null),
+    wa.last_error ? el("p", { class: "error small" }, `שגיאה אחרונה: ${wa.last_error}`) : null,
+    el("div", { class: "grid two" }, adminL, phoneIdL,
+      el("label", {}, "Access token", tokenIn), el("label", {}, "App Secret", secretIn),
+      el("div", { class: "row gap end" }, el("div", { class: "grow" }, verifyL), gen), pubL, tplL),
+    el("div", { class: "row gap wrap" }, el("span", { class: "muted small" }, "כתובת ה-Webhook:"),
+      el("code", { class: "ltr" }, wa.webhook_url), el("button", { class: "ghost small", onclick: () => copy(wa.webhook_url) }, "העתקה")),
+    el("details", {}, el("summary", {}, "איך מחברים (פעם אחת, כרבע שעה)"),
+      el("ol", { class: "small steps" },
+        el("li", {}, "ב-developers.facebook.com: My Apps → Create app → Business, ומוסיפים את המוצר WhatsApp."),
+        el("li", {}, "WhatsApp → API Setup: מעתיקים את Phone number ID. מספר עסקי — מספר שלא רשום באפליקציית וואטסאפ רגילה (או מספר הבדיקה של Meta)."),
+        el("li", {}, "Business settings → System users: יוצרים משתמש (Admin) → Generate token עם whatsapp_business_messaging ו-whatsapp_business_management. מדביקים כאן ב-Access token."),
+        el("li", {}, "App settings → Basic → App Secret: מדביקים כאן."),
+        el("li", {}, "לוחצים \"יצירה\" ליד Verify token ושומרים. ב-WhatsApp → Configuration → Webhook: Callback URL = הכתובת למעלה, Verify token = אותה מחרוזת → Verify and save → Subscribe ל-messages."),
+        el("li", {}, "שולחים הודעה כלשהי מהוואטסאפ שלך למספר העסקי (פותח חלון של 24 שעות). להתראות גם אחרי 24 שעות: תבנית Utility בשם support_message, בעברית, עם הגוף: פנייה חדשה מ-{{1}}: {{2}}"),
+        el("li", {}, "\"הודעת בדיקה\" — ואמורה להגיע אליך הודעה."))),
+    el("div", { class: "row end gap" },
+      wa.token_set || wa.app_secret_set ? el("button", { class: "danger small", onclick: async () => {
+        if (!await confirmDialog("למחוק את הטוקן וה-App Secret?", "השליחה לוואטסאפ תיפסק עד שתזינו אותם שוב.", "מחיקה", true)) return;
+        await attempt(() => api("/v1/admin/whatsapp", { method: "PUT", body: { clear_secrets: true } }), "נמחק");
+        render();
+      } }, "מחיקת הסודות") : null,
+      el("button", { class: "ghost", disabled: !wa.can_send, onclick: () => attempt(() => api("/v1/admin/whatsapp/test", { method: "POST" }), "נשלחה הודעת בדיקה").then(render, render) }, "הודעת בדיקה"),
+      el("button", { class: "primary", onclick: save }, "שמירה")));
+}
+
 async function viewSystem() {
   const o = await api("/v1/admin/overview");
   const sys = await api("/v1/admin/system").catch(() => null);
+  const wa = await api("/v1/admin/whatsapp").catch(() => null);
   const ag = o.adguard;
   const CHECKS = { db: "מסד נתונים", redis: "Redis", engine: "מנוע תמונות", wireguard: "WireGuard", adguard: "AdGuard" };
   const m = (snap, key) => (snap && snap[key] !== undefined ? num(Math.round(snap[key])) : "—");
@@ -1435,6 +1584,7 @@ async function viewSystem() {
       el("div", { class: "ltr mono small" }, [...x.apps, ...x.screens.map((s) => `${s.package}: ${s.match.join("/")}`)].join(" · "))) : "—")));
   return [
     healthCard,
+    whatsappCard(wa),
     el("div", { class: "grid two" }, agCard,
       card("מנוע הסינון", null, kv([["מצב", o.engine ? chip("פעיל", "ok") : chip("לא זמין", "bad")],
         ["תמונות שנבדקו היום", num(o.today.scanned)], ["נחסמו / נצבעו היום", `${num(o.today.block)} / ${num(o.today.replace)}`]]),

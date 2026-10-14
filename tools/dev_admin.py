@@ -133,6 +133,16 @@ def seed(svc: Services) -> None:
         row = svc.device_row(d["id"])
         svc.heartbeat(row, {**hb, "policy_version": row["policy_version"]}, d["vpn_ip"])
         svc.heartbeat(svc.device_row(d["id"]), {**hb, "policy_version": row["policy_version"]}, d["vpn_ip"])
+    # שיחות תמיכה מהאפליקציה
+    from filterphone.api.support import SupportDesk
+    desk = SupportDesk(svc)
+    desk.device_post(svc.device_row(active[0]["id"]), "שלום, ה-VPN מתנתק כל כמה דקות. מה לעשות?",
+                     {"vpn": "DOWN", "accessibility": True, "device_owner": True, "app_version": "2.1.0", "sdk": 34,
+                      "battery_unrestricted": False, "topic": "vpn"})
+    desk.reply(active[0]["id"], "admin", "שלום! הגדרתי עכשיו סוללה ללא הגבלה מרחוק. תבדוק אם זה עדיין קורה 🙏")
+    desk.device_post(svc.device_row(active[0]["id"]), "עכשיו זה יציב, תודה רבה!", {"vpn": "UP"})
+    desk.device_post(svc.device_row(active[1]["id"]), "איך מתקינים את ווייז? בחנות כתוב 'בקשה'",
+                     {"vpn": "UP", "accessibility": False, "device_owner": False, "app_version": "2.0.0"})
     print(f"נתוני דוגמה: {len(svc.list_devices())} מכשירים, {len(svc.list_requests())} בקשות ממתינות")
     json.dumps(tokens)
 

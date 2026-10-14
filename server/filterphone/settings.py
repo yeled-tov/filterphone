@@ -74,6 +74,17 @@ class Settings:
     adguard_user: str = ""
     adguard_password: str = ""
 
+    # --- תמיכה בוואטסאפ (WhatsApp Cloud API). ריק = מה שהמנהל שמר בממשק (מערכת → וואטסאפ) ---
+    wa_token: str = ""
+    wa_phone_number_id: str = ""
+    wa_admin_number: str = ""
+    wa_verify_token: str = ""
+    wa_app_secret: str = ""
+    wa_template: str = ""
+    wa_template_lang: str = ""
+    wa_public_number: str = ""
+    wa_graph_version: str = ""
+
     @property
     def engine_socket(self) -> str:
         return os.path.join(self.run_dir, "engine.sock")

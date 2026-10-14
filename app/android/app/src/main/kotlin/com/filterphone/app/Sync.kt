@@ -109,6 +109,8 @@ object Sync {
         } else if (first.optInt("policy_version", -1) == GuardPolicy.version(context)) {
             ProtectionState.mark(context, ProtectionState.POLICY_SYNC)
         }
+        // המנהל ענה בצ'אט התמיכה — התראה (פעם אחת לכל תשובה)
+        runCatching { SupportNotify.onServer(context, first.optJSONObject("support")) }
         // גרסה חדשה של האפליקציה: במנהל מכשיר — עדכון שקט ובטוח; אחרת — הודעה במסך הראשי
         if (first.optString("status") == "active") {
             runCatching { SelfUpdate.consider(context, first.optJSONObject("app_update")) }

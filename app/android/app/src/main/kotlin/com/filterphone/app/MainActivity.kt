@@ -33,6 +33,19 @@ class MainActivity : FlutterActivity() {
     private var pendingVpn: MethodChannel.Result? = null
     private var pendingCert: MethodChannel.Result? = null
     private var vpnListener: ((Tunnel.State) -> Unit)? = null
+    /** פתיחה מהתראה ("יש תשובה מהתמיכה") — ה-Flutter שואל פעם אחת ועובר ללשונית. */
+    private var launchTarget: String? = null
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        launchTarget = intent?.getStringExtra(SupportNotify.EXTRA_OPEN)
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(SupportNotify.EXTRA_OPEN)?.let { launchTarget = it }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -200,6 +213,8 @@ class MainActivity : FlutterActivity() {
                 val page = SelfUpdate.available(this)?.get("page")
                 result.success(page != null && tryStart(Intent(Intent.ACTION_VIEW, Uri.parse(page))))
             }
+            "launchTarget" -> { result.success(launchTarget); launchTarget = null }
+            "clearSupportNotification" -> { SupportNotify.clear(this); result.success(true) }
             // תמיכה — פתיחת שיחת WhatsApp עם פרטי מכשיר/מצב שנמסרו מה-Flutter
             "openSupportWhatsApp" -> {
                 val number = call.argument<String>("number")
