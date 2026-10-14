@@ -905,7 +905,11 @@ async function viewApps() {
   const pkg = el("input", { class: "ltr", placeholder: "com.example.app" });
   const label = el("input", { placeholder: "שם בחנות" });
   const category = el("input", { placeholder: "קטגוריה (כלים, ניווט...)" });
-  const playUrl = el("input", { class: "ltr", placeholder: "קישור Google Play (רשות) — https://play.google.com/..." });
+  const playUrl = el("input", { class: "ltr", placeholder: "קישור Google Play (רשות) — https://play.google.com/...",
+    oninput: (e) => {
+      const m = e.target.value.match(/[?&]id=([\w.]+)/);     // חילוץ שם החבילה מהקישור
+      if (m && !pkg.value.trim()) pkg.value = m[1];
+    } });
   const addStoreOnly = el("button", { class: "ghost", onclick: async () => {
     await attempt(() => api("/v1/admin/apps", { method: "POST", body: {
       package: pkg.value.trim(), label: label.value, category: category.value, play_url: playUrl.value.trim() } }), "נוספה");
