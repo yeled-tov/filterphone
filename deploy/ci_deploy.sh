@@ -12,6 +12,8 @@
 #   rollback <גיבוי>   חזרה לגרסה הקודמת (deploy/rollback_version.sh) עם /root/fp-backups/<גיבוי>
 #   wabot              אבחון בוט הוואטסאפ: מצב השירות, יומן אחרון, Chrome, הבוט הישן (pm2)
 #   legacy-bot <start|stop|logs>   הבוט הישן (filterphone-bot ב-pm2) — להשוואה מול הבוט החדש
+#   devices            אבחון מכשירים (לקריאה בלבד, בלי מספרי טלפון): מצב, גרסה, דיווח אחרון,
+#                      חיבור VPN (WireGuard), ושגיאות אחרונות של השרת
 # =====================================================================
 set -euo pipefail
 
@@ -100,6 +102,50 @@ legacy-bot)
     logs)  bash -lc "pm2 logs filterphone-bot --lines 80 --nostream" 2>&1 | tail -100 || true ;;
     *)     echo "start / stop / logs"; exit 2 ;;
     esac
+    ;;
+devices)
+    echo "== מכשירים (24 השעות האחרונות / פעילים)"
+    sudo -n python3 - <<'PY' || true
+import json, sqlite3, subprocess, time
+now = int(time.time())
+hs = {}
+try:
+    out = subprocess.run(["wg", "show", "wg0", "latest-handshakes"], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        k, _, t = line.partition("\t")
+        hs[k.strip()] = int(t or 0)
+except Exception as e:
+    print("wg:", e)
+ago = lambda t: "-" if not t else f"{(now - int(t)) // 60}m"
+db = sqlite3.connect("file:/var/lib/filterphone/filterphone.db?mode=ro", uri=True)
+db.row_factory = sqlite3.Row
+rows = db.execute("SELECT * FROM devices WHERE status IN ('active','pending') OR last_seen_at > ? "
+                  "ORDER BY COALESCE(heartbeat_at, last_seen_at, 0) DESC LIMIT 15", (now - 86400,)).fetchall()
+for d in rows:
+    d = dict(d)
+    hb = {}
+    try:
+        hb = json.loads(d.get("heartbeat") or "{}")
+    except Exception:
+        pass
+    keep = {k: hb.get(k) for k in ("app_version", "via_vpn", "vpn", "tunnel", "device_owner", "guard", "policy_version",
+                                   "policy_error", "always_on", "lockdown", "error", "network") if k in hb}
+    h = hs.get(d["public_key"], 0)
+    print(f"#{d['id']} {d['name']!r} status={d['status']}/{d.get('disabled_reason','')} app={d['app_version']} "
+          f"seen={ago(d['last_seen_at'])} hb={ago(d.get('heartbeat_at'))} wg={ago(h) if h else 'never'} "
+          f"vpn_ip={'yes' if d['vpn_ip'] else 'no'} policy={d.get('policy_version')}/{d.get('device_policy_version')} "
+          f"pause={'yes' if (d.get('pause_until') or 0) > now else 'no'} unmanage={'yes' if d.get('unmanage_at') else 'no'}")
+    print("    hb:", json.dumps(keep, ensure_ascii=False)[:500])
+peers = set(hs)
+known = {r[0] for r in db.execute("SELECT public_key FROM devices WHERE status = 'active'")}
+print(f"== WireGuard: {len(peers)} peers בשרת, {len(known)} מכשירים פעילים, חסרים ב-wg: {len(known - peers)}")
+PY
+    echo "== fp-api — שגיאות ותשובות 4xx/5xx אחרונות"
+    sudo -n journalctl -u fp-api --since "-3h" --no-pager -o short-iso 2>&1 \
+        | grep -E 'ERROR|Traceback|Exception| (4[0-9]{2}|5[0-9]{2}) |WARNING' | grep -v -E '/admin|/v1/bot/' | tail -60 || true
+    echo "== fp-api — בקשות מכשירים אחרונות"
+    sudo -n journalctl -u fp-api --since "-1h" --no-pager -o short-iso 2>&1 | grep -E '"(GET|POST|PUT) /v1/' \
+        | grep -v -E '/admin|/v1/bot/' | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/x.x.x.x/g' | tail -40 || true
     ;;
 rollback)
     [[ "${arg:-}" =~ ^[0-9]{8}-[0-9]{6}$ ]] || { echo "שם גיבוי לא חוקי (למשל 20261005-213000)"; exit 2; }
