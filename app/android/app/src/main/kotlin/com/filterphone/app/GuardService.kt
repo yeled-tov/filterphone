@@ -42,6 +42,12 @@ class GuardService : AccessibilityService() {
     private var lastAliveMark = 0L
     private var lastWaWindow: String? = null        // המסך האחרון של וואטסאפ (Activity) — לשכבת ההחרגה
     private var lastWaTabScanAt = 0L
+    private var settingsOpen = false                // ההגדרות בחזית — בודקים גם שינויי תוכן (דפים שנטענים לאט)
+    private var lastSettingsScanAt = 0L
+    private var launcherMenuPkg = ""                // מסך הבית שבו נלחץ ארוך הסמל שלנו
+    private val curtain by lazy { PlayCurtain(this) }
+    private var curtainBase = -1                    // תחתית הכפתור כשעמוד ה-Play בראש — לזיהוי גלילה
+    private var lastPlayScrollBackAt = 0L
     private val debug by lazy { (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
 
     override fun onServiceConnected() {
@@ -54,8 +60,9 @@ class GuardService : AccessibilityService() {
     }
 
     /**
-     * סוגי האירועים: תמיד מעבר בין מסכים; שינויי תוכן — רק בוואטסאפ (זיהוי תמונות פרופיל);
-     * שינויי טקסט — כשחסימת מילות חיפוש פעילה (כל אפליקציה, כדי לתפוס הקלדה בשדה חיפוש).
+     * סוגי האירועים: תמיד מעבר בין מסכים ולחיצה ארוכה (על הסמל של FilterPhone במסך הבית); שינויי תוכן —
+     * רק בוואטסאפ (תמונות פרופיל / עדכונים), ב-Play בזמן חלון התקנה, ובהגדרות (הגנה עצמית — הדפים
+     * נטענים בהדרגה); שינויי טקסט — כשחסימת מילות חיפוש פעילה (כדי לתפוס הקלדה בשדה חיפוש).
      */
     private var lastPlayScanAt = 0L
     private var lastPlayReturnAt = 0L
@@ -63,8 +70,7 @@ class GuardService : AccessibilityService() {
 
     private fun reconfigure() {
         val policy = GuardPolicy.get(this)
-        val wa = policy.waProfile
-        val wantContent = wantsContent(foreground, policy)
+        val wantContent = wantsContent(foreground, policy) || (settingsOpen && AccessibilityGuard.wanted(this))
         scanKeywords = policy.keywords != null
         if (scanKeywords && keywordVersion != policy.version) {
             keywordDetector = KeywordDetector(policy.keywords!!.terms)
@@ -75,7 +81,7 @@ class GuardService : AccessibilityService() {
         }
         if (serviceInfo == null) return
         val info = serviceInfo
-        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+        info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_VIEW_LONG_CLICKED or
             (if (wantContent) AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED else 0) or
             (if (scanKeywords) AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED else 0)
         info.flags = info.flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
@@ -97,8 +103,14 @@ class GuardService : AccessibilityService() {
             if (scanKeywords) onTyped(pkg, event)
             return
         }
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
+            onLongClick(pkg, event)
+            return
+        }
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             markAlive()
+            trackSettings(pkg)
+            if (pkg != PlayLock.PLAY && pkg != packageName && pkg != SYSTEM_UI) hideCurtain()
             if (guardSelf(pkg, event.className?.toString())) return
             if (guardCritical(pkg)) return
             endPlayWindowIfLeft(pkg)
@@ -107,10 +119,102 @@ class GuardService : AccessibilityService() {
             if (!policy.isEmpty) onWindow(pkg, event.className?.toString(), policy)
             if (scanKeywords) checkFocusedInput(pkg)
         } else if (contentEvents) {
+            if (pkg in SETTINGS_PACKAGES) {
+                onSettingsContent(pkg)
+                return
+            }
             if (guardPlay(pkg, policy, fromContent = true)) return
             onContent(pkg, policy)
         }
     }
+
+    // ------------------------------------------------------------ הגנה עצמית: רק FilterPhone
+
+    /**
+     * לחיצה ארוכה על הסמל של FilterPhone במסך הבית / במגירה → "אחורה" (התפריט נסגר לפני שאפשר להגיע
+     * ממנו ל"מידע על האפליקציה" / "השהיית אפליקציה" / הסרה). שאר האפליקציות — כרגיל.
+     */
+    private fun onLongClick(pkg: String, event: AccessibilityEvent) {
+        if (pkg == packageName || !AccessibilityGuard.wanted(this) || !isLauncher(pkg)) return
+        val texts = ArrayList<String>(4)
+        event.text?.forEach { t -> t?.toString()?.let(texts::add) }
+        event.contentDescription?.toString()?.let(texts::add)
+        if (!SelfProtect.isOurIcon(texts, appLabel)) {
+            val src = runCatching { event.source }.getOrNull() ?: return
+            val ours = SelfProtect.isOurIcon(listOfNotNull(src.text?.toString(), src.contentDescription?.toString()), appLabel)
+            recycle(src)
+            if (!ours) return
+        }
+        if (block(pkg, GLOBAL_ACTION_BACK, R.string.guard_self_protected, minGapMs = 300)) {
+            ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+        }
+        // התפריט לפעמים נפתח רגע אחרי האירוע — בודקים שוב ונסגר אם עדיין פתוח
+        launcherMenuPkg = pkg
+        main.removeCallbacks(closeLauncherMenu)
+        main.postDelayed(closeLauncherMenu, 350)
+        main.postDelayed(closeLauncherMenu, 900)
+    }
+
+    private val closeLauncherMenu = Runnable {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return@Runnable
+        try {
+            if (root.packageName?.toString() == launcherMenuPkg && SelfProtect.isLauncherMenu(collectTexts(root))) {
+                performGlobalAction(GLOBAL_ACTION_BACK)
+            }
+        } catch (e: Exception) {
+            // לא קריטי
+        } finally {
+            recycle(root)
+        }
+    }
+
+    /**
+     * ההגדרות בחזית? אז גם שינויי תוכן (דף "מידע על האפליקציה" ודף מנהל המכשיר נטענים בהדרגה — הכפתורים
+     * מופיעים אחרי פתיחת המסך), ובדיקה חוזרת קצרה אחרי שהמסך נפתח. מקלדת / שורת המצב לא "סוגרות" את ההגדרות.
+     */
+    private fun trackSettings(pkg: String) {
+        if (pkg == packageName || pkg == SYSTEM_UI || isIme(pkg)) return
+        val open = pkg in SETTINGS_PACKAGES
+        if (open && AccessibilityGuard.wanted(this)) {
+            main.removeCallbacks(settingsRecheck)
+            main.postDelayed(settingsRecheck, 400)
+            main.postDelayed(settingsRecheck, 1_100)
+        }
+        if (open != settingsOpen) {
+            settingsOpen = open
+            reconfigure()
+        }
+    }
+
+    private fun onSettingsContent(pkg: String) {
+        if (!AccessibilityGuard.wanted(this)) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastSettingsScanAt < SCAN_EVERY_MS) {
+            // רצף שינויים — בודקים שוב בסופו (שלא יפוספס המצב האחרון של הדף)
+            main.removeCallbacks(settingsRecheck)
+            main.postDelayed(settingsRecheck, SCAN_EVERY_MS)
+            return
+        }
+        lastSettingsScanAt = now
+        if (!guardSelf(pkg, null)) guardCritical(pkg)
+    }
+
+    private val settingsRecheck = Runnable {
+        if (!AccessibilityGuard.wanted(this)) return@Runnable
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return@Runnable
+        val p = root.packageName?.toString()
+        recycle(root)
+        if (p != null && p in SETTINGS_PACKAGES) {
+            lastSettingsScanAt = SystemClock.elapsedRealtime()
+            if (!guardSelf(p, null)) guardCritical(p)
+        }
+    }
+
+    private fun isIme(pkg: String): Boolean =
+        runCatching {
+            android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD)
+                ?.startsWith("$pkg/") == true
+        }.getOrDefault(false)
 
     /**
      * המשתמש הקליד בשדה (חיפוש, כתובת, כל שדה טקסט): אם מה שהוקלד מכיל מילה חסומה — חזרה אחורה,
@@ -262,21 +366,107 @@ class GuardService : AccessibilityService() {
     private fun guardPlay(pkg: String, policy: GuardPolicy.Policy, fromContent: Boolean): Boolean {
         if (pkg != PlayLock.PLAY || PlayLock.PLAY !in policy.apps) return false
         val now = SystemClock.elapsedRealtime()
-        val s = PlayLock.active(now) ?: return false          // אין חלון — החסימה הרגילה
-        if (fromContent && now - lastPlayScanAt < PLAY_SCAN_MS) return true
+        val s = PlayLock.active(now) ?: run {                  // אין חלון — החסימה הרגילה
+            hideCurtain()
+            return false
+        }
+        if (fromContent && now - lastPlayScanAt < PLAY_SCAN_MS) {
+            // רצף (גלילה) — בודקים שוב בסופו, שהדף הלבן יעמוד במקום הנכון
+            main.removeCallbacks(playRecheck)
+            main.postDelayed(playRecheck, PLAY_SCAN_MS)
+            return true
+        }
         lastPlayScanAt = now
         PlayLock.onVersion(ManagedApps.installedVersion(this, s.pkg), now)
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return true
         try {
             if (root.packageName?.toString() != PlayLock.PLAY) return true
-            val (texts, search) = collectOrdered(root)
-            if (PlayLock.verdict(texts, search, s.titles) == PlayLock.Verdict.RETURN) returnToPlayTarget(s.pkg, now)
+            val boxes = ArrayList<PlayLock.Box>(64)
+            val (texts, search) = collectOrdered(root, boxes)
+            when {
+                PlayLock.verdict(texts, search, s.titles) == PlayLock.Verdict.RETURN -> {
+                    hideCurtain()
+                    returnToPlayTarget(s.pkg, now)
+                }
+                PlayLock.isTargetPage(texts, s.titles) -> updateCurtain(root, boxes, now)
+                else -> hideCurtain()                          // חלון ביניים (חשבון, אישורים) — בלי דף
+            }
         } catch (e: Exception) {
             Log.w(TAG, "play window check failed", e)
         } finally {
             recycle(root)
         }
         return true
+    }
+
+    private val playRecheck = Runnable {
+        val p = GuardPolicy.get(this)
+        if (!AdminState.isPaused(this)) guardPlay(PlayLock.PLAY, p, fromContent = false)
+    }
+
+    /**
+     * "דף לבן" מתחת לכפתור ההתקנה בעמוד של האפליקציה שנבחרה — אי אפשר לראות או לגלול ל"אפליקציות דומות".
+     * גללו בכל זאת (מהחלק העליון) — הדף עוקב אחרי הכפתור, והעמוד חוזר לראש.
+     */
+    private fun updateCurtain(root: AccessibilityNodeInfo, boxes: List<PlayLock.Box>, now: Long) {
+        val top = PlayLock.curtainTop(boxes, curtain.screenHeight(), curtain.marginPx())
+        if (top == null) {
+            // הכפתור לא במסך (העמוד גלול) או עדיין נטען — חוזרים לראש העמוד; הדף נשאר במקומו
+            scrollPlayBack(root, now)
+            return
+        }
+        if (top > curtainBase) curtainBase = top
+        if (top < curtainBase - curtain.marginPx() * 3) scrollPlayBack(root, now)
+        curtain.show(top)
+        main.removeCallbacks(curtainCheck)
+        main.postDelayed(curtainCheck, CURTAIN_CHECK_MS)
+    }
+
+    private fun hideCurtain() {
+        if (!curtain.isShown && curtainBase < 0) return
+        curtain.hide()
+        curtainBase = -1
+        main.removeCallbacks(curtainCheck)
+    }
+
+    /** גלילה אחת לאחור ברשימה הראשית של העמוד (לא יותר מפעם ב-400ms). */
+    private fun scrollPlayBack(root: AccessibilityNodeInfo, now: Long) {
+        if (now - lastPlayScrollBackAt < 400) return
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        queue.add(root)
+        try {
+            var visited = 0
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                if (n !== root) seen += n
+                visited++
+                if (n.isScrollable) {
+                    lastPlayScrollBackAt = now
+                    n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                    return
+                }
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { if (it !== root) recycle(it) }
+        }
+    }
+
+    /** כל עוד הדף מוצג: יצאו מ-Play / החלון נגמר / השהיה מאושרת — הדף יורד (גם בלי אירוע). */
+    private val curtainCheck: Runnable = Runnable {
+        if (!curtain.isShown) return@Runnable
+        val now = SystemClock.elapsedRealtime()
+        val root = runCatching { rootInActiveWindow }.getOrNull()
+        val p = root?.packageName?.toString()
+        root?.let { recycle(it) }
+        if (AdminState.isPaused(this) || PlayLock.active(now) == null ||
+            (p != null && p != PlayLock.PLAY && p != packageName)) {
+            hideCurtain()
+        } else {
+            main.postDelayed(curtainCheck, CURTAIN_CHECK_MS)
+        }
     }
 
     /** חזרה לעמוד של האפליקציה שנבחרה. ניסיונות חוזרים ברצף (מישהו "נלחם") — סוגרים את החלון. */
@@ -287,6 +477,7 @@ class GuardService : AccessibilityService() {
         while (playReturns.isNotEmpty() && now - playReturns.first() > 30_000) playReturns.removeFirst()
         if (playReturns.size > 4) {
             PlayLock.end()
+            hideCurtain()
             playReturns.clear()
             reconfigure()
             block(PlayLock.PLAY, GLOBAL_ACTION_HOME, R.string.guard_play_window_closed, minGapMs = 0)
@@ -309,23 +500,35 @@ class GuardService : AccessibilityService() {
         if (pkg == s.pkg || pkg == packageName || pkg in PlayLock.COMPANIONS) return
         if (pkg in GuardPolicy.untouchable(this) && !isLauncher(pkg)) return     // מקלדת וכו'
         PlayLock.end()
+        hideCurtain()
         playReturns.clear()
         reconfigure()
     }
 
-    /** הטקסטים בחלון לפי סדר הרכיבים (מלמעלה למטה), ויש בו שדה הקלדה? — ל-PlayLock. */
-    private fun collectOrdered(root: AccessibilityNodeInfo): Pair<List<String>, Boolean> {
+    /**
+     * הטקסטים בחלון לפי סדר הרכיבים (מלמעלה למטה), ויש בו שדה הקלדה? — ל-PlayLock. אם [boxes] ניתן —
+     * גם המיקום במסך של כל טקסט גלוי (לדף הלבן).
+     */
+    private fun collectOrdered(root: AccessibilityNodeInfo, boxes: MutableList<PlayLock.Box>? = null): Pair<List<String>, Boolean> {
         val out = ArrayList<String>(64)
         var editable = false
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.addLast(root)
         var seen = 0
+        val rect = Rect()
         while (stack.isNotEmpty() && seen < MAX_NODES) {
             val node = stack.removeLast()
             seen++
             if (node.isEditable || node.className?.toString() == "android.widget.EditText") editable = true
-            node.text?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
-            node.contentDescription?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
+            val text = node.text?.toString()?.takeIf { it.isNotBlank() }
+            val desc = node.contentDescription?.toString()?.takeIf { it.isNotBlank() }
+            text?.let { out.add(it) }
+            desc?.let { out.add(it) }
+            if (boxes != null && (text != null || desc != null) && node.isVisibleToUser) {
+                node.getBoundsInScreen(rect)
+                text?.let { boxes.add(PlayLock.Box(it, rect.top, rect.bottom)) }
+                desc?.let { boxes.add(PlayLock.Box(it, rect.top, rect.bottom)) }
+            }
             for (i in node.childCount - 1 downTo 0) {
                 runCatching { node.getChild(i) }.getOrNull()?.let { stack.addLast(it) }
             }
@@ -544,6 +747,7 @@ class GuardService : AccessibilityService() {
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         instance = null
+        runCatching { curtain.hide() }
         Recovery.syncSoon(this)            // המגן כובה — לדווח לשרת
         // כובה בהגדרות? עם ההרשאה (הקמה) — מדליקים מחדש מיד (לא בהשהיה שהמנהל אישר)
         val app = applicationContext
@@ -557,6 +761,7 @@ class GuardService : AccessibilityService() {
     override fun onDestroy() {
         instance = null
         main.removeCallbacksAndMessages(null)
+        runCatching { curtain.hide() }
         super.onDestroy()
     }
 
@@ -575,6 +780,8 @@ class GuardService : AccessibilityService() {
         val isRunning: Boolean get() = instance != null
 
         private const val PLAY_SCAN_MS = 300L
+        private const val CURTAIN_CHECK_MS = 1_500L
+        private const val SYSTEM_UI = "com.android.systemui"
 
         /** החנות פתחה חלון התקנה ב-Play — שינויי תוכן ב-Play נחוצים מעכשיו (מכל חוט). */
         fun onPlaySession() {

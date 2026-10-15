@@ -9,6 +9,8 @@ package com.filterphone.app
  *   • וחלונות ביניים של ההתקנה (חשבון, הרשאות, טעינה) — כל מה שאינו "ניווט החוצה".
  * ניווט החוצה — דף הבית של Play, חיפוש, או עמוד של אפליקציה אחרת — מחזיר מיד לעמוד המבוקש.
  * אחרי שהאפליקציה הותקנה/עודכנה (או כשהזמן נגמר, או כשיוצאים מ-Play) — Play חוזר להיות חסום.
+ * בעמוד האפליקציה עצמה — "דף לבן" (PlayCurtain) מכסה את כל מה שמתחת לכפתור ההתקנה, כך שאי אפשר לגלול
+ * ל"אפליקציות דומות" ולמודעות.
  *
  * כאן רק ההחלטה (טהור, נבדק ביחידה) ומצב החלון; הביצוע ב-GuardService.
  */
@@ -63,13 +65,45 @@ object PlayLock {
      */
     fun verdict(texts: List<String>, searchField: Boolean, titles: List<String>): Verdict {
         val all = texts.map(::norm).filter { it.isNotEmpty() }
-        val head = all.take(HEAD_TEXTS)
-        if (titles.any { t -> head.any { h -> h == t || (t.length >= 4 && h.startsWith(t)) } }) return Verdict.ALLOW
+        if (isTargetPage(texts, titles)) return Verdict.ALLOW
         if (searchField) return Verdict.RETURN
         if (all.count { it in NAV_LABELS } >= 2) return Verdict.RETURN            // דף הבית / לשוניות של Play
         if (all.any { it in INSTALL_BUTTONS }) return Verdict.RETURN              // עמוד של אפליקציה אחרת
         return Verdict.ALLOW                                                       // חלון ביניים של ההתקנה
     }
+
+    /** זה העמוד של האפליקציה שנבחרה: השם שלה בראש המסך. */
+    fun isTargetPage(texts: List<String>, titles: List<String>): Boolean {
+        val head = texts.asSequence().map(::norm).filter { it.isNotEmpty() }.take(HEAD_TEXTS).toList()
+        return titles.any { t -> head.any { h -> h == t || (t.length >= 4 && h.startsWith(t)) } }
+    }
+
+    // ------------------------------------------------------------ "דף לבן" מתחת לכפתור ההתקנה
+
+    /** רכיב טקסט במסך עם המיקום האנכי שלו (פיקסלים במסך). */
+    data class Box(val text: String, val top: Int, val bottom: Int)
+
+    /**
+     * איפה מתחיל ה"דף הלבן" בעמוד האפליקציה: מתחת לשורת הכפתור הראשי (התקנה / עדכון / פתיחה / ביטול).
+     * מכאן ומטה — צילומי מסך, "אפליקציות דומות", מודעות — מכוסה, כך שאי אפשר לראות או לגלול לאפליקציות
+     * אחרות. null = לא נמצאה שורת כפתורים במקום סביר (עמוד בטעינה / גלול / חלון ביניים) — בלי דף.
+     * [screenH] — גובה המסך; [marginPx] — רווח קטן מתחת לכפתור (שהמסגרת שלו לא תיחתך).
+     */
+    fun curtainTop(boxes: List<Box>, screenH: Int, marginPx: Int): Int? {
+        if (screenH <= 0) return null
+        val buttons = boxes.filter {
+            norm(it.text) in ACTION_BUTTONS && it.bottom > it.top &&
+                it.top > screenH * 0.08 && it.bottom < screenH * 0.8      // לא בסרגל העליון, לא בתחתית המסך
+        }
+        val first = buttons.minByOrNull { it.top } ?: return null
+        // השורה הראשית: הכפתור העליון וכל מה שלצידו ("הסרת התקנה" + "פתיחה")
+        val rowBottom = buttons.filter { it.top < first.bottom }.maxOf { it.bottom }
+        return (rowBottom + marginPx).coerceAtMost(screenH)
+    }
+
+    /** הכפתורים בשורה הראשית של עמוד אפליקציה (כל המצבים: לא מותקנת, בהתקנה, מותקנת, עדכון). */
+    private val ACTION_BUTTONS = setOf("התקנה", "התקן", "עדכון", "עדכן", "פתיחה", "פתח", "ביטול", "הסרת התקנה",
+        "הסר התקנה", "הפעלה", "install", "update", "open", "cancel", "uninstall", "enable")
 
     /** הלשוניות בתחתית Play (עברית/אנגלית). שתיים יחד = לא עמוד של אפליקציה. */
     private val NAV_LABELS = setOf("משחקים", "אפליקציות", "ספרים", "חיפוש", "בשבילך", "מבצעים", "ילדים",

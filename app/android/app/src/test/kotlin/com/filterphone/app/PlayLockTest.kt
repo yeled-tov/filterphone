@@ -81,4 +81,42 @@ class PlayLockTest {
         PlayLock.start("com.waze", waze, versionAtStart = null, now = 0)
         assertNull(PlayLock.active(PlayLock.WINDOW_MS))
     }
+
+    @Test
+    fun curtainStartsBelowTheMainButtonRow() {
+        val h = 2400
+        val page = listOf(
+            PlayLock.Box("ניווט למעלה", 90, 200),
+            PlayLock.Box("Waze: ניווט ועדכוני תנועה", 300, 380),
+            PlayLock.Box("4.5 ★", 600, 650),
+            PlayLock.Box("התקנה", 760, 860),
+            PlayLock.Box("מוביט: ניווט ותכנון מסלולים", 1500, 1560),
+            PlayLock.Box("התקנה", 1600, 1680),                 // כפתור של אפליקציה דומה — נמוך יותר
+        )
+        assertEquals(890, PlayLock.curtainTop(page, h, 30))
+        // מותקנת: "הסרת התקנה" + "פתיחה" באותה שורה — מתחת לנמוך מביניהם
+        val installed = listOf(PlayLock.Box("הסרת התקנה", 760, 858), PlayLock.Box("פתיחה", 755, 862))
+        assertEquals(872, PlayLock.curtainTop(installed, h, 10))
+        // בזמן ההורדה: "ביטול"
+        assertEquals(870, PlayLock.curtainTop(listOf(PlayLock.Box("Cancel", 770, 860)), h, 10))
+    }
+
+    @Test
+    fun noCurtainWithoutAButtonInASaneSpot() {
+        val h = 2400
+        assertNull(PlayLock.curtainTop(emptyList(), h, 10))
+        assertNull(PlayLock.curtainTop(listOf(PlayLock.Box("Waze", 300, 380)), h, 10))
+        // הכפתור נגלל אל מתחת לסרגל העליון / בתחתית המסך — לא מכסים לפיו
+        assertNull(PlayLock.curtainTop(listOf(PlayLock.Box("התקנה", 40, 150)), h, 10))
+        assertNull(PlayLock.curtainTop(listOf(PlayLock.Box("התקנה", 2100, 2200)), h, 10))
+        assertNull(PlayLock.curtainTop(listOf(PlayLock.Box("התקנה", 800, 900)), 0, 10))
+    }
+
+    @Test
+    fun targetPageIsRecognisedOnlyByTheHeader() {
+        assertEquals(true, PlayLock.isTargetPage(listOf("ניווט למעלה", "Waze: ניווט ועדכוני תנועה", "התקנה"), titles))
+        assertEquals(false, PlayLock.isTargetPage(listOf("מוביט", "התקנה"), titles))
+        val far = List(PlayLock.HEAD_TEXTS) { "פסקה $it" } + listOf("Waze: ניווט ועדכוני תנועה")
+        assertEquals(false, PlayLock.isTargetPage(far, titles))
+    }
 }
