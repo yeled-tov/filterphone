@@ -215,6 +215,15 @@ class _OneTapCard extends StatelessWidget {
     return '';
   }
 
+  /// צעד-אחר-צעד להפעלת ADB ללא מחשב (אנדרואיד 11+, ניפוי אלחוטי + Shizuku) — בשפה פשוטה.
+  static const _adbSteps = [
+    'פותחים הגדרות ← אודות הטלפון, ולוחצים 7 פעמים על "מספר Build" (מספר גרסה) עד שכתוב "הפכת למפתח".',
+    'חוזרים להגדרות ← מערכת ← אפשרויות מפתחים, ומדליקים את "ניפוי באגים אלחוטי" (Wireless debugging).',
+    'מתקינים את האפליקציה Shizuku מ-Google Play (או מהקובץ שנשלח), ופותחים אותה.',
+    'ב-Shizuku לוחצים "Start / התחל" דרך ניפוי באגים אלחוטי, ומאשרים את ההתאמה (Pairing) שתופיע.',
+    'חוזרים לכאן ולוחצים "הקמה בלי Root" — FilterPhone יגדיר את הכול דרך Shizuku.',
+  ];
+
   @override
   Widget build(BuildContext context) {
     final c = controller;
@@ -222,6 +231,7 @@ class _OneTapCard extends StatelessWidget {
     final step = c.setupStep;
     final running = step != null && step != SetupStep.done;
     final r = c.setupReport;
+    final disabled = running || c.busy;
     Widget mark(String label, Object? ok) => Chip(
           visualDensity: VisualDensity.compact,
           avatar: Icon(ok == true ? Icons.check_circle : Icons.remove_circle_outline,
@@ -246,7 +256,7 @@ class _OneTapCard extends StatelessWidget {
                   Text('הקמה בלחיצה אחת', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 2),
                   const Text('FilterPhone מגדיר הכול לבד: צריבת ניהול, מגן, תעודה, סוללה וחיבור לסינון. '
-                      'בטלפון עם Root — בלי שום אישור נוסף. בלי Root — כל אישור נפתח בתורו, רק ללחוץ "אישור".'),
+                      'בחרו את הדרך שמתאימה לטלפון שלכם.'),
                 ]),
               ),
             ]),
@@ -257,6 +267,30 @@ class _OneTapCard extends StatelessWidget {
               Text('עכשיו: ${AppController.setupStepTitle(step)}',
                   style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
               Text(_howTo[step] ?? ''),
+            ] else ...[
+              const SizedBox(height: 14),
+              // דרך 1 — Root
+              _SetupOption(
+                icon: Icons.verified_user_rounded,
+                title: 'יש לי Root בטלפון',
+                body: 'אם הטלפון שלך עבר Root — לחצו כאן ואשרו את בקשת ה-Root (Superuser) שתקפוץ. '
+                    'כל השאר (צריבה, מגן, תעודה, סוללה, VPN) יוגדר אוטומטית, בלי אף אישור נוסף.',
+                buttonLabel: 'הקמה עם Root',
+                buttonIcon: Icons.bolt_rounded,
+                onPressed: disabled ? null : c.oneTapSetup,
+              ),
+              const SizedBox(height: 10),
+              // דרך 2 — בלי Root (ADB / Shizuku)
+              _SetupOption(
+                icon: Icons.usb_rounded,
+                title: 'אין לי Root (ADB / Shizuku)',
+                body: 'אם אין Root — ההקמה עובדת דרך ADB בעזרת האפליקציה Shizuku, בלי מחשב. '
+                    'צריך להפעיל פעם אחת "אפשרויות מפתחים" ו"ניפוי באגים אלחוטי". ההסבר המלא כאן למטה.',
+                steps: _adbSteps,
+                buttonLabel: 'הקמה בלי Root',
+                buttonIcon: Icons.usb_rounded,
+                onPressed: disabled ? null : c.oneTapSetup,
+              ),
             ],
             if (r != null && r['error'] == null) ...[
               const SizedBox(height: 12),
@@ -274,16 +308,98 @@ class _OneTapCard extends StatelessWidget {
                 Text(_result(r), style: theme.textTheme.bodySmall),
               ],
             ],
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: running || c.busy ? null : c.oneTapSetup,
-              icon: running
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.bolt_rounded),
-              label: Text(running ? 'מגדיר…' : (step == SetupStep.done ? 'בדיקה והקמה שוב' : 'הקמה בלחיצה אחת')),
-            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// אריח של דרך הקמה (Root / ADB): כותרת, הסבר, שלבים (אופציונלי) וכפתור ברוחב מלא.
+class _SetupOption extends StatelessWidget {
+  const _SetupOption({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.buttonLabel,
+    required this.buttonIcon,
+    required this.onPressed,
+    this.steps,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final String buttonLabel;
+  final IconData buttonIcon;
+  final VoidCallback? onPressed;
+  final List<String>? steps;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: theme.colorScheme.primary),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  Text(body, style: theme.textTheme.bodySmall),
+                ]),
+              ),
+            ],
+          ),
+          if (steps != null)
+            Material(
+              type: MaterialType.transparency,     // ל-ExpansionTile (ListTile) בתוך רקע צבעוני
+              child: Theme(
+              data: theme.copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                title: Text('איך מפעילים (צעד אחר צעד)', style: theme.textTheme.bodyMedium),
+                children: [
+                  for (var i = 0; i < steps!.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 11,
+                            backgroundColor: theme.colorScheme.primary,
+                            child: Text('${i + 1}',
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(steps![i], style: theme.textTheme.bodySmall)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            ),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: onPressed,
+            icon: Icon(buttonIcon, size: 18),
+            label: Text(buttonLabel),
+          ),
+        ],
       ),
     );
   }
@@ -680,13 +796,49 @@ class _UpdateCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final version = controller.protection.updateAvailable ?? '';
+    // פריסה מפורשת (Row + Expanded + כפתור ברוחב מלא מתחת) — כדי שהטקסט לא יצטמצם לרוחב אפס
+    // ויירד אות-אחרי-אות בצד המסך (הבאג שדווח). כאן הטקסט תמיד מקבל את כל רוחב הכרטיס.
     return Card(
-      child: ListTile(
-        leading: const Icon(Icons.system_update),
-        title: Text(version.isEmpty ? 'גרסה חדשה של FilterPhone' : 'גרסה חדשה של FilterPhone ($version)'),
-        subtitle: const Text('מורידים מדף ההורדה ומתקינים מעל הקיימת — ההגדרות והסינון נשמרים.'),
-        trailing: FilledButton(onPressed: controller.openUpdatePage, child: const Text('להורדה')),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.system_update, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        version.isEmpty
+                            ? 'גרסה חדשה של FilterPhone'
+                            : 'גרסה חדשה של FilterPhone ($version)',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'מורידים מדף ההורדה ומתקינים מעל הקיימת — ההגדרות והסינון נשמרים.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: controller.openUpdatePage,
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text('להורדה'),
+            ),
+          ],
+        ),
       ),
     );
   }

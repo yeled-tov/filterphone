@@ -698,15 +698,16 @@ class _PhoneAppRow extends StatelessWidget {
       'unknown' => [version, 'לא מ-Google Play'].where((x) => x.isNotEmpty).join(' · '),
       _ => version,
     };
+    final label = app.label.isNotEmpty ? app.label : app.package;   // תמיד מציגים שם מזהה כלשהו
     final icon = app.icon != null
         ? ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Image.memory(app.icon!, width: 44, height: 44, gaplessPlayback: true),
           )
-        : CircleAvatar(child: Text(app.label.characters.firstOrNull ?? '?'));
+        : CircleAvatar(child: Text(label.characters.firstOrNull ?? '?'));
     return ListTile(
       leading: icon,
-      title: Text(app.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: installing
           ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const SizedBox(height: 6),
