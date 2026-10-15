@@ -165,6 +165,9 @@ async function start() {
   clearProfileLocks();
   const c = new Client({
     authStrategy: new LocalAuth({ clientId: 'filterphone', dataPath: path.join(DATA, 'auth') }),
+    // המטמון של גרסת וואטסאפ ווב — בתיקיית הנתונים של הבוט. ברירת המחדל (./.wwebjs_cache ליד הקוד) לא
+    // ניתנת לכתיבה לשירות, והשגיאה נבלעת בספרייה — זו הסיבה שהבוט נתקע על "מתחבר".
+    webVersionCache: { type: 'local', path: path.join(DATA, 'wwebjs_cache') },
     puppeteer: {
       headless: true,
       executablePath: chromePath(),
