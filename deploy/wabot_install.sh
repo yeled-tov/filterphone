@@ -70,12 +70,15 @@ loginctl enable-linger "$BOT_USER" >/dev/null 2>&1 || true      # /run/user/<uid
 BOT_UID=$(id -u "$BOT_USER")
 
 # ------------------------------------------------------------ הקוד (node_modules נבנה מחדש רק כשהתלויות השתנו)
-WANT=$(cat "$SRC/deploy/whatsapp-bot/package-lock.json" "$SRC/deploy/whatsapp-bot/package.json" | sha256sum | cut -c1-16)
+WANT=$(cat "$SRC/deploy/whatsapp-bot/package-lock.json" "$SRC/deploy/whatsapp-bot/package.json" \
+        "$SRC"/deploy/whatsapp-bot/vendor/*.tgz 2>/dev/null | sha256sum | cut -c1-16)
 if [ ! -d "$BOT_APP/node_modules" ] || [ "$(cat "$BOT_APP/.deps" 2>/dev/null)" != "$WANT" ]; then
     log "  תלויות הבוט (npm ci)"
     rm -rf "$BOT_APP.new"
     install -d -m 755 "$BOT_APP.new"
     cp "$SRC/deploy/whatsapp-bot/package.json" "$SRC/deploy/whatsapp-bot/package-lock.json" "$BOT_APP.new/"
+    # whatsapp-web.js בגרסה קבועה מתוך הפרויקט (vendor/) — בלי תלות ב-GitHub או ב-git בזמן ההתקנה
+    [ -d "$SRC/deploy/whatsapp-bot/vendor" ] && cp -r "$SRC/deploy/whatsapp-bot/vendor" "$BOT_APP.new/"
     (cd "$BOT_APP.new" && PUPPETEER_SKIP_DOWNLOAD=1 "$NPM" ci --omit=dev --no-audit --no-fund --loglevel=error >/dev/null)
     echo "$WANT" > "$BOT_APP.new/.deps"
     rm -rf "$BOT_APP.old"
@@ -96,8 +99,8 @@ after=$(cd "$BOT_APP" && cat index.js lib/*.js | sha256sum)
 # את וואטסאפ ווב כמה פעמים ברצף. מותקן פעם אחת — לא בכל העלאה.
 case "$CHROME" in /snap/*|/usr/bin/chromium-browser) snap refresh --hold chromium >/dev/null 2>&1 || true ;; esac
 CFT_DIR=$APP/wabot-chrome
-CFT=$(ls -d "$CFT_DIR"/chrome/linux-*/chrome-linux64/chrome 2>/dev/null | sort -V | tail -1 || true)
-if [ -z "$CFT" ]; then
+CFT=$(ls -d "$CFT_DIR"/chrome/linux*/chrome-linux*/chrome 2>/dev/null | sort -V | tail -1 || true)
+if [ -z "$CFT" ] && [ ! -f "$CFT_DIR/.unsupported" ]; then
     log "  Chrome for Testing (גרסה קבועה, גיבוי לבוט)"
     if CFT=$(cd "$BOT_APP" && timeout 900 ./node_modules/.bin/browsers install chrome@stable --path "$CFT_DIR" \
             --install-deps --format '{{path}}' 2>/dev/null | tail -1) && [ -x "$CFT" ]; then
@@ -107,6 +110,12 @@ if [ -z "$CFT" ]; then
         warn "Chrome for Testing לא הותקן — הבוט ימשיך עם $CHROME"
         CFT=""
     fi
+fi
+# חייב לרוץ בפועל על המעבד הזה (בשרת ARM אין Chrome for Testing — מורידים גרסת x64 שלא רצה)
+if [ -n "$CFT" ] && ! timeout 30 "$CFT" --headless=new --no-sandbox --version >/dev/null 2>&1; then
+    warn "Chrome for Testing לא רץ על השרת הזה ($(uname -m)) — הבוט ימשיך רק עם $CHROME"
+    rm -rf "$CFT_DIR"; install -d "$CFT_DIR"; touch "$CFT_DIR/.unsupported"
+    CFT=""
 fi
 
 # ------------------------------------------------------------ הגדרות לשירות (רק מה שהבוט צריך)

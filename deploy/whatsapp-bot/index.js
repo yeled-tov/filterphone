@@ -136,9 +136,10 @@ async function loadConfig() {
  * ל-CHROME_ALT (Chrome for Testing בגרסה קבועה, שההתקנה מורידה) ונשארים בו עד הפעלה מחדש של השירות.
  */
 let useAlt = false;
+let altBroken = false;
 function chromePath() {
   const alt = process.env.CHROME_ALT;
-  const altOk = Boolean(alt) && fs.existsSync(alt);
+  const altOk = Boolean(alt) && !altBroken && fs.existsSync(alt);
   if (!useAlt && altOk && readyFailures + startFailures >= 3) {
     useAlt = true;
     console.warn(`עובר ל-Chrome היציב (${alt}) אחרי ${readyFailures + startFailures} ניסיונות שלא הצליחו`);
@@ -186,6 +187,7 @@ async function start() {
   });
   c.on('authenticated', () => {
     console.log('authenticated — החיבור לוואטסאפ אושר, ממתין לסיום הטעינה');
+    withTimeout(c.getWWebVersion(), 10e3, 'version').then((v) => console.log('גרסת וואטסאפ ווב:', v)).catch(() => {});
     armReadyWatchdog(c);
     report({ state: 'starting', qr: '' });
   });
@@ -213,6 +215,11 @@ async function start() {
     if (client !== c) return;                     // כובה בינתיים מהדשבורד
     client = null;
     startFailures += 1;
+    if (useAlt) {                                 // הדפדפן החלופי לא עלה — חוזרים לראשי
+      useAlt = false;
+      altBroken = true;
+      console.warn('ה-Chrome החלופי לא עלה — חוזר ל-Chromium');
+    }
     nextStartAt = Date.now() + Math.min(10 * 60e3, 60e3 * 2 ** (startFailures - 1));
     await report({ state: 'error', error: `הפעלה נכשלה: ${e.message || e}`.slice(0, 280) });
   }

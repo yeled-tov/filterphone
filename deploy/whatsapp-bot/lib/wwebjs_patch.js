@@ -32,6 +32,21 @@ async function withRetry(fn, { attempts = 6, delayMs = 250, sleep = (ms) => new 
   throw last;
 }
 
+/**
+ * שגיאה בתוך פונקציה שוואטסאפ ווב קורא לה (למשל השלמת הטעינה אחרי החיבור) נבלעת בספרייה בשקט —
+ * ככה בדיוק הבוט נתקע על "מתחבר" בלי שום הסבר. כאן היא נכתבת ליומן (ומשם לדשבורד), ונזרקת הלאה כרגיל.
+ */
+function logged(name, fn) {
+  return async (...args) => {
+    try {
+      return await fn(...args);
+    } catch (e) {
+      console.error(`[whatsapp-web.js] ${name}: ${String((e && (e.stack || e.message)) || e).slice(0, 500)}`);
+      throw e;
+    }
+  };
+}
+
 let applied = false;
 
 function apply() {
@@ -44,9 +59,9 @@ function apply() {
   }
   const orig = mod.exposeFunctionIfAbsent;
   if (typeof orig !== 'function') return false;
-  mod.exposeFunctionIfAbsent = (page, name, fn) => withRetry(() => orig(page, name, fn));
+  mod.exposeFunctionIfAbsent = (page, name, fn) => withRetry(() => orig(page, name, logged(name, fn)));
   applied = true;
   return true;
 }
 
-module.exports = { apply, withRetry, isTransient };
+module.exports = { apply, withRetry, isTransient, logged };

@@ -10,7 +10,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.34.7"
+    "whatsapp-web.js": "file:vendor/whatsapp-web.js-1.34.7-064a3d5.tgz"
   },
   "engines": {
     "node": ">=18"
