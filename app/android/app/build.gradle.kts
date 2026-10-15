@@ -82,11 +82,10 @@ dependencies {
     implementation("com.wireguard.android:tunnel:1.0.20260102")
     // הקמה בלחיצה אחת בלי מחשב ובלי אפליקציה חיצונית: ADB דרך ניפוי אלחוטי, מתוך האפליקציה עצמה.
     // libadb-android מבצע התאמה (pairing) וחיבור TLS ל-adbd המקומי, ומגלה את הפורטים ב-mDNS (אנדרואיד 11+).
-    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")       // מביא גם bcprov-jdk15to18:1.81
     implementation("org.conscrypt:conscrypt-android:2.5.3")               // TLSv1.3 + SPAKE2 להתאמה
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")     // גישה ל-API נסתר (אנדרואיד 9+)
-    implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")              // יצירת תעודת ADB (X.509) חתומה-עצמית
-    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("org.bouncycastle:bcpkix-jdk15to18:1.81")              // יצירת תעודת ADB (X.509); תואם ל-bcprov של libadb
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
 }
