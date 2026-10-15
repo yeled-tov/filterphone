@@ -677,6 +677,29 @@ class Services:
             raise ApiError(404, "לא נמצא חשבון עם המספר הזה. אפשר להירשם כלקוח חדש.")
         return cust
 
+    def recognize(self, device_uid: str) -> dict:
+        """זיהוי מכשיר חוזר לפי המזהה האמיתי של אנדרואיד (device_uid), בלי מספר טלפון — נקרא עם
+        פתיחת האפליקציה אחרי התקנה מחדש. אותו מזהה קיים במאגר → האפליקציה מציעה מיד שחזור (הלקוח
+        מאמת עם מספר טלפון). לא קיים (איפוס / טלפון חדש) → זרימת הרשמה/שחזור הרגילה.
+        מחזיר מינימום (בלי מספר טלפון): האם מוכר והמצב — כדי לנתב את המסך."""
+        uid = self.clean_uid(device_uid)
+        if not uid:
+            return {"known": False}
+        with self.db() as c:
+            rows = c.execute(
+                "SELECT status, disabled_reason, name FROM devices WHERE device_uid = ? AND status != 'rejected'"
+                " ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'disabled' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END,"
+                " id DESC", (uid,)).fetchall()
+        if not rows:
+            return {"known": False}
+        d = rows[0]
+        # הושבת על ידי המנהל (לא "הוסר על ידי הלקוח") — לא מציעים שחזור אוטומטי
+        if d["status"] == "disabled" and d["disabled_reason"] != "uninstalled":
+            return {"known": True, "status": "admin_disabled", "device_name": d["name"]}
+        if d["status"] == "pending":
+            return {"known": True, "status": "pending", "device_name": d["name"]}
+        return {"known": True, "status": "restorable", "device_name": d["name"]}
+
     def restore_lookup(self, *, phone: str, device_uid: str, public_key: str, name: str, platform: str,
                        app_version: str) -> dict:
         """הלקוח הזין מספר טלפון במסך הפתיחה (אחרי הסרה והתקנה מחדש, איפוס או טלפון חדש):

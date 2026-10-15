@@ -447,6 +447,35 @@ void main() {
     expect(c.phase, Phase.welcome);
   });
 
+  test('reinstall on a known phone (same Android ID) opens restore by itself', () async {
+    String? sentUid;
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      if (req.url.path == '/v1/recognize') {
+        sentUid = (jsonDecode(req.body) as Map)['device_uid'] as String?;
+        return http.Response(jsonEncode({'known': true, 'status': 'restorable', 'device_name': 'גלקסי'}), 200,
+            headers: json);
+      }
+      return http.Response('{}', 404, headers: json);
+    });
+    final native = FakeNative();
+    final c = makeController(native, server);
+    await c.start();
+    expect(sentUid, native.uid);
+    expect(c.phase, Phase.restore);
+    expect(c.recognized, 'restorable');
+    expect(c.notice, contains('זיהינו'));
+  });
+
+  test('a phone the server does not know stays on the welcome screen', () async {
+    final server = MockClient((req) async => http.Response(jsonEncode({'known': false}), 200,
+        headers: {'content-type': 'application/json; charset=utf-8'}));
+    final c = makeController(FakeNative(), server);
+    await c.start();
+    expect(c.phase, Phase.welcome);
+    expect(c.recognized, isNull);
+  });
+
   test('registration waits for approval, then connects by itself', () async {
     final native = FakeNative();
     final server = SignupServer();

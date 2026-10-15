@@ -510,6 +510,11 @@ class ApiClient {
     return Enrollment.fromJson(j);
   }
 
+  /// האם הטלפון הזה (לפי מזהה אנדרואיד) כבר מוכר בשרת — פתיחה ראשונה אחרי התקנה מחדש.
+  /// מחזיר: known, ו-status (restorable / pending / admin_disabled). בלי פרטים אישיים.
+  Future<Map<String, Object?>> recognize(String deviceUid) async =>
+      Map<String, Object?>.from(await _send('POST', '/v1/recognize', body: {'device_uid': deviceUid}) as Map);
+
   /// שחזור לפי מספר טלפון (אחרי הסרה והתקנה, איפוס או טלפון חדש).
   Future<RestoreLookup> restore({
     required String phone,

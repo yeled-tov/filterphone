@@ -444,6 +444,10 @@ class WaBotIn(BaseModel):
     clear_key: bool = False
 
 
+class RecognizeIn(BaseModel):
+    device_uid: str = Field(min_length=16, max_length=64)
+
+
 class BotStatusIn(BaseModel):
     state: str = Field(max_length=20)
     qr: str = Field(default="", max_length=2000)
@@ -616,6 +620,13 @@ def _routes(app: FastAPI) -> None:
         _limit(restore_limiter, "phone:" + security.normalize_phone(body.phone))
         return svc.restore_lookup(phone=body.phone, device_uid=body.device_uid, public_key=body.public_key,
                                   name=body.name, platform=body.platform, app_version=body.app_version)
+
+    @app.post("/v1/recognize")
+    def recognize(body: RecognizeIn, request: Request, svc: SvcDep):
+        """פתיחה ראשונה אחרי התקנה מחדש: האם הטלפון הזה (לפי המזהה של אנדרואיד) כבר מוכר — כדי להציע
+        מיד שחזור. בלי מספר טלפון ובלי פרטים אישיים בתשובה."""
+        _limit(restore_limiter, client_ip(request))
+        return svc.recognize(body.device_uid)
 
     @app.post("/v1/restore/request", status_code=201)
     def restore_request(body: RestoreRequestIn, request: Request, svc: SvcDep):

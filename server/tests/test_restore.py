@@ -134,3 +134,24 @@ def test_heartbeat_records_the_device_id_of_existing_phones(env):
     with svc.db() as c:
         assert c.execute("SELECT device_uid FROM devices WHERE id = ?", (j["device_id"],)).fetchone()[0] == UID_A
 
+
+
+def test_recognize_known_device_by_android_id_without_phone(env):
+    """פתיחה אחרי התקנה מחדש: אותו מזהה אנדרואיד → "מוכר" (מציעים שחזור מיד); מזהה אחר → לא מוכר.
+    בתשובה אין מספר טלפון או שם לקוח."""
+    svc, client = env
+    assert client.post("/v1/recognize", json={"device_uid": UID_A}).json() == {"known": False}
+    active_customer(svc, client)
+    j = client.post("/v1/recognize", json={"device_uid": UID_A}).json()
+    assert j["known"] is True and j["status"] == "restorable"
+    assert "phone" not in j and "customer_name" not in j
+    assert client.post("/v1/recognize", json={"device_uid": UID_B}).json() == {"known": False}
+    assert client.post("/v1/recognize", json={"device_uid": "short"}).status_code == 400
+
+
+def test_recognize_does_not_offer_restore_after_admin_disable(env):
+    svc, client = env
+    did, _ = active_customer(svc, client)
+    with svc.db() as c:
+        c.execute("UPDATE devices SET status = 'disabled', disabled_reason = 'admin' WHERE id = ?", (did,))
+    assert client.post("/v1/recognize", json={"device_uid": UID_A}).json()["status"] == "admin_disabled"

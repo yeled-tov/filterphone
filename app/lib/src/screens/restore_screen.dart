@@ -59,6 +59,21 @@ class _RestoreScreenState extends State<RestoreScreen> {
                       children: [
                         Icon(Icons.restore_rounded, size: 64, color: theme.colorScheme.primary),
                         const SizedBox(height: 12),
+                        // פתיחה אחרי התקנה מחדש: השרת זיהה את הטלפון לפי מזהה אנדרואיד
+                        if (c.recognized == 'restorable' && r == null && c.notice != null) ...[
+                          Card(
+                            color: theme.colorScheme.secondaryContainer,
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: Row(children: [
+                                Icon(Icons.verified_rounded, color: theme.colorScheme.primary),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text(c.notice!)),
+                              ]),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         Text('הזינו את מספר הטלפון של החשבון',
                             textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
                         const SizedBox(height: 8),

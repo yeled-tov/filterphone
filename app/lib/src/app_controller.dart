@@ -75,6 +75,9 @@ class AppController extends ChangeNotifier {
   DateTime? pauseUntil;
   bool rootProvisioning = false;
 
+  /// מה השרת אמר על הטלפון הזה בפתיחה (לפי מזהה אנדרואיד): restorable / pending / admin_disabled.
+  String? recognized;
+
   /// הקמה בלחיצה אחת: הצעד הנוכחי (null = לא רצה), ומה בוצע אוטומטית (root / מנהל מכשיר).
   SetupStep? setupStep;
   Map<String, Object?>? setupReport;
@@ -153,6 +156,7 @@ class AppController extends ChangeNotifier {
       phase = Phase.welcome;
       notifyListeners();
       await _autoProvision();
+      if (phase == Phase.welcome) await _recognizeDevice();
       return;
     }
     final summary = await store.read(_kSummary);
@@ -199,6 +203,30 @@ class AppController extends ChangeNotifier {
     } else {
       phase = Phase.activation; // הקוד לא עבד (פג תוקף?) — אפשר להזין ידנית
       notifyListeners();
+    }
+  }
+
+  /// התקנה מחדש באותו טלפון: המזהה של אנדרואיד כבר מוכר בשרת → פותחים ישר את מסך השחזור
+  /// (הלקוח מאשר עם מספר הטלפון וההגנה חוזרת מיד). טלפון אחר / אחרי איפוס → מסך הפתיחה הרגיל,
+  /// ושם "כבר יש לי חשבון" מציע החלפת מכשיר לפי מספר הטלפון. שקט בכשל (אין רשת).
+  Future<void> _recognizeDevice() async {
+    try {
+      final uid = await _deviceUid();
+      if (uid.isEmpty) return;
+      final r = await api.recognize(uid);
+      if (r['known'] != true || phase != Phase.welcome) return;
+      recognized = r['status'] as String?;
+      if (recognized == 'restorable') {
+        openRestore();
+        notice = 'זיהינו שהטלפון הזה כבר היה מוגן ב-FilterPhone. הזינו את מספר הטלפון שנרשם — וההגנה תחזור מיד.';
+      } else if (recognized == 'pending') {
+        notice = 'מהטלפון הזה כבר נשלחה בקשה — היא ממתינה לאישור. אפשר לבדוק שוב ב"כבר יש לי חשבון".';
+      } else if (recognized == 'admin_disabled') {
+        notice = 'ההגנה בטלפון הזה הושבתה על ידי המנהל. לחידוש — פנו לתמיכה.';
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('recognize skipped: $e');
     }
   }
 

@@ -39,6 +39,16 @@ class WelcomeScreen extends StatelessWidget {
                   const _Feature(icon: Icons.image_outlined, text: 'סינון תמונות חכם — בכל אתר, לפי הרמה שתבחרו'),
                   const _Feature(icon: Icons.apps_outlined, text: 'חסימת רשתות, אפליקציות, סטטוסים ותמונות פרופיל'),
                   const _Feature(icon: Icons.lock_outline, text: 'רק המנהל משנה הגדרות — אי אפשר לעקוף מהטלפון'),
+                  if (controller.notice != null && controller.recognized != null) ...[
+                    const SizedBox(height: 20),
+                    Card(
+                      color: theme.colorScheme.secondaryContainer,
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Text(controller.notice!, textAlign: TextAlign.center),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 28),
                   FilledButton.icon(
                     onPressed: controller.openRegister,
