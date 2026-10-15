@@ -27,7 +27,8 @@ def test_save_validates_and_never_returns_the_key(env):
     assert "AIzaSy" not in r.text
     # שדה מפתח ריק = בלי שינוי
     assert client.put("/v1/admin/wabot", headers=h, json={"ai_key": ""}).json()["key_set"] is True
-    for bad in ({"hours": "כל היום"}, {"ai_provider": "skynet"}, {"handoff_minutes": 0}, {"ai_key": "has space"}):
+    for bad in ({"hours": "כל היום"}, {"ai_provider": "skynet"}, {"handoff_minutes": 0}, {"ai_key": "has space"},
+                {"ai_provider": "gemini", "ai_key": "gsk_" + "x" * 40}, {"ai_provider": "groq", "ai_key": "AIzaSyX" * 4}):
         assert client.put("/v1/admin/wabot", headers=h, json=bad).status_code == 400, bad
     assert client.put("/v1/admin/wabot", headers=h, json={"clear_key": True}).json()["key_set"] is False
     assert client.put("/v1/admin/wabot", json={"enabled": True}).status_code == 401

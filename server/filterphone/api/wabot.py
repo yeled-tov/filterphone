@@ -100,6 +100,9 @@ class WaBot:
                     continue                        # ריק = בלי שינוי
                 if len(v) > 300 or re.search(r"\s", v):
                     raise ApiError(400, "מפתח לא תקין")
+                provider = changes.get("ai_provider") or self.settings()["ai_provider"]
+                if (provider == "gemini" and v.startswith("gsk_")) or (provider == "groq" and v.startswith("AIza")):
+                    raise ApiError(400, "המפתח לא מתאים לספק שנבחר (Gemini מתחיל ב-AIza, Groq ב-gsk_)")
             elif k == "ai_model":
                 v = str(v).strip()
                 if v and not re.fullmatch(r"[\w.\-/]{1,80}", v):

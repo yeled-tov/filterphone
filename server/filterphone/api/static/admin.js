@@ -1732,6 +1732,12 @@ async function viewWabot() {
     if (l) { keyLink.href = l[0]; keyLink.textContent = `${l[1]} ↗`; }
   };
   provider.addEventListener("change", syncLink);
+  // הדביקו מפתח — הספק נבחר לפיו (Gemini מתחיל ב-AIza, Groq ב-gsk_)
+  key.addEventListener("input", () => {
+    const k = key.value.trim();
+    const want = k.startsWith("AIza") ? "gemini" : k.startsWith("gsk_") ? "groq" : "";
+    if (want && provider.value !== want) { provider.value = want; syncLink(); toast(want === "gemini" ? "זוהה מפתח Gemini" : "זוהה מפתח Groq"); }
+  });
   syncLink();
   const model = el("input", { class: "ltr", value: v.ai_model || "", placeholder: "אוטומטי — המודל המהיר העדכני" });
   const testOut = el("p", { class: "small" });
