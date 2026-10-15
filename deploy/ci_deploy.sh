@@ -10,6 +10,8 @@
 #   apk                stdin: tar עם FilterPhone.apk + FilterPhone-universal.apk (+ FilterPhone.json) → דף ההורדה
 #   status             גרסה, שירותים, מקום פנוי
 #   rollback <גיבוי>   חזרה לגרסה הקודמת (deploy/rollback_version.sh) עם /root/fp-backups/<גיבוי>
+#   wabot              אבחון בוט הוואטסאפ: מצב השירות, יומן אחרון, Chrome, הבוט הישן (pm2)
+#   legacy-bot <start|stop|logs>   הבוט הישן (filterphone-bot ב-pm2) — להשוואה מול הבוט החדש
 # =====================================================================
 set -euo pipefail
 
@@ -70,6 +72,34 @@ status)
     df -h / | tail -1
     echo "גיבויים אחרונים:"
     sudo -n ls -1t /root/fp-backups | head -5
+    ;;
+wabot)
+    echo "== fp-wabot"
+    systemctl status fp-wabot --no-pager 2>&1 | head -12 || true
+    echo "== יומן הבוט (150 שורות אחרונות)"
+    sudo -n journalctl -u fp-wabot -n 150 --no-pager -o short-iso 2>&1 | tail -150 || true
+    echo "== Chrome"
+    sudo -n cat /etc/filterphone/wabot.env 2>/dev/null | grep -E '^CHROME_(PATH|ALT)=' || true
+    snap list chromium 2>/dev/null | tail -1 || true
+    echo "== הבוט הישן (pm2)"
+    bash -lc 'pm2 jlist' 2>/dev/null | python3 -c '
+import json, sys
+raw = sys.stdin.read(); i = raw.find("[")
+for a in (json.loads(raw[i:]) if i >= 0 else []):
+    e = a.get("pm2_env", {})
+    print(a.get("name"), e.get("status"), e.get("pm_cwd"), "restarts:", e.get("restart_time"))
+' || echo "pm2 לא זמין"
+    ls -d /home/ubuntu/filterphone-bot/.wwebjs_auth/session-* 2>/dev/null || true
+    ;;
+legacy-bot)
+    L=/home/ubuntu/filterphone-bot
+    [ -f "$L/index.js" ] || { echo "הבוט הישן לא נמצא ב-$L"; exit 2; }
+    case "${arg:-}" in
+    start) bash -lc "cd $L && (pm2 describe filterphone-bot >/dev/null 2>&1 && pm2 restart filterphone-bot || pm2 start index.js --name filterphone-bot) && pm2 save" ;;
+    stop)  bash -lc "pm2 stop filterphone-bot && pm2 save" || true ;;
+    logs)  bash -lc "pm2 logs filterphone-bot --lines 80 --nostream" 2>&1 | tail -100 || true ;;
+    *)     echo "start / stop / logs"; exit 2 ;;
+    esac
     ;;
 rollback)
     [[ "${arg:-}" =~ ^[0-9]{8}-[0-9]{6}$ ]] || { echo "שם גיבוי לא חוקי (למשל 20261005-213000)"; exit 2; }

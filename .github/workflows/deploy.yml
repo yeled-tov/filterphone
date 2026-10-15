@@ -7,7 +7,7 @@ on:
       what:
         description: "מה לעשות"
         type: choice
-        options: [both, server, apk, status, rollback]
+        options: [both, server, apk, status, rollback, wabot, legacy-bot-start, legacy-bot-stop, legacy-bot-logs]
         default: both
       backup:
         description: "לחזרה לאחור בלבד: שם תיקיית הגיבוי, למשל 20261005-213000"
@@ -168,6 +168,16 @@ jobs:
         env:
           BACKUP: ${{ inputs.backup }}
         run: ssh -o BatchMode=yes -o ServerAliveInterval=30 "$SERVER" "rollback $BACKUP"
+
+      - name: בוט הוואטסאפ — אבחון
+        if: inputs.what == 'wabot'
+        run: ssh -o BatchMode=yes "$SERVER" wabot
+
+      - name: הבוט הישן (pm2)
+        if: startsWith(inputs.what, 'legacy-bot-')
+        env:
+          WHAT: ${{ inputs.what }}
+        run: ssh -o BatchMode=yes "$SERVER" "legacy-bot ${WHAT#legacy-bot-}"
 
       - name: ניקוי מפתח החתימה
         if: always()

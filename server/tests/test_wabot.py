@@ -135,3 +135,44 @@ def test_ai_marker_defaults_and_saves(env):
     set_bot(client)
     cfg = client.get("/v1/bot/config", headers=auth(BOT)).json()
     assert cfg["mark_ai"] is False and cfg["ai_tag"] == "✦ בוט"
+
+
+def test_shadow_mode_is_on_by_default_and_reaches_the_bot(env):
+    """מצב השוואה מופעל כברירת מחדל — שני בוטים לא יענו לאותו לקוח עד שמחליטים לעבור."""
+    _, client = env
+    h = admin_headers(client)
+    assert client.get("/v1/admin/wabot", headers=h).json()["shadow"] is True
+    set_bot(client)
+    assert client.get("/v1/bot/config", headers=auth(BOT)).json()["shadow"] is True
+    assert client.put("/v1/admin/wabot", headers=h, json={"shadow": False}).json()["shadow"] is False
+
+
+def test_compare_rows_pair_question_ours_and_theirs(env):
+    """שורת השוואה לכל הודעת לקוח: מה הבוט שלנו היה עונה, ומה נענה בפועל (כמה הודעות → מצטרפות)."""
+    _, client = env
+    h = admin_headers(client)
+    set_bot(client)
+    post = lambda body: client.post("/v1/bot/compare", headers=auth(BOT), json=body)  # noqa: E731
+    assert post({"key": "m1", "phone": "+972 50-111-2222", "question": "כמה עולה כשר פליי?"}).status_code == 200
+    post({"key": "m1", "ours": "צריבה 70₪ ומנוי 150₪."})
+    post({"key": "m1", "theirs": "שלום!"})
+    post({"key": "m1", "theirs": "המחיר 70₪ לצריבה."})
+    rows = client.get("/v1/admin/wabot/compare", headers=h).json()["rows"]
+    assert len(rows) == 1
+    r = rows[0]
+    assert r["phone"] == "972501112222" and r["question"] == "כמה עולה כשר פליי?"
+    assert r["ours"].startswith("צריבה") and r["theirs"] == "שלום!\nהמחיר 70₪ לצריבה."
+    assert r["ours_at"] and r["theirs_at"]
+    assert client.post("/v1/bot/compare", json={"key": "x"}).status_code == 401
+    assert client.get("/v1/admin/wabot/compare").status_code == 401
+    assert client.delete("/v1/admin/wabot/compare", headers=h).json() == {"deleted": 1}
+
+
+def test_status_carries_progress_and_log(env):
+    _, client = env
+    h = admin_headers(client)
+    set_bot(client)
+    client.post("/v1/bot/status", headers=auth(BOT), json={"state": "starting", "progress": 45,
+                                                           "log": ["08:00 מפעיל", "08:01 authenticated"]})
+    st = client.get("/v1/admin/wabot", headers=h).json()["status"]
+    assert st["progress"] == 45 and st["log"][-1] == "08:01 authenticated"

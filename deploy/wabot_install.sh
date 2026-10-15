@@ -90,6 +90,25 @@ cp "$SRC/deploy/whatsapp-bot/index.js" "$SRC/deploy/whatsapp-bot/package.json" "
 chmod -R a+rX "$BOT_APP"
 after=$(cd "$BOT_APP" && cat index.js lib/*.js | sha256sum)
 
+# ------------------------------------------------------------ Chrome יציב (גיבוי) + עצירת עדכונים ברקע
+# Chromium מ-snap מתעדכן לבד ברקע — כל עדכון יכול לנתק את הבוט. מקפיאים אותו (snap refresh --hold).
+# בנוסף: Chrome for Testing בגרסה קבועה (לא מתעדכן לבד), שהבוט עובר אליו לבד אם Chromium לא מצליח לטעון
+# את וואטסאפ ווב כמה פעמים ברצף. מותקן פעם אחת — לא בכל העלאה.
+case "$CHROME" in /snap/*|/usr/bin/chromium-browser) snap refresh --hold chromium >/dev/null 2>&1 || true ;; esac
+CFT_DIR=$APP/wabot-chrome
+CFT=$(ls -d "$CFT_DIR"/chrome/linux-*/chrome-linux64/chrome 2>/dev/null | sort -V | tail -1 || true)
+if [ -z "$CFT" ]; then
+    log "  Chrome for Testing (גרסה קבועה, גיבוי לבוט)"
+    if CFT=$(cd "$BOT_APP" && timeout 900 ./node_modules/.bin/browsers install chrome@stable --path "$CFT_DIR" \
+            --install-deps --format '{{path}}' 2>/dev/null | tail -1) && [ -x "$CFT" ]; then
+        chmod -R a+rX "$CFT_DIR"
+        log "    $CFT"
+    else
+        warn "Chrome for Testing לא הותקן — הבוט ימשיך עם $CHROME"
+        CFT=""
+    fi
+fi
+
 # ------------------------------------------------------------ הגדרות לשירות (רק מה שהבוט צריך)
 env_new=$(mktemp)
 cat > "$env_new" <<EOF
@@ -98,6 +117,7 @@ FP_API=http://127.0.0.1:8090
 FP_WA_BOT_TOKEN=$FP_WA_BOT_TOKEN
 FP_WABOT_DATA=$BOT_DATA
 CHROME_PATH=$CHROME
+CHROME_ALT=$CFT
 XDG_RUNTIME_DIR=/run/user/$BOT_UID
 HOME=$BOT_HOME
 NODE_ENV=production

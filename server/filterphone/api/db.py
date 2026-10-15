@@ -254,7 +254,22 @@ ALTER TABLE managed_apps ADD COLUMN icon_url TEXT NOT NULL DEFAULT '';      -- �
 ALTER TABLE managed_apps ADD COLUMN play_url TEXT NOT NULL DEFAULT '';      -- קישור Google Play (מתווך)
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9]
+_V10 = """
+CREATE TABLE wabot_compare (                    -- מצב השוואה: מה הבוט שלנו היה עונה מול מה שנענה בפועל
+    id         INTEGER PRIMARY KEY,
+    key        TEXT NOT NULL UNIQUE,            -- מזהה ההודעה של הלקוח בוואטסאפ
+    phone      TEXT NOT NULL DEFAULT '',
+    question   TEXT NOT NULL DEFAULT '',
+    ours       TEXT NOT NULL DEFAULT '',        -- התשובה שהבוט שלנו היה שולח
+    theirs     TEXT NOT NULL DEFAULT '',        -- מה שנשלח בפועל (הבוט הקיים / את/ה)
+    ts         INTEGER NOT NULL,
+    ours_at    INTEGER,
+    theirs_at  INTEGER
+);
+CREATE INDEX wabot_compare_ts ON wabot_compare(ts);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10]
 VERSION = len(MIGRATIONS)
 
 

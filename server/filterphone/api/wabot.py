@@ -24,7 +24,7 @@ PROVIDERS = ("gemini", "groq", "none")
 _SECRET = ("ai_key",)
 _FIELDS = ("enabled", "ai_provider", "ai_key", "ai_model", "business_info", "hours", "friday_until",
            "handoff_minutes", "bot_name", "label_name", "auto_new", "include_contacts",
-           "mark_ai", "ai_tag")
+           "mark_ai", "ai_tag", "shadow")
 STATUS_STALE_S = 120            # בלי דיווח מהבוט יותר מזה — "השירות לא רץ"
 
 # מה שהבוט הישן ידע (מחירים, כתובת, שעות) — נקודת התחלה; עורכים בדשבורד
@@ -57,7 +57,11 @@ DEFAULTS: dict = {
     "include_contacts": False,          # גם אנשי קשר שמורים בטלפון נחשבים "חדשים"
     "mark_ai": True,                    # להוסיף סימון בסוף כל הודעה שהבוט ענה (כמו הסימון של וואטסאפ)
     "ai_tag": "🤖 הודעה אוטומטית",       # הסימון עצמו
+    # מצב השוואה: הבוט לא שולח כלום ללקוחות — רק רושם מה היה עונה, ליד מה שנענה בפועל (הבוט הקיים /
+    # את/ה). ברירת מחדל: מופעל — כדי שלא יענו שני בוטים לאותו לקוח עד שמחליטים לעבור.
+    "shadow": True,
 }
+COMPARE_KEEP = 500                      # כמה שורות השוואה לשמור (הישנות נמחקות)
 
 _HOURS = re.compile(r"^\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\s*(,\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\s*)*$")
 
@@ -92,7 +96,7 @@ class WaBot:
             if k not in changes or changes[k] is None:
                 continue
             v = changes[k]
-            if k in ("enabled", "auto_new", "include_contacts", "mark_ai"):
+            if k in ("enabled", "auto_new", "include_contacts", "mark_ai", "shadow"):
                 v = bool(v)
             elif k == "ai_provider":
                 if v not in PROVIDERS:
@@ -170,6 +174,8 @@ class WaBot:
               "version": str(raw.get("version", ""))[:20],
               "labels": str(raw.get("labels", "")) if raw.get("labels") in ("on", "missing", "not_business") else "",
               "label": str(raw.get("label", ""))[:30],
+              "progress": max(0, min(100, int(raw["progress"]))) if isinstance(raw.get("progress"), int | float) else None,
+              "log": [str(x)[:300] for x in (raw.get("log") or [])[-40:] if isinstance(x, str)],
               "stats": {k: int(v) for k, v in (raw.get("stats") or {}).items()
                         if isinstance(v, int | float) and re.fullmatch(r"[a-z_]{1,30}", str(k))}}
         with self._lock:
@@ -181,7 +187,7 @@ class WaBot:
             st = dict(WaBot._status)
         if not st or time.time() - st.get("at", 0) > STATUS_STALE_S:
             return {"state": "not_running", "at": st.get("at"), "qr": "", "me": "", "error": "", "ai": "",
-                    "labels": "", "label": "", "stats": {}}
+                    "labels": "", "label": "", "progress": None, "log": st.get("log", []), "stats": {}}
         return st
 
     def admin_view(self) -> dict:
@@ -194,6 +200,50 @@ class WaBot:
                 "notify_to": SupportDesk(self.svc).wa_config().admin_number,
                 "status": st,
                 "qr_image": segno.make(qr, error="l").svg_data_uri(scale=6, border=2) if qr else ""}
+
+    # ------------------------------------------------------------ מצב השוואה
+
+    def compare_record(self, raw: dict) -> dict:
+        """הבוט מדווח: שאלה של לקוח, מה הבוט שלנו היה עונה (ours), ומה נענה בפועל (theirs).
+        שורה לכל הודעת לקוח (key = מזהה ההודעה); עדכונים מצטרפים לאותה שורה."""
+        key = str(raw.get("key", "")).strip()[:200]
+        if not key:
+            raise ApiError(400, "חסר מזהה הודעה")
+        now = int(time.time())
+        phone = re.sub(r"\D", "", str(raw.get("phone", "")))[:20]
+        question = str(raw.get("question") or "")[:2000]
+        ours = str(raw.get("ours") or "")[:4000]
+        theirs = str(raw.get("theirs") or "")[:4000]
+        with self.svc.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM wabot_compare WHERE key = ?", (key,)).fetchone()
+            if row is None:
+                c.execute("INSERT INTO wabot_compare (key, phone, question, ours, theirs, ts, ours_at, theirs_at)"
+                          " VALUES (?,?,?,?,?,?,?,?)",
+                          (key, phone, question, ours, theirs, now, now if ours else None, now if theirs else None))
+                c.execute("DELETE FROM wabot_compare WHERE id NOT IN"
+                          " (SELECT id FROM wabot_compare ORDER BY id DESC LIMIT ?)", (COMPARE_KEEP,))
+            else:
+                # הבוט הקיים שלח כמה הודעות ברצף — מצטרפות לאותה תשובה
+                joined = (row["theirs"] + "\n" + theirs).strip()[:4000] if theirs and row["theirs"] else (theirs or row["theirs"])
+                c.execute("UPDATE wabot_compare SET phone = COALESCE(NULLIF(?, ''), phone),"
+                          " question = COALESCE(NULLIF(?, ''), question), ours = COALESCE(NULLIF(?, ''), ours),"
+                          " theirs = ?, ours_at = CASE WHEN ? != '' THEN ? ELSE ours_at END,"
+                          " theirs_at = CASE WHEN ? != '' THEN ? ELSE theirs_at END WHERE id = ?",
+                          (phone, question, ours, joined, ours, now, theirs, now, row["id"]))
+        return {"ok": True}
+
+    def compare_list(self, limit: int = 100) -> list[dict]:
+        with self.svc.db() as c:
+            rows = c.execute("SELECT * FROM wabot_compare ORDER BY id DESC LIMIT ?", (max(1, min(limit, 500)),))
+            return [{"id": r["id"], "phone": r["phone"], "question": r["question"], "ours": r["ours"],
+                     "theirs": r["theirs"], "ts": r["ts"], "ours_at": r["ours_at"], "theirs_at": r["theirs_at"]}
+                    for r in rows]
+
+    def compare_clear(self, admin: str) -> dict:
+        with self.svc.db() as c, db.transaction(c):
+            n = c.execute("DELETE FROM wabot_compare").rowcount
+        self.svc.audit(admin, "wabot_compare_clear", "whatsapp-bot", str(n))
+        return {"deleted": n}
 
     # ------------------------------------------------------------ בדיקת מפתח ה-AI
 

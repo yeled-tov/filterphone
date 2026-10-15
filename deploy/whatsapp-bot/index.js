@@ -18,7 +18,9 @@
  *
  * אזהרה: API לא-רשמי של וואטסאפ — יש סיכון לחסימת המספר. הבוט מגיב בלבד, בקצב סביר, ומוסר אליך.
  */
+const fs = require('fs');
 const path = require('path');
+const patched = require('./lib/wwebjs_patch').apply();     // לפני require('whatsapp-web.js') — ראו שם
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const { State } = require('./lib/state');
 const fp = require('./lib/fp');
@@ -27,7 +29,7 @@ const { israelNow, isOpen } = require('./lib/hours');
 const { replyDelayMs, typingMs, parseHashReply, waNumber } = require('./lib/logic');
 const labels = require('./lib/labels');
 
-const VERSION = '2.0.0';
+const VERSION = '2.1.0';
 const API = (process.env.FP_API || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
@@ -37,6 +39,28 @@ const ADMIN_ACTIVE_MS = 2 * 60e3;
 const READ_CHECK_MS = 3000;
 const LABEL_EVERY_MS = 60e3;
 const CATCHUP_EVERY_MS = 20e3;
+const READY_TIMEOUT_MS = 2 * 60e3;   // "מחובר" בוואטסאפ אבל לא סיים לטעון — אחרי זה מאתחלים (בלי סריקה)
+const CALL_TIMEOUT_MS = 20e3;        // קריאה לדף של וואטסאפ ווב שלא חוזרת — לא תוקעת את הבוט
+
+// יומן קצר (40 שורות אחרונות) — נשלח לדשבורד עם המצב, כדי לראות מה קורה בלי גישה לשרת
+const LOG = [];
+for (const level of ['log', 'warn', 'error']) {
+  const orig = console[level].bind(console);
+  console[level] = (...args) => {
+    orig(...args);
+    const t = new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour12: false });
+    const line = args.map((a) => (a instanceof Error ? a.message : typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    LOG.push(`${t} ${level === 'log' ? '' : level === 'warn' ? '⚠ ' : '✖ '}${line}`.slice(0, 300));
+    if (LOG.length > 40) LOG.shift();
+  };
+}
+
+/** הבטחה שלא חוזרת בזמן → שגיאה (במקום שהבוט ייתקע לנצח על קריאה לדף). */
+function withTimeout(p, ms = CALL_TIMEOUT_MS, what = 'call') {
+  let t;
+  return Promise.race([p, new Promise((_, rej) => { t = setTimeout(() => rej(new Error(`${what}: timeout`)), ms); })])
+    .finally(() => clearTimeout(t));
+}
 
 if (!TOKEN) {
   console.error('חסר FP_WA_BOT_TOKEN (נוצר אוטומטית בהתקנת השרת — deploy/install.sh).');
@@ -56,11 +80,13 @@ const botMsgIds = new Set();  // הודעות שהבוט שלח — כדי לא 
 const outgoing = new Map();   // טקסט → עד מתי לצפות לו
 const appThreads = new Map(); // הודעת העברה בצ'אט שלך → מכשיר (לתשובה ב"השב")
 const pending = new Map();    // תשובות שמחכות (5 שניות בשעות הפעילות)
-const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0 };
+const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, compared: 0 };
 let menu = { open: false, step: '' };
 let botLabel = null;          // הרשימה "בוט" בוואטסאפ ביזנס — כשקיימת, הבוט מנוהל לפיה
 let labelState = '';          // on | missing | not_business
 let labelCheckedAt = 0;
+let readyTimer = null;
+let readyFailures = 0;
 
 // ------------------------------------------------------------------ מצב → לדשבורד
 
@@ -68,7 +94,9 @@ async function report(patch = {}) {
   status = { ...status, ...patch };
   try {
     await srv.status({ state: status.state, qr: status.qr || '', me: me.replace(/@.+/, ''), error: status.error || '',
-      ai: status.ai || '', version: VERSION, stats, labels: labelState, label: botLabel?.name || cfg?.label_name || '' });
+      ai: status.ai || '', version: VERSION, stats, labels: labelState, label: botLabel?.name || cfg?.label_name || '',
+      progress: status.state === 'starting' && Number.isFinite(status.progress) ? status.progress : null,
+      log: LOG.slice(-30) });
   } catch (e) {
     console.warn('status report failed:', e.message);
   }
@@ -103,23 +131,45 @@ async function loadConfig() {
   }
 }
 
+/**
+ * הדפדפן: CHROME_PATH (מה שההתקנה מצאה). אם וואטסאפ ווב לא מצליח לטעון בו 3 פעמים ברצף — עוברים לבד
+ * ל-CHROME_ALT (Chrome for Testing בגרסה קבועה, שההתקנה מורידה) ונשארים בו עד הפעלה מחדש של השירות.
+ */
+let useAlt = false;
 function chromePath() {
-  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
-  const fs = require('fs');
+  const alt = process.env.CHROME_ALT;
+  const altOk = Boolean(alt) && fs.existsSync(alt);
+  if (!useAlt && altOk && readyFailures + startFailures >= 3) {
+    useAlt = true;
+    console.warn(`עובר ל-Chrome היציב (${alt}) אחרי ${readyFailures + startFailures} ניסיונות שלא הצליחו`);
+  }
+  if (useAlt && altOk) return alt;
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) return process.env.CHROME_PATH;
+  if (altOk) return alt;
   return ['/usr/bin/google-chrome', '/usr/bin/chromium', '/snap/bin/chromium', '/usr/bin/chromium-browser']
     .find((p) => fs.existsSync(p));
 }
 
+/** נעילות של Chrome שנשארו מכיבוי לא מסודר — בלעדיהן Chrome מסרב לפתוח את אותו פרופיל. */
+function clearProfileLocks() {
+  const dir = path.join(DATA, 'auth', 'session-filterphone');
+  for (const f of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+    try { fs.rmSync(path.join(dir, f), { force: true }); } catch { /* */ }
+  }
+}
+
 async function start() {
-  console.log('מפעיל את הבוט…');
-  await report({ state: 'starting', qr: '', error: '' });
+  console.log(`מפעיל את הבוט… (${chromePath() || 'Chrome לא נמצא'}${patched ? ', תיקון ready פעיל' : ''})`);
+  await report({ state: 'starting', qr: '', error: '', progress: null });
+  clearProfileLocks();
   const c = new Client({
     authStrategy: new LocalAuth({ clientId: 'filterphone', dataPath: path.join(DATA, 'auth') }),
     puppeteer: {
       headless: true,
       executablePath: chromePath(),
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu',
-        '--disable-extensions', '--no-first-run', '--no-zygote'],
+        '--disable-extensions', '--no-first-run', '--no-zygote', '--password-store=basic',
+        '--no-default-browser-check'],
       timeout: 180000,
       protocolTimeout: 180000,
     },
@@ -128,13 +178,26 @@ async function start() {
     takeoverOnConflict: true,
     takeoverTimeoutMs: 60000,
   });
-  c.on('qr', (qr) => { console.log('ממתין לסריקת QR (בדשבורד)'); report({ state: 'qr', qr }); });
-  c.on('authenticated', () => report({ state: 'starting', qr: '' }));
-  c.on('auth_failure', (m) => report({ state: 'error', error: `אימות נכשל: ${m}` }));
+  c.on('qr', (qr) => { console.log('ממתין לסריקת QR (בדשבורד)'); report({ state: 'qr', qr, progress: null }); });
+  c.on('loading_screen', (percent) => {
+    if (client !== c) return;
+    console.log(`וואטסאפ ווב נטען: ${percent}%`);
+    report({ state: 'starting', progress: Number(percent) || 0 });
+  });
+  c.on('authenticated', () => {
+    console.log('authenticated — החיבור לוואטסאפ אושר, ממתין לסיום הטעינה');
+    armReadyWatchdog(c);
+    report({ state: 'starting', qr: '' });
+  });
+  c.on('auth_failure', (m) => { console.error('auth_failure:', m); report({ state: 'error', error: `אימות נכשל: ${m}` }); });
+  c.on('change_state', (st) => console.log('מצב החיבור:', st));
   c.on('ready', () => {
+    clearTimeout(readyTimer);
+    readyFailures = 0;
     me = c.info?.wid?._serialized || '';
-    console.log('מחובר ✓', me);
+    console.log('מחובר ✓', me, cfg?.shadow ? '(מצב השוואה — לא עונה ללקוחות)' : '');
     status.state = 'ready';
+    status.progress = null;
     refreshLabel().finally(() => report({ state: 'ready', qr: '', error: '' }));
   });
   c.on('disconnected', (r) => onDisconnected(c, r));
@@ -144,20 +207,44 @@ async function start() {
     await c.initialize();
     startFailures = 0;
   } catch (e) {
-    console.error('initialize failed:', e.message);
-    try { await c.destroy(); } catch { /* */ }
+    console.error('initialize failed:', e.message || String(e));
+    clearTimeout(readyTimer);
+    try { await withTimeout(c.destroy(), 30e3, 'destroy'); } catch { /* */ }
     if (client !== c) return;                     // כובה בינתיים מהדשבורד
     client = null;
     startFailures += 1;
     nextStartAt = Date.now() + Math.min(10 * 60e3, 60e3 * 2 ** (startFailures - 1));
-    await report({ state: 'error', error: `הפעלה נכשלה: ${e.message}`.slice(0, 280) });
+    await report({ state: 'error', error: `הפעלה נכשלה: ${e.message || e}`.slice(0, 280) });
   }
+}
+
+/**
+ * באג ידוע בספרייה: "authenticated" מגיע (בוואטסאפ רואים "מחובר") אבל "ready" לא — הבוט היה נתקע על
+ * "מתחבר" לתמיד. אם תוך READY_TIMEOUT_MS לא הגיע ready — מכבים ומפעילים מחדש. החיבור שמור בתיקייה,
+ * כך שאין צורך לסרוק QR שוב. ניסיונות חוזרים — בהמתנה עולה (15 שנ', 30, 60… עד 10 דק').
+ */
+function armReadyWatchdog(c) {
+  clearTimeout(readyTimer);
+  readyTimer = setTimeout(() => onReadyTimeout(c).catch((e) => console.error('watchdog:', e.message)), READY_TIMEOUT_MS);
+}
+
+async function onReadyTimeout(c) {
+  if (client !== c || status.state === 'ready') return;
+  readyFailures += 1;
+  console.warn(`וואטסאפ מחובר אבל לא סיים לטעון תוך ${READY_TIMEOUT_MS / 60e3} דק' — מאתחל מחדש בלי סריקה (ניסיון ${readyFailures})`);
+  client = null;
+  me = '';
+  try { await withTimeout(c.destroy(), 30e3, 'destroy'); } catch { /* */ }
+  nextStartAt = Date.now() + Math.min(10 * 60e3, 15e3 * 2 ** (readyFailures - 1));
+  await report({ state: 'error', progress: null,
+    error: `וואטסאפ התחבר אבל לא סיים לטעון — הבוט מאתחל את עצמו (ניסיון ${readyFailures}). אין צורך לסרוק שוב.` });
 }
 
 /** נותק (התנתקת מהטלפון / וואטסאפ סגר את החיבור) — מכבים, ובסבב ההגדרות הבא מפעילים מחדש (QR חדש אם צריך). */
 async function onDisconnected(c, reason) {
   console.warn('disconnected:', reason);
   if (client !== c) return;
+  clearTimeout(readyTimer);
   client = null;
   me = '';
   try { await c.destroy(); } catch { /* */ }
@@ -166,6 +253,7 @@ async function onDisconnected(c, reason) {
 
 async function stop() {
   console.log('מכבה את הבוט');
+  clearTimeout(readyTimer);
   const c = client;
   client = null;
   me = '';
@@ -180,7 +268,7 @@ async function refreshLabel() {
   if (!client) return;
   if (!['smba', 'smbi'].includes(client.info?.platform)) { botLabel = null; labelState = 'not_business'; return; }
   try {
-    botLabel = labels.findLabel(await client.getLabels(), cfg?.label_name);
+    botLabel = labels.findLabel(await withTimeout(client.getLabels(), CALL_TIMEOUT_MS, 'getLabels'), cfg?.label_name);
     labelState = botLabel ? 'on' : 'missing';
   } catch (e) {
     console.warn('labels:', e?.message || e);
@@ -188,7 +276,7 @@ async function refreshLabel() {
 }
 
 async function chatLabelIds(chatId) {
-  return (await client.getChatLabels(chatId)).map((l) => String(l.id));
+  return (await withTimeout(client.getChatLabels(chatId), CALL_TIMEOUT_MS, 'getChatLabels')).map((l) => String(l.id));
 }
 
 async function inBotList(chatId) {
@@ -202,7 +290,7 @@ async function setBotList(chatId, on) {
   try {
     const ids = await chatLabelIds(chatId);
     const want = labels.withLabel(ids, botLabel.id, on);
-    if (want.length !== ids.length || !want.every((x) => ids.includes(x))) await client.addOrRemoveLabels(want, [chatId]);
+    if (want.length !== ids.length || !want.every((x) => ids.includes(x))) await withTimeout(client.addOrRemoveLabels(want, [chatId]), CALL_TIMEOUT_MS, 'addOrRemoveLabels');
     return true;
   } catch (e) {
     console.warn('label change:', e?.message || e);
@@ -214,7 +302,7 @@ async function setBotList(chatId, on) {
 async function looksNew(msg) {
   try {
     const chat = await msg.getChat();
-    const msgs = await chat.fetchMessages({ limit: 40 });
+    const msgs = await withTimeout(chat.fetchMessages({ limit: 40 }), CALL_TIMEOUT_MS, 'fetchMessages');
     let isContact = false;
     try { isContact = Boolean((await msg.getContact())?.isMyContact); } catch { /* */ }
     return labels.isNewChat(msgs, { isContact, includeContacts: Boolean(cfg?.include_contacts) });
@@ -226,8 +314,8 @@ async function looksNew(msg) {
 /** החזרת את הבוט לשיחה (סימנת "בוט") והלקוח מחכה? — עונה לו. גם אחרי הפעלה מחדש של הבוט. */
 async function catchUp() {
   try {
-    if (client && status.state === 'ready' && botLabel && cfg?.enabled && state.data.botActive) {
-      for (const chat of await client.getChatsByLabelId(botLabel.id)) {
+    if (client && status.state === 'ready' && botLabel && cfg?.enabled && !cfg.shadow && state.data.botActive) {
+      for (const chat of await withTimeout(client.getChatsByLabelId(botLabel.id), CALL_TIMEOUT_MS, 'getChatsByLabelId')) {
         const chatId = chat?.id?._serialized;
         if (!chatId || chat.isGroup || pending.has(chatId) || chatId === adminChat()) continue;
         const last = chat.lastMessage;
@@ -339,6 +427,7 @@ async function onMessage(msg) {
  * מוציא את השיחה מהרשימה "בוט" (או, בלי רשימה, שותק בה לזמן שנקבע).
  */
 async function onAdmin(msg, body, selfChat) {
+  if (!selfChat && cfg?.shadow) return onTheirReply(msg.to, body);   // מצב השוואה: זו התשובה "שלהם"
   adminLastSeen = Date.now();
   if (!selfChat) {
     const chatId = msg.to;
@@ -413,7 +502,10 @@ async function onMenu(text) {
     menu.open = false;
     const open = inHours();
     let list = [];
-    if (botLabel) list = (await client.getChatsByLabelId(botLabel.id).catch(() => [])).map((ch) => ch.id._serialized);
+    if (botLabel) {
+      list = (await withTimeout(client.getChatsByLabelId(botLabel.id), CALL_TIMEOUT_MS, 'getChatsByLabelId')
+        .catch(() => [])).map((ch) => ch.id._serialized);
+    }
     const lines = state.recent(10).map(([id, c], i) => {
       const st = botLabel ? (list.includes(id) ? '🤖 הבוט' : '👤 אתה') :
         state.paused(id) ? '👤 אתה מטפל' : c.handedOff ? '⏳ ממתין לנציג' : '🤖 הבוט';
@@ -422,7 +514,8 @@ async function onMenu(text) {
     const mode = botLabel ? `📋 רשימת "${botLabel.name}": ${list.length} שיחות` :
       labelState === 'missing' ? `📋 אין רשימה בשם "${cfg?.label_name || labels.DEFAULT_NAME}" — צור אותה בוואטסאפ` :
         '⏱️ בלי רשימה: כתבת ללקוח → הבוט שותק שם לזמן קצוב';
-    return toAdmin(`📊 *סטטוס*\n${state.data.botActive ? '🟢 פעיל' : '🔴 עצור'} · ${open ? '☀️ שעות פעילות' : '🌙 מחוץ לשעות'}\n${mode}\n` +
+    const shadow = cfg?.shadow ? `🔍 *מצב השוואה* — לא עונה ללקוחות, רק רושם בדשבורד (${stats.compared || 0} השוואות)\n` : '';
+    return toAdmin(`📊 *סטטוס*\n${shadow}${state.data.botActive ? '🟢 פעיל' : '🔴 עצור'} · ${open ? '☀️ שעות פעילות' : '🌙 מחוץ לשעות'}\n${mode}\n` +
       `תשובות: ${stats.replies} · הועברו אליך: ${stats.handoffs}\n\n${lines.join('\n') || '_אין שיחות_'}`);
   }
   const steps = { 4: 'pause', 5: 'resume', 6: 'reset' };
@@ -449,7 +542,7 @@ async function adminReadSoon(notice) {
   await sleep(READ_CHECK_MS);
   try {
     const chat = await notice.getChat();
-    const msgs = await chat.fetchMessages({ limit: 5 });
+    const msgs = await withTimeout(chat.fetchMessages({ limit: 5 }), CALL_TIMEOUT_MS, 'fetchMessages');
     const m = msgs.find((x) => x.id._serialized === notice.id._serialized);
     return Boolean(m && m.ack >= 3);
   } catch { return false; }
@@ -464,6 +557,7 @@ async function onCustomer(msg, text) {
   c.lastIn = msg.id?._serialized || '';
 
   if (!cfg?.enabled) return;
+  if (cfg.shadow) return onCustomerShadow(msg, chatId, c, phone, text);
   if (botLabel) {
     // מנוהל לפי הרשימה "בוט": עונים רק שם; לקוח חדש — מצטרף אליה אוטומטית
     if (!state.data.botActive) return;                               // עצרת לכולם — השיחות אצלך
@@ -502,6 +596,60 @@ function schedule(msg, chatId, phone, text, open, delay) {
   }, delay));
 }
 
+// ------------------------------------------------------------------ מצב השוואה (shadow)
+// הבוט לא שולח כלום ללקוח ולא נוגע ברשימות. לכל הודעת לקוח: שואל את ה-AI מה היה עונה, ורושם בדשבורד
+// ליד מה שנשלח בפועל מהמספר (הבוט הקיים / את/ה) — להשוואה, לפני שעוברים.
+
+const THEIRS_WINDOW_MS = 30 * 60e3;   // תשובה "שלהם" נצמדת לשאלה האחרונה בשיחה, עד חצי שעה אחריה
+
+async function onCustomerShadow(msg, chatId, c, phone, text) {
+  const key = msg.id?._serialized;
+  if (!key) return;
+  // רק לקוחות: שיחה ברשימה "בוט" או שיחה חדשה (לא משפחה/חברים — כמו במצב הרגיל). ההחלטה פעם אחת לשיחה.
+  if (c.shadowOk === undefined) {
+    c.shadowOk = Boolean((botLabel && await withTimeout(inBotList(chatId), CALL_TIMEOUT_MS, 'labels').catch(() => false)) ||
+      await looksNew(msg));
+  }
+  if (!c.shadowOk) return;
+  c.lastQ = key;
+  c.lastQAt = Date.now();
+  state.save();
+  srv.compare({ key, phone, question: text }).catch((e) => console.warn('compare:', e.message));
+  if (!state.allowReply(chatId)) return;                              // לא יותר מדי קריאות AI ברצף
+  setTimeout(() => shadowAnswer(msg, chatId, phone, text, key).catch((e) => console.error('shadow:', e.message)), 800);
+}
+
+async function shadowAnswer(msg, chatId, phone, text, key) {
+  let crm = null;
+  try { crm = await srv.customer(phone); } catch { /* לא לקוח */ }
+  const open = inHours();
+  const history = state.chat(chatId).history.slice(0, -1);
+  const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: open,
+    hoursText: cfg.hours, crm, history, text });
+  if (res.error) { stats.ai_errors += 1; status.error = `AI: ${res.error}`; }
+  else if (status.error?.startsWith('AI:')) status.error = '';
+  status.ai = res.ai;
+  let out = res.text || '';
+  if (res.tags.some((t) => t.kind === 'ADDRESS')) {
+    const block = ai.addressBlock(cfg.business_info);
+    if (block) out = `${out ? out + '\n\n' : ''}${block}`;
+  }
+  // הפעולות שהבוט היה עושה — כתובות בסוף, כדי לראות גם אותן בהשוואה
+  const acts = res.tags.map((t) => t.kind === 'HUMAN' ? '[מעביר לנציג]' : t.kind === 'BLOCK' ? `[חוסם: ${t.arg}]` :
+    t.kind === 'ESCALATE' ? `[לאישורך: ${t.arg}]` : '').filter(Boolean);
+  if (acts.length) out = `${out}\n${acts.join(' ')}`.trim();
+  stats.compared = (stats.compared || 0) + 1;
+  await srv.compare({ key, ours: out || '(אין תשובה)' });
+}
+
+/** הודעה שנשלחה מהמספר בשיחה עם לקוח (לא ע"י הבוט שלנו) — "התשובה שלהם" לשאלה האחרונה. */
+async function onTheirReply(chatId, body) {
+  const c = state.data.chats[chatId];
+  if (!c?.lastQ || Date.now() - (c.lastQAt || 0) > THEIRS_WINDOW_MS) return;
+  state.remember(chatId, 'assistant', body);                         // ההיסטוריה = מה שנאמר באמת
+  await srv.compare({ key: c.lastQ, theirs: body }).catch((e) => console.warn('compare:', e.message));
+}
+
 /** הבוט מעביר אליך את השיחה: מוציא אותה מהרשימה "בוט" (או מסמן "ממתין לנציג"). */
 async function handOff(chatId) {
   stats.handoffs += 1;
@@ -512,6 +660,7 @@ async function handOff(chatId) {
 }
 
 async function replyNow(msg, chatId, phone, text, open) {
+  if (cfg?.shadow) return;                                            // מצב השוואה — לא שולחים ללקוחות
   if (botLabel ? !(await inBotList(chatId)) : state.paused(chatId)) return;   // ענית בינתיים / הוצאת מהרשימה
   state.chat(chatId).answered = msg.id?._serialized || '';
   if (!state.allowReply(chatId)) {                                    // הרבה מדי ברצף — מעבירים אליך

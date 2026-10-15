@@ -24,6 +24,7 @@ function client(api, token, fetchImpl = fetch) {
     customer: (phone) => call('GET', `/v1/bot/customer?phone=${encodeURIComponent(phone)}`),
     block: (deviceId, options) => call('POST', '/v1/bot/block', { device_id: deviceId, options }),
     escalate: (deviceId, note) => call('POST', '/v1/bot/escalate', { device_id: deviceId, note }),
+    compare: (row) => call('POST', '/v1/bot/compare', row),
   };
 }
 

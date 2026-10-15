@@ -441,6 +441,7 @@ class WaBotIn(BaseModel):
     include_contacts: bool | None = None
     mark_ai: bool | None = None
     ai_tag: str | None = Field(default=None, max_length=60)
+    shadow: bool | None = None
     clear_key: bool = False
 
 
@@ -457,7 +458,17 @@ class BotStatusIn(BaseModel):
     version: str = Field(default="", max_length=20)
     labels: str = Field(default="", max_length=20)
     label: str = Field(default="", max_length=40)
+    progress: int | None = None
+    log: list[str] = Field(default_factory=list, max_length=60)
     stats: dict[str, int] = Field(default_factory=dict)
+
+
+class BotCompareIn(BaseModel):
+    key: str = Field(min_length=1, max_length=200)
+    phone: str = Field(default="", max_length=40)
+    question: str = Field(default="", max_length=4000)
+    ours: str = Field(default="", max_length=8000)
+    theirs: str = Field(default="", max_length=8000)
 
 
 class BrandingIn(BaseModel):
@@ -801,6 +812,14 @@ def _routes(app: FastAPI) -> None:
     def wabot_save(body: WaBotIn, svc: SvcDep, admin: AdminRow):
         return WaBot(svc).save(admin["username"], body.model_dump())
 
+    @app.get("/v1/admin/wabot/compare")
+    def wabot_compare(svc: SvcDep, _: AdminRow, limit: int = 100):
+        return {"rows": WaBot(svc).compare_list(limit)}
+
+    @app.delete("/v1/admin/wabot/compare")
+    def wabot_compare_clear(svc: SvcDep, admin: AdminRow):
+        return WaBot(svc).compare_clear(admin["username"])
+
     @app.post("/v1/admin/wabot/test-ai")
     def wabot_test_ai(svc: SvcDep, _: AdminRow):
         return WaBot(svc).test_ai()
@@ -814,6 +833,10 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/bot/status")
     def bot_status(body: BotStatusIn, bot: BotDep):
         return WaBot(bot.svc).report(body.model_dump())
+
+    @app.post("/v1/bot/compare")
+    def bot_compare(body: BotCompareIn, bot: BotDep):
+        return WaBot(bot.svc).compare_record(body.model_dump())
 
     @app.get("/v1/bot/customer")
     def bot_customer(phone: str, bot: BotDep):

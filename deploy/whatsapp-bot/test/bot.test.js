@@ -137,3 +137,27 @@ test('bot put back in a chat: answers only a recent, unanswered customer message
   assert.equal(labels.needsCatchUp(msg({ timestamp: now / 1000 - 3600 }), { now }), false); // ישן
   assert.equal(labels.needsCatchUp(null, { now }), false);
 });
+
+test('library patch: transient page errors are retried, real errors are not', async () => {
+  const { withRetry, isTransient } = require('../lib/wwebjs_patch');
+  const noSleep = { sleep: async () => {} };
+  assert.equal(isTransient(new Error('Protocol error (Runtime.addBinding): Target closed')), true);
+  assert.equal(isTransient(new Error('Execution context was destroyed, most likely because of a navigation')), true);
+  assert.equal(isTransient(new Error('Cannot read properties of undefined')), false);
+  let n = 0;
+  assert.equal(await withRetry(async () => { n += 1; if (n < 3) throw new Error('Target closed'); return 'ok'; }, noSleep), 'ok');
+  assert.equal(n, 3);
+  n = 0;
+  await assert.rejects(withRetry(async () => { n += 1; throw new Error('boom'); }, noSleep), /boom/);
+  assert.equal(n, 1);                                                // לא חוזרים על שגיאה אמיתית
+  n = 0;
+  await assert.rejects(withRetry(async () => { n += 1; throw new Error('Target closed'); }, { ...noSleep, attempts: 4 }));
+  assert.equal(n, 4);
+});
+
+test('library patch applies to whatsapp-web.js before it loads (when installed)', () => {
+  let installed = true;
+  try { require.resolve('whatsapp-web.js/src/util/Puppeteer'); } catch { installed = false; }
+  const { apply } = require('../lib/wwebjs_patch');
+  assert.equal(apply(), installed);
+});
