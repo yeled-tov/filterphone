@@ -24,7 +24,7 @@ PROVIDERS = ("gemini", "groq", "none")
 _SECRET = ("ai_key",)
 _FIELDS = ("enabled", "ai_provider", "ai_key", "ai_model", "business_info", "hours", "friday_until",
            "handoff_minutes", "bot_name", "label_name", "auto_new", "include_contacts",
-           "mark_ai", "ai_tag", "shadow")
+           "mark_ai", "ai_tag", "learn_from_replies", "ask_when_unsure")
 STATUS_STALE_S = 120            # בלי דיווח מהבוט יותר מזה — "השירות לא רץ"
 
 # מה שהבוט הישן ידע (מחירים, כתובת, שעות) — נקודת התחלה; עורכים בדשבורד
@@ -57,11 +57,13 @@ DEFAULTS: dict = {
     "include_contacts": False,          # גם אנשי קשר שמורים בטלפון נחשבים "חדשים"
     "mark_ai": True,                    # להוסיף סימון בסוף כל הודעה שהבוט ענה (כמו הסימון של וואטסאפ)
     "ai_tag": "🤖 הודעה אוטומטית",       # הסימון עצמו
-    # מצב השוואה: הבוט לא שולח כלום ללקוחות — רק רושם מה היה עונה, ליד מה שנענה בפועל (הבוט הקיים /
-    # את/ה). ברירת מחדל: מופעל — כדי שלא יענו שני בוטים לאותו לקוח עד שמחליטים לעבור.
-    "shadow": True,
+    # מצב לימוד: כשאתה עונה ללקוח בעצמך — הבוט שומר את השאלה ואת התשובה שלך, ועונה כך בפעם הבאה
+    "learn_from_replies": True,
+    # הבוט לא יודע (חסר מידע) → אומר ללקוח שיבדוק, ושואל אותך בצ'אט עם עצמך; התשובה שלך נשלחת ונלמדת
+    "ask_when_unsure": True,
 }
-COMPARE_KEEP = 500                      # כמה שורות השוואה לשמור (הישנות נמחקות)
+KNOWLEDGE_MAX = 1000                    # כמה פריטי ידע לשמור לכל היותר (הישנים ביותר נמחקים)
+KNOWLEDGE_SOURCES = ("reply", "ask", "teach", "dashboard")
 
 _HOURS = re.compile(r"^\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\s*(,\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\s*)*$")
 
@@ -96,7 +98,7 @@ class WaBot:
             if k not in changes or changes[k] is None:
                 continue
             v = changes[k]
-            if k in ("enabled", "auto_new", "include_contacts", "mark_ai", "shadow"):
+            if k in ("enabled", "auto_new", "include_contacts", "mark_ai", "learn_from_replies", "ask_when_unsure"):
                 v = bool(v)
             elif k == "ai_provider":
                 if v not in PROVIDERS:
@@ -201,49 +203,77 @@ class WaBot:
                 "status": st,
                 "qr_image": segno.make(qr, error="l").svg_data_uri(scale=6, border=2) if qr else ""}
 
-    # ------------------------------------------------------------ מצב השוואה
+    # ------------------------------------------------------------ ידע שהבוט למד
 
-    def compare_record(self, raw: dict) -> dict:
-        """הבוט מדווח: שאלה של לקוח, מה הבוט שלנו היה עונה (ours), ומה נענה בפועל (theirs).
-        שורה לכל הודעת לקוח (key = מזהה ההודעה); עדכונים מצטרפים לאותה שורה."""
-        key = str(raw.get("key", "")).strip()[:200]
-        if not key:
-            raise ApiError(400, "חסר מזהה הודעה")
-        now = int(time.time())
-        phone = re.sub(r"\D", "", str(raw.get("phone", "")))[:20]
-        question = str(raw.get("question") or "")[:2000]
-        ours = str(raw.get("ours") or "")[:4000]
-        theirs = str(raw.get("theirs") or "")[:4000]
-        with self.svc.db() as c, db.transaction(c):
-            row = c.execute("SELECT * FROM wabot_compare WHERE key = ?", (key,)).fetchone()
-            if row is None:
-                c.execute("INSERT INTO wabot_compare (key, phone, question, ours, theirs, ts, ours_at, theirs_at)"
-                          " VALUES (?,?,?,?,?,?,?,?)",
-                          (key, phone, question, ours, theirs, now, now if ours else None, now if theirs else None))
-                c.execute("DELETE FROM wabot_compare WHERE id NOT IN"
-                          " (SELECT id FROM wabot_compare ORDER BY id DESC LIMIT ?)", (COMPARE_KEEP,))
-            else:
-                # הבוט הקיים שלח כמה הודעות ברצף — מצטרפות לאותה תשובה
-                joined = (row["theirs"] + "\n" + theirs).strip()[:4000] if theirs and row["theirs"] else (theirs or row["theirs"])
-                c.execute("UPDATE wabot_compare SET phone = COALESCE(NULLIF(?, ''), phone),"
-                          " question = COALESCE(NULLIF(?, ''), question), ours = COALESCE(NULLIF(?, ''), ours),"
-                          " theirs = ?, ours_at = CASE WHEN ? != '' THEN ? ELSE ours_at END,"
-                          " theirs_at = CASE WHEN ? != '' THEN ? ELSE theirs_at END WHERE id = ?",
-                          (phone, question, ours, joined, ours, now, theirs, now, row["id"]))
-        return {"ok": True}
+    @staticmethod
+    def _k_row(r) -> dict:
+        return {"id": r["id"], "kind": r["kind"], "question": r["question"], "answer": r["answer"],
+                "source": r["source"], "phone": r["phone"], "uses": r["uses"],
+                "created_at": r["created_at"], "updated_at": r["updated_at"]}
 
-    def compare_list(self, limit: int = 100) -> list[dict]:
+    def knowledge_list(self, limit: int = KNOWLEDGE_MAX) -> list[dict]:
         with self.svc.db() as c:
-            rows = c.execute("SELECT * FROM wabot_compare ORDER BY id DESC LIMIT ?", (max(1, min(limit, 500)),))
-            return [{"id": r["id"], "phone": r["phone"], "question": r["question"], "ours": r["ours"],
-                     "theirs": r["theirs"], "ts": r["ts"], "ours_at": r["ours_at"], "theirs_at": r["theirs_at"]}
-                    for r in rows]
+            rows = c.execute("SELECT * FROM wabot_knowledge ORDER BY id DESC LIMIT ?", (max(1, min(limit, KNOWLEDGE_MAX)),))
+            return [self._k_row(r) for r in rows]
 
-    def compare_clear(self, admin: str) -> dict:
+    def knowledge_add(self, raw: dict, source: str, actor: str = "bot") -> dict:
+        """פריט ידע חדש: qa (שאלה + התשובה שלך) או fact (עובדה). כפילות מדויקת — מעדכנת את הקיים."""
+        kind = str(raw.get("kind") or ("qa" if raw.get("question") else "fact"))
+        question = re.sub(r"\s+", " ", str(raw.get("question") or "")).strip()[:1000]
+        answer = str(raw.get("answer") or "").strip()[:3000]
+        if kind not in ("qa", "fact") or source not in KNOWLEDGE_SOURCES:
+            raise ApiError(400, "סוג ידע לא מוכר")
+        if not answer or (kind == "qa" and not question):
+            raise ApiError(400, "חסרה שאלה או תשובה")
+        phone = re.sub(r"\D", "", str(raw.get("phone") or ""))[:20]
+        now = int(time.time())
         with self.svc.db() as c, db.transaction(c):
-            n = c.execute("DELETE FROM wabot_compare").rowcount
-        self.svc.audit(admin, "wabot_compare_clear", "whatsapp-bot", str(n))
-        return {"deleted": n}
+            dup = c.execute("SELECT id FROM wabot_knowledge WHERE kind = ? AND question = ? AND answer = ?",
+                            (kind, question, answer)).fetchone()
+            if dup:
+                c.execute("UPDATE wabot_knowledge SET updated_at = ? WHERE id = ?", (now, dup["id"]))
+                kid = dup["id"]
+            else:
+                kid = c.execute("INSERT INTO wabot_knowledge (kind, question, answer, source, phone, created_at,"
+                                " updated_at) VALUES (?,?,?,?,?,?,?)",
+                                (kind, question, answer, source, phone, now, now)).lastrowid
+                c.execute("DELETE FROM wabot_knowledge WHERE id NOT IN"
+                          " (SELECT id FROM wabot_knowledge ORDER BY id DESC LIMIT ?)", (KNOWLEDGE_MAX,))
+            row = c.execute("SELECT * FROM wabot_knowledge WHERE id = ?", (kid,)).fetchone()
+        if actor != "bot":
+            self.svc.audit(actor, "wabot_knowledge_add", f"knowledge:{kid}", kind)
+        return self._k_row(row)
+
+    def knowledge_update(self, kid: int, raw: dict, actor: str) -> dict:
+        with self.svc.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM wabot_knowledge WHERE id = ?", (kid,)).fetchone()
+            if row is None:
+                raise ApiError(404, "לא נמצא")
+            question = re.sub(r"\s+", " ", str(raw.get("question", row["question"]) or "")).strip()[:1000]
+            answer = str(raw.get("answer", row["answer"]) or "").strip()[:3000]
+            if not answer or (row["kind"] == "qa" and not question):
+                raise ApiError(400, "חסרה שאלה או תשובה")
+            c.execute("UPDATE wabot_knowledge SET question = ?, answer = ?, updated_at = ? WHERE id = ?",
+                      (question, answer, int(time.time()), kid))
+            row = c.execute("SELECT * FROM wabot_knowledge WHERE id = ?", (kid,)).fetchone()
+        self.svc.audit(actor, "wabot_knowledge_edit", f"knowledge:{kid}", "")
+        return self._k_row(row)
+
+    def knowledge_delete(self, kid: int, actor: str) -> dict:
+        with self.svc.db() as c, db.transaction(c):
+            n = c.execute("DELETE FROM wabot_knowledge WHERE id = ?", (kid,)).rowcount
+        if not n:
+            raise ApiError(404, "לא נמצא")
+        self.svc.audit(actor, "wabot_knowledge_delete", f"knowledge:{kid}", "")
+        return {"deleted": kid}
+
+    def knowledge_used(self, ids: list[int]) -> None:
+        """הבוט השתמש בפריטים האלה בתשובה — מונה (להצגה בדשבורד: מה באמת שימושי)."""
+        ids = [int(i) for i in ids[:20] if isinstance(i, int) or str(i).isdigit()]
+        if not ids:
+            return
+        with self.svc.db() as c, db.transaction(c):
+            c.executemany("UPDATE wabot_knowledge SET uses = uses + 1 WHERE id = ?", [(i,) for i in ids])
 
     # ------------------------------------------------------------ בדיקת מפתח ה-AI
 

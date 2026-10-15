@@ -1678,7 +1678,7 @@ function wabotStatus(v) {
   const parts = [el("div", { class: "chips" }, chip(text, kind),
     st.me ? chip(`+${st.me}`) : null, st.ai ? chip(`AI: ${st.ai}`) : null,
     lists ? chip(lists[0], lists[1]) : null, st.version ? chip(`גרסה ${st.version}`) : null,
-    v.shadow ? chip("מצב השוואה — לא עונה ללקוחות", "violet") : null)];
+    v.learn_from_replies !== false ? chip("מצב לימוד", "violet") : null)];
   if (st.error) parts.push(el("p", { class: "error small" }, st.error));
   if (st.state === "not_running") {
     parts.push(el("p", { class: "muted small" }, "הבוט מותקן בשרת אוטומטית בהעלאה (deploy). אם זה לא מסתדר תוך כמה דקות — בשרת: journalctl -u fp-wabot -n 50"));
@@ -1701,8 +1701,8 @@ function wabotStatus(v) {
         el("li", {}, "אחרי הסריקה החיבור נשמר בשרת — לא צריך לסרוק שוב."))));
   } else if (st.state === "ready") {
     parts.push(kv([
-      v.shadow ? ["השוואות שנרשמו", num(stats.compared)] : null,
       ["תשובות של הבוט", num(stats.replies)], ["הועברו אליך", num(stats.handoffs)],
+      ["למד מהתשובות שלך", num(stats.learned)], ["שאל אותך (לא ידע לענות)", num(stats.asked)],
       ["פניות מהאפליקציה שהגיעו אליך", num(stats.app_forwarded)], ["ענית ללקוחות באפליקציה", num(stats.app_replies)],
       stats.ai_errors ? ["שגיאות AI", num(stats.ai_errors)] : null,
       ["הודעות הבוט אליך", v.notify_to ? `למספר ${v.notify_to}` : "לצ'אט עם עצמך"],
@@ -1722,39 +1722,87 @@ function wabotStatus(v) {
   return parts;
 }
 
-function compareRows(rows) {
-  if (!rows.length) {
-    return [empty("עוד אין השוואות. כשלקוח יכתוב לוואטסאפ — יופיעו כאן השאלה, מה נענה בפועל, ומה הבוט שלנו היה עונה.")];
+const KNOW_SOURCE = { reply: ["מהתשובה שלך ללקוח", ""], ask: ["שאל אותך וענית", "ok"],
+  teach: ["לימדת בוואטסאפ", "violet"], dashboard: ["נוסף בדשבורד", "violet"] };
+
+/** הוספה / עריכה של פריט ידע (שאלה + תשובה, או עובדה). מחזיר true אם נשמר. */
+async function editKnowledge(it) {
+  const kind = el("select", { disabled: Boolean(it) }, [["qa", "שאלה ותשובה"], ["fact", "עובדה"]]
+    .map(([val, t]) => el("option", { value: val, selected: (it?.kind || "qa") === val }, t)));
+  const question = el("textarea", { rows: 2, value: it?.question || "", placeholder: "למשל: כמה עולה סינון למכשיר?" });
+  const answer = el("textarea", { rows: 4, value: it?.answer || "",
+    placeholder: "התשובה, כמו שהיית עונה ללקוח (בלי פרטים אישיים)" });
+  const qLabel = el("label", {}, "השאלה של הלקוח", question);
+  const aTitle = el("span");
+  const sync = () => {
+    qLabel.hidden = kind.value === "fact";
+    aTitle.textContent = kind.value === "fact" ? "העובדה" : "התשובה";
+  };
+  kind.addEventListener("change", sync);
+  sync();
+  if (!await dialog(it ? `עריכה #${it.id}` : "ללמד את הבוט", el("div", { class: "stack" },
+    it ? null : el("label", {}, "סוג", kind), qLabel, el("label", {}, aTitle, answer)),
+  "שמירה")) return false;
+  const body = { question: kind.value === "fact" ? "" : question.value, answer: answer.value };
+  try {
+    await attempt(() => (it
+      ? api(`/v1/admin/wabot/knowledge/${it.id}`, { method: "PUT", body })
+      : api("/v1/admin/wabot/knowledge", { method: "POST", body: { ...body, kind: kind.value } })),
+    "נשמר — הבוט ישתמש בזה תוך כמה דקות");
+    return true;
+  } catch (_) {
+    return false;
   }
-  const cell = (text, muted) => el("td", { dir: "auto", style: "white-space:pre-wrap;vertical-align:top;min-width:160px" },
-    text ? text : el("span", { class: "muted" }, muted));
+}
+
+function knowledgeRows(items, reload) {
+  if (!items.length) {
+    return [empty("עוד לא למד כלום. הוא לומד כשאתה עונה ללקוח בעצמך, וכשהוא שואל אותך בצ'אט עם עצמך ואתה עונה. אפשר גם ללמד אותו כאן (\"הוספה\") או בוואטסאפ.")];
+  }
+  const cell = (text) => el("td", { dir: "auto", style: "white-space:pre-wrap;vertical-align:top;min-width:160px" }, text);
   return [el("div", { class: "table-wrap" }, el("table", {},
-    el("thead", {}, el("tr", {}, el("th", {}, "מתי / לקוח"), el("th", {}, "הלקוח כתב"),
-      el("th", {}, "מה נענה בפועל"), el("th", {}, "הבוט שלנו היה עונה"))),
-    el("tbody", {}, rows.map((r) => el("tr", {},
-      el("td", { style: "vertical-align:top;white-space:nowrap" }, dateTime(r.ts), el("br"),
-        el("small", { class: "ltr" }, r.phone ? `+${r.phone}` : "")),
-      cell(r.question, "—"), cell(r.theirs, "(עוד לא נענה)"), cell(r.ours, "(חושב…)"))))))];
+    el("thead", {}, el("tr", {}, el("th", {}, "#"), el("th", {}, "שאלה / עובדה"), el("th", {}, "התשובה"),
+      el("th", {}, "מאיפה"), el("th", {}, "שימושים"), el("th", {}, ""))),
+    el("tbody", {}, items.map((it) => {
+      const [src, kind] = KNOW_SOURCE[it.source] || [it.source, ""];
+      return el("tr", {},
+        el("td", { style: "vertical-align:top" }, el("span", { class: "ltr" }, String(it.id))),
+        it.kind === "fact" ? cell(el("span", {}, "📌 ", el("span", { class: "muted" }, "עובדה"))) : cell(it.question),
+        cell(it.answer),
+        el("td", { style: "vertical-align:top;white-space:nowrap" }, chip(src, kind), el("br"),
+          el("small", { class: "muted" }, dateTime(it.updated_at)),
+          it.phone ? el("small", { class: "ltr muted" }, ` · +${it.phone}`) : null),
+        el("td", { style: "vertical-align:top" }, num(it.uses)),
+        el("td", { style: "vertical-align:top;white-space:nowrap" },
+          el("button", { class: "ghost small", onclick: async () => { if (await editKnowledge(it)) reload(); } }, "עריכה"),
+          el("button", { class: "danger small", onclick: async () => {
+            if (!await confirmDialog(`לשכוח את #${it.id}?`, "הבוט לא ישתמש בזה יותר.", "מחיקה", true)) return;
+            await attempt(() => api(`/v1/admin/wabot/knowledge/${it.id}`, { method: "DELETE" }), "נמחק").catch(() => {});
+            reload();
+          } }, "מחיקה")));
+    }))))];
 }
 
 async function viewWabot() {
   const v = await api("/v1/admin/wabot");
   const statusBox = el("div", { class: "stack" }, wabotStatus(v));
-  const compareBox = el("div", { class: "stack" }, loading());
-  const loadCompare = async () => {
+  const knowBox = el("div", { class: "stack" }, loading());
+  const knowCount = el("span", { class: "muted small" });
+  const loadKnowledge = async () => {
     try {
-      compareBox.replaceChildren(...compareRows((await api("/v1/admin/wabot/compare?limit=100")).rows));
+      const { items } = await api("/v1/admin/wabot/knowledge");
+      knowCount.textContent = items.length ? `${num(items.length)} פריטים` : "";
+      knowBox.replaceChildren(...knowledgeRows(items, loadKnowledge));
     } catch (e) {
-      compareBox.replaceChildren(el("p", { class: "error small" }, e.message));
+      knowBox.replaceChildren(el("p", { class: "error small" }, e.message));
     }
   };
-  loadCompare();
+  loadKnowledge();
   let lastState = v.status?.state;
   const refresh = async () => {
     try {
       const n = await api("/v1/admin/wabot");
       statusBox.replaceChildren(...wabotStatus(n));
-      if (n.shadow) loadCompare();
       if (n.status?.state !== lastState) {
         lastState = n.status?.state;
         autoRefresh(refresh, ["qr", "starting", "disconnected"].includes(lastState) ? 4000 : 15000);
@@ -1786,7 +1834,8 @@ async function viewWabot() {
   const testOut = el("p", { class: "small" });
   const botName = el("input", { value: v.bot_name || "", maxlength: 30 });
   const markAi = el("input", { type: "checkbox", checked: v.mark_ai !== false, "aria-label": "סימון שהבוט ענה" });
-  const shadow = el("input", { type: "checkbox", checked: v.shadow !== false, "aria-label": "מצב השוואה" });
+  const learn = el("input", { type: "checkbox", checked: v.learn_from_replies !== false, "aria-label": "לומד מהתשובות שלך" });
+  const askMe = el("input", { type: "checkbox", checked: v.ask_when_unsure !== false, "aria-label": "שואל אותך כשלא יודע" });
   const aiTag = el("input", { value: v.ai_tag || "", maxlength: 60, placeholder: "🤖 הודעה אוטומטית" });
   const labelName = el("input", { value: v.label_name || "בוט", maxlength: 30 });
   const autoNew = el("input", { type: "checkbox", checked: v.auto_new !== false, "aria-label": "לקוח חדש נכנס לרשימה" });
@@ -1802,7 +1851,7 @@ async function viewWabot() {
     await attempt(() => api("/v1/admin/wabot", { method: "PUT", body: {
       enabled: enabled.checked, ai_provider: provider.value, ai_key: key.value, ai_model: model.value,
       bot_name: botName.value, label_name: labelName.value, auto_new: autoNew.checked, include_contacts: contacts.checked,
-      mark_ai: markAi.checked, ai_tag: aiTag.value, shadow: shadow.checked,
+      mark_ai: markAi.checked, ai_tag: aiTag.value, learn_from_replies: learn.checked, ask_when_unsure: askMe.checked,
       handoff_minutes: Number(handoff.value), hours: hours.value, friday_until: friday.value, business_info: info.value } }),
     "נשמר — הבוט יקלוט תוך כ-15 שניות");
     render();
@@ -1829,19 +1878,8 @@ async function viewWabot() {
 
   return [
     card("חיבור", "הבוט רץ בשרת ומחובר לוואטסאפ שלך כמו וואטסאפ ווב. כאן רואים את המצב, ואת ה-QR לחיבור.", statusBox),
-    card("השוואה מול הבוט הקיים", "בכל הודעה של לקוח: מה נשלח לו בפועל (הבוט הקיים או אתה) ומה הבוט שלנו היה עונה — כדי לראות מי עונה טוב יותר ומה לשפר במידע העסק למטה. נרשם רק כש\"מצב השוואה\" פעיל.",
-      compareBox,
-      el("div", { class: "row end gap" },
-        el("button", { class: "danger small", onclick: async () => {
-          if (!await confirmDialog("למחוק את כל ההשוואות?", "הטבלה תתרוקן. זה לא משפיע על הבוט.", "מחיקה", true)) return;
-          await attempt(() => api("/v1/admin/wabot/compare", { method: "DELETE" }), "נמחק");
-          loadCompare();
-        } }, "ניקוי הטבלה"),
-        el("button", { class: "ghost", onclick: loadCompare }, "רענון"))),
     card("הבוט", null,
       toggleRow(enabled, "הבוט פעיל", "כבוי = מתנתק מהוואטסאפ ולא עונה לאף אחד."),
-      toggleRow(shadow, "מצב השוואה (לא עונה ללקוחות)",
-        "הבוט מחובר ורואה את ההודעות, אבל לא שולח כלום ללקוחות ולא נוגע ברשימות — רק רושם למטה מה היה עונה, ליד מה שנענה בפועל (הבוט הקיים / אתה). כשמרוצים — מכבים את המתג והבוט מתחיל לענות."),
       el("div", { class: "grid two" },
         el("label", {}, "המוח (AI)", provider),
         el("label", {}, "מפתח", key),
@@ -1882,6 +1920,22 @@ async function viewWabot() {
         el("label", {}, "שישי עד (שבת — סגור)", friday)),
       el("p", { class: "muted small" }, "בשעות הפעילות, אם אתה פעיל בוואטסאפ, הבוט מחכה 5 שניות לפני שהוא עונה — שתספיק לענות בעצמך. מחוץ לשעות — עונה מיד ואומר מתי חוזרים."),
       el("div", { class: "row end" }, el("button", { class: "primary", onclick: save }, "שמירה"))),
+    card("מצב לימוד — מה הבוט למד ממך", "מה שכתוב כאן גובר על המידע הכללי למעלה. הבוט משתמש רק בתוכן הכללי של כל תשובה — לא בפרטים של לקוח אחר.",
+      toggleRow(learn, "לומד מהתשובות שלך",
+        "ענית ללקוח בעצמך (בשיחה שהבוט טיפל בה או שהיא ברשימה) — הבוט זוכר את התשובה לשאלה של הלקוח, ובפעם הבאה עונה ככה. אישורים קצרים (\"אוקיי\"), \"רגע, בודק\" ותשובות עם מספר טלפון — לא נשמרים. על כל דבר שנלמד מגיעה לך הודעה בצ'אט עם עצמך, עם אפשרות לבטל."),
+      toggleRow(askMe, "כשלא יודע — שואל אותך",
+        "במקום לנחש: עונה ללקוח שהוא בודק וחוזר אליו, ושולח לך שאלה בצ'אט עם עצמך. \"השב\" על השאלה עם התשובה — הבוט שולח ללקוח (בניסוח שלו) וזוכר לפעם הבאה."),
+      el("details", {}, el("summary", {}, "ניהול מהצ'אט עם עצמך בוואטסאפ"),
+        el("ul", { class: "small steps" },
+          el("li", {}, el("b", {}, "למד: "), "משלוח לכל הארץ תוך 3 ימי עסקים — עובדה חדשה."),
+          el("li", {}, el("b", {}, "ש: "), "כמה עולה סינון? ", el("i", {}, "(שורה חדשה) "), el("b", {}, "ת: "), "250 ₪ — שאלה ותשובה."),
+          el("li", {}, el("b", {}, "מה למדת"), " — הרשימה. ", el("b", {}, "שכח 12"), " — מחיקה של פריט 12."),
+          el("li", {}, "בתפריט (\"בוט\"): 7 — מה למדתי, 8 — איך ללמד."))),
+      el("div", { class: "row end gap" }, knowCount,
+        el("button", { class: "ghost", onclick: loadKnowledge }, "רענון"),
+        el("button", { class: "ghost", onclick: async () => { if (await editKnowledge(null)) loadKnowledge(); } }, "הוספה"),
+        el("button", { class: "primary", onclick: save }, "שמירה")),
+      knowBox),
     el("p", { class: "muted small" }, "שימו לב: זה חיבור לא-רשמי לוואטסאפ (כמו וואטסאפ ווב). הבוט עונה רק למי שכותב, בקצב אנושי, ומעביר אליך — אבל יש סיכון שוואטסאפ יגביל את המספר."),
   ];
 }

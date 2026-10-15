@@ -441,7 +441,8 @@ class WaBotIn(BaseModel):
     include_contacts: bool | None = None
     mark_ai: bool | None = None
     ai_tag: str | None = Field(default=None, max_length=60)
-    shadow: bool | None = None
+    learn_from_replies: bool | None = None
+    ask_when_unsure: bool | None = None
     clear_key: bool = False
 
 
@@ -463,12 +464,16 @@ class BotStatusIn(BaseModel):
     stats: dict[str, int] = Field(default_factory=dict)
 
 
-class BotCompareIn(BaseModel):
-    key: str = Field(min_length=1, max_length=200)
+class KnowledgeIn(BaseModel):
+    kind: str = Field(default="", max_length=10)
+    question: str = Field(default="", max_length=2000)
+    answer: str = Field(default="", max_length=6000)
     phone: str = Field(default="", max_length=40)
-    question: str = Field(default="", max_length=4000)
-    ours: str = Field(default="", max_length=8000)
-    theirs: str = Field(default="", max_length=8000)
+    source: str = Field(default="reply", max_length=20)
+
+
+class KnowledgeUsedIn(BaseModel):
+    ids: list[int] = Field(default_factory=list, max_length=50)
 
 
 class BrandingIn(BaseModel):
@@ -812,13 +817,21 @@ def _routes(app: FastAPI) -> None:
     def wabot_save(body: WaBotIn, svc: SvcDep, admin: AdminRow):
         return WaBot(svc).save(admin["username"], body.model_dump())
 
-    @app.get("/v1/admin/wabot/compare")
-    def wabot_compare(svc: SvcDep, _: AdminRow, limit: int = 100):
-        return {"rows": WaBot(svc).compare_list(limit)}
+    @app.get("/v1/admin/wabot/knowledge")
+    def wabot_knowledge(svc: SvcDep, _: AdminRow):
+        return {"items": WaBot(svc).knowledge_list()}
 
-    @app.delete("/v1/admin/wabot/compare")
-    def wabot_compare_clear(svc: SvcDep, admin: AdminRow):
-        return WaBot(svc).compare_clear(admin["username"])
+    @app.post("/v1/admin/wabot/knowledge", status_code=201)
+    def wabot_knowledge_add(body: KnowledgeIn, svc: SvcDep, admin: AdminRow):
+        return WaBot(svc).knowledge_add(body.model_dump(), "dashboard", admin["username"])
+
+    @app.put("/v1/admin/wabot/knowledge/{kid}")
+    def wabot_knowledge_edit(kid: int, body: KnowledgeIn, svc: SvcDep, admin: AdminRow):
+        return WaBot(svc).knowledge_update(kid, body.model_dump(exclude_unset=True), admin["username"])
+
+    @app.delete("/v1/admin/wabot/knowledge/{kid}")
+    def wabot_knowledge_delete(kid: int, svc: SvcDep, admin: AdminRow):
+        return WaBot(svc).knowledge_delete(kid, admin["username"])
 
     @app.post("/v1/admin/wabot/test-ai")
     def wabot_test_ai(svc: SvcDep, _: AdminRow):
@@ -834,9 +847,23 @@ def _routes(app: FastAPI) -> None:
     def bot_status(body: BotStatusIn, bot: BotDep):
         return WaBot(bot.svc).report(body.model_dump())
 
-    @app.post("/v1/bot/compare")
-    def bot_compare(body: BotCompareIn, bot: BotDep):
-        return WaBot(bot.svc).compare_record(body.model_dump())
+    @app.get("/v1/bot/knowledge")
+    def bot_knowledge(bot: BotDep):
+        return {"items": WaBot(bot.svc).knowledge_list()}
+
+    @app.post("/v1/bot/knowledge", status_code=201)
+    def bot_knowledge_add(body: KnowledgeIn, bot: BotDep):
+        src = body.source if body.source in ("reply", "ask", "teach") else "reply"
+        return WaBot(bot.svc).knowledge_add(body.model_dump(), src)
+
+    @app.delete("/v1/bot/knowledge/{kid}")
+    def bot_knowledge_delete(kid: int, bot: BotDep):
+        return WaBot(bot.svc).knowledge_delete(kid, "whatsapp")
+
+    @app.post("/v1/bot/knowledge/used")
+    def bot_knowledge_used(body: KnowledgeUsedIn, bot: BotDep):
+        WaBot(bot.svc).knowledge_used(body.ids)
+        return {"ok": True}
 
     @app.get("/v1/bot/customer")
     def bot_customer(phone: str, bot: BotDep):

@@ -161,3 +161,73 @@ test('library patch applies to whatsapp-web.js before it loads (when installed)'
   const { apply } = require('../lib/wwebjs_patch');
   assert.equal(apply(), installed);
 });
+
+test('learning: relevant past answers are picked, facts always, nothing personal', () => {
+  const know = require('../lib/knowledge');
+  const items = [
+    { id: 1, kind: 'qa', question: 'כמה עולה סינון למכשיר?', answer: '250 ₪ כולל התקנה', updated_at: 10 },
+    { id: 2, kind: 'qa', question: 'אתם פתוחים בשישי?', answer: 'עד 12:00', updated_at: 20 },
+    { id: 3, kind: 'fact', question: '', answer: 'משלוח לכל הארץ תוך 3 ימי עסקים', updated_at: 5 },
+  ];
+  const sel = know.select(items, 'שלום, כמה עולה הסינון?');
+  assert.deepEqual(sel.qas.map((q) => q.id), [1]);
+  assert.deepEqual(sel.facts.map((f) => f.id), [3]);
+  assert.deepEqual(sel.ids.sort(), [1, 3]);
+  const section = know.promptSection(sel);
+  assert.match(section, /250 ₪/);
+  assert.match(section, /משלוח לכל הארץ/);
+  assert.doesNotMatch(section, /עד 12:00/);
+  assert.equal(know.promptSection({ facts: [], qas: [] }), '');
+  // הסינון של מה שנלמד מתשובה שלך בשיחה
+  assert.equal(know.worthLearning('אוקיי', 'כמה עולה סינון?'), false);
+  assert.equal(know.worthLearning('רגע, בודק', 'כמה עולה סינון?'), false);
+  assert.equal(know.worthLearning('תתקשר ל-050-1234567', 'כמה עולה סינון?'), false);
+  assert.equal(know.worthLearning('250 ₪ כולל התקנה', 'שלום'), false);          // "שלום" זו לא שאלה
+  assert.equal(know.worthLearning('250 ₪ כולל התקנה', 'כמה עולה סינון?'), true);
+  assert.equal(know.hasPhone('+972 52 123 4567'), false);                         // רק תבנית רגילה
+  assert.equal(know.hasPhone('0521234567'), true);
+});
+
+test('learning: teach / forget / list commands from your own chat', () => {
+  const know = require('../lib/knowledge');
+  assert.deepEqual(know.parseCommand('למד: משלוח תוך 3 ימים'), { cmd: 'teach', kind: 'fact', answer: 'משלוח תוך 3 ימים' });
+  assert.deepEqual(know.parseCommand('למד:משלוח תוך 3 ימים'), { cmd: 'teach', kind: 'fact', answer: 'משלוח תוך 3 ימים' });
+  assert.deepEqual(know.parseCommand('ש: כמה עולה?\nת: 250 ₪'), { cmd: 'teach', kind: 'qa', question: 'כמה עולה?', answer: '250 ₪' });
+  assert.deepEqual(know.parseCommand('שכח 12'), { cmd: 'forget', id: 12 });
+  assert.deepEqual(know.parseCommand('מה למדת?'), { cmd: 'list' });
+  assert.equal(know.parseCommand('למדתי משהו'), null);
+  assert.equal(know.parseCommand('3'), null);                                     // התפריט
+  assert.match(know.listText([]), /עוד לא למדתי/);
+  const list = know.listText([{ id: 7, kind: 'qa', question: 'כמה עולה?', answer: '250' }, { id: 8, kind: 'fact', answer: 'סגור בשבת' }]);
+  assert.match(list, /#7/);
+  assert.match(list, /סגור בשבת/);
+  assert.match(list, /שכח 7/);
+});
+
+test('learning: the AI gets what it learned and may ask you instead of guessing', () => {
+  const p = ai.systemPrompt({ botName: 'פילטר', businessInfo: 'מחיר: 100', inHours: true, hoursText: '', crm: null,
+    knowledge: '=== מה שלמדת ===\nש: x\nת: y', askWhenUnsure: true });
+  assert.match(p, /מה שלמדת/);
+  assert.match(p, /\[\[ASK:/);
+  assert.doesNotMatch(ai.systemPrompt({ businessInfo: '', inHours: true }), /\[\[ASK:/);
+  const r = ai.parseTags('אני בודק ואחזור אליך 🙏\n[[ASK:האם יש מלאי של אייפון 13]]');
+  assert.equal(r.text, 'אני בודק ואחזור אליך 🙏');
+  assert.deepEqual(r.tags, [{ kind: 'ASK', arg: 'האם יש מלאי של אייפון 13' }]);
+});
+
+test('learning: questions the bot asked you survive a restart and close when you answer', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wabot-'));
+  const file = path.join(dir, 'state.json');
+  const s = new State(file);
+  s.addAsk('msg1', { chatId: 'c1@c.us', phone: '9725', question: 'יש מלאי?', missing: 'מלאי' }, 1000);
+  assert.ok(s.openAsk('c1@c.us', 60e3, 2000));
+  assert.equal(s.openAsk('c2@c.us', 60e3, 2000), null);
+  s.flush();
+  const s2 = new State(file);
+  assert.equal(s2.getAsk('msg1', 2000).question, 'יש מלאי?');
+  s2.closeAsks('c1@c.us');
+  assert.equal(s2.openAsk('c1@c.us', 60e3, 2000), null);
+  assert.equal(s2.getAsk('msg1', 1000 + 8 * 24 * 3600e3), null);                  // אחרי שבוע — נשכח
+  clearTimeout(s._timer);
+  clearTimeout(s2._timer);
+});

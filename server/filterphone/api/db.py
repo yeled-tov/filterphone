@@ -269,7 +269,23 @@ CREATE TABLE wabot_compare (                    -- מצב השוואה: מה ה�
 CREATE INDEX wabot_compare_ts ON wabot_compare(ts);
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10]
+_V11 = """
+DROP TABLE IF EXISTS wabot_compare;             -- מצב ההשוואה בוטל
+CREATE TABLE wabot_knowledge (                  -- מה שבוט הוואטסאפ למד מבעל העסק
+    id         INTEGER PRIMARY KEY,
+    kind       TEXT NOT NULL CHECK (kind IN ('qa', 'fact')),
+    question   TEXT NOT NULL DEFAULT '',        -- qa: מה הלקוח שאל
+    answer     TEXT NOT NULL,                   -- qa: מה ענית; fact: העובדה עצמה
+    source     TEXT NOT NULL DEFAULT 'reply',   -- reply (ענית בשיחה) / ask (הבוט שאל אותך) / teach / dashboard
+    phone      TEXT NOT NULL DEFAULT '',        -- מאיזו שיחה נלמד (לבדיקה בלבד — לא נשלח ל-AI)
+    uses       INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX wabot_knowledge_created ON wabot_knowledge(created_at);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11]
 VERSION = len(MIGRATIONS)
 
 

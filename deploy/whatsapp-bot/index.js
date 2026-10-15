@@ -14,6 +14,9 @@
  *   • פניות מצ'אט התמיכה באפליקציה מגיעות אליך לצ'אט עם עצמך; "השב" עליהן או "#מכשיר טקסט" — חוזר
  *     ללקוח באפליקציה.
  *   • תפריט ניהול: כתוב "בוט" בצ'אט עם עצמך (כמו בבוט הקודם).
+ *   • מצב לימוד: עונים ללקוח בעצמך — הבוט זוכר את התשובה לשאלה שלו (ויודע לענות בפעם הבאה). לא יודע מה
+ *     לענות — אומר ללקוח שהוא בודק ושואל אותך בצ'אט עם עצמך; "השב" על השאלה — נשלח ללקוח ונשמר.
+ *     ללמד ישירות: "למד: ..." / "ש: ...\nת: ...", "מה למדת", "שכח 12". הכול גם בדשבורד.
  *   • לקוח קיים (לפי הטלפון): חסימה — מבצע לבד; פעולה רגישה (השהיה/פתיחה) — רק נרשמת לאישורך.
  *
  * אזהרה: API לא-רשמי של וואטסאפ — יש סיכון לחסימת המספר. הבוט מגיב בלבד, בקצב סביר, ומוסר אליך.
@@ -28,8 +31,9 @@ const ai = require('./lib/ai');
 const { israelNow, isOpen } = require('./lib/hours');
 const { replyDelayMs, typingMs, parseHashReply, waNumber } = require('./lib/logic');
 const labels = require('./lib/labels');
+const know = require('./lib/knowledge');
 
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 const API = (process.env.FP_API || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
@@ -41,6 +45,11 @@ const LABEL_EVERY_MS = 60e3;
 const CATCHUP_EVERY_MS = 20e3;
 const READY_TIMEOUT_MS = 2 * 60e3;   // "מחובר" בוואטסאפ אבל לא סיים לטעון — אחרי זה מאתחלים (בלי סריקה)
 const CALL_TIMEOUT_MS = 20e3;        // קריאה לדף של וואטסאפ ווב שלא חוזרת — לא תוקעת את הבוט
+const KNOWLEDGE_EVERY_MS = 5 * 60e3; // רענון מה שהבוט למד (שינויים מהדשבורד)
+const QUESTION_JOIN_MS = 3 * 60e3;   // כמה הודעות רצופות של לקוח = שאלה אחת
+const ANSWER_WINDOW_MS = 30 * 60e3;  // תשובה שלך עד חצי שעה אחרי השאלה — נלמדת
+const ANSWER_SETTLE_MS = 90e3;       // מחכים שתסיים לכתוב (כמה הודעות = תשובה אחת) לפני שלומדים
+const ASK_AGAIN_MS = 30 * 60e3;      // לא שואלים אותך שוב על אותו לקוח בתוך חצי שעה
 
 // יומן קצר (40 שורות אחרונות) — נשלח לדשבורד עם המצב, כדי לראות מה קורה בלי גישה לשרת
 const LOG = [];
@@ -80,7 +89,10 @@ const botMsgIds = new Set();  // הודעות שהבוט שלח — כדי לא 
 const outgoing = new Map();   // טקסט → עד מתי לצפות לו
 const appThreads = new Map(); // הודעת העברה בצ'אט שלך → מכשיר (לתשובה ב"השב")
 const pending = new Map();    // תשובות שמחכות (5 שניות בשעות הפעילות)
-const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, compared: 0 };
+const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0 };
+let knowledge = [];           // מה שהבוט למד ממך (מהשרת)
+let knowledgeAt = 0;
+const drafts = new Map();     // שיחה → תשובה שלך שעוד נכתבת (ללמידה)
 let menu = { open: false, step: '' };
 let botLabel = null;          // הרשימה "בוט" בוואטסאפ ביזנס — כשקיימת, הבוט מנוהל לפיה
 let labelState = '';          // on | missing | not_business
@@ -200,7 +212,7 @@ async function start() {
     clearTimeout(readyTimer);
     readyFailures = 0;
     me = c.info?.wid?._serialized || '';
-    console.log('מחובר ✓', me, cfg?.shadow ? '(מצב השוואה — לא עונה ללקוחות)' : '');
+    console.log('מחובר ✓', me);
     status.state = 'ready';
     status.progress = null;
     refreshLabel().finally(() => report({ state: 'ready', qr: '', error: '' }));
@@ -324,7 +336,7 @@ async function looksNew(msg) {
 /** החזרת את הבוט לשיחה (סימנת "בוט") והלקוח מחכה? — עונה לו. גם אחרי הפעלה מחדש של הבוט. */
 async function catchUp() {
   try {
-    if (client && status.state === 'ready' && botLabel && cfg?.enabled && !cfg.shadow && state.data.botActive) {
+    if (client && status.state === 'ready' && botLabel && cfg?.enabled && state.data.botActive) {
       for (const chat of await withTimeout(client.getChatsByLabelId(botLabel.id), CALL_TIMEOUT_MS, 'getChatsByLabelId')) {
         const chatId = chat?.id?._serialized;
         if (!chatId || chat.isGroup || pending.has(chatId) || chatId === adminChat()) continue;
@@ -437,7 +449,6 @@ async function onMessage(msg) {
  * מוציא את השיחה מהרשימה "בוט" (או, בלי רשימה, שותק בה לזמן שנקבע).
  */
 async function onAdmin(msg, body, selfChat) {
-  if (!selfChat && cfg?.shadow) return onTheirReply(msg.to, body);   // מצב השוואה: זו התשובה "שלהם"
   adminLastSeen = Date.now();
   if (!selfChat) {
     const chatId = msg.to;
@@ -446,17 +457,20 @@ async function onAdmin(msg, body, selfChat) {
     const c = state.chat(chatId);
     c.known = true;
     state.remember(chatId, 'assistant', body);
+    state.closeAsks(chatId);                                         // ענית לו בעצמך
+    noteOwnerReply(chatId, c, body);                                 // מצב לימוד
     if (botLabel) await setBotList(chatId, false);
     else state.pause(chatId, (cfg?.handoff_minutes || 60) * 60e3);
     return;
   }
+  const quoted = msg.hasQuotedMsg ? await msg.getQuotedMessage().catch(() => null) : null;
+  const quotedId = quoted?.id?._serialized || '';
+  // "השב" על שאלה שהבוט שאל אותך → התשובה ללקוח, ונשמרת לפעם הבאה
+  const ask = quotedId && state.getAsk(quotedId);
+  if (ask) return answerAsk(msg, ask, body);
   // תשובה ללקוח באפליקציה: "#123 טקסט", או "השב" על הודעת פנייה
   let reply = parseHashReply(body);
-  if (!reply && msg.hasQuotedMsg) {
-    const q = await msg.getQuotedMessage().catch(() => null);
-    const deviceId = q && appThreads.get(q.id._serialized);
-    if (deviceId) reply = { deviceId, text: body };
-  }
+  if (!reply && quotedId && appThreads.has(quotedId)) reply = { deviceId: appThreads.get(quotedId), text: body };
   if (reply) {
     try {
       await srv.reply(reply.deviceId, reply.text);
@@ -467,7 +481,127 @@ async function onAdmin(msg, body, selfChat) {
     }
     return;
   }
+  // פקודות לימוד: "למד: ...", "ש: ...\nת: ...", "שכח 12", "מה למדת"
+  const cmd = know.parseCommand(body);
+  if (cmd) return onTeach(msg, cmd);
   await onMenu(body);
+}
+
+// ------------------------------------------------------------------ מצב לימוד
+
+/** מה שהבוט למד (מהשרת) — מתרענן כל כמה דקות, ומיד אחרי שלמד משהו חדש. */
+async function loadKnowledge(force = false) {
+  if (!force && Date.now() - knowledgeAt < KNOWLEDGE_EVERY_MS) return knowledge;
+  try {
+    knowledge = (await srv.knowledge()).items || [];
+    knowledgeAt = Date.now();
+  } catch (e) {
+    console.warn('knowledge:', e.message);
+  }
+  return knowledge;
+}
+
+/** הלקוח כתב — זו "השאלה" שהתשובה הבאה שלך תיצמד אליה (כמה הודעות רצופות = שאלה אחת). */
+function noteCustomerQuestion(chatId, c, text) {
+  if (drafts.has(chatId)) flushDraft(chatId).catch((e) => console.warn('learn:', e.message));   // הלקוח כבר ענה לך
+  const now = Date.now();
+  const join = c.q && !c.q.taken && now - c.q.at < QUESTION_JOIN_MS;
+  c.q = { text: (join ? `${c.q.text}\n${text}` : text).slice(-800), at: now };
+}
+
+/** ענית ללקוח בשיחה — אוספים את התשובה (אולי בכמה הודעות), ואחרי שסיימת לומדים אותה. */
+function noteOwnerReply(chatId, c, body) {
+  if (cfg?.learn_from_replies === false || !c.customer) return;      // רק שיחות עם לקוחות, לא משפחה/חברים
+  let d = drafts.get(chatId);
+  if (!d) {
+    if (!c.q || c.q.taken || Date.now() - c.q.at > ANSWER_WINDOW_MS) return;
+    c.q.taken = true;
+    d = { question: c.q.text, phone: c.phone || '', parts: [], timer: null };
+    drafts.set(chatId, d);
+  }
+  d.parts.push(body);
+  clearTimeout(d.timer);
+  d.timer = setTimeout(() => flushDraft(chatId).catch((e) => console.warn('learn:', e.message)), ANSWER_SETTLE_MS);
+}
+
+async function flushDraft(chatId) {
+  const d = drafts.get(chatId);
+  if (!d) return;
+  drafts.delete(chatId);
+  clearTimeout(d.timer);
+  const answer = d.parts.join('\n').trim();
+  if (!know.worthLearning(answer, d.question)) return;
+  const item = await srv.learn({ kind: 'qa', question: d.question, answer, phone: d.phone, source: 'reply' });
+  stats.learned += 1;
+  knowledgeAt = 0;
+  console.log(`למד מהתשובה שלך (#${item.id})`);
+  await toAdmin(`📚 *למדתי מהתשובה שלך* (#${item.id})\nש: ${know.short(d.question)}\nת: ${know.short(answer)}\n_לא מדויק? "שכח ${item.id}"_`);
+}
+
+/** הבוט לא ידע לענות — שואל אותך בצ'אט עם עצמך. "השב" על השאלה → answerAsk. */
+async function askOwner(chatId, phone, question, missing) {
+  if (state.openAsk(chatId, ASK_AGAIN_MS)) return;                    // כבר שאל עליו — מחכה לך
+  stats.asked += 1;
+  const sent = await toAdmin(`❓ *לא ידעתי מה לענות* · ${phone}\n💭 הלקוח כתב: ${know.short(question, 400)}\n` +
+    `🔎 חסר לי: ${missing || 'מידע'}\n\n↩️ *"השב" על ההודעה הזו* עם התשובה — אשלח ללקוח ואזכור לפעם הבאה.\n🔗 https://wa.me/${phone}`);
+  const id = sent?.id?._serialized;
+  if (id) state.addAsk(id, { chatId, phone, question, missing: missing || '' });
+}
+
+async function answerAsk(msg, ask, ownerText) {
+  ask.answered = true;
+  state.save();
+  const c = state.chat(ask.chatId);
+  // הבוט מנסח ללקוח הודעת המשך לפי התשובה שלך; בלי AI / בתקלה — התשובה שלך כמו שהיא
+  let out = ownerText;
+  let byAi = false;
+  if (cfg?.ai_key && cfg.ai_provider !== 'none') {
+    const extra = `=== בעל העסק ענה עכשיו על מה שבדקת ===\nהלקוח שאל: ${ask.question}\n${ask.missing ? `מה שחסר לך: ${ask.missing}\n` : ''}התשובה של בעל העסק: ${ownerText}\n=== סוף ===`;
+    const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: inHours(),
+      hoursText: cfg.hours, crm: null, knowledge: extra, askWhenUnsure: false, history: c.history.slice(-12),
+      text: '[הודעה פנימית — לא מהלקוח] כתוב/כתבי עכשיו ללקוח הודעת המשך קצרה ("בדקתי, ...") עם התשובה של בעל העסק. בלי תגיות.' });
+    if (!res.error && res.ai !== 'none' && res.text) { out = res.text; byAi = true; }
+  }
+  try {
+    await send(ask.chatId, byAi && cfg.mark_ai !== false && cfg.ai_tag ? `${out}\n\n${cfg.ai_tag}` : out, { typing: true });
+    state.remember(ask.chatId, 'assistant', out);
+    stats.replies += 1;
+  } catch (e) {
+    return toAdmin(`⚠️ לא הצלחתי לשלוח ל-${ask.phone}: ${e.message}`);
+  }
+  let learnedNote = '';
+  if (!know.hasPhone(ownerText)) {
+    try {
+      const item = await srv.learn({ kind: 'qa', question: ask.question, answer: ownerText, phone: ask.phone, source: 'ask' });
+      stats.learned += 1;
+      knowledgeAt = 0;
+      learnedNote = `\n📚 נשמר לפעם הבאה (#${item.id}) — "שכח ${item.id}" לביטול`;
+    } catch (e) {
+      learnedNote = `\n⚠️ לא נשמר לפעם הבאה: ${e.message}`;
+    }
+  }
+  await msg.react('✅').catch(() => {});
+  return toAdmin(`✅ נשלח ל-${ask.phone}${byAi ? ' (בניסוח של הבוט)' : ''}:\n${know.short(out, 300)}${learnedNote}`);
+}
+
+/** פקודות לימוד בצ'אט עם עצמך. */
+async function onTeach(msg, cmd) {
+  try {
+    if (cmd.cmd === 'list') return toAdmin(know.listText(await loadKnowledge(true)));
+    if (cmd.cmd === 'forget') {
+      await srv.forget(cmd.id);
+      knowledgeAt = 0;
+      await msg.react('🗑️').catch(() => {});
+      return toAdmin(`🗑️ שכחתי את #${cmd.id}.`);
+    }
+    const item = await srv.learn({ kind: cmd.kind, question: cmd.question || '', answer: cmd.answer, source: 'teach' });
+    stats.learned += 1;
+    knowledgeAt = 0;
+    await msg.react('📚').catch(() => {});
+    return toAdmin(`📚 למדתי (#${item.id}). "מה למדת" — הרשימה · "שכח ${item.id}" — ביטול.`);
+  } catch (e) {
+    return toAdmin(cmd.cmd === 'forget' && /לא נמצא|404/.test(e.message) ? `⚠️ אין פריט #${cmd.id}.` : `⚠️ לא הצלחתי: ${e.message}`);
+  }
 }
 
 const MENU = `🛠️ *תפריט הבוט*
@@ -480,6 +614,8 @@ const MENU = `🛠️ *תפריט הבוט*
 *4* - ⏸️ עצור לקוח מסוים
 *5* - ▶️ הפעל לקוח מסוים (גם אחרי "נציג")
 *6* - 🔄 מחק היסטוריה של לקוח
+*7* - 📚 מה למדתי
+*8* - ✏️ איך ללמד אותי
 
 *0* - ❌ סגור`;
 
@@ -524,13 +660,16 @@ async function onMenu(text) {
     const mode = botLabel ? `📋 רשימת "${botLabel.name}": ${list.length} שיחות` :
       labelState === 'missing' ? `📋 אין רשימה בשם "${cfg?.label_name || labels.DEFAULT_NAME}" — צור אותה בוואטסאפ` :
         '⏱️ בלי רשימה: כתבת ללקוח → הבוט שותק שם לזמן קצוב';
-    const shadow = cfg?.shadow ? `🔍 *מצב השוואה* — לא עונה ללקוחות, רק רושם בדשבורד (${stats.compared || 0} השוואות)\n` : '';
-    return toAdmin(`📊 *סטטוס*\n${shadow}${state.data.botActive ? '🟢 פעיל' : '🔴 עצור'} · ${open ? '☀️ שעות פעילות' : '🌙 מחוץ לשעות'}\n${mode}\n` +
-      `תשובות: ${stats.replies} · הועברו אליך: ${stats.handoffs}\n\n${lines.join('\n') || '_אין שיחות_'}`);
+    const learning = cfg?.learn_from_replies === false ? '📚 לימוד מהתשובות שלך: כבוי' :
+      `📚 למדתי: ${(await loadKnowledge()).length} · שאלתי אותך: ${stats.asked}`;
+    return toAdmin(`📊 *סטטוס*\n${state.data.botActive ? '🟢 פעיל' : '🔴 עצור'} · ${open ? '☀️ שעות פעילות' : '🌙 מחוץ לשעות'}\n${mode}\n` +
+      `תשובות: ${stats.replies} · הועברו אליך: ${stats.handoffs}\n${learning}\n\n${lines.join('\n') || '_אין שיחות_'}`);
   }
+  if (text === '7') { menu.open = false; return toAdmin(know.listText(await loadKnowledge(true))); }
+  if (text === '8') { menu.open = false; return toAdmin(know.TEACH_HELP); }
   const steps = { 4: 'pause', 5: 'resume', 6: 'reset' };
   if (steps[text]) { menu.step = steps[text]; return toAdmin('📞 שלח את מספר הטלפון של הלקוח (למשל 0501234567), או *0*.'); }
-  return toAdmin('❓ שלח מספר 1–6, או *0*.');
+  return toAdmin('❓ שלח מספר 1–8, או *0*.');
 }
 
 function inHours() {
@@ -565,21 +704,26 @@ async function onCustomer(msg, text) {
   const phone = c.phone;
   state.remember(chatId, 'user', text);
   c.lastIn = msg.id?._serialized || '';
+  noteCustomerQuestion(chatId, c, text);
 
   if (!cfg?.enabled) return;
-  if (cfg.shadow) return onCustomerShadow(msg, chatId, c, phone, text);
   if (botLabel) {
     // מנוהל לפי הרשימה "בוט": עונים רק שם; לקוח חדש — מצטרף אליה אוטומטית
-    if (!state.data.botActive) return;                               // עצרת לכולם — השיחות אצלך
     let inList = await inBotList(chatId);
     if (!inList && !c.known) {
       c.known = true;
       state.save();
-      if (cfg.auto_new !== false && await looksNew(msg)) inList = await setBotList(chatId, true);
+      if (await looksNew(msg)) {
+        c.customer = true;
+        if (state.data.botActive && cfg.auto_new !== false) inList = await setBotList(chatId, true);
+      }
     }
     c.known = true;
-    if (!inList) return;                                              // שיחה שלך
+    if (inList) c.customer = true;                                    // לקוח — לומדים מהתשובות שלך אליו
+    state.save();
+    if (!state.data.botActive || !inList) return;                     // עצרת לכולם / שיחה שלך
   } else {
+    c.customer = true;                                                // בלי רשימה — הבוט עונה לכולם
     if (!state.data.botActive || c.handedOff) {
       await toAdmin(`💬 *הודעה מ-${phone}*${c.handedOff ? ' (ממתין לנציג)' : ' (הבוט עצור)'}\n💭 ${text}\n🔗 https://wa.me/${phone}`);
       return;
@@ -606,60 +750,6 @@ function schedule(msg, chatId, phone, text, open, delay) {
   }, delay));
 }
 
-// ------------------------------------------------------------------ מצב השוואה (shadow)
-// הבוט לא שולח כלום ללקוח ולא נוגע ברשימות. לכל הודעת לקוח: שואל את ה-AI מה היה עונה, ורושם בדשבורד
-// ליד מה שנשלח בפועל מהמספר (הבוט הקיים / את/ה) — להשוואה, לפני שעוברים.
-
-const THEIRS_WINDOW_MS = 30 * 60e3;   // תשובה "שלהם" נצמדת לשאלה האחרונה בשיחה, עד חצי שעה אחריה
-
-async function onCustomerShadow(msg, chatId, c, phone, text) {
-  const key = msg.id?._serialized;
-  if (!key) return;
-  // רק לקוחות: שיחה ברשימה "בוט" או שיחה חדשה (לא משפחה/חברים — כמו במצב הרגיל). ההחלטה פעם אחת לשיחה.
-  if (c.shadowOk === undefined) {
-    c.shadowOk = Boolean((botLabel && await withTimeout(inBotList(chatId), CALL_TIMEOUT_MS, 'labels').catch(() => false)) ||
-      await looksNew(msg));
-  }
-  if (!c.shadowOk) return;
-  c.lastQ = key;
-  c.lastQAt = Date.now();
-  state.save();
-  srv.compare({ key, phone, question: text }).catch((e) => console.warn('compare:', e.message));
-  if (!state.allowReply(chatId)) return;                              // לא יותר מדי קריאות AI ברצף
-  setTimeout(() => shadowAnswer(msg, chatId, phone, text, key).catch((e) => console.error('shadow:', e.message)), 800);
-}
-
-async function shadowAnswer(msg, chatId, phone, text, key) {
-  let crm = null;
-  try { crm = await srv.customer(phone); } catch { /* לא לקוח */ }
-  const open = inHours();
-  const history = state.chat(chatId).history.slice(0, -1);
-  const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: open,
-    hoursText: cfg.hours, crm, history, text });
-  if (res.error) { stats.ai_errors += 1; status.error = `AI: ${res.error}`; }
-  else if (status.error?.startsWith('AI:')) status.error = '';
-  status.ai = res.ai;
-  let out = res.text || '';
-  if (res.tags.some((t) => t.kind === 'ADDRESS')) {
-    const block = ai.addressBlock(cfg.business_info);
-    if (block) out = `${out ? out + '\n\n' : ''}${block}`;
-  }
-  // הפעולות שהבוט היה עושה — כתובות בסוף, כדי לראות גם אותן בהשוואה
-  const acts = res.tags.map((t) => t.kind === 'HUMAN' ? '[מעביר לנציג]' : t.kind === 'BLOCK' ? `[חוסם: ${t.arg}]` :
-    t.kind === 'ESCALATE' ? `[לאישורך: ${t.arg}]` : '').filter(Boolean);
-  if (acts.length) out = `${out}\n${acts.join(' ')}`.trim();
-  stats.compared = (stats.compared || 0) + 1;
-  await srv.compare({ key, ours: out || '(אין תשובה)' });
-}
-
-/** הודעה שנשלחה מהמספר בשיחה עם לקוח (לא ע"י הבוט שלנו) — "התשובה שלהם" לשאלה האחרונה. */
-async function onTheirReply(chatId, body) {
-  const c = state.data.chats[chatId];
-  if (!c?.lastQ || Date.now() - (c.lastQAt || 0) > THEIRS_WINDOW_MS) return;
-  state.remember(chatId, 'assistant', body);                         // ההיסטוריה = מה שנאמר באמת
-  await srv.compare({ key: c.lastQ, theirs: body }).catch((e) => console.warn('compare:', e.message));
-}
-
 /** הבוט מעביר אליך את השיחה: מוציא אותה מהרשימה "בוט" (או מסמן "ממתין לנציג"). */
 async function handOff(chatId) {
   stats.handoffs += 1;
@@ -670,7 +760,6 @@ async function handOff(chatId) {
 }
 
 async function replyNow(msg, chatId, phone, text, open) {
-  if (cfg?.shadow) return;                                            // מצב השוואה — לא שולחים ללקוחות
   if (botLabel ? !(await inBotList(chatId)) : state.paused(chatId)) return;   // ענית בינתיים / הוצאת מהרשימה
   state.chat(chatId).answered = msg.id?._serialized || '';
   if (!state.allowReply(chatId)) {                                    // הרבה מדי ברצף — מעבירים אליך
@@ -683,8 +772,13 @@ async function replyNow(msg, chatId, phone, text, open) {
   let crm = null;
   try { crm = await srv.customer(phone); } catch { /* לא לקוח — עדיין עונים */ }
   const history = state.chat(chatId).history.slice(0, -1);
+  // מה שלמד ממך: העובדות + שאלות דומות שכבר ענית עליהן (הודעה קצרה — יחד עם ההודעה הקודמת של הלקוח)
+  const prevUser = [...history].reverse().find((h) => h.role === 'user')?.content || '';
+  const sel = know.select(await loadKnowledge(), text.length < 25 && prevUser ? `${prevUser}\n${text}` : text);
   const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: open,
-    hoursText: cfg.hours, crm, history, text });
+    hoursText: cfg.hours, crm, history, text, knowledge: know.promptSection(sel),
+    askWhenUnsure: cfg.ask_when_unsure !== false });
+  if (sel.qas.length) srv.used(sel.qas.map((q) => q.id)).catch(() => {});
   if (res.error) { stats.ai_errors += 1; console.warn('AI:', res.error); status.error = `AI: ${res.error}`; }
   else if (status.error?.startsWith('AI:')) status.error = '';
   status.ai = res.ai;
@@ -712,6 +806,8 @@ async function replyNow(msg, chatId, phone, text, open) {
     } else if (t.kind === 'ESCALATE' && deviceId) {
       await srv.escalate(deviceId, t.arg || text).catch((e) => console.warn('escalate:', e.message));
       await toAdmin(`🔐 *בקשה לאישורך* · ${phone} · מכשיר #${deviceId}\n${t.arg || text}\n(בדשבורד → בקשות)`);
+    } else if (t.kind === 'ASK' && !res.tags.some((x) => x.kind === 'HUMAN')) {
+      await askOwner(chatId, phone, state.chat(chatId).q?.text || text, t.arg);
     }
   }
 }

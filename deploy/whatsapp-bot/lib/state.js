@@ -8,6 +8,8 @@ const fs = require('fs');
 const path = require('path');
 
 const HISTORY = 16;
+const ASK_TTL_MS = 7 * 24 * 3600e3;
+const ASK_MAX = 200;
 
 class State {
   constructor(file) {
@@ -48,6 +50,35 @@ class State {
     if (c.replies.length >= max) return false;
     c.replies.push(now);
     return true;
+  }
+
+  /**
+   * שאלה שהבוט שלח לך (לא ידע לענות ללקוח) — לפי מזהה ההודעה בצ'אט שלך, כדי ש"השב" עליה יחזור ללקוח.
+   * נשמרות שבוע (עד 200).
+   */
+  addAsk(msgId, rec, now = Date.now()) {
+    const asks = this.data.asks || (this.data.asks = {});
+    for (const [k, a] of Object.entries(asks)) if (now - (a.at || 0) > ASK_TTL_MS) delete asks[k];
+    asks[msgId] = { ...rec, at: now };
+    const keys = Object.keys(asks);
+    for (const k of keys.slice(0, Math.max(0, keys.length - ASK_MAX))) delete asks[k];
+    this.save();
+  }
+
+  getAsk(msgId, now = Date.now()) {
+    const a = this.data.asks?.[msgId];
+    return a && now - (a.at || 0) <= ASK_TTL_MS ? a : null;
+  }
+
+  /** כבר שאלת עליו לאחרונה ועוד לא ענית? (לא שולחים לך שאלה חדשה על כל הודעה של אותו לקוח) */
+  openAsk(chatId, withinMs, now = Date.now()) {
+    return Object.values(this.data.asks || {}).find((a) => a.chatId === chatId && !a.answered && now - (a.at || 0) < withinMs) || null;
+  }
+
+  /** ענית ללקוח בעצמך — השאלות הפתוחות עליו נסגרות. */
+  closeAsks(chatId) {
+    for (const a of Object.values(this.data.asks || {})) if (a.chatId === chatId) a.answered = true;
+    this.save();
   }
 
   findByPhone(phone) {

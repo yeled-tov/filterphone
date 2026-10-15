@@ -137,35 +137,48 @@ def test_ai_marker_defaults_and_saves(env):
     assert cfg["mark_ai"] is False and cfg["ai_tag"] == "✦ בוט"
 
 
-def test_shadow_mode_is_on_by_default_and_reaches_the_bot(env):
-    """מצב השוואה מופעל כברירת מחדל — שני בוטים לא יענו לאותו לקוח עד שמחליטים לעבור."""
+def test_learning_settings_default_on_and_reach_the_bot(env):
     _, client = env
     h = admin_headers(client)
-    assert client.get("/v1/admin/wabot", headers=h).json()["shadow"] is True
+    v = client.get("/v1/admin/wabot", headers=h).json()
+    assert v["learn_from_replies"] is True and v["ask_when_unsure"] is True and "shadow" not in v
     set_bot(client)
-    assert client.get("/v1/bot/config", headers=auth(BOT)).json()["shadow"] is True
-    assert client.put("/v1/admin/wabot", headers=h, json={"shadow": False}).json()["shadow"] is False
+    cfg = client.get("/v1/bot/config", headers=auth(BOT)).json()
+    assert cfg["learn_from_replies"] is True and cfg["ask_when_unsure"] is True
+    v = client.put("/v1/admin/wabot", headers=h, json={"learn_from_replies": False}).json()
+    assert v["learn_from_replies"] is False
 
 
-def test_compare_rows_pair_question_ours_and_theirs(env):
-    """שורת השוואה לכל הודעת לקוח: מה הבוט שלנו היה עונה, ומה נענה בפועל (כמה הודעות → מצטרפות)."""
+def test_bot_learns_and_the_admin_manages_knowledge(env):
+    """הבוט שומר שאלה + תשובה שלך / עובדה; המנהל רואה, עורך ומוחק; כפילות לא נשמרת פעמיים."""
     _, client = env
     h = admin_headers(client)
     set_bot(client)
-    post = lambda body: client.post("/v1/bot/compare", headers=auth(BOT), json=body)  # noqa: E731
-    assert post({"key": "m1", "phone": "+972 50-111-2222", "question": "כמה עולה כשר פליי?"}).status_code == 200
-    post({"key": "m1", "ours": "צריבה 70₪ ומנוי 150₪."})
-    post({"key": "m1", "theirs": "שלום!"})
-    post({"key": "m1", "theirs": "המחיר 70₪ לצריבה."})
-    rows = client.get("/v1/admin/wabot/compare", headers=h).json()["rows"]
-    assert len(rows) == 1
-    r = rows[0]
-    assert r["phone"] == "972501112222" and r["question"] == "כמה עולה כשר פליי?"
-    assert r["ours"].startswith("צריבה") and r["theirs"] == "שלום!\nהמחיר 70₪ לצריבה."
-    assert r["ours_at"] and r["theirs_at"]
-    assert client.post("/v1/bot/compare", json={"key": "x"}).status_code == 401
-    assert client.get("/v1/admin/wabot/compare").status_code == 401
-    assert client.delete("/v1/admin/wabot/compare", headers=h).json() == {"deleted": 1}
+    r = client.post("/v1/bot/knowledge", headers=auth(BOT), json={
+        "question": "יש לכם  סינון לאייפון?", "answer": "כן — חסימת אתרים ורשתות, בלי יוטיוב כשר.",
+        "phone": "050-111-2222", "source": "reply"})
+    assert r.status_code == 201
+    qa = r.json()
+    assert qa["kind"] == "qa" and qa["question"] == "יש לכם סינון לאייפון?" and qa["phone"] == "0501112222"
+    client.post("/v1/bot/knowledge", headers=auth(BOT), json={
+        "question": "יש לכם  סינון לאייפון?", "answer": "כן — חסימת אתרים ורשתות, בלי יוטיוב כשר."})
+    f = client.post("/v1/bot/knowledge", headers=auth(BOT), json={"answer": "משלוח לכל הארץ תוך 3 ימי עסקים",
+                                                                  "source": "teach"}).json()
+    assert f["kind"] == "fact" and f["source"] == "teach"
+    items = client.get("/v1/bot/knowledge", headers=auth(BOT)).json()["items"]
+    assert len(items) == 2
+    client.post("/v1/bot/knowledge/used", headers=auth(BOT), json={"ids": [qa["id"]]})
+    admin_items = client.get("/v1/admin/wabot/knowledge", headers=h).json()["items"]
+    assert next(i for i in admin_items if i["id"] == qa["id"])["uses"] == 1
+    e = client.put(f"/v1/admin/wabot/knowledge/{qa['id']}", headers=h, json={"answer": "כן, לאייפון יש סינון."})
+    assert e.json()["answer"] == "כן, לאייפון יש סינון."
+    assert client.post("/v1/admin/wabot/knowledge", headers=h, json={"kind": "qa", "answer": "בלי שאלה"}).status_code == 400
+    assert client.post("/v1/admin/wabot/knowledge", headers=h,
+                       json={"question": "שעות?", "answer": "13:00-15:00"}).json()["source"] == "dashboard"
+    assert client.delete(f"/v1/bot/knowledge/{f['id']}", headers=auth(BOT)).json() == {"deleted": f["id"]}
+    assert client.delete(f"/v1/admin/wabot/knowledge/{f['id']}", headers=h).status_code == 404
+    assert client.get("/v1/bot/knowledge").status_code == 401
+    assert client.get("/v1/admin/wabot/knowledge").status_code == 401
 
 
 def test_status_carries_progress_and_log(env):
