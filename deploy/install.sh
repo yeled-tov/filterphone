@@ -113,6 +113,16 @@ if ! grep -q '^FP_PUBLIC_IP=' "$ETC/filterphone.env"; then
     fi
 fi
 
+# טוקן לבוט הוואטסאפ (שירות fp-wabot ↔ ה-API) — נוצר פעם אחת
+if ! grep -q '^FP_WA_BOT_TOKEN=.' "$ETC/filterphone.env"; then
+    sed -i '/^FP_WA_BOT_TOKEN=[[:space:]]*$/d' "$ETC/filterphone.env"
+    FP_WA_BOT_TOKEN=$(openssl rand -hex 32)
+    printf '\n# נוצר אוטומטית ב-install.sh (%s) — הטוקן של בוט הוואטסאפ (fp-wabot)\nFP_WA_BOT_TOKEN=%s\n' \
+        "$(date +%F)" "$FP_WA_BOT_TOKEN" >> "$ETC/filterphone.env"
+    export FP_WA_BOT_TOKEN
+    log "  נוצר טוקן לבוט הוואטסאפ"
+fi
+
 # ------------------------------------------------------------ 7. Redis
 log "Redis: תקרת זיכרון 512MB, פינוי רק של רשומות קאש (עם תפוגה)"
 redis-cli CONFIG SET maxmemory 512mb >/dev/null
@@ -208,6 +218,10 @@ for _ in $(seq 1 60); do [ -S /run/filterphone/engine.sock ] && break; sleep 1; 
 [ -S /run/filterphone/engine.sock ] || die "המנוע לא עלה — journalctl -u fp-engine"
 systemctl restart fp-proxy.service fp-api.service
 
+# ------------------------------------------------------------ 12א. בוט הוואטסאפ (לא עוצר את ההתקנה)
+log "בוט הוואטסאפ (fp-wabot)"
+bash "$SRC/deploy/wabot_install.sh" || warn "בוט הוואטסאפ לא הותקן — שאר השרת תקין. פרטים למעלה / journalctl -u fp-wabot"
+
 # ------------------------------------------------------------ 13. Caddy
 log "Caddy (HTTPS ל-${FP_PUBLIC_HOST:-api.filterphone.com}) ודף הורדת האפליקציה"
 install -d -m 755 /var/www/filterphone
@@ -229,6 +243,7 @@ for s in fp-engine fp-proxy fp-api adguardhome caddy redis-server wg-quick@wg0; 
     if systemctl is-active --quiet "$s"; then echo "  ✓ $s"; else echo "  ✗ $s"; ok=0; fi
 done
 curl -fsS http://127.0.0.1:8090/health >/dev/null && echo "  ✓ API עונה" || { echo "  ✗ API"; ok=0; }
+systemctl is-active --quiet fp-wabot && echo "  ✓ fp-wabot (בוט וואטסאפ)" || echo "  · fp-wabot לא פעיל (לא חוסם)"
 ss -ltn | grep -q ':8080 ' && echo "  ✓ פרוקסי מאזין על 8080" || { echo "  ✗ פרוקסי"; ok=0; }
 dig +short +time=2 @127.0.0.1 example.com >/dev/null && echo "  ✓ DNS עונה" || { echo "  ✗ DNS"; ok=0; }
 echo "  גיבויים: $BACKUP"

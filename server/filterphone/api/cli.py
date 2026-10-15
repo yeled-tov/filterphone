@@ -4,11 +4,13 @@
     python -m filterphone.api.cli create-code --label "משפחת כהן" --level 1
     python -m filterphone.api.cli import-legacy - < /etc/wireguard/wg0.conf
     python -m filterphone.api.cli sync
+    GROQ=... ENABLE=1 python -m filterphone.api.cli wabot-legacy   (install.sh — מעבר מהבוט הישן)
 """
 from __future__ import annotations
 
 import argparse
 import getpass
+import os
 import re
 import sys
 
@@ -70,6 +72,7 @@ def main() -> None:
     i = sub.add_parser("import-legacy")
     i.add_argument("conf", help="קובץ wg0.conf, או - לקריאה מ-stdin")
     sub.add_parser("sync")
+    sub.add_parser("wabot-legacy", help="מפתח Groq מ-$GROQ, הפעלה אם ENABLE=1")
     args = ap.parse_args()
 
     svc = build_services()
@@ -103,6 +106,9 @@ def main() -> None:
     elif args.cmd == "sync":
         svc.sync_all()
         print("סונכרן")
+    elif args.cmd == "wabot-legacy":
+        from .wabot import import_legacy
+        print("    " + import_legacy(svc, os.environ.get("GROQ", ""), os.environ.get("ENABLE") == "1"))
 
 
 if __name__ == "__main__":

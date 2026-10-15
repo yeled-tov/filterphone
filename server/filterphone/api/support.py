@@ -407,8 +407,9 @@ class SupportDesk:
     def notify_admin(self, message_id: int) -> None:
         """שולח את הפנייה לוואטסאפ של המנהל (רץ ברקע). כשלון לא מאבד את ההודעה — היא בממשק."""
         cfg = self.wa_config()
-        # כשמוגדר בוט לא-רשמי (whatsapp-web.js) — הוא מושך מה-outbox ושולח; לא שולחים גם דרך Cloud API
-        if cfg.bot_token or not cfg.can_send:
+        # כשבוט הוואטסאפ (whatsapp-web.js) מופעל — הוא מושך מה-outbox ושולח; לא שולחים גם דרך Cloud API
+        from .wabot import WaBot
+        if not cfg.can_send or (cfg.bot_token and WaBot(self.svc).settings()["enabled"]):
             return
         with self.svc.db() as c:
             m = c.execute("SELECT m.*, d.name AS device_name, cu.name AS customer FROM support_messages m"

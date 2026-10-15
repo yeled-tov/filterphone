@@ -1,0 +1,26 @@
+# תבנית — deploy/wabot_install.sh ממלא את __NODE__ / __USER__ ומתקין ל-/etc/systemd/system
+[Unit]
+Description=FilterPhone — בוט וואטסאפ (whatsapp-web.js)
+After=network-online.target fp-api.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=__USER__
+Group=__USER__
+WorkingDirectory=/opt/filterphone/wabot
+EnvironmentFile=/etc/filterphone/wabot.env
+ExecStart=__NODE__ /opt/filterphone/wabot/index.js
+Restart=always
+RestartSec=10
+# הבוט סוגר את Chromium בעצמו (SIGTERM); מה שנשאר — נהרג אחרי 30 שניות
+KillMode=mixed
+TimeoutStopSec=30
+MemoryMax=1500M
+Nice=5
+# בלי NoNewPrivileges / ProtectHome: Chromium מ-snap עולה דרך snap-confine וצריך את הבית של המשתמש
+PrivateTmp=no
+
+[Install]
+WantedBy=multi-user.target

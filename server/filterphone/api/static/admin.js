@@ -335,6 +335,7 @@ const ROUTES = {
   overview: ["סקירה", viewOverview],
   requests: ["בקשות הצטרפות ושינוי", viewRequests],
   support: ["תמיכה", viewSupport],
+  wabot: ["בוט וואטסאפ", viewWabot],
   devices: ["מכשירים", viewDevices],
   customers: ["לקוחות", viewCustomers],
   profiles: ["פרופילים מוכנים", viewProfiles],
@@ -1550,16 +1551,10 @@ function whatsappCard(wa) {
   } }, "יצירה");
   const [pub, pubL] = f("public_number", "מספר לפנייה ישירה בוואטסאפ (רשות — מוצג ללקוחות)", { class: "ltr", inputmode: "tel" });
   const [tpl, tplL] = f("template", "תבנית להתראה אחרי 24 שעות (רשות)", { class: "ltr", placeholder: "support_message" });
-  const botIn = el("input", { type: "password", class: "ltr", autocomplete: "off",
-    placeholder: wa.bot_token_set ? "מוגדר — השאירו ריק בלי שינוי" : "טוקן לשירות בוט הוואטסאפ (whatsapp-web.js)" });
-  const genBot = el("button", { class: "ghost small", type: "button", onclick: () => {
-    const b = new Uint8Array(24); crypto.getRandomValues(b);
-    botIn.type = "text"; botIn.value = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-  } }, "יצירה");
   const save = async () => {
     await attempt(() => api("/v1/admin/whatsapp", { method: "PUT", body: {
       admin_number: adminNumber.value, phone_number_id: phoneId.value, token: tokenIn.value, app_secret: secretIn.value,
-      verify_token: verify.value, public_number: pub.value, template: tpl.value, bot_token: botIn.value } }), "נשמר");
+      verify_token: verify.value, public_number: pub.value, template: tpl.value } }), "נשמר");
     render();
   };
   const copy = (v) => navigator.clipboard?.writeText(v).then(() => toast("הועתק"));
@@ -1574,9 +1569,8 @@ function whatsappCard(wa) {
       el("div", { class: "row gap end" }, el("div", { class: "grow" }, verifyL), gen), pubL, tplL),
     el("div", { class: "row gap wrap" }, el("span", { class: "muted small" }, "כתובת ה-Webhook:"),
       el("code", { class: "ltr" }, wa.webhook_url), el("button", { class: "ghost small", onclick: () => copy(wa.webhook_url) }, "העתקה")),
-    el("details", {}, el("summary", {}, `בוט וואטסאפ לא-רשמי (whatsapp-web.js)${wa.bot_token_set ? " — מוגדר ✓" : ""}`),
-      el("p", { class: "muted small" }, "חלופה ל-Cloud API: בוט שמחובר לוואטסאפ הרגיל שלך ב-QR, עונה ללקוחות כשאינך זמין ועוצר כשאתה נכנס. דורש הרצת שירות ה-Node (deploy/whatsapp-bot). שימו לב: API לא-רשמי, בסיכון חסימת מספר."),
-      el("div", { class: "row gap end" }, el("label", { class: "grow" }, "טוקן בוט", botIn), genBot)),
+    el("p", { class: "muted small" }, "בוט שמחובר לוואטסאפ שלך ב-QR ועונה ללקוחות עם AI — בעמוד ",
+      el("a", { href: "#/wabot" }, "בוט וואטסאפ"), "."),
     el("details", {}, el("summary", {}, "איך מחברים (פעם אחת, כרבע שעה)"),
       el("ol", { class: "small steps" },
         el("li", {}, "ב-developers.facebook.com: My Apps → Create app → Business, ומוסיפים את המוצר WhatsApp."),
@@ -1661,6 +1655,169 @@ function gpuCard(g) {
       } }, "הסרה") : null,
       el("button", { class: "ghost", disabled: !g.configured, onclick: (ev) => test(ev.currentTarget) }, "בדיקת חיבור"),
       fromEnv ? null : el("button", { class: "primary", onclick: save }, "שמירה")));
+}
+
+// ---------------------------------------------------------------- בוט וואטסאפ
+
+const WABOT_STATE = {
+  not_running: ["השירות לא רץ בשרת", "bad"], off: ["כבוי", "warn"], starting: ["מתחבר…", "warn"],
+  qr: ["ממתין לסריקת QR", "warn"], ready: ["מחובר", "ok"], disconnected: ["נותק — מתחבר מחדש", "bad"], error: ["שגיאה", "bad"],
+};
+const AI_KEY_LINKS = { gemini: ["https://aistudio.google.com/apikey", "קבלת מפתח Gemini (חינם)"],
+  groq: ["https://console.groq.com/keys", "קבלת מפתח Groq (חינם)"] };
+
+function wabotStatus(v) {
+  const st = v.status || {};
+  const [text, kind] = WABOT_STATE[st.state] || [st.state || "—", ""];
+  const label = st.label || v.label_name || "בוט";
+  const lists = { on: [`רשימת "${label}" פעילה`, "ok"], missing: [`אין רשימה בשם "${label}"`, "warn"],
+    not_business: ["וואטסאפ רגיל — בלי רשימות", "warn"] }[st.labels];
+  const stats = st.stats || {};
+  const parts = [el("div", { class: "chips" }, chip(text, kind),
+    st.me ? chip(`+${st.me}`) : null, st.ai ? chip(`AI: ${st.ai}`) : null,
+    lists ? chip(lists[0], lists[1]) : null, st.version ? chip(`גרסה ${st.version}`) : null)];
+  if (st.error) parts.push(el("p", { class: "error small" }, st.error));
+  if (st.state === "not_running") {
+    parts.push(el("p", { class: "muted small" }, "הבוט מותקן בשרת אוטומטית בהעלאה (deploy). אם זה לא מסתדר תוך כמה דקות — בשרת: journalctl -u fp-wabot -n 50"));
+  } else if (st.state === "off") {
+    parts.push(el("p", { class: "muted small" }, "מדליקים את \"הבוט פעיל\" למטה ושומרים — ותוך כמה שניות מופיע כאן QR לסריקה."));
+  } else if (st.state === "starting") {
+    parts.push(el("p", { class: "muted small" }, "פותח את וואטסאפ ווב בשרת (עד דקה)…"));
+  } else if (st.state === "qr" && v.qr_image) {
+    parts.push(el("div", { class: "stack" },
+      el("img", { class: "qr", alt: "QR לחיבור הוואטסאפ", src: v.qr_image }),
+      el("ol", { class: "small steps" },
+        el("li", {}, "בטלפון: פותחים את וואטסאפ (ביזנס) → ⋮ למעלה → מכשירים מקושרים → קישור מכשיר."),
+        el("li", {}, "סורקים את הקוד. הוא מתחלף כל כמה שניות — העמוד מתעדכן לבד."),
+        el("li", {}, "אחרי הסריקה החיבור נשמר בשרת — לא צריך לסרוק שוב."))));
+  } else if (st.state === "ready") {
+    parts.push(kv([
+      ["תשובות של הבוט", num(stats.replies)], ["הועברו אליך", num(stats.handoffs)],
+      ["פניות מהאפליקציה שהגיעו אליך", num(stats.app_forwarded)], ["ענית ללקוחות באפליקציה", num(stats.app_replies)],
+      stats.ai_errors ? ["שגיאות AI", num(stats.ai_errors)] : null,
+      ["הודעות הבוט אליך", v.notify_to ? `למספר ${v.notify_to}` : "לצ'אט עם עצמך"],
+    ]));
+    if (st.labels === "missing") {
+      parts.push(el("p", { class: "small" }, `כדי לנהל מתוך הוואטסאפ: בוואטסאפ ביזנס → צ'אטים → רשימות → ＋ → רשימה בשם "${label}". עד אז הבוט עונה לכולם ושותק בשיחה שבה כתבת.`));
+    }
+  }
+  return parts;
+}
+
+async function viewWabot() {
+  const v = await api("/v1/admin/wabot");
+  const statusBox = el("div", { class: "stack" }, wabotStatus(v));
+  let lastState = v.status?.state;
+  const refresh = async () => {
+    try {
+      const n = await api("/v1/admin/wabot");
+      statusBox.replaceChildren(...wabotStatus(n));
+      if (n.status?.state !== lastState) {
+        lastState = n.status?.state;
+        autoRefresh(refresh, ["qr", "starting", "disconnected"].includes(lastState) ? 4000 : 15000);
+      }
+    } catch (_) { /* הבא */ }
+  };
+  autoRefresh(refresh, ["qr", "starting", "disconnected"].includes(lastState) ? 4000 : 15000);
+
+  const enabled = el("input", { type: "checkbox", checked: Boolean(v.enabled), "aria-label": "הבוט פעיל" });
+  const provider = el("select", {}, [["gemini", "Gemini של גוגל (מומלץ)"], ["groq", "Groq"], ["none", "בלי AI — תשובה קבועה ומעביר אליך"]]
+    .map(([val, t]) => el("option", { value: val, selected: v.ai_provider === val }, t)));
+  const key = el("input", { type: "password", class: "ltr", autocomplete: "off",
+    placeholder: v.key_set ? `שמור (${v.key_hint || "…"}) — השאירו ריק בלי שינוי` : "מדביקים כאן את המפתח" });
+  const keyLink = el("a", { target: "_blank", rel: "noopener" });
+  const syncLink = () => {
+    const l = AI_KEY_LINKS[provider.value];
+    keyLink.hidden = !l;
+    if (l) { keyLink.href = l[0]; keyLink.textContent = `${l[1]} ↗`; }
+  };
+  provider.addEventListener("change", syncLink);
+  syncLink();
+  const model = el("input", { class: "ltr", value: v.ai_model || "", placeholder: "אוטומטי — המודל המהיר העדכני" });
+  const testOut = el("p", { class: "small" });
+  const botName = el("input", { value: v.bot_name || "", maxlength: 30 });
+  const labelName = el("input", { value: v.label_name || "בוט", maxlength: 30 });
+  const autoNew = el("input", { type: "checkbox", checked: v.auto_new !== false, "aria-label": "לקוח חדש נכנס לרשימה" });
+  const contacts = el("input", { type: "checkbox", checked: Boolean(v.include_contacts), "aria-label": "גם אנשי קשר שמורים" });
+  const handoff = el("input", { type: "number", min: 1, max: 1440, value: v.handoff_minutes || 60, class: "ltr" });
+  const hours = el("input", { class: "ltr", value: v.hours || "", placeholder: "13:00-15:00, 20:00-22:30" });
+  const friday = el("input", { class: "ltr", value: v.friday_until || "", placeholder: "12:00" });
+  const info = el("textarea", { rows: 16, value: v.business_info || "" });
+  const toggleRow = (input, title, sub) => el("div", { class: "opt" }, el("label", { class: "switch" }, input, el("span")),
+    el("div", { class: "txt" }, el("div", { class: "title" }, title), sub ? el("div", { class: "muted small" }, sub) : null));
+
+  const save = async () => {
+    await attempt(() => api("/v1/admin/wabot", { method: "PUT", body: {
+      enabled: enabled.checked, ai_provider: provider.value, ai_key: key.value, ai_model: model.value,
+      bot_name: botName.value, label_name: labelName.value, auto_new: autoNew.checked, include_contacts: contacts.checked,
+      handoff_minutes: Number(handoff.value), hours: hours.value, friday_until: friday.value, business_info: info.value } }),
+    "נשמר — הבוט יקלוט תוך כ-15 שניות");
+    render();
+  };
+  const testKey = async (btn) => {
+    if (key.value.trim()) {
+      toast("קודם שומרים את המפתח — ואז בודקים", true);
+      return;
+    }
+    btn.disabled = true;
+    testOut.className = "small muted";
+    testOut.textContent = "בודק…";
+    try {
+      const r = await api("/v1/admin/wabot/test-ai", { method: "POST" });
+      testOut.className = r.ok ? "small ok-text" : "error small";
+      testOut.textContent = r.message;
+    } catch (e) {
+      testOut.className = "error small";
+      testOut.textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  return [
+    card("חיבור", "הבוט רץ בשרת ומחובר לוואטסאפ שלך כמו וואטסאפ ווב. כאן רואים את המצב, ואת ה-QR לחיבור.", statusBox),
+    card("הבוט", null,
+      toggleRow(enabled, "הבוט פעיל", "כבוי = מתנתק מהוואטסאפ ולא עונה לאף אחד."),
+      el("div", { class: "grid two" },
+        el("label", {}, "המוח (AI)", provider),
+        el("label", {}, "מפתח", key),
+        el("label", {}, "שם הבוט (איך הוא מציג את עצמו)", botName),
+        el("label", {}, "מודל (לא חובה)", model)),
+      el("div", { class: "row gap wrap" }, keyLink,
+        el("span", { class: "muted small" }, "נכנסים עם חשבון גוגל → Create API key → מעתיקים ומדביקים כאן → שמירה → בדיקת מפתח.")),
+      testOut,
+      el("div", { class: "row end gap" },
+        v.key_set ? el("button", { class: "danger small", onclick: async () => {
+          if (!await confirmDialog("למחוק את המפתח?", "הבוט יענה תשובה קבועה ויעביר אליך עד שתזינו מפתח חדש.", "מחיקה", true)) return;
+          await attempt(() => api("/v1/admin/wabot", { method: "PUT", body: { clear_key: true } }), "נמחק");
+          render();
+        } }, "מחיקת המפתח") : null,
+        el("button", { class: "ghost", onclick: (ev) => testKey(ev.currentTarget) }, "בדיקת מפתח"),
+        el("button", { class: "primary", onclick: save }, "שמירה"))),
+    card("ניהול מתוך הוואטסאפ", "בוואטסאפ ביזנס: רשימה (תווית) — השיחות שבה הן של הבוט. בלי לפתוח את הדשבורד.",
+      el("ol", { class: "small steps" },
+        el("li", {}, `לקוח חדש כותב → הבוט מוסיף אותו לרשימה "${v.label_name || "בוט"}" ועונה לו.`),
+        el("li", {}, "נכנסת לשיחה וכתבת בעצמך → הבוט מוציא אותה מהרשימה וזז הצידה."),
+        el("li", {}, `להחזיר את הבוט: בשיחה → הכפתור של הרשימות למעלה → מסמנים "${v.label_name || "בוט"}" → סיום. אם הלקוח מחכה לתשובה — הבוט עונה לו.`),
+        el("li", {}, "לקוח ביקש נציג → הבוט מוציא את השיחה מהרשימה ושולח לך סיכום."),
+        el("li", {}, "תפריט מהיר: כותבים \"בוט\" בצ'אט עם עצמך (עצירה לכולם, סטטוס, ועוד)."),
+        el("li", {}, "פניות מצ'אט התמיכה באפליקציה מגיעות לצ'אט עם עצמך — \"השב\" עליהן והתשובה מגיעה ללקוח באפליקציה.")),
+      el("div", { class: "grid two" },
+        el("label", {}, "שם הרשימה בוואטסאפ", labelName),
+        el("label", {}, "בלי רשימה (וואטסאפ רגיל): כמה דקות הבוט שותק אחרי שכתבת", handoff)),
+      toggleRow(autoNew, "לקוח חדש נכנס לרשימה אוטומטית", "\"חדש\" = מעולם לא כתבת לו. שיחות קיימות שלך — הבוט לא נוגע."),
+      toggleRow(contacts, "גם אנשי קשר שמורים בטלפון", "כבוי (מומלץ): משפחה וחברים ששמורים אצלך לא יקבלו תשובות מהבוט."),
+      el("p", { class: "muted small" }, "אם הפעלת בוואטסאפ ביזנס עוזר AI מובנה (הודעות שמסומנות AI) — כבה אותו, כדי שלא יענו שניים."),
+      el("div", { class: "row end" }, el("button", { class: "primary", onclick: save }, "שמירה"))),
+    card("מה הבוט יודע", "כל מה שכתוב כאן — הבוט משתמש בו בתשובות: מחירים, מסלולים, כתובת, שאלות נפוצות. שורה שמתחילה ב\"כתובת:\" — הבוט שולח גם קישור לוויז ולמפות.",
+      info,
+      el("div", { class: "grid two" },
+        el("label", {}, "שעות פעילות (א'–ה')", hours),
+        el("label", {}, "שישי עד (שבת — סגור)", friday)),
+      el("p", { class: "muted small" }, "בשעות הפעילות, אם אתה פעיל בוואטסאפ, הבוט מחכה 5 שניות לפני שהוא עונה — שתספיק לענות בעצמך. מחוץ לשעות — עונה מיד ואומר מתי חוזרים."),
+      el("div", { class: "row end" }, el("button", { class: "primary", onclick: save }, "שמירה"))),
+    el("p", { class: "muted small" }, "שימו לב: זה חיבור לא-רשמי לוואטסאפ (כמו וואטסאפ ווב). הבוט עונה רק למי שכותב, בקצב אנושי, ומעביר אליך — אבל יש סיכון שוואטסאפ יגביל את המספר."),
+  ];
 }
 
 async function viewSystem() {

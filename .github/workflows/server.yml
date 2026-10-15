@@ -36,6 +36,14 @@ jobs:
         run: pytest -q server/tests
       - name: בדיקת תחביר לסקריפטי ההתקנה
         run: for f in deploy/*.sh; do [ -e "$f" ] || continue; bash -n "$f"; done
+      - name: בוט הוואטסאפ — תחביר ובדיקות יחידה
+        working-directory: deploy/whatsapp-bot
+        run: |
+          node --version
+          for f in index.js lib/*.js; do node --check "$f"; done
+          node --test
+      - name: הדשבורד — תחביר
+        run: node --check server/filterphone/api/static/admin.js
 
   smoke:
     name: בדיקת עשן עם המודלים האמיתיים

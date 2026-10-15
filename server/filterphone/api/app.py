@@ -49,6 +49,7 @@ from .playinfo import PlayInfo
 from .security import RateLimiter
 from .service import LEVEL_NAMES, ApiError, Services, store_seed
 from .support import SupportDesk
+from .wabot import WaBot
 from .wg import WireGuard, WireGuardError
 
 log = logging.getLogger("filterphone.api")
@@ -425,6 +426,34 @@ class WhatsAppIn(BaseModel):
     clear_secrets: bool = False
 
 
+class WaBotIn(BaseModel):
+    enabled: bool | None = None
+    ai_provider: str | None = Field(default=None, max_length=20)
+    ai_key: str | None = Field(default=None, max_length=300)
+    ai_model: str | None = Field(default=None, max_length=80)
+    business_info: str | None = Field(default=None, max_length=6000)
+    hours: str | None = Field(default=None, max_length=120)
+    friday_until: str | None = Field(default=None, max_length=5)
+    handoff_minutes: int | None = None
+    bot_name: str | None = Field(default=None, max_length=30)
+    label_name: str | None = Field(default=None, max_length=30)
+    auto_new: bool | None = None
+    include_contacts: bool | None = None
+    clear_key: bool = False
+
+
+class BotStatusIn(BaseModel):
+    state: str = Field(max_length=20)
+    qr: str = Field(default="", max_length=2000)
+    me: str = Field(default="", max_length=40)
+    error: str = Field(default="", max_length=300)
+    ai: str = Field(default="", max_length=80)
+    version: str = Field(default="", max_length=20)
+    labels: str = Field(default="", max_length=20)
+    label: str = Field(default="", max_length=40)
+    stats: dict[str, int] = Field(default_factory=dict)
+
+
 class BrandingIn(BaseModel):
     org_name: str = Field(min_length=1, max_length=60)
 
@@ -749,7 +778,29 @@ def _routes(app: FastAPI) -> None:
     def gpu_test(svc: SvcDep, _: AdminRow):
         return gpu.test(svc.cfg)
 
+    # --- בוט וואטסאפ: הגדרות ומצב בדשבורד (חיבור ב-QR, מוח ה-AI, מידע העסק) ---
+
+    @app.get("/v1/admin/wabot")
+    def wabot_view(svc: SvcDep, _: AdminRow):
+        return WaBot(svc).admin_view()
+
+    @app.put("/v1/admin/wabot")
+    def wabot_save(body: WaBotIn, svc: SvcDep, admin: AdminRow):
+        return WaBot(svc).save(admin["username"], body.model_dump())
+
+    @app.post("/v1/admin/wabot/test-ai")
+    def wabot_test_ai(svc: SvcDep, _: AdminRow):
+        return WaBot(svc).test_ai()
+
     # --- בוט וואטסאפ לא-רשמי (שירות נפרד, מאומת בטוקן בוט) ---
+
+    @app.get("/v1/bot/config")
+    def bot_config(bot: BotDep):
+        return WaBot(bot.svc).bot_config()
+
+    @app.post("/v1/bot/status")
+    def bot_status(body: BotStatusIn, bot: BotDep):
+        return WaBot(bot.svc).report(body.model_dump())
 
     @app.get("/v1/bot/customer")
     def bot_customer(phone: str, bot: BotDep):

@@ -64,7 +64,7 @@ apk)
     ;;
 status)
     echo "גרסה: $(cat "$A/src/REVISION" 2>/dev/null || echo '?') · קודמת: $(cat "$A/src.prev/REVISION" 2>/dev/null || echo '-')"
-    for s in fp-engine fp-proxy fp-api adguardhome caddy redis-server wg-quick@wg0; do
+    for s in fp-engine fp-proxy fp-api fp-wabot adguardhome caddy redis-server wg-quick@wg0; do
         printf '  %-16s %s\n' "$s" "$(systemctl is-active "$s" || true)"
     done
     df -h / | tail -1
