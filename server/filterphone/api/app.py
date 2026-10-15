@@ -439,6 +439,8 @@ class WaBotIn(BaseModel):
     label_name: str | None = Field(default=None, max_length=30)
     auto_new: bool | None = None
     include_contacts: bool | None = None
+    mark_ai: bool | None = None
+    ai_tag: str | None = Field(default=None, max_length=60)
     clear_key: bool = False
 
 

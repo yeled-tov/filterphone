@@ -535,7 +535,9 @@ async function replyNow(msg, chatId, phone, text, open) {
     if (block) out = `${out ? out + '\n\n' : ''}${block}`;
   }
   if (out) {
-    await send(chatId, out, { typing: true });
+    // סימון שהבוט ענה (כמו הסימון של וואטסאפ) — אם הופעל בדשבורד
+    const tagged = cfg.mark_ai !== false && cfg.ai_tag ? `${out}\n\n${cfg.ai_tag}` : out;
+    await send(chatId, tagged, { typing: true });
     state.remember(chatId, 'assistant', out);
     stats.replies += 1;
   }

@@ -23,7 +23,8 @@ from .service import ApiError, Services
 PROVIDERS = ("gemini", "groq", "none")
 _SECRET = ("ai_key",)
 _FIELDS = ("enabled", "ai_provider", "ai_key", "ai_model", "business_info", "hours", "friday_until",
-           "handoff_minutes", "bot_name", "label_name", "auto_new", "include_contacts")
+           "handoff_minutes", "bot_name", "label_name", "auto_new", "include_contacts",
+           "mark_ai", "ai_tag")
 STATUS_STALE_S = 120            # בלי דיווח מהבוט יותר מזה — "השירות לא רץ"
 
 # מה שהבוט הישן ידע (מחירים, כתובת, שעות) — נקודת התחלה; עורכים בדשבורד
@@ -54,6 +55,8 @@ DEFAULTS: dict = {
     "label_name": "בוט",
     "auto_new": True,                   # לקוח חדש (מעולם לא כתבת לו) — נכנס לרשימה אוטומטית
     "include_contacts": False,          # גם אנשי קשר שמורים בטלפון נחשבים "חדשים"
+    "mark_ai": True,                    # להוסיף סימון בסוף כל הודעה שהבוט ענה (כמו הסימון של וואטסאפ)
+    "ai_tag": "🤖 הודעה אוטומטית",       # הסימון עצמו
 }
 
 _HOURS = re.compile(r"^\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\s*(,\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\s*)*$")
@@ -89,7 +92,7 @@ class WaBot:
             if k not in changes or changes[k] is None:
                 continue
             v = changes[k]
-            if k in ("enabled", "auto_new", "include_contacts"):
+            if k in ("enabled", "auto_new", "include_contacts", "mark_ai"):
                 v = bool(v)
             elif k == "ai_provider":
                 if v not in PROVIDERS:
@@ -128,6 +131,8 @@ class WaBot:
                     raise ApiError(400, "דקות: 1–1440")
             elif k == "bot_name":
                 v = str(v).strip()[:30]
+            elif k == "ai_tag":
+                v = str(v).strip()[:60]
             elif k == "label_name":
                 v = str(v).strip()[:30]
                 if not v:

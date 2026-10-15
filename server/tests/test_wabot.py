@@ -122,3 +122,16 @@ def test_legacy_import_from_install(env, monkeypatch):
     W.import_legacy(svc, groq="gsk_" + "y" * 40, enable=False)
     s = W.WaBot(svc).settings()
     assert s["ai_provider"] == "gemini" and s["ai_key"] == "AIzaSyTESTKEY1234567890" and s["enabled"]
+
+
+def test_ai_marker_defaults_and_saves(env):
+    """סימון AI: מופעל כברירת מחדל עם טקסט, והבוט מקבל אותו."""
+    _, client = env
+    h = admin_headers(client)
+    v = client.get("/v1/admin/wabot", headers=h).json()
+    assert v["mark_ai"] is True and v["ai_tag"]
+    v = client.put("/v1/admin/wabot", headers=h, json={"mark_ai": False, "ai_tag": "✦ בוט"}).json()
+    assert v["mark_ai"] is False and v["ai_tag"] == "✦ בוט"
+    set_bot(client)
+    cfg = client.get("/v1/bot/config", headers=auth(BOT)).json()
+    assert cfg["mark_ai"] is False and cfg["ai_tag"] == "✦ בוט"

@@ -69,13 +69,14 @@ class Option:
     warn: str = ""                              # מה עוד ייפגע — מוצג בממשק
     needs_guard: bool = False                   # עובד רק כשמגן FilterPhone פעיל בטלפון
     protections: tuple[str, ...] = ()           # מפתחות ב-PROTECTIONS — הגנות מיוחדות בטלפון
+    wa_screens: tuple[str, ...] = ()            # מסכים בתוך וואטסאפ שנחסמים לפי תוכן (updates/channels/status)
 
     @property
     def mechanisms(self) -> list[str]:
         m = []
         if self.hosts or self.paths:
             m.append("network")
-        if self.apps or self.screens or self.protections:
+        if self.apps or self.screens or self.protections or self.wa_screens:
             m.append("device")
         if self.images or self.video:
             m.append("proxy")
@@ -90,7 +91,8 @@ class Option:
         return {**self.public(), "hosts": list(self.hosts), "apps": list(self.apps),
                 "screens": [{"package": p, "match": list(m)} for p, m in self.screens],
                 "mechanisms": self.mechanisms, "needs_guard": self.needs_guard,
-                "protections": list(self.protections), "images": self.images, "video": self.video}
+                "protections": list(self.protections), "wa_screens": list(self.wa_screens),
+                "images": self.images, "video": self.video}
 
 
 WA = ("com.whatsapp", "com.whatsapp.w4b")
@@ -123,7 +125,18 @@ OPTIONS: tuple[Option, ...] = (
            "אי אפשר לפתוח סטטוסים. נאכף בטלפון עצמו (מגן FilterPhone), כי וואטסאפ מוריד סטטוסים מאותם "
            "שרתים כמו תמונות בצ'אט. לחסימה מלאה גם של התמונות — 'מדיה בוואטסאפ'.",
            screens=tuple((p, ("status.playback", "StatusPlayback", "statusplayback")) for p in WA),
-           popular=True, needs_guard=True),
+           wa_screens=("status",), popular=True, needs_guard=True),
+    Option("whatsapp_channels", "messaging", "ערוצים בוואטסאפ",
+           "הערוצים בוואטסאפ (Channels) נחסמים — אי אפשר לפתוח ערוץ או את מדריך הערוצים. נאכף בטלפון "
+           "עצמו (מגן FilterPhone). הצ'אטים, הקבוצות והשיחות ממשיכים כרגיל.",
+           screens=tuple((p, ("newsletter", "Newsletter", "channel")) for p in WA),
+           wa_screens=("channels",), needs_guard=True),
+    Option("whatsapp_updates", "messaging", "טאב העדכונים בוואטסאפ (סטטוסים + ערוצים)",
+           "כל טאב 'עדכונים' בוואטסאפ נחסם — ברגע שנכנסים אליו (שם נמצאים גם הסטטוסים וגם הערוצים) "
+           "המגן מחזיר מיד לצ'אטים. נאכף בטלפון עצמו (מגן FilterPhone). כולל את חסימת הסטטוסים והערוצים.",
+           screens=tuple((p, ("status.playback", "StatusPlayback", "statusplayback", "newsletter", "Newsletter"))
+                         for p in WA),
+           wa_screens=("updates", "status", "channels"), popular=True, needs_guard=True),
     Option("whatsapp_media", "messaging", "מדיה בוואטסאפ (תמונות, סרטונים, סטטוסים)",
            "תמונות, סרטונים וסטטוסים לא יורדים. ההודעות הכתובות והשיחות עובדות.",
            hosts=("mmg.whatsapp.net", "mmg-fna.whatsapp.net", "media*.whatsapp.net"),
@@ -802,6 +815,7 @@ class Compiled:
     network_only_unknown: tuple[str, ...] = ()  # אפליקציות "ברשת" בלי שרתים ידועים — אין מה לחסום
     split_apps: tuple[str, ...] = ()            # חסומות רק במסכים שלהן (SPLIT_APPS), לא כאפליקציה שלמה
     accessibility_only: tuple[str, ...] = ()    # חסומות בנגישות בלבד — לא מוסתרות במנהל המכשיר
+    wa_screens: tuple[str, ...] = ()            # מסכים בוואטסאפ שנחסמים לפי תוכן (updates/channels/status)
 
     def proxy_json(self, level: int) -> str:
         """מה שהפרוקסי קורא (fp:policy ב-Redis)."""
@@ -828,6 +842,7 @@ class Compiled:
             "keywords": self.keywords,
             "vpn_bypass": self.vpn_bypass,
             "accessibility_only": list(self.accessibility_only),
+            "wa_screens": list(self.wa_screens),
         }
 
 
@@ -871,6 +886,7 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         split_apps=tuple(split),
         accessibility_only=tuple(sorted(p for p, full in ACCESSIBILITY_ONLY_APPS.items()
                                         if p in device_apps and full not in s.options)),
+        wa_screens=tuple(sorted({k for o in opts for k in o.wa_screens})),
     )
 
 

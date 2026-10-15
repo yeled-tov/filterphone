@@ -1742,6 +1742,8 @@ async function viewWabot() {
   const model = el("input", { class: "ltr", value: v.ai_model || "", placeholder: "אוטומטי — המודל המהיר העדכני" });
   const testOut = el("p", { class: "small" });
   const botName = el("input", { value: v.bot_name || "", maxlength: 30 });
+  const markAi = el("input", { type: "checkbox", checked: v.mark_ai !== false, "aria-label": "סימון שהבוט ענה" });
+  const aiTag = el("input", { value: v.ai_tag || "", maxlength: 60, placeholder: "🤖 הודעה אוטומטית" });
   const labelName = el("input", { value: v.label_name || "בוט", maxlength: 30 });
   const autoNew = el("input", { type: "checkbox", checked: v.auto_new !== false, "aria-label": "לקוח חדש נכנס לרשימה" });
   const contacts = el("input", { type: "checkbox", checked: Boolean(v.include_contacts), "aria-label": "גם אנשי קשר שמורים" });
@@ -1756,6 +1758,7 @@ async function viewWabot() {
     await attempt(() => api("/v1/admin/wabot", { method: "PUT", body: {
       enabled: enabled.checked, ai_provider: provider.value, ai_key: key.value, ai_model: model.value,
       bot_name: botName.value, label_name: labelName.value, auto_new: autoNew.checked, include_contacts: contacts.checked,
+      mark_ai: markAi.checked, ai_tag: aiTag.value,
       handoff_minutes: Number(handoff.value), hours: hours.value, friday_until: friday.value, business_info: info.value } }),
     "נשמר — הבוט יקלוט תוך כ-15 שניות");
     render();
@@ -1792,6 +1795,8 @@ async function viewWabot() {
       el("div", { class: "row gap wrap" }, keyLink,
         el("span", { class: "muted small" }, "נכנסים עם חשבון גוגל → Create API key → מעתיקים ומדביקים כאן → שמירה → בדיקת מפתח.")),
       testOut,
+      toggleRow(markAi, "סימון שהבוט ענה (כמו הסימון של וואטסאפ)", "בסוף כל הודעה אוטומטית מתווסף הסימון שלמטה — כך אתה (והלקוח) רואים שזו תשובה של הבוט."),
+      el("label", {}, "הסימון", aiTag),
       el("div", { class: "row end gap" },
         v.key_set ? el("button", { class: "danger small", onclick: async () => {
           if (!await confirmDialog("למחוק את המפתח?", "הבוט יענה תשובה קבועה ויעביר אליך עד שתזינו מפתח חדש.", "מחיקה", true)) return;

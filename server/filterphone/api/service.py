@@ -59,7 +59,7 @@ log = logging.getLogger("filterphone.api")
 ORG_NAME_DEFAULT = "פילטר פון"     # מוצג בטלפון: "המכשיר הזה שייך ל-פילטר פון"
 
 # ---- החנות
-STORE_SEED_VERSION = 2
+STORE_SEED_VERSION = 3
 STORE_MEDIA_TTL_S = 30 * 86400          # תמונות חנות מסוננות נשמרות חודש (כתובת חדשה = קובץ חדש)
 STORE_MEDIA_MAX_BYTES = 3_000_000
 FT_STORE, FT_FULL = "com.filtertube.filtertube", "com.filtertube.app"
@@ -72,6 +72,7 @@ FT_DESC = (
     "• רמה 3 — בסיסי: חסימת תוכן בוטה בלבד.\n\n"
     "את הרמה בוחרים בתוך FilterTube. היא מחליפה את יוטיוב הרגיל (שנחסם לפי ההגדרות שלכם)."
 )
+FT_NOTE = "יוטיוב כשר עם 3 רמות סינון — התקנה ישירה (העלו את ה-APK בדשבורד)."
 # הזריעה של גרסה 1 (כפי שהייתה) — כדי לזהות מה המנהל עוד לא שינה
 _FT_V1 = (
     {"package": FT_STORE, "label": "FilterTube — גרסת החנות", "category": "וידאו",
@@ -85,9 +86,8 @@ _FT_V1 = (
 @functools.lru_cache(maxsize=1)
 def _play_titles() -> dict[str, list[str]]:
     seed = store_seed()
-    out = {a["package"]: a.get("play_titles", []) for a in seed["apps"]}
-    out[seed["filtertube_play"]["package"]] = seed["filtertube_play"].get("play_titles", [])
-    return out
+    # FilterTube מותקנת ישירות (לא מ-Google Play) — לכן לא נכללת ברשימת הכותרות של חלון ה-Play.
+    return {a["package"]: a.get("play_titles", []) for a in seed["apps"]}
 
 
 @functools.lru_cache(maxsize=1)
@@ -1504,6 +1504,8 @@ class Services:
                 self._seed_store_v1(c)
             if have < 2:
                 self._seed_store_v2(c)
+            if have < 3:
+                self._seed_store_v3(c)
             c.execute("INSERT INTO meta (key, value) VALUES ('store_seed_version', ?)"
                       " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(STORE_SEED_VERSION),))
         log.info("store seeded up to version %d", STORE_SEED_VERSION)
@@ -1552,6 +1554,30 @@ class Services:
                 " play_url, sort, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (a["package"], a["label"], a["category"], a["note"], a["description"], a["icon_url"],
                  json.dumps(a["screenshots"]), a["play_url"], a["sort"], t, t))
+
+    @staticmethod
+    def _seed_store_v3(c: sqlite3.Connection) -> None:
+        """FilterTube חוזרת להיות הגרסה הפרוצה של המנהל — מתארחת אצלנו ומותקנת ישירות (לא מ-Google Play).
+        גרסה 2 קישרה אותה בטעות ל-Google Play (אותו שם חבילה — com.filtertube.app). מנקים את הקישור
+        ואת תמונות ה-Play, ומאחדים לכרטיס אחד. את ה-APK הפרוץ המנהל מעלה בדשבורד. לא דורסים עריכות ידניות."""
+        t = db.now()
+        play = f"https://play.google.com/store/apps/details?id={FT_FULL}"
+        # com.filtertube.app: מנתקים מ-Google Play וממירים לכרטיס "התקנה ישירה" (רק אם עדיין זהה לזריעת v2)
+        c.execute(
+            "UPDATE managed_apps SET play_url = '',"
+            " icon_url = CASE WHEN icon_url = ? THEN '' ELSE icon_url END,"
+            " screenshots = CASE WHEN screenshots = ? THEN '[]' ELSE screenshots END,"
+            " label = CASE WHEN label = 'FilterTube' THEN ? ELSE label END,"
+            " note = CASE WHEN note = ? THEN ? ELSE note END, updated_at = ?"
+            " WHERE package = ? AND play_url = ?",
+            (store_seed()["filtertube_play"]["icon_url"],
+             json.dumps(store_seed()["filtertube_play"]["screenshots"]),
+             "FilterTube — יוטיוב כשר", "יוטיוב כשר עם 3 רמות סינון — מ-Google Play.", FT_NOTE,
+             t, FT_FULL, play))
+        # com.filtertube.filtertube: הכרטיס הכפול של v2 — מוחקים רק אם לא נערך ולא הועלה אליו APK
+        c.execute(
+            "DELETE FROM managed_apps WHERE package = ? AND play_url = '' AND (apk_url IS NULL OR apk_url = '')"
+            " AND label = 'FilterTube — הגרסה המלאה'", (FT_STORE,))
 
     # ------------------------------------------------------------ תמונות החנות — דרך מסנן התמונות
 

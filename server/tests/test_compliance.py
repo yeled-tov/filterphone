@@ -770,18 +770,17 @@ def test_galaxy_store_is_in_the_catalog():
     assert "com.sec.android.app.samsungapps" in CATALOG["galaxy_store"].apps
 
 
-def test_filtertube_is_seeded_into_the_store_with_description(env):
+def test_filtertube_is_seeded_as_direct_install_not_play(env):
     svc, client = env
     h = admin_headers(client)
     apps = {a["package"]: a for a in client.get("/v1/admin/apps", headers=h).json()["apps"]}
-    assert "com.filtertube.app" in apps and "com.filtertube.filtertube" in apps
-    play, full = apps["com.filtertube.app"], apps["com.filtertube.filtertube"]
-    assert "שלוש רמות" in full["description"] and full["category"] == play["category"] == "מדיה"
-    # ב-Google Play נמצאת com.filtertube.app; com.filtertube.filtertube — התקנה ישירה בלבד
-    assert play["play_url"] == "https://play.google.com/store/apps/details?id=com.filtertube.app"
-    assert full["play_url"] == "" and play["icon_url"].startswith("https://play-lh.googleusercontent.com/")
+    # FilterTube הפרוצה — מתארחת אצלנו, התקנה ישירה (לא מ-Google Play); כרטיס אחד
+    assert "com.filtertube.app" in apps and "com.filtertube.filtertube" not in apps
+    ft = apps["com.filtertube.app"]
+    assert "שלוש רמות" in ft["description"] and ft["category"] == "מדיה"
+    assert ft["play_url"] == "" and ft["icon_url"] == ""
     # הזריעה חד-פעמית: מחיקה לא גוררת זריעה מחדש
-    client.delete(f"/v1/admin/apps/{apps['com.filtertube.app']['id']}", headers=h)
+    client.delete(f"/v1/admin/apps/{ft['id']}", headers=h)
     svc.seed_store()
     assert "com.filtertube.app" not in {a["package"] for a in client.get("/v1/admin/apps", headers=h).json()["apps"]}
 
