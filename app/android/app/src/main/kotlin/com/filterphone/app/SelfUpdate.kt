@@ -328,6 +328,11 @@ object SelfUpdate {
     fun available(context: Context): Map<String, String>? {
         val p = prefs(context)
         if (p.getString(K_STATE, null) != "available") return null
+        // כבר עודכן (התקנה ידנית מדף ההורדה) — לא מחכים לתשובה מהשרת כדי להוריד את ההודעה
+        if (installedVersionCode(context) >= p.getLong(K_CODE, Long.MAX_VALUE)) {
+            clear(context)
+            return null
+        }
         val page = p.getString(K_PAGE, null) ?: return null
         return mapOf("version" to (p.getString(K_VERSION, null) ?: ""), "page" to page)
     }

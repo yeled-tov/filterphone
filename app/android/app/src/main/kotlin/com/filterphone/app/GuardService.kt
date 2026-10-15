@@ -53,10 +53,52 @@ class GuardService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        markAlive(force = true)
-        reconfigure()
-        recheckNow()
+        safely("connect") {
+            markAlive(force = true)
+            reconfigure()
+            recheckNow()
+        }
         Recovery.syncSoon(this)            // לדווח לשרת שהמגן חזר
+    }
+
+    /**
+     * המגן רץ באותו תהליך כמו ה-VPN: חריגה כאן הייתה מפילה את התהליך — ואיתו את המנהרה, כלומר את
+     * האינטרנט בכל הטלפון. לכן כל אירוע / משימה של המגן עטופים: תקלה נרשמת, מדווחת לשרת, ונמשכים.
+     */
+    private inline fun safely(where: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            if (t is OutOfMemoryError) throw t
+            onGuardError(where, t)
+        }
+    }
+
+    private var lastGuardErrorAt = 0L
+
+    private fun onGuardError(where: String, t: Throwable) {
+        Log.e(TAG, "guard $where failed", t)
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastGuardErrorAt < 60_000) return            // לא מציפים את האחסון ברצף תקלות
+        lastGuardErrorAt = now
+        runCatching {
+            ProtectionState.inc(this, ProtectionState.GUARD_ERRORS)
+            ProtectionState.setString(this, ProtectionState.GUARD_ERROR,
+                "$where: ${t.javaClass.simpleName} ${t.message.orEmpty()}".take(80))
+        }
+    }
+
+    /** "המגן צריך לפעול" (מכשיר רשום, בלי השהיה) — נבדק לכל היותר פעם ב-5 שניות (קריאה ל-Keystore). */
+    private var wantedAt = 0L
+    private var wantedValue = false
+
+    private fun guardWanted(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (now - wantedAt > 5_000) {
+            wantedValue = runCatching { AccessibilityGuard.wanted(this) }.getOrDefault(false)
+            wantedAt = now
+        }
+        return wantedValue
     }
 
     /**
@@ -70,7 +112,7 @@ class GuardService : AccessibilityService() {
 
     private fun reconfigure() {
         val policy = GuardPolicy.get(this)
-        val wantContent = wantsContent(foreground, policy) || (settingsOpen && AccessibilityGuard.wanted(this))
+        val wantContent = wantsContent(foreground, policy) || (settingsOpen && guardWanted())
         scanKeywords = policy.keywords != null
         if (scanKeywords && keywordVersion != policy.version) {
             keywordDetector = KeywordDetector(policy.keywords!!.terms)
@@ -91,6 +133,10 @@ class GuardService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        safely("event") { handleEvent(event) }
+    }
+
+    private fun handleEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val pkg = event.packageName?.toString() ?: return
         // מצב תחזוקה (השהיה שהמנהל אישר): המגן לא חוסם עד שהתוקף פג. עדיין מסמנים "חי".
@@ -135,7 +181,7 @@ class GuardService : AccessibilityService() {
      * ממנו ל"מידע על האפליקציה" / "השהיית אפליקציה" / הסרה). שאר האפליקציות — כרגיל.
      */
     private fun onLongClick(pkg: String, event: AccessibilityEvent) {
-        if (pkg == packageName || !AccessibilityGuard.wanted(this) || !isLauncher(pkg)) return
+        if (pkg == packageName || !guardWanted() || !isLauncher(pkg)) return
         val texts = ArrayList<String>(4)
         event.text?.forEach { t -> t?.toString()?.let(texts::add) }
         event.contentDescription?.toString()?.let(texts::add)
@@ -156,15 +202,15 @@ class GuardService : AccessibilityService() {
     }
 
     private val closeLauncherMenu = Runnable {
-        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return@Runnable
-        try {
-            if (root.packageName?.toString() == launcherMenuPkg && SelfProtect.isLauncherMenu(collectTexts(root))) {
-                performGlobalAction(GLOBAL_ACTION_BACK)
+        safely("launcher-menu") {
+            val root = runCatching { rootInActiveWindow }.getOrNull() ?: return@safely
+            try {
+                if (root.packageName?.toString() == launcherMenuPkg && SelfProtect.isLauncherMenu(collectTexts(root))) {
+                    performGlobalAction(GLOBAL_ACTION_BACK)
+                }
+            } finally {
+                recycle(root)
             }
-        } catch (e: Exception) {
-            // לא קריטי
-        } finally {
-            recycle(root)
         }
     }
 
@@ -175,7 +221,7 @@ class GuardService : AccessibilityService() {
     private fun trackSettings(pkg: String) {
         if (pkg == packageName || pkg == SYSTEM_UI || isIme(pkg)) return
         val open = pkg in SETTINGS_PACKAGES
-        if (open && AccessibilityGuard.wanted(this)) {
+        if (open && guardWanted()) {
             main.removeCallbacks(settingsRecheck)
             main.postDelayed(settingsRecheck, 400)
             main.postDelayed(settingsRecheck, 1_100)
@@ -187,7 +233,6 @@ class GuardService : AccessibilityService() {
     }
 
     private fun onSettingsContent(pkg: String) {
-        if (!AccessibilityGuard.wanted(this)) return
         val now = SystemClock.elapsedRealtime()
         if (now - lastSettingsScanAt < SCAN_EVERY_MS) {
             // רצף שינויים — בודקים שוב בסופו (שלא יפוספס המצב האחרון של הדף)
@@ -196,25 +241,37 @@ class GuardService : AccessibilityService() {
             return
         }
         lastSettingsScanAt = now
+        if (!guardWanted()) return
         if (!guardSelf(pkg, null)) guardCritical(pkg)
     }
 
     private val settingsRecheck = Runnable {
-        if (!AccessibilityGuard.wanted(this)) return@Runnable
-        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return@Runnable
-        val p = root.packageName?.toString()
-        recycle(root)
-        if (p != null && p in SETTINGS_PACKAGES) {
-            lastSettingsScanAt = SystemClock.elapsedRealtime()
-            if (!guardSelf(p, null)) guardCritical(p)
+        safely("settings-recheck") {
+            if (AdminState.isPaused(this) || !guardWanted()) return@safely
+            val root = runCatching { rootInActiveWindow }.getOrNull() ?: return@safely
+            val p = root.packageName?.toString()
+            recycle(root)
+            if (p != null && p in SETTINGS_PACKAGES) {
+                lastSettingsScanAt = SystemClock.elapsedRealtime()
+                if (!guardSelf(p, null)) guardCritical(p)
+            }
         }
     }
 
-    private fun isIme(pkg: String): Boolean =
-        runCatching {
-            android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD)
-                ?.startsWith("$pkg/") == true
-        }.getOrDefault(false)
+    private var imePkg: String? = null
+    private var imeAt = 0L
+
+    private fun isIme(pkg: String): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (now - imeAt > 60_000) {
+            imePkg = runCatching {
+                android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.DEFAULT_INPUT_METHOD)
+                    ?.substringBefore('/')
+            }.getOrNull()
+            imeAt = now
+        }
+        return pkg == imePkg
+    }
 
     /**
      * המשתמש הקליד בשדה (חיפוש, כתובת, כל שדה טקסט): אם מה שהוקלד מכיל מילה חסומה — חזרה אחורה,
@@ -239,7 +296,7 @@ class GuardService : AccessibilityService() {
      * (כשהמגן פעיל) — נסגר. בהשהיה שהמנהל אישר, או כשהמכשיר לא רשום — לא חוסמים.
      */
     private fun guardSelf(pkg: String, cls: String?): Boolean {
-        if (pkg !in SETTINGS_PACKAGES || !AccessibilityGuard.wanted(this)) return false
+        if (pkg !in SETTINGS_PACKAGES || !guardWanted()) return false
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
         try {
             if (root.packageName?.toString() !in SETTINGS_PACKAGES) return false
@@ -265,7 +322,7 @@ class GuardService : AccessibilityService() {
      * VPN — זה החור שנסגר.) בהשהיה שהמנהל אישר כבר לא מגיעים לכאן (נבדק למעלה).
      */
     private fun guardCritical(pkg: String): Boolean {
-        if (pkg !in SETTINGS_PACKAGES || !AccessibilityGuard.wanted(this)) return false
+        if (pkg !in SETTINGS_PACKAGES || !guardWanted()) return false
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
         try {
             if (root.packageName?.toString() !in SETTINGS_PACKAGES) return false
@@ -400,8 +457,9 @@ class GuardService : AccessibilityService() {
     }
 
     private val playRecheck = Runnable {
-        val p = GuardPolicy.get(this)
-        if (!AdminState.isPaused(this)) guardPlay(PlayLock.PLAY, p, fromContent = false)
+        safely("play-recheck") {
+            if (!AdminState.isPaused(this)) guardPlay(PlayLock.PLAY, GuardPolicy.get(this), fromContent = false)
+        }
     }
 
     /**
@@ -456,16 +514,18 @@ class GuardService : AccessibilityService() {
 
     /** כל עוד הדף מוצג: יצאו מ-Play / החלון נגמר / השהיה מאושרת — הדף יורד (גם בלי אירוע). */
     private val curtainCheck: Runnable = Runnable {
-        if (!curtain.isShown) return@Runnable
-        val now = SystemClock.elapsedRealtime()
-        val root = runCatching { rootInActiveWindow }.getOrNull()
-        val p = root?.packageName?.toString()
-        root?.let { recycle(it) }
-        if (AdminState.isPaused(this) || PlayLock.active(now) == null ||
-            (p != null && p != PlayLock.PLAY && p != packageName)) {
-            hideCurtain()
-        } else {
-            main.postDelayed(curtainCheck, CURTAIN_CHECK_MS)
+        safely("curtain-check") {
+            if (!curtain.isShown) return@safely
+            val now = SystemClock.elapsedRealtime()
+            val root = runCatching { rootInActiveWindow }.getOrNull()
+            val p = root?.packageName?.toString()
+            root?.let { recycle(it) }
+            if (AdminState.isPaused(this) || PlayLock.active(now) == null ||
+                (p != null && p != PlayLock.PLAY && p != packageName)) {
+                hideCurtain()
+            } else {
+                main.postDelayed(curtainCheck, CURTAIN_CHECK_MS)
+            }
         }
     }
 

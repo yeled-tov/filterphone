@@ -121,7 +121,7 @@ _HB_SECTIONS = {
     "vpn": {"state": str, "handshake_age_s": int, "always_on": bool, "lockdown": bool, "last_health_ok": int,
             "reconnects": int, "error": str},
     "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool,
-                      "self_heal": bool, "restored": int},
+                      "self_heal": bool, "restored": int, "errors": int, "error": str},
     "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
     "dpc": {"applied": list, "failed": list, "always_on_vpn": str, "lockdown": bool, "frp": bool},
     "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int,

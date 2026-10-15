@@ -46,6 +46,8 @@ object Sync {
             .put("required", needsAccessibility)
             .put("self_heal", AccessibilityGuard.canHeal(context))
             .put("restored", ProtectionState.count(context, ProtectionState.GUARD_RESTORED))
+            .put("errors", ProtectionState.count(context, ProtectionState.GUARD_ERRORS))
+            .apply { ProtectionState.string(context, ProtectionState.GUARD_ERROR)?.let { put("error", it.take(80)) } }
 
         val o = JSONObject()
             .put("app_version", runCatching { pm.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "")

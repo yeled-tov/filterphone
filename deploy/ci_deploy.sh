@@ -128,7 +128,7 @@ for d in rows:
         hb = json.loads(d.get("heartbeat") or "{}")
     except Exception:
         pass
-    keep = {k: hb.get(k) for k in ("app_version", "via_vpn", "vpn", "tunnel", "device_owner", "guard", "policy_version",
+    keep = {k: hb.get(k) for k in ("app_version", "via_vpn", "vpn", "accessibility", "device_owner", "guard", "policy_version",
                                    "policy_error", "always_on", "lockdown", "error", "network") if k in hb}
     h = hs.get(d["public_key"], 0)
     print(f"#{d['id']} {d['name']!r} status={d['status']}/{d.get('disabled_reason','')} app={d['app_version']} "
