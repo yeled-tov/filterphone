@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Base64
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
+import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -13,20 +14,11 @@ import java.security.cert.Certificate
 import java.security.cert.CertificateFactory
 import java.security.spec.PKCS8EncodedKeySpec
 import java.util.Date
-import java.util.Random
-import sun.security.x509.AlgorithmId
-import sun.security.x509.CertificateAlgorithmId
-import sun.security.x509.CertificateExtensions
-import sun.security.x509.CertificateSerialNumber
-import sun.security.x509.CertificateValidity
-import sun.security.x509.CertificateVersion
-import sun.security.x509.CertificateX509Key
-import sun.security.x509.KeyIdentifier
-import sun.security.x509.PrivateKeyUsageExtension
-import sun.security.x509.SubjectKeyIdentifierExtension
-import sun.security.x509.X500Name
-import sun.security.x509.X509CertImpl
-import sun.security.x509.X509CertInfo
+import org.bouncycastle.asn1.x500.X500Name
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 
 /**
  * מנהל חיבור ה-ADB המקומי של FilterPhone (libadb-android). משמש את [WirelessSetup] כדי להתחבר
@@ -58,13 +50,12 @@ object AdbManager {
         manager = null
     }
 
-    private class Manager(private val app: Context) : AbsAdbConnectionManager() {
+    private class Manager(app: Context) : AbsAdbConnectionManager() {
         private val keyPair: KeyPair = loadOrCreate(app)
-        private val cert: Certificate
+        private val cert: Certificate = loadCert(app) ?: selfSigned(app, keyPair)
 
         init {
             setApi(Build.VERSION.SDK_INT)
-            cert = loadCert(app) ?: selfSigned(app, keyPair)
         }
 
         override fun getPrivateKey(): PrivateKey = keyPair.private
@@ -78,13 +69,12 @@ object AdbManager {
     private fun loadOrCreate(context: Context): KeyPair {
         val p = prefs(context)
         val stored = p.getString(K_KEY, null)
-        if (stored != null) {
+        val cert = loadCert(context)
+        if (stored != null && cert != null) {
             runCatching {
                 val kf = KeyFactory.getInstance("RSA")
                 val priv = kf.generatePrivate(PKCS8EncodedKeySpec(Base64.decode(stored, Base64.NO_WRAP)))
-                // המפתח הציבורי נגזר מהתעודה
-                val cert = loadCert(context)
-                if (cert != null) return KeyPair(cert.publicKey, priv)
+                return KeyPair(cert.publicKey, priv)
             }
         }
         val kpg = KeyPairGenerator.getInstance("RSA")
@@ -106,31 +96,16 @@ object AdbManager {
         }.getOrNull()
     }
 
-    /** תעודה חתומה-עצמית ל-ADB (כמו ש-adb במחשב יוצר). sun.security.x509 מגיע מ-sun-security-android. */
+    /** תעודה חתומה-עצמית ל-ADB (כמו ש-adb במחשב יוצר) — BouncyCastle, בלי לרשום ספק גלובלי. */
     private fun selfSigned(context: Context, kp: KeyPair): Certificate {
-        val algorithm = "SHA512withRSA"
         val now = Date()
         val expiry = Date(now.time + 10L * 365 * 24 * 3600 * 1000)   // 10 שנים
         val name = X500Name("CN=$DEVICE")
-        val extensions = CertificateExtensions()
-        extensions.set(
-            SubjectKeyIdentifierExtension.NAME,
-            SubjectKeyIdentifierExtension(KeyIdentifier(kp.public).identifier),
-        )
-        extensions.set(PrivateKeyUsageExtension.NAME, PrivateKeyUsageExtension(now, expiry))
-        val info = X509CertInfo()
-        info.set(X509CertInfo.VERSION, CertificateVersion(CertificateVersion.V3))
-        info.set(X509CertInfo.SERIAL_NUMBER, CertificateSerialNumber(Random().nextInt() and 0x7fffffff))
-        info.set(X509CertInfo.ALGORITHM_ID, CertificateAlgorithmId(AlgorithmId.get(algorithm)))
-        info.set(X509CertInfo.SUBJECT, name)
-        info.set(X509CertInfo.KEY, CertificateX509Key(kp.public))
-        info.set(X509CertInfo.VALIDITY, CertificateValidity(now, expiry))
-        info.set(X509CertInfo.ISSUER, name)
-        info.set(X509CertInfo.EXTENSIONS, extensions)
-        val certImpl = X509CertImpl(info)
-        certImpl.sign(kp.private, algorithm)
-        // נשמר כדי שהמפתח הציבורי יתאים בפעם הבאה
-        prefs(context).edit().putString(K_CERT, Base64.encodeToString(certImpl.encoded, Base64.NO_WRAP)).apply()
-        return certImpl
+        val serial = BigInteger.valueOf(System.currentTimeMillis())
+        val builder = JcaX509v3CertificateBuilder(name, serial, now, expiry, name, kp.public)
+        val signer = JcaContentSignerBuilder("SHA256withRSA").build(kp.private)
+        val cert = JcaX509CertificateConverter().setProvider(BouncyCastleProvider()).getCertificate(builder.build(signer))
+        prefs(context).edit().putString(K_CERT, Base64.encodeToString(cert.encoded, Base64.NO_WRAP)).apply()
+        return cert
     }
 }

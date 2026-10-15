@@ -10,9 +10,8 @@
 -dontwarn io.github.muntashirakon.adb.**
 -keep class org.conscrypt.** { *; }
 -dontwarn org.conscrypt.**
--keep class sun.security.** { *; }
--dontwarn sun.security.**
 -keep class org.lsposed.hiddenapibypass.** { *; }
 -dontwarn org.lsposed.hiddenapibypass.**
+-keep class org.bouncycastle.** { *; }
 -dontwarn org.bouncycastle.**
--dontwarn org.spongycastle.**
+-dontwarn javax.naming.**
