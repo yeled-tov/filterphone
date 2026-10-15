@@ -159,13 +159,16 @@ abstract class NativeBridge {
   /// התקדמות התקנות בטלפון בזמן אמת (גם של Google Play, כשאנדרואיד חושף אותה).
   Stream<InstallProgress> installProgress();
 
-  /// מצב Shizuku (ניפוי אלחוטי / adb): {available, permitted, version}.
-  Future<Map<String, Object?>> shizukuStatus();
+  /// האם ניפוי אלחוטי נתמך (אנדרואיד 11+) — להקמה בלי מחשב ובלי אפליקציה חיצונית.
+  Future<bool> wirelessSupported();
 
-  /// מבקש הרשאת Shizuku (חלון של אפליקציית Shizuku). מחזיר {available, permitted}.
-  Future<Map<String, Object?>> shizukuRequestPermission();
+  /// פותח את "אפשרויות מפתחים" (משם ל"ניפוי באגים אלחוטי").
+  Future<bool> openDeveloperOptions();
 
-  /// הקמה בלחיצה אחת: כל מה שאפשר בלי מגע (root / Shizuku / מנהל מכשיר). מחזיר מה הושלם.
+  /// הקמה בניפוי אלחוטי: קוד התאמה (6 ספרות) ופורט (0 = לגלות ב-mDNS). מבצע הכול ומחזיר מה הושלם.
+  Future<Map<String, Object?>> provisionWireless(String code, int port, String? caPem);
+
+  /// הקמה בלחיצה אחת: כל מה שאפשר בלי מגע (root / מנהל מכשיר). מחזיר מה הושלם.
   Future<Map<String, Object?>> setupAll(String? caPem);
 
   // --- מגן FilterPhone: חסימת אפליקציות ומסכים בטלפון עצמו ---
@@ -336,12 +339,15 @@ class ChannelNativeBridge implements NativeBridge {
       Map<String, Object?>.from(await _call<Map<Object?, Object?>>('provisionRoot'));
 
   @override
-  Future<Map<String, Object?>> shizukuStatus() async =>
-      Map<String, Object?>.from(await _call<Map<Object?, Object?>>('shizukuStatus'));
+  Future<bool> wirelessSupported() async => await _call<bool>('wirelessSupported');
 
   @override
-  Future<Map<String, Object?>> shizukuRequestPermission() async =>
-      Map<String, Object?>.from(await _call<Map<Object?, Object?>>('shizukuRequestPermission'));
+  Future<bool> openDeveloperOptions() async => await _call<bool>('openDeveloperOptions');
+
+  @override
+  Future<Map<String, Object?>> provisionWireless(String code, int port, String? caPem) async =>
+      Map<String, Object?>.from(await _call<Map<Object?, Object?>>(
+          'provisionWireless', {'code': code, 'port': port, 'ca': caPem}));
 
   @override
   Future<List<Map<String, Object?>>> installedApps() async {

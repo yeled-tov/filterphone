@@ -177,14 +177,17 @@ class MainActivity : FlutterActivity() {
                 report
             }
             "provisionRoot" -> background(result) { RootProvisioner.provision(this).toMap() }
-            // Shizuku (ניפוי אלחוטי / adb): מצב החיבור, ובקשת ההרשאה (חלון של אפליקציית Shizuku)
-            "shizukuStatus" -> result.success(mapOf(
-                "available" to ShizukuSetup.isAvailable(),
-                "permitted" to ShizukuSetup.hasPermission(),
-                "version" to ShizukuSetup.version(),
-            ))
-            "shizukuRequestPermission" -> ShizukuSetup.requestPermission { granted ->
-                main.post { result.success(mapOf("available" to ShizukuSetup.isAvailable(), "permitted" to granted)) }
+            // ניפוי אלחוטי מתוך האפליקציה (בלי מחשב, בלי Shizuku): נתמך? ופתיחת אפשרויות מפתחים.
+            "wirelessSupported" -> result.success(WirelessSetup.isSupported())
+            "openDeveloperOptions" -> result.success(WirelessSetup.openDeveloperOptions(this))
+            // ההקמה בניפוי אלחוטי: מקבל קוד התאמה (6 ספרות) ופורט (0 = לגלות ב-mDNS), ומבצע הכול.
+            "provisionWireless" -> background(result) {
+                val report = OneTapSetup.runWireless(this,
+                    call.argument<String>("code").orEmpty(),
+                    call.argument<Int>("port") ?: 0,
+                    call.argument<String>("ca"))
+                main.post { Recovery.startProtection(this) }
+                report
             }
             "reset" -> background(result) {
                 AdminState.clear(this)

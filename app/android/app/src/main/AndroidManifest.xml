@@ -137,15 +137,6 @@
         <!-- שירות ה-VPN של WireGuard (com.wireguard.android.backend.GoBackend$VpnService)
              מוגדר במניפסט של הספרייה ומתמזג אוטומטית -->
 
-        <!-- Shizuku: הקמה בלחיצה אחת בלי root (ניפוי אלחוטי / adb). מקבל את ה-binder של Shizuku. -->
-        <provider
-            android:name="rikka.shizuku.ShizukuProvider"
-            android:authorities="${applicationId}.shizuku"
-            android:multiprocess="false"
-            android:enabled="true"
-            android:exported="true"
-            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
-
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

@@ -15,8 +15,12 @@ import java.util.concurrent.TimeUnit
  * עם root (אחרי אישור אחד בחלון של אפליקציית ה-root):
  *   מנהל מכשיר (dpm set-device-owner — אם אנדרואיד מתיר: בלי חשבונות במכשיר), WRITE_SECURE_SETTINGS
  *   (המגן נדלק לבד וחוזר אם מכבים), פטור סוללה ועבודה ברקע, אישור VPN, התראות, ותעודת הסינון.
- * כמנהל מכשיר (גם בלי root, למשל אחרי QR): VPN תמיד מופעל (כולל האישור), התראות ותעודה — בשקט.
+ * כמנהל מכשיר (גם בלי root, למשל אחרי ניפוי אלחוטי / QR): VPN תמיד מופעל (כולל האישור), התראות
+ *   ותעודה — בשקט.
  * בלי שניהם: לא עוקפים כלום — מחזירים מה חסר, והממשק מוביל את המשתמש.
+ *
+ * הקמה בלי root ובלי מחשב = ניפוי אלחוטי מתוך האפליקציה (WirelessSetup), בזרימה נפרדת שצריכה את
+ * קוד ההתאמה. כאן ה-run() האוטומטי עובד עם root / כשכבר מנהל מכשיר.
  *
  * כל צעד נבדק בפועל בסוף (לא "הצליח" כי הפקודה רצה). חוסם — להריץ בחוט רקע.
  */
@@ -26,33 +30,22 @@ object OneTapSetup {
     fun run(context: Context, caPem: String?): Map<String, Any?> {
         val pkg = context.packageName
         val out = LinkedHashMap<String, Any?>()
-        // ערוץ מורשה להקמה: קודם root (su), ואם אין — Shizuku (shell, ניפוי אלחוטי/adb). שניהם מריצים
-        // את אותן הפקודות הרשמיות; מה שאנדרואיד לא מתיר מדווח ככשל.
+        // ערוץ מורשה אוטומטי: root (su). ההקמה בלי root נעשית בניפוי אלחוטי (WirelessSetup), בנפרד.
         val root = runCatching { RootProvisioner.hasRoot() }.getOrDefault(false)
-        val shizuku = !root && runCatching { ShizukuSetup.isReady() }.getOrDefault(false)
         out["root"] = root
-        out["shizuku"] = shizuku
-        if (!DeviceOwnerManager.isDeviceOwner(context)) {
-            val r = when {
-                root -> RootProvisioner.provision(context)
-                shizuku -> ShizukuSetup.provision(context)
-                else -> null
-            }
-            if (r != null) {
-                out["device_owner_result"] = r.resultKey
-                out["technical"] = r.technical
-            }
+        out["wireless_supported"] = WirelessSetup.isSupported()
+        if (root && !DeviceOwnerManager.isDeviceOwner(context)) {
+            val r = RootProvisioner.provision(context)
+            out["device_owner_result"] = r.resultKey
+            out["technical"] = r.technical
         }
         val owner = DeviceOwnerManager.isDeviceOwner(context)
         out["device_owner"] = owner
-        // פקודה מורשה אחת, בלי קשר לערוץ (root/Shizuku). אין ערוץ — לא עוקפים כלום, הממשק מוביל.
+        // פקודה מורשה אחת דרך root. אין root — לא עוקפים כלום, הממשק מוביל.
         fun privileged(cmd: String, timeoutS: Long) {
-            when {
-                root -> RootProvisioner.runSu(cmd, timeoutS)
-                shizuku -> ShizukuSetup.exec(cmd, timeoutS)
-            }
+            if (root) RootProvisioner.runSu(cmd, timeoutS)
         }
-        if (root || shizuku) {
+        if (root) {
             if (!AccessibilityGuard.canHeal(context)) {
                 privileged("pm grant $pkg android.permission.WRITE_SECURE_SETTINGS", 20)
             }
@@ -89,6 +82,22 @@ object OneTapSetup {
         }
         out["vpn"] = TunnelManager.state == Tunnel.State.UP
         Log.i(TAG, "one-tap setup: root=$root owner=$owner vpn=${out["vpn"]} ca=${out["ca"]}")
+        return out
+    }
+
+    /**
+     * הקמה בלחיצה אחת בלי root ובלי מחשב — ניפוי אלחוטי (WirelessSetup): הופך למנהל מכשיר, ואז
+     * משלים את כל שאר הצעדים (סוללה, VPN, תעודה) כמו ב-run(). חוסם — חוט רקע.
+     */
+    fun runWireless(context: Context, code: String, port: Int, caPem: String?): Map<String, Any?> {
+        val out = LinkedHashMap<String, Any?>()
+        val r = WirelessSetup.provision(context, code, port)
+        out["device_owner_result"] = r.resultKey
+        out["technical"] = r.technical
+        out["pairing_ok"] = r.resultKey != "pairing_failed" && r.resultKey != "pairing_port_not_found" &&
+            r.resultKey != "bad_pairing_code"
+        // אחרי שהפכנו למנהל מכשיר — ממשיכים באותם צעדים כמו ב-run() (סוללה כבר הוחלה דרך ADB; כאן VPN+תעודה)
+        out.putAll(run(context, caPem))
         return out
     }
 }

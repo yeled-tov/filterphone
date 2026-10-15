@@ -100,14 +100,21 @@ class FakeNative implements NativeBridge {
         'ok': false, 'code': 'ENROLL-ROOT-001', 'result': 'no_root', 'technical': ''
       };
 
-  Map<String, Object?> shizuku = {'available': false, 'permitted': false, 'version': 0};
-  int shizukuRequests = 0;
+  bool wireless = true;
+  int devOptionsOpened = 0;
+  String? wirelessCode;
+  Map<String, Object?> wirelessResult = {'root': false, 'device_owner': false, 'secure_settings': false};
   @override
-  Future<Map<String, Object?>> shizukuStatus() async => shizuku;
+  Future<bool> wirelessSupported() async => wireless;
   @override
-  Future<Map<String, Object?>> shizukuRequestPermission() async {
-    shizukuRequests++;
-    return {'available': shizuku['available'], 'permitted': shizuku['permitted']};
+  Future<bool> openDeveloperOptions() async {
+    devOptionsOpened++;
+    return true;
+  }
+  @override
+  Future<Map<String, Object?>> provisionWireless(String code, int port, String? caPem) async {
+    wirelessCode = code;
+    return wirelessResult;
   }
 
   bool guard = false;

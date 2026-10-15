@@ -215,13 +215,12 @@ class _OneTapCard extends StatelessWidget {
     return '';
   }
 
-  /// צעד-אחר-צעד להפעלת ADB ללא מחשב (אנדרואיד 11+, ניפוי אלחוטי + Shizuku) — בשפה פשוטה.
+  /// צעד-אחר-צעד להקמה בלי מחשב ובלי אפליקציה חיצונית (אנדרואיד 11+, ניפוי אלחוטי מובנה) — בשפה פשוטה.
   static const _adbSteps = [
     'פותחים הגדרות ← אודות הטלפון, ולוחצים 7 פעמים על "מספר Build" (מספר גרסה) עד שכתוב "הפכת למפתח".',
     'חוזרים להגדרות ← מערכת ← אפשרויות מפתחים, ומדליקים את "ניפוי באגים אלחוטי" (Wireless debugging).',
-    'מתקינים את האפליקציה Shizuku מ-Google Play (או מהקובץ שנשלח), ופותחים אותה.',
-    'ב-Shizuku לוחצים "Start / התחל" דרך ניפוי באגים אלחוטי, ומאשרים את ההתאמה (Pairing) שתופיע.',
-    'חוזרים לכאן ולוחצים "הקמה בלי Root" — FilterPhone יגדיר את הכול דרך Shizuku.',
+    'נכנסים ל"ניפוי באגים אלחוטי" ← "התאמת מכשיר באמצעות קוד התאמה" — מופיע קוד בן 6 ספרות.',
+    'חוזרים לכאן, מזינים את הקוד — ו-FilterPhone יגדיר את הכול לבד. בלי מחשב, בלי אפליקציה נוספת.',
   ];
 
   @override
@@ -280,16 +279,16 @@ class _OneTapCard extends StatelessWidget {
                 onPressed: disabled ? null : c.oneTapSetup,
               ),
               const SizedBox(height: 10),
-              // דרך 2 — בלי Root (ADB / Shizuku)
+              // דרך 2 — בלי Root: ניפוי אלחוטי מובנה (בלי מחשב, בלי אפליקציה חיצונית)
               _SetupOption(
-                icon: Icons.usb_rounded,
-                title: 'אין לי Root (ADB / Shizuku)',
-                body: 'אם אין Root — ההקמה עובדת דרך ADB בעזרת האפליקציה Shizuku, בלי מחשב. '
-                    'צריך להפעיל פעם אחת "אפשרויות מפתחים" ו"ניפוי באגים אלחוטי". ההסבר המלא כאן למטה.',
+                icon: Icons.wifi_tethering_rounded,
+                title: 'אין לי Root — הקמה בלי מחשב',
+                body: 'ההקמה עובדת דרך "ניפוי אלחוטי" מתוך FilterPhone עצמה — בלי מחשב ובלי אפליקציה נוספת. '
+                    'צריך להפעיל פעם אחת "אפשרויות מפתחים" ו"ניפוי באגים אלחוטי", ולהזין קוד התאמה. ההסבר למטה.',
                 steps: _adbSteps,
                 buttonLabel: 'הקמה בלי Root',
-                buttonIcon: Icons.usb_rounded,
-                onPressed: disabled ? null : c.oneTapSetup,
+                buttonIcon: Icons.wifi_tethering_rounded,
+                onPressed: disabled ? null : () => _startWirelessSetup(context, c),
               ),
             ],
             if (r != null && r['error'] == null) ...[
@@ -881,4 +880,112 @@ class _RemovedBanner extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// פותח את זרימת ההקמה בניפוי אלחוטי: מסביר, פותח אפשרויות מפתחים, ומקבל את קוד ההתאמה.
+Future<void> _startWirelessSetup(BuildContext context, AppController c) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (_) => _WirelessDialog(controller: c),
+  );
+}
+
+/// דיאלוג ההקמה בניפוי אלחוטי (בלי מחשב): הדלקת ניפוי אלחוטי + קוד התאמה בן 6 ספרות.
+class _WirelessDialog extends StatefulWidget {
+  const _WirelessDialog({required this.controller});
+  final AppController controller;
+
+  @override
+  State<_WirelessDialog> createState() => _WirelessDialogState();
+}
+
+class _WirelessDialogState extends State<_WirelessDialog> {
+  final _code = TextEditingController();
+  bool _working = false;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final code = _code.text.trim();
+    if (code.length != 6 || int.tryParse(code) == null) {
+      setState(() {});
+      return;
+    }
+    setState(() => _working = true);
+    final ok = await widget.controller.wirelessSetup(code);
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    if (!ok) {
+      final msg = widget.controller.notice;
+      if (msg != null && msg.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final valid = _code.text.trim().length == 6 && int.tryParse(_code.text.trim()) != null;
+    return AlertDialog(
+      title: const Text('הקמה בלי מחשב'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('1. הדליקו "ניפוי באגים אלחוטי" (אפשרויות מפתחים).'),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: _working ? null : widget.controller.openDeveloperOptions,
+                icon: const Icon(Icons.settings_rounded, size: 18),
+                label: const Text('פתח אפשרויות מפתחים'),
+              ),
+            ),
+            const Text('2. נכנסים ל"ניפוי באגים אלחוטי" ← "התאמת מכשיר באמצעות קוד התאמה".'),
+            const SizedBox(height: 4),
+            const Text('3. מזינים כאן את הקוד בן 6 הספרות שהופיע:'),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _code,
+              enabled: !_working,
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              maxLength: 6,
+              style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 8),
+              decoration: const InputDecoration(
+                hintText: '••••••',
+                counterText: '',
+                border: OutlineInputBorder(),
+              ),
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _submit(),
+            ),
+            if (_working) ...[
+              const SizedBox(height: 14),
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              const Text('מתחבר ומגדיר… זה יכול לקחת כמה שניות.'),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _working ? null : () => Navigator.of(context).pop(),
+          child: const Text('ביטול'),
+        ),
+        FilledButton(
+          onPressed: (_working || !valid) ? null : _submit,
+          child: const Text('התחל הקמה'),
+        ),
+      ],
+    );
+  }
 }

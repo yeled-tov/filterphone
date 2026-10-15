@@ -723,18 +723,6 @@ class AppController extends ChangeNotifier {
     error = null;
     notice = null;
     notifyListeners();
-    // בלי root ובלי מנהל מכשיר: אם Shizuku פעיל אך עדיין לא אושר — מבקשים הרשאה (חלון Shizuku),
-    // כדי שההקמה הבאה תוכל להשתמש בו (ניפוי אלחוטי / adb) בדיוק כמו ב-root.
-    if (!deviceOwner) {
-      try {
-        final sz = await native.shizukuStatus();
-        if (sz['available'] == true && sz['permitted'] != true) {
-          await native.shizukuRequestPermission();
-        }
-      } catch (e) {
-        debugPrint('shizuku permission step skipped: $e');
-      }
-    }
     try {
       setupReport = await native.setupAll(_caPem);
     } on PlatformException catch (e) {
@@ -743,6 +731,54 @@ class AppController extends ChangeNotifier {
     }
     await _continueSetup();
   }
+
+  /// הקמה בלחיצה אחת בלי root ובלי מחשב — ניפוי אלחוטי מתוך האפליקציה (כמו סוויצ'): המשתמש הדליק
+  /// "ניפוי באגים אלחוטי" והזין את קוד ההתאמה; FilterPhone עושה את כל השאר. מחזיר true בהצלחה.
+  Future<bool> wirelessSetup(String code, {int port = 0}) async {
+    if (setupStep != null && setupStep != SetupStep.done) return false;
+    _setupTried.clear();
+    setupStep = SetupStep.automatic;
+    error = null;
+    notice = null;
+    notifyListeners();
+    try {
+      setupReport = await native.provisionWireless(code.trim(), port, _caPem);
+    } on PlatformException catch (e) {
+      debugPrint('wireless setup failed: $e');
+      setupReport = {'error': e.message ?? e.code};
+    }
+    final ok = setupReport?['device_owner'] == true;
+    if (!ok) {
+      final reason = setupReport?['device_owner_result']?.toString() ?? '';
+      notice = _wirelessError(reason);
+    }
+    await _continueSetup();
+    return ok;
+  }
+
+  /// פותח את "אפשרויות מפתחים" (משם ל"ניפוי באגים אלחוטי").
+  Future<void> openDeveloperOptions() async {
+    try {
+      await native.openDeveloperOptions();
+    } catch (e) {
+      debugPrint('open developer options failed: $e');
+    }
+  }
+
+  String _wirelessError(String reason) => switch (reason) {
+        'bad_pairing_code' => 'קוד ההתאמה צריך להיות 6 ספרות. נסו שוב.',
+        'pairing_port_not_found' =>
+          'לא זוהה הפורט אוטומטית. ודאו ש"ניפוי באגים אלחוטי" דלוק ושחלון קוד ההתאמה פתוח, ונסו שוב.',
+        'pairing_failed' => 'ההתאמה נכשלה — ודאו שהקוד נכון ושהחלון עדיין פתוח, ונסו שוב.',
+        'connect_failed' => 'ההתאמה הצליחה אבל החיבור נכשל. ודאו שהטלפון מחובר ל-Wi-Fi, ונסו שוב.',
+        'accounts_present' =>
+          'יש חשבונות במכשיר שחוסמים את ההקמה. ניסינו לעקוף אוטומטית — אם לא הצליח, הסירו חשבון Google זמנית ונסו שוב.',
+        'already_has_device_owner' =>
+          'כבר מוגדר מנהל מכשיר אחר. צריך קודם להסיר אותו (או איפוס להגדרות יצרן).',
+        'multiple_users' => 'יש כמה משתמשים במכשיר. מחקו משתמשים נוספים ונסו שוב.',
+        'wireless_unsupported' => 'ניפוי אלחוטי דורש אנדרואיד 11 ומעלה.',
+        _ => 'ההקמה לא הושלמה. אפשר לנסות שוב, או ליצור קשר עם התמיכה.',
+      };
 
   /// האפליקציה חזרה לחזית (המשתמש סיים עם חלון של אנדרואיד) — ממשיכים בהקמה, ומרעננים.
   Future<void> onAppResumed() async {

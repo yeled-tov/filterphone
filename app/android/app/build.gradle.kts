@@ -80,8 +80,12 @@ kotlin {
 
 dependencies {
     implementation("com.wireguard.android:tunnel:1.0.20260102")
-    implementation("dev.rikka.shizuku:api:13.1.5")
-    implementation("dev.rikka.shizuku:provider:13.1.5")
+    // הקמה בלחיצה אחת בלי מחשב ובלי אפליקציה חיצונית: ADB דרך ניפוי אלחוטי, מתוך האפליקציה עצמה.
+    // libadb-android מבצע התאמה (pairing) וחיבור TLS ל-adbd המקומי, ומגלה את הפורטים ב-mDNS (אנדרואיד 11+).
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    implementation("com.github.MuntashirAkon:sun-security-android:1.1")   // יצירת תעודת ADB (X.509) ללא BouncyCastle
+    implementation("org.conscrypt:conscrypt-android:2.5.3")               // TLSv1.3 + SPAKE2 להתאמה
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")     // גישה ל-API נסתר (אנדרואיד 9+)
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
 }

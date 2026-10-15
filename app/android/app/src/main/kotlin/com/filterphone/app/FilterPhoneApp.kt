@@ -1,10 +1,16 @@
 package com.filterphone.app
 
 import android.app.Application
+import android.os.Build
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 class FilterPhoneApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // ניפוי אלחוטי מתוך האפליקציה (libadb) ניגש ל-API נסתר של אנדרואיד — פותחים את הגישה מוקדם.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            runCatching { HiddenApiBypass.addHiddenApiExemptions("") }
+        }
         // חייב לרוץ מוקדם: במצב "VPN תמיד מופעל" המערכת מפעילה את השירות בלי פתיחת האפליקציה
         TunnelManager.init(this)
         ProtectionService.createChannel(this)

@@ -2,6 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // libadb-android (ADB client לניפוי אלחוטי מתוך האפליקציה) מתפרסם ב-JitPack
+        maven { url = uri("https://jitpack.io") }
     }
 }
 
