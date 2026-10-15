@@ -41,6 +41,7 @@ class GuardService : AccessibilityService() {
     private var waFirstStrikeAt = 0L
     private var lastAliveMark = 0L
     private var lastWaWindow: String? = null        // המסך האחרון של וואטסאפ (Activity) — לשכבת ההחרגה
+    private var lastWaTabScanAt = 0L
     private val debug by lazy { (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
 
     override fun onServiceConnected() {
@@ -243,9 +244,13 @@ class GuardService : AccessibilityService() {
         }
     }
 
-    /** שינויי תוכן נחוצים: בוואטסאפ (תמונות פרופיל), וב-Play בזמן חלון התקנה (ניווט בתוך Play). */
+    /**
+     * שינויי תוכן נחוצים: בוואטסאפ (תמונות פרופיל / טאב העדכונים — מעבר בין טאבים לא פותח מסך חדש),
+     * וב-Play בזמן חלון התקנה (ניווט בתוך Play).
+     */
     private fun wantsContent(pkg: String?, policy: GuardPolicy.Policy): Boolean =
         policy.waProfile?.packages?.contains(pkg) == true ||
+            (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES) ||
             (pkg == PlayLock.PLAY && PlayLock.active(SystemClock.elapsedRealtime()) != null)
 
     // ------------------------------------------------------------ שלב א': חלון Play לאפליקציה אחת
@@ -350,6 +355,7 @@ class GuardService : AccessibilityService() {
             }
             null -> Unit
         }
+        if (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES && guardWaUpdates(pkg, fromContent = false)) return
         val wa = policy.waProfile ?: return
         val detector = WaProfileDetector(wa)
         if (!detector.watches(pkg)) return
@@ -360,6 +366,7 @@ class GuardService : AccessibilityService() {
     }
 
     private fun onContent(pkg: String, policy: GuardPolicy.Policy) {
+        if (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES && guardWaUpdates(pkg, fromContent = true)) return
         val wa = policy.waProfile ?: return
         val detector = WaProfileDetector(wa)
         if (!detector.watches(pkg) || detector.excluded(lastWaWindow)) return
@@ -367,6 +374,72 @@ class GuardService : AccessibilityService() {
         if (now - lastScanAt < SCAN_EVERY_MS) return       // עד ~4 סריקות בשנייה, גם בגלילה מהירה
         lastScanAt = now
         scan(detector)?.let { blockProfilePhoto(pkg, it, null) }
+    }
+
+    /**
+     * טאב "עדכונים" בוואטסאפ (סטטוסים + ערוצים) נבחר, והמנהל חסם אותו → לוחצים על הטאב "צ'אטים"
+     * (ואם לא נמצא — "אחורה"). קורא רק את שמות הטאבים והסימון "נבחר" — לא הודעות. true = טופל.
+     */
+    private fun guardWaUpdates(pkg: String, fromContent: Boolean): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (fromContent && now - lastWaTabScanAt < SCAN_EVERY_MS) return false
+        lastWaTabScanAt = now
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        try {
+            if (root.packageName?.toString() !in WaScreens.PACKAGES) return false
+            queue.add(root)
+            var updates = false
+            var chats: AccessibilityNodeInfo? = null
+            var visited = 0
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                seen += n
+                visited++
+                val text = n.text?.toString()
+                val desc = n.contentDescription?.toString()
+                if (!updates && n.isSelected) {
+                    // הטאב הנבחר: השם על הרכיב עצמו, או על הכיתוב שבתוכו
+                    updates = WaScreens.isUpdatesLabel(text, desc) || (0 until n.childCount).any { i ->
+                        runCatching { n.getChild(i) }.getOrNull()?.let { ch ->
+                            WaScreens.isUpdatesLabel(ch.text?.toString(), ch.contentDescription?.toString())
+                                .also { recycle(ch) }
+                        } ?: false
+                    }
+                }
+                if (chats == null && WaScreens.isChatsTab(text, desc)) chats = n
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+            if (!updates) return false
+            val clicked = chats?.let { clickSelfOrParent(it) } ?: false
+            if (block(pkg, if (clicked) NO_GLOBAL_ACTION else GLOBAL_ACTION_BACK, R.string.guard_wa_updates_blocked,
+                    minGapMs = 700)) {
+                ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+            }
+            return true
+        } catch (e: Exception) {
+            return false
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { recycle(it) }
+        }
+    }
+
+    /** לחיצה על הרכיב, או על ההורה הלחיץ הקרוב (עד 4 רמות) — הטאב עצמו לפעמים לא "לחיץ" אלא העוטף שלו. */
+    private fun clickSelfOrParent(node: AccessibilityNodeInfo): Boolean {
+        var n: AccessibilityNodeInfo? = node
+        val parents = ArrayList<AccessibilityNodeInfo>()
+        try {
+            repeat(5) {
+                val cur = n ?: return false
+                if (cur.isClickable) return cur.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                n = runCatching { cur.parent }.getOrNull()?.also { parents += it }
+            }
+            return false
+        } finally {
+            parents.forEach { recycle(it) }
+        }
     }
 
     /** שכבות 2–3: מעבר מוגבל על עץ הרכיבים של החלון הפעיל (עד MAX_NODES), בלי לקרוא טקסט. */
@@ -441,7 +514,7 @@ class GuardService : AccessibilityService() {
         if (pkg == lastBlockPkg && now - lastBlockAt < minGapMs) return false
         lastBlockPkg = pkg
         lastBlockAt = now
-        performGlobalAction(action)
+        if (action != NO_GLOBAL_ACTION) performGlobalAction(action)
         if (now - lastToastAt > 3_000) {
             lastToastAt = now
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
@@ -490,6 +563,8 @@ class GuardService : AccessibilityService() {
     companion object {
         private const val TAG = "FilterPhone"
         private const val SCAN_EVERY_MS = 250L
+        /** ל-block(): כבר טיפלנו בעצמנו (למשל לחצנו על טאב) — רק ההודעה, בלי פעולה גלובלית. */
+        private const val NO_GLOBAL_ACTION = 0
         private const val MAX_NODES = 300
         /** אפליקציות ההגדרות (כולל הגדרות הנגישות של סמסונג). */
         private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.samsung.accessibility",

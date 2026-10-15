@@ -129,7 +129,7 @@ OPTIONS: tuple[Option, ...] = (
     Option("whatsapp_channels", "messaging", "ערוצים בוואטסאפ",
            "הערוצים בוואטסאפ (Channels) נחסמים — אי אפשר לפתוח ערוץ או את מדריך הערוצים. נאכף בטלפון "
            "עצמו (מגן FilterPhone). הצ'אטים, הקבוצות והשיחות ממשיכים כרגיל.",
-           screens=tuple((p, ("newsletter", "Newsletter", "channel")) for p in WA),
+           screens=tuple((p, ("newsletter", "Newsletter")) for p in WA),
            wa_screens=("channels",), needs_guard=True),
     Option("whatsapp_updates", "messaging", "טאב העדכונים בוואטסאפ (סטטוסים + ערוצים)",
            "כל טאב 'עדכונים' בוואטסאפ נחסם — ברגע שנכנסים אליו (שם נמצאים גם הסטטוסים וגם הערוצים) "

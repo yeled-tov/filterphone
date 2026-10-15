@@ -79,8 +79,12 @@ object GuardPolicy {
         val vpnBypass: List<VpnBypass.App> = VpnBypass.DEFAULTS,
         /** חסומות לכניסה בנגישות בלבד — מנהל המכשיר לא מסתיר אותן (Play: עדכונים ברקע ממשיכים). */
         val accessibilityOnly: Set<String> = emptySet(),
+        /** מסכים בוואטסאפ שנחסמים לפי תוכן: updates (טאב העדכונים), channels, status. */
+        val waScreens: Set<String> = emptySet(),
     ) {
-        val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null
+        val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty()
+        /** טאב "עדכונים" בוואטסאפ חסום (סטטוסים + ערוצים). */
+        val blocksWaUpdates get() = "updates" in waScreens
     }
 
     enum class Block { APP, SCREEN }
@@ -171,6 +175,9 @@ object GuardPolicy {
             dpc = dpc,
             vpnBypass = VpnBypass.parse(o.opt("vpn_bypass")),
             accessibilityOnly = o.optJSONArray("accessibility_only")
+                ?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }.toSet() }
+                ?: emptySet(),
+            waScreens = o.optJSONArray("wa_screens")
                 ?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }.toSet() }
                 ?: emptySet(),
         )
