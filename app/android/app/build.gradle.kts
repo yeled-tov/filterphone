@@ -1,9 +1,33 @@
+import com.android.build.api.artifact.SingleArtifact
 import java.util.Properties
 
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+/**
+ * מסיר מהמניפסט הממוזג את הרשאות האחסון החיצוני (READ/WRITE_EXTERNAL_STORAGE) שספריות צד-שלישי
+ * (libadb/spake2) מצהירות — אנחנו לא משתמשים בהן, וה-tools:node="remove" לא נאכף במ-merger של AGP 9.
+ * עובד ישירות על קובץ המניפסט הממוזג, כך שזה ודאי.
+ */
+abstract class StripStoragePermissions : DefaultTask() {
+    @get:org.gradle.api.tasks.InputFile
+    abstract val mergedManifest: org.gradle.api.file.RegularFileProperty
+
+    @get:org.gradle.api.tasks.OutputFile
+    abstract val updatedManifest: org.gradle.api.file.RegularFileProperty
+
+    @org.gradle.api.tasks.TaskAction
+    fun strip() {
+        val text = mergedManifest.get().asFile.readText()
+        val cleaned = text.replace(
+            Regex("""\s*<uses-permission[^>]*android:name="android\.permission\.(READ|WRITE)_EXTERNAL_STORAGE"[^>]*/>"""),
+            "",
+        )
+        updatedManifest.get().asFile.writeText(cleaned)
+    }
 }
 
 // חתימת שחרור: ב-GitHub Actions נוצר key.properties מתוך הסודות של המאגר.
@@ -69,6 +93,18 @@ android {
         ignoreTestSources = true
         warningsAsErrors = false
         disable += setOf("GradleDependency", "NewerVersionAvailable", "AndroidGradlePluginVersion", "OldTargetApi")
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val task = tasks.register(
+            "strip${variant.name.replaceFirstChar { it.uppercaseChar() }}StoragePermissions",
+            StripStoragePermissions::class.java,
+        )
+        variant.artifacts.use(task)
+            .wiredWithFiles(StripStoragePermissions::mergedManifest, StripStoragePermissions::updatedManifest)
+            .toTransform(SingleArtifact.MERGED_MANIFEST)
     }
 }
 
