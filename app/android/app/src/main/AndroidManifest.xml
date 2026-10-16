@@ -90,6 +90,11 @@
             android:name=".UpdateReceiver"
             android:exported="false" />
 
+        <!-- הזנת קוד ההתאמה (ניפוי אלחוטי) מתוך התראה — כמו סוויץ'. לא חשוף: רק ה-PendingIntent שלנו -->
+        <receiver
+            android:name=".WirelessCodeReceiver"
+            android:exported="false" />
+
         <!-- מנהל המכשיר: Device Owner (QR / adb) או מנהל מכשיר רגיל — ראו DeviceOwnerManager -->
         <receiver
             android:name=".DeviceAdmin"

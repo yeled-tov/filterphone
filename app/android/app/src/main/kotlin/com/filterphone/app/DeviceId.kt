@@ -19,6 +19,11 @@ object DeviceId {
         return of(androidId, context.packageName)
     }
 
+    /** ה-ANDROID_ID המקורי (16 תווים הקס), לתצוגה למשתמש ולתמיכה — המזהה הייחודי של המכשיר. */
+    @SuppressLint("HardwareIds")
+    fun androidId(context: Context): String =
+        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID).orEmpty()
+
     /** טהור — נבדק ביחידה. */
     fun of(androidId: String, pkg: String): String =
         MessageDigest.getInstance("SHA-256").digest("$androidId:$pkg".toByteArray())

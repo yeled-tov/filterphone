@@ -105,6 +105,7 @@ class MainActivity : FlutterActivity() {
                 "appVersion" to packageManager.getPackageInfo(packageName, 0).versionName,
             ))
             "deviceUid" -> result.success(DeviceId.get(this))
+            "androidId" -> result.success(DeviceId.androidId(this))
             "generateKeyPair" -> background(result) { TunnelManager.newKeyPair() }
             "publicKey" -> background(result) { TunnelManager.publicKey() }
             "saveVpnConfig" -> background(result) {
@@ -180,6 +181,8 @@ class MainActivity : FlutterActivity() {
             // ניפוי אלחוטי מתוך האפליקציה (בלי מחשב, בלי Shizuku): נתמך? ופתיחת אפשרויות מפתחים.
             "wirelessSupported" -> result.success(WirelessSetup.isSupported())
             "openDeveloperOptions" -> result.success(WirelessSetup.openDeveloperOptions(this))
+            // התראת הזנת קוד ההתאמה — מקלידים את הקוד בשורת ההתראה בלי לצאת ממסך "ניפוי אלחוטי"
+            "startWirelessNotification" -> result.success(WirelessNotify.prompt(this, call.argument<String>("ca")))
             // ההקמה בניפוי אלחוטי: מקבל קוד התאמה (6 ספרות) ופורט (0 = לגלות ב-mDNS), ומבצע הכול.
             "provisionWireless" -> background(result) {
                 val report = OneTapSetup.runWireless(this,

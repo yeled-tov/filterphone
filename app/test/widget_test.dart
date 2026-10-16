@@ -25,6 +25,9 @@ class FakeNative implements NativeBridge {
   String uid = 'ab' * 16;
   @override
   Future<String> deviceUid() async => uid;
+  String androidIdValue = '0123456789abcdef';
+  @override
+  Future<String> androidId() async => androidIdValue;
   @override
   Future<Map<String, Object?>> deviceInfo() async =>
       {'model': 'Pixel 9', 'manufacturer': 'Google', 'sdk': 36, 'appVersion': '1.0.0'};
@@ -115,6 +118,13 @@ class FakeNative implements NativeBridge {
   Future<Map<String, Object?>> provisionWireless(String code, int port, String? caPem) async {
     wirelessCode = code;
     return wirelessResult;
+  }
+
+  int wirelessNotifications = 0;
+  @override
+  Future<bool> startWirelessNotification(String? caPem) async {
+    wirelessNotifications++;
+    return true;
   }
 
   bool guard = false;

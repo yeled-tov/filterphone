@@ -903,11 +903,24 @@ class _WirelessDialog extends StatefulWidget {
 class _WirelessDialogState extends State<_WirelessDialog> {
   final _code = TextEditingController();
   bool _working = false;
+  bool _posted = false;      // התראת הזנת הקוד הוצגה
+  bool _manual = false;      // המשתמש בחר להזין כאן ידנית (גיבוי)
+
+  @override
+  void initState() {
+    super.initState();
+    _post();
+  }
 
   @override
   void dispose() {
     _code.dispose();
     super.dispose();
+  }
+
+  Future<void> _post() async {
+    final ok = await widget.controller.startWirelessNotification();
+    if (mounted) setState(() => _posted = ok);
   }
 
   Future<void> _submit() async {
@@ -928,9 +941,19 @@ class _WirelessDialogState extends State<_WirelessDialog> {
     }
   }
 
+  Widget _step(String n, String text) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          CircleAvatar(radius: 11, child: Text(n, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+          const SizedBox(width: 10),
+          Expanded(child: Text(text)),
+        ]),
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final manual = _manual || !_posted;
     final valid = _code.text.trim().length == 6 && int.tryParse(_code.text.trim()) != null;
     return AlertDialog(
       title: const Text('הקמה בלי מחשב'),
@@ -939,7 +962,9 @@ class _WirelessDialogState extends State<_WirelessDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('1. הדליקו "ניפוי באגים אלחוטי" (אפשרויות מפתחים).'),
+            const Text('בלחיצה אחת — בלי מחשב ובלי לצאת מהמסך:'),
+            const SizedBox(height: 10),
+            _step('1', 'הדליקו "ניפוי באגים אלחוטי" באפשרויות המפתחים.'),
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton.icon(
@@ -948,25 +973,45 @@ class _WirelessDialogState extends State<_WirelessDialog> {
                 label: const Text('פתח אפשרויות מפתחים'),
               ),
             ),
-            const Text('2. נכנסים ל"ניפוי באגים אלחוטי" ← "התאמת מכשיר באמצעות קוד התאמה".'),
-            const SizedBox(height: 4),
-            const Text('3. מזינים כאן את הקוד בן 6 הספרות שהופיע:'),
+            _step('2', 'הקישו "התאמת מכשיר באמצעות קוד התאמה" — יופיע קוד בן 6 ספרות.'),
+            _step('3', 'משכו מלמעלה את פס ההתראות, הקלידו את הקוד בהתראת FilterPhone, ושלחו.'),
+            _step('4', 'אפשר לסגור את החלון — ההקמה תמשיך לבד.'),
             const SizedBox(height: 10),
-            TextField(
-              controller: _code,
-              enabled: !_working,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              maxLength: 6,
-              style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 8),
-              decoration: const InputDecoration(
-                hintText: '••••••',
-                counterText: '',
-                border: OutlineInputBorder(),
+            if (!manual)
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(children: [
+                  Icon(Icons.notifications_active_rounded, size: 18, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('התראת הזנת הקוד מחכה בפס ההתראות.')),
+                ]),
               ),
-              onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => _submit(),
-            ),
+            if (!manual)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(
+                  onPressed: _working ? null : () => setState(() => _manual = true),
+                  child: const Text('אין לי התראה? הזנת הקוד כאן'),
+                ),
+              ),
+            if (manual) ...[
+              const SizedBox(height: 4),
+              TextField(
+                controller: _code,
+                enabled: !_working,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                maxLength: 6,
+                style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 8),
+                decoration: const InputDecoration(hintText: '••••••', counterText: '', border: OutlineInputBorder()),
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _submit(),
+              ),
+            ],
             if (_working) ...[
               const SizedBox(height: 14),
               const LinearProgressIndicator(),
@@ -979,12 +1024,13 @@ class _WirelessDialogState extends State<_WirelessDialog> {
       actions: [
         TextButton(
           onPressed: _working ? null : () => Navigator.of(context).pop(),
-          child: const Text('ביטול'),
+          child: Text(manual ? 'ביטול' : 'סגירה'),
         ),
-        FilledButton(
-          onPressed: (_working || !valid) ? null : _submit,
-          child: const Text('התחל הקמה'),
-        ),
+        if (manual)
+          FilledButton(
+            onPressed: (_working || !valid) ? null : _submit,
+            child: const Text('התחל הקמה'),
+          ),
       ],
     );
   }

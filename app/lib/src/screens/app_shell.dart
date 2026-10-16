@@ -298,8 +298,10 @@ class ProfileScreen extends StatelessWidget {
                 _InfoRow(label: 'שם המכשיר', value: d?.name ?? '—'),
                 _InfoRow(
                   label: 'מזהה מכשיר',
-                  value: d?.id.toString() ?? '—',
-                  action: d == null ? null : () => _copy(context, 'מזהה המכשיר', d.id.toString()),
+                  value: controller.androidId.isNotEmpty ? controller.androidId : (d?.id.toString() ?? '—'),
+                  action: controller.androidId.isEmpty
+                      ? null
+                      : () => _copy(context, 'מזהה המכשיר', controller.androidId),
                 ),
                 _InfoRow(label: 'ניהול מכשיר', value: d?.status == 'active' && controller.deviceOwner ? 'Device Owner פעיל' : 'לא פעיל'),
               ],

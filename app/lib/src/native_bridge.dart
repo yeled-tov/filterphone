@@ -126,6 +126,9 @@ abstract class NativeBridge {
 
   /// מזהה יציב של הטלפון (hash) — לשחזור לפי מספר טלפון. אותו טלפון אחרי התקנה מחדש = אותו מזהה.
   Future<String> deviceUid();
+
+  /// ה-ANDROID_ID המקורי של המכשיר (16 תווים) — לתצוגה למשתמש ולתמיכה.
+  Future<String> androidId();
   Future<String> generateKeyPair();
   Future<String?> publicKey();
   Future<void> saveVpnConfig(Map<String, Object?> vpn);
@@ -167,6 +170,9 @@ abstract class NativeBridge {
 
   /// הקמה בניפוי אלחוטי: קוד התאמה (6 ספרות) ופורט (0 = לגלות ב-mDNS). מבצע הכול ומחזיר מה הושלם.
   Future<Map<String, Object?>> provisionWireless(String code, int port, String? caPem);
+
+  /// מציג התראה עם שדה קלט לקוד ההתאמה — מקלידים את הקוד בשורת ההתראה בלי לצאת ממסך "ניפוי אלחוטי".
+  Future<bool> startWirelessNotification(String? caPem);
 
   /// הקמה בלחיצה אחת: כל מה שאפשר בלי מגע (root / מנהל מכשיר). מחזיר מה הושלם.
   Future<Map<String, Object?>> setupAll(String? caPem);
@@ -263,6 +269,9 @@ class ChannelNativeBridge implements NativeBridge {
   Future<String> deviceUid() => _call<String>('deviceUid');
 
   @override
+  Future<String> androidId() => _call<String>('androidId');
+
+  @override
   Future<String> generateKeyPair() => _call<String>('generateKeyPair');
 
   @override
@@ -348,6 +357,10 @@ class ChannelNativeBridge implements NativeBridge {
   Future<Map<String, Object?>> provisionWireless(String code, int port, String? caPem) async =>
       Map<String, Object?>.from(await _call<Map<Object?, Object?>>(
           'provisionWireless', {'code': code, 'port': port, 'ca': caPem}));
+
+  @override
+  Future<bool> startWirelessNotification(String? caPem) async =>
+      await _call<bool>('startWirelessNotification', {'ca': caPem});
 
   @override
   Future<List<Map<String, Object?>>> installedApps() async {

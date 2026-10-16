@@ -105,6 +105,7 @@ class AppController extends ChangeNotifier {
   bool supportSending = false;
   String? _requestedTab;
   String _appVersion = '';
+  String androidId = '';          // ה-ANDROID_ID המקורי של המכשיר — לתצוגה למשתמש ולתמיכה
 
   Timer? _timer;
   StreamSubscription<String>? _vpnSub;
@@ -145,6 +146,7 @@ class AppController extends ChangeNotifier {
   Future<void> start() async {
     try {
       _appVersion = '${(await native.deviceInfo())['appVersion'] ?? ''}';
+      androidId = await native.androidId();
     } on MissingPluginException {
       phase = Phase.unsupported; // אייפון — עד שה-Network Extension יתווסף
       notifyListeners();
@@ -762,6 +764,17 @@ class AppController extends ChangeNotifier {
       await native.openDeveloperOptions();
     } catch (e) {
       debugPrint('open developer options failed: $e');
+    }
+  }
+
+  /// מציג את התראת הזנת קוד ההתאמה (כמו סוויץ'): מקלידים את הקוד בשורת ההתראה בלי לצאת ממסך
+  /// "ניפוי אלחוטי", וההקמה ממשיכה לבד ברקע. מחזיר false אם לא נתמך/נכשל.
+  Future<bool> startWirelessNotification() async {
+    try {
+      return await native.startWirelessNotification(_caPem);
+    } catch (e) {
+      debugPrint('wireless notification failed: $e');
+      return false;
     }
   }
 
