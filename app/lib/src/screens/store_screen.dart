@@ -381,41 +381,70 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
     }
     final pending = _store.pendingUpdates;
     final rest = phone.where((a) => !pending.contains(a)).toList();
+    final hasPending = pending.isNotEmpty;
+    final cs = theme.colorScheme;
     return [
+      // כרטיס מצב: ירוק "הכול מעודכן" או כתום עם כפתור "עדכון הכול" רחב
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
-          child: Row(children: [
-            Expanded(
-              child: Text(
-                _store.checking
-                    ? 'בודק עדכונים…'
-                    : pending.isEmpty
-                        ? 'כל ${phone.length} האפליקציות מעודכנות ✓'
-                        : '${pending.length} עדכונים זמינים',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-              ),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: hasPending ? cs.primaryContainer.withValues(alpha: 0.5) : StatusColors.ok(context).withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: (hasPending ? cs.primary : StatusColors.ok(context)).withValues(alpha: 0.25)),
             ),
-            IconButton(
-              tooltip: 'בדיקה מחדש',
-              onPressed: _store.checking ? null : () => _store.checkUpdates(force: true),
-              icon: const Icon(Icons.refresh_rounded),
-            ),
-            if (pending.isNotEmpty)
-              FilledButton.icon(
-                onPressed: () => _toast(_store.updateAll()),
-                icon: const Icon(Icons.system_update_alt_rounded, size: 18),
-                label: const Text('עדכון הכול'),
-              ),
-          ]),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Icon(hasPending ? Icons.system_update_rounded : Icons.verified_rounded,
+                    color: hasPending ? cs.primary : StatusColors.ok(context), size: 26),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(
+                      _store.checking
+                          ? 'בודק עדכונים…'
+                          : hasPending
+                              ? '${pending.length} עדכונים זמינים'
+                              : 'הכול מעודכן',
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    ),
+                    Text('${phone.length} אפליקציות בטלפון',
+                        style: theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                  ]),
+                ),
+                IconButton(
+                  tooltip: 'בדיקה מחדש',
+                  onPressed: _store.checking ? null : () => _store.checkUpdates(force: true),
+                  icon: const Icon(Icons.refresh_rounded),
+                ),
+              ]),
+              if (hasPending) ...[
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () => _toast(_store.updateAll()),
+                  icon: const Icon(Icons.system_update_alt_rounded, size: 20),
+                  label: Text('עדכון כל ה-${pending.length}'),
+                ),
+              ],
+            ]),
+          ),
         ),
       ),
       if (_store.checking) const SliverToBoxAdapter(child: LinearProgressIndicator(minHeight: 2)),
       if (_store.updatesError != null)
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(_store.updatesError!, style: TextStyle(color: theme.colorScheme.error)),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: Text(_store.updatesError!, style: TextStyle(color: cs.error)),
+          ),
+        ),
+      if (hasPending)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+            child: Text('זמינים לעדכון', style: theme.textTheme.labelLarge?.copyWith(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
           ),
         ),
       SliverList.builder(
@@ -424,9 +453,16 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
       ),
       if (rest.isNotEmpty)
         SliverToBoxAdapter(
-          child: ExpansionTile(
-            title: Text('מעודכנות ואחרות (${rest.length})'),
-            children: [for (final a in rest) _PhoneAppRow(store: _store, app: a)],
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+            child: ExpansionTile(
+              shape: const Border(),
+              collapsedShape: const Border(),
+              leading: const Icon(Icons.check_circle_outline_rounded),
+              title: Text('מעודכנות ואחרות (${rest.length})'),
+              childrenPadding: EdgeInsets.zero,
+              children: [for (final a in rest) _PhoneAppRow(store: _store, app: a)],
+            ),
           ),
         ),
       const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -691,7 +727,9 @@ class _PhoneAppRow extends StatelessWidget {
     final p = store.progress[app.package];
     final version = app.versionName.isEmpty ? '' : 'גרסה ${app.versionName}';
     final sub = switch (info?.status) {
-      'update' => '$version · חדשה: ${info!.playVersion}',
+      'update' => (app.versionName.isNotEmpty && info!.playVersion.isNotEmpty)
+          ? 'גרסה ${app.versionName} ← ${info.playVersion}'
+          : 'עדכון זמין${(info!.playVersion.isNotEmpty) ? ' · ${info.playVersion}' : ''}',
       'maybe' => [version, if (info!.playUpdated != null) 'עודכנה ב-Google Play ${_ago(info.playUpdated!)}']
           .where((x) => x.isNotEmpty).join(' · '),
       'current' => [version, 'מעודכנת'].where((x) => x.isNotEmpty).join(' · '),

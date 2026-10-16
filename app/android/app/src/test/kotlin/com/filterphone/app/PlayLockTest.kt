@@ -119,4 +119,17 @@ class PlayLockTest {
         val far = List(PlayLock.HEAD_TEXTS) { "פסקה $it" } + listOf("Waze: ניווט ועדכוני תנועה")
         assertEquals(false, PlayLock.isTargetPage(far, titles))
     }
+
+    @Test
+    fun targetPageMatchesWhenPlayTitleIsShorterThanLabel() {
+        // הכותרת ב-Play קצרה משם האפליקציה שבטלפון ("waze" מול "waze navigation")
+        assertEquals(true, PlayLock.isTargetPage(listOf("waze"), listOf("waze navigation")))
+    }
+
+    @Test
+    fun fallbackTopCoversBelowHeaderWhenNoButton() {
+        // 46% מגובה המסך — מתחת לכותרת ולכפתור, כך שהדף הלבן תמיד מכסה גם כשלא זוהה כפתור
+        assertEquals(1104, PlayLock.fallbackTop(2400))
+        assertEquals(1, PlayLock.fallbackTop(0))
+    }
 }

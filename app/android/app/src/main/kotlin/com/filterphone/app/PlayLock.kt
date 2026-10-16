@@ -75,7 +75,13 @@ object PlayLock {
     /** זה העמוד של האפליקציה שנבחרה: השם שלה בראש המסך. */
     fun isTargetPage(texts: List<String>, titles: List<String>): Boolean {
         val head = texts.asSequence().map(::norm).filter { it.isNotEmpty() }.take(HEAD_TEXTS).toList()
-        return titles.any { t -> head.any { h -> h == t || (t.length >= 4 && h.startsWith(t)) } }
+        return titles.any { t ->
+            head.any { h ->
+                h == t ||
+                    (t.length >= 4 && h.startsWith(t)) ||     // כותרת Play ארוכה יותר (שם מלא של האפליקציה)
+                    (h.length >= 4 && t.startsWith(h))        // שם האפליקציה בטלפון ארוך יותר מהכותרת ב-Play
+            }
+        }
     }
 
     // ------------------------------------------------------------ "דף לבן" מתחת לכפתור ההתקנה
@@ -100,6 +106,14 @@ object PlayLock {
         val rowBottom = buttons.filter { it.top < first.bottom }.maxOf { it.bottom }
         return (rowBottom + marginPx).coerceAtMost(screenH)
     }
+
+    /**
+     * איפה לשים את הדף הלבן כשלא זוהה כפתור (העמוד נטען / גלול / Play שינה את מבנה הרכיבים):
+     * קו בטוח מתחת לכותרת ולכפתור, כך שהדף תמיד מכסה את מה שמתחת. יחד עם גלילה-לראש-העמוד
+     * ב-GuardService הכפתור חוזר להיראות, ואז הקו המדויק (curtainTop) תופס את מקומו.
+     */
+    const val FALLBACK_TOP_FRACTION = 0.46
+    fun fallbackTop(screenH: Int): Int = (screenH * FALLBACK_TOP_FRACTION).toInt().coerceAtLeast(1)
 
     /** הכפתורים בשורה הראשית של עמוד אפליקציה (כל המצבים: לא מותקנת, בהתקנה, מותקנת, עדכון). */
     private val ACTION_BUTTONS = setOf("התקנה", "התקן", "עדכון", "עדכן", "פתיחה", "פתח", "ביטול", "הסרת התקנה",

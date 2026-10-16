@@ -467,14 +467,19 @@ class GuardService : AccessibilityService() {
      * גללו בכל זאת (מהחלק העליון) — הדף עוקב אחרי הכפתור, והעמוד חוזר לראש.
      */
     private fun updateCurtain(root: AccessibilityNodeInfo, boxes: List<PlayLock.Box>, now: Long) {
-        val top = PlayLock.curtainTop(boxes, curtain.screenHeight(), curtain.marginPx())
-        if (top == null) {
-            // הכפתור לא במסך (העמוד גלול) או עדיין נטען — חוזרים לראש העמוד; הדף נשאר במקומו
+        val screenH = curtain.screenHeight()
+        val buttonTop = PlayLock.curtainTop(boxes, screenH, curtain.marginPx())
+        // הכלל: בעמוד האפליקציה הדף הלבן תמיד מכסה. זוהה כפתור — מתחתיו בדיוק; לא זוהה (עמוד נטען /
+        // גלול / מבנה רכיבים אחר) — קו ברירת מחדל בטוח, ובמקביל גלילה לראש העמוד כדי שהכפתור יחזור.
+        val top: Int
+        if (buttonTop != null) {
+            if (buttonTop > curtainBase) curtainBase = buttonTop
+            if (buttonTop < curtainBase - curtain.marginPx() * 3) scrollPlayBack(root, now)
+            top = buttonTop
+        } else {
             scrollPlayBack(root, now)
-            return
+            top = PlayLock.fallbackTop(screenH)
         }
-        if (top > curtainBase) curtainBase = top
-        if (top < curtainBase - curtain.marginPx() * 3) scrollPlayBack(root, now)
         curtain.show(top)
         main.removeCallbacks(curtainCheck)
         main.postDelayed(curtainCheck, CURTAIN_CHECK_MS)
