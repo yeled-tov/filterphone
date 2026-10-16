@@ -993,7 +993,7 @@ void main() {
     final sent = (checked.single as Map)['apps'] as List;
     expect(sent.first, {'package': 'com.bnhp.payments.paymentsapp', 'version_name': '6.10', 'updated_ms': 0});
     expect(find.text('2 עדכונים זמינים'), findsOneWidget);
-    expect(find.text('גרסה 6.10 · חדשה: 6.18'), findsOneWidget);
+    expect(find.text('גרסה 6.10 ← 6.18'), findsOneWidget);
     expect(find.textContaining('עודכנה ב-Google Play לפני 3 ימים'), findsOneWidget);
     expect(find.text('מעודכנות ואחרות (1)'), findsOneWidget);
 
