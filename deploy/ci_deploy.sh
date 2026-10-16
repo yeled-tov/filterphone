@@ -10,6 +10,7 @@
 #   apk                stdin: tar עם FilterPhone.apk + FilterPhone-universal.apk (+ FilterPhone.json) → דף ההורדה
 #   status             גרסה, שירותים, מקום פנוי
 #   rollback <גיבוי>   חזרה לגרסה הקודמת (deploy/rollback_version.sh) עם /root/fp-backups/<גיבוי>
+#   net                אבחון שרשרת התעבורה של הטלפונים (DNS, פרוקסי, NAT, תעבורה לכל מכשיר)
 #   wabot              אבחון בוט הוואטסאפ: מצב השירות, יומן אחרון, Chrome, הבוט הישן (pm2)
 #   legacy-bot <start|stop|logs>   הבוט הישן (filterphone-bot ב-pm2) — להשוואה מול הבוט החדש
 #   devices            אבחון מכשירים (לקריאה בלבד, בלי מספרי טלפון): מצב, גרסה, דיווח אחרון,
@@ -146,6 +147,98 @@ PY
     echo "== fp-api — בקשות מכשירים אחרונות"
     sudo -n journalctl -u fp-api --since "-1h" --no-pager -o short-iso 2>&1 | grep -E '"(GET|POST|PUT) /v1/' \
         | grep -v -E '/admin|/v1/bot/' | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/x.x.x.x/g' | tail -40 || true
+    ;;
+net)
+    # אבחון שרשרת התעבורה של הטלפונים (לקריאה בלבד): DNS → פרוקסי → NAT, ותעבורה אמיתית לכל מכשיר.
+    # handshake טרי לבד לא מוכיח שיש אינטרנט — כאן רואים איפה התעבורה נעצרת.
+    sudo -n python3 - <<'PY' || true
+import collections, re, sqlite3, subprocess, time
+
+def sh(*a):
+    return subprocess.run(list(a), capture_output=True, text=True).stdout
+
+now = time.time()
+print("== ip_forward:", sh("sysctl", "-n", "net.ipv4.ip_forward").strip())
+wgip = (re.search(r"inet (\d+\.\d+\.\d+\.\d+)", sh("ip", "-4", "-o", "addr", "show", "wg0")) or [None, "10.8.0.1"])[1]
+print(f"== DNS דרך AdGuard ({wgip}) — כמו שהטלפון שואל:")
+for n in ("google.com", "api.filterphone.com", "www.whatsapp.com", "play.googleapis.com", "connectivitycheck.gstatic.com"):
+    t = time.time()
+    r = sh("dig", "+short", "+time=2", "+tries=1", f"@{wgip}", n, "A").strip().splitlines()
+    print(f"   {n:32s} → {(r[-1] if r else '(אין תשובה)'):18s} {int((time.time() - t) * 1000)}ms")
+
+print("== שירותים (מתי עלו / כמה הפעלות מחדש):")
+for s in ("fp-proxy", "adguardhome", "fp-api", "caddy", "redis-server", "wg-quick@wg0"):
+    since = sh("systemctl", "show", "-p", "ActiveEnterTimestamp", "--value", s).strip()
+    nr = sh("systemctl", "show", "-p", "NRestarts", "--value", s).strip()
+    print(f"   {s:14s} since={since} restarts={nr}")
+
+db = sqlite3.connect("file:/var/lib/filterphone/filterphone.db?mode=ro", uri=True)
+db.row_factory = sqlite3.Row
+devs = {r["public_key"]: dict(r) for r in db.execute(
+    "SELECT id, name, vpn_ip, public_key, app_version FROM devices WHERE status = 'active'")}
+tr, hs = {}, {}
+for line in sh("wg", "show", "wg0", "transfer").splitlines():
+    k, rx, tx = line.split("\t")
+    tr[k] = (int(rx), int(tx))
+for line in sh("wg", "show", "wg0", "latest-handshakes").splitlines():
+    k, _, t = line.partition("\t")
+    hs[k] = int(t or 0)
+learned = collections.Counter(f.split("|", 1)[0] for f in sh("redis-cli", "--raw", "HKEYS", "fp:pt").splitlines() if "|" in f)
+print("== תעבורה במנהרה לכל מכשיר (מהטלפון → / ← אל הטלפון), handshake, מעקפים שנלמדו:")
+for k, d in sorted(devs.items(), key=lambda kv: -hs.get(kv[0], 0))[:12]:
+    rx, tx = tr.get(k, (0, 0))
+    h = hs.get(k, 0)
+    print(f"   #{d['id']:<3} {d['name'][:18]!r:20s} app={d['app_version']:8s} {d['vpn_ip']:12s} "
+          f"from_phone={rx / 1e6:8.2f}MB to_phone={tx / 1e6:8.2f}MB hs={(str(int((now - h) // 60)) + 'm') if h else 'never':>6s} "
+          f"learned={learned.get(d['vpn_ip'], 0)}")
+print(f"== Redis: fp:pt={sum(learned.values())} מעקפים | uptime={sh('redis-cli', 'INFO', 'server').split('uptime_in_seconds:')[-1].split()[0]}s")
+
+print("== NAT PREROUTING (מונים):")
+print(sh("iptables", "-t", "nat", "-L", "PREROUTING", "-v", "-n", "-x").rstrip())
+print("== FORWARD (מונים):")
+print(sh("iptables", "-L", "FORWARD", "-v", "-n", "-x").rstrip())
+
+log = sh("journalctl", "-u", "fp-proxy", "--since", "-3h", "--no-pager", "-o", "cat")
+cats, hosts, per_ip = collections.Counter(), collections.Counter(), collections.Counter()
+samples = []
+for line in log.splitlines():
+    low = line.lower()
+    if "handshake failed" in low or "tls" in low and ("fail" in low or "error" in low):
+        if any(m in low for m in ("does not trust", "certificate unknown", "unknown ca", "bad certificate",
+                                  "certificate_unknown", "unknown_ca", "bad_certificate")):
+            c = "distrust→learned"
+        elif any(m in low for m in ("disconnect", "reset", "eof", "closed", "timeout", "timed out")):
+            c = "client-closed→NOT-learned"
+        elif "server" in low:
+            c = "server-side"
+        else:
+            c = "other-tls"
+        cats[c] += 1
+        m = re.search(r"\bfor ([a-z0-9][a-z0-9.-]*\.[a-z]{2,})", low) or re.search(r"([a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,})", low)
+        if m:
+            hosts[(c, m.group(1))] += 1
+        ip = re.search(r"\b(10\.\d+\.\d+\.\d+)\b", line)
+        if ip:
+            per_ip[ip.group(1)] += 1
+        if len(samples) < 12 and c != "distrust→learned":
+            samples.append(line[:260])
+    elif "traceback" in low or "exception" in low or " error" in low:
+        cats["error/exception"] += 1
+        if len(samples) < 20:
+            samples.append(line[:260])
+print("== פרוקסי (3 שעות) — כשלים לפי סוג:", dict(cats))
+print("== פרוקסי — אתרים מובילים בכשל:")
+for (c, h), n in hosts.most_common(25):
+    print(f"   {n:6d}  {c:26s} {h}")
+print("== פרוקסי — כשלים לפי כתובת VPN:", dict(per_ip.most_common(10)))
+print("== פרוקסי — דוגמאות שורות (לא 'distrust'):")
+for s in samples:
+    print("   ", s)
+PY
+    echo "== Caddy — שגיאות אחרונות"
+    sudo -n journalctl -u caddy --since "-3h" --no-pager -o cat 2>&1 | grep -iE '"level":"error"|error' | tail -15 || true
+    echo "== fp-api — אזהרות ושגיאות (3 שעות)"
+    sudo -n journalctl -u fp-api --since "-3h" --no-pager -o cat 2>&1 | grep -E 'WARNING|ERROR|Traceback' | tail -25 || true
     ;;
 rollback)
     [[ "${arg:-}" =~ ^[0-9]{8}-[0-9]{6}$ ]] || { echo "שם גיבוי לא חוקי (למשל 20261005-213000)"; exit 2; }
