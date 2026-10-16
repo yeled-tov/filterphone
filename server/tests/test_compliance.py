@@ -404,6 +404,28 @@ def test_heartbeat_offers_published_release_verified_against_the_files(env, tmp_
     assert svc.device_detail(did)["latest_app_version"] is None
 
 
+def test_heartbeat_logs_tunnel_without_traffic(env):
+    """handshake טרי לא מוכיח שיש אינטרנט: הטלפון בודק תעבורה אמיתית ומדווח — וזה נכנס ליומן המכשיר."""
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    vpn = {"state": "UP", "handshake_age_s": 30}
+    client.post("/v1/device/heartbeat", headers=dh, json={"vpn": {**vpn, "data_ok": True, "data_fails": 0}})
+    client.post("/v1/device/heartbeat", headers=dh, json={"vpn": {
+        **vpn, "data_ok": False, "data_error": "dns", "data_fail_age_s": 120, "data_fails": 3, "junk": 1}})
+    client.post("/v1/device/heartbeat", headers=dh, json={"vpn": {
+        **vpn, "data_ok": True, "data_error": "dns", "data_fail_age_s": 900, "data_fails": 3}})
+    # כשל שקרה ונפתר בין שני דיווחים — רק המונה מראה אותו
+    client.post("/v1/device/heartbeat", headers=dh, json={"vpn": {
+        **vpn, "data_ok": True, "data_error": "timeout", "data_fail_age_s": 60, "data_fails": 4}})
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    log = [(e["kind"], e["detail"]) for e in reversed(d["device_log"]) if e["kind"].startswith("vpn_")]
+    assert log == [("vpn_no_data", "מנהרה למעלה בלי תעבורה: dns ×3, לפני 2 דק'"),
+                   ("vpn_data_ok", "התעבורה במנהרה חזרה"),
+                   ("vpn_no_data", "מנהרה למעלה בלי תעבורה: timeout, לפני 1 דק'")]
+    assert d["heartbeat"]["vpn"]["data_fails"] == 4 and "junk" not in d["heartbeat"]["vpn"]
+
+
 def test_heartbeat_logs_app_update_and_failure(env, tmp_path):
     svc, client = env
     h = admin_headers(client)

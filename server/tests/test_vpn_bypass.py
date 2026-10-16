@@ -183,6 +183,29 @@ def test_adguard_patch_removes_hotfix_exceptions_and_restores_youtube_safesearch
     assert yaml.safe_load(cfg.read_text(encoding="utf-8"))["user_rules"] == rules
 
 
+def test_adguard_patch_rate_limits_each_phone_not_the_whole_vpn_subnet(tmp_path):
+    """ratelimit: 30 לכל ‎/24 = 30 שאילתות בשנייה לכל הטלפונים יחד — "VPN מחובר ואין אינטרנט"."""
+    spec = importlib.util.spec_from_file_location("adguard_patch", REPO / "deploy" / "adguard_patch.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    cfg = tmp_path / "AdGuardHome.yaml"
+    cfg.write_text(yaml.safe_dump({"dns": {"ratelimit": 30, "ratelimit_subnet_len_ipv4": 24,
+                                           "ratelimit_subnet_len_ipv6": 56, "ratelimit_whitelist": []}}),
+                   encoding="utf-8")
+    mod.main(str(cfg))
+    dns = yaml.safe_load(cfg.read_text(encoding="utf-8"))["dns"]
+    assert dns["ratelimit_subnet_len_ipv4"] == 32
+    assert dns["ratelimit"] == mod.PHONE_RATELIMIT >= 200
+    assert dns["ratelimit_subnet_len_ipv6"] == 56
+    mod.main(str(cfg))                                             # הרצה חוזרת — אותו דבר
+    assert yaml.safe_load(cfg.read_text(encoding="utf-8"))["dns"] == dns
+
+    # 0 = בלי הגבלה — נשאר כך; גרסה בלי מפתח ה-subnet — לא מוסיפים מפתח לא מוכר
+    cfg.write_text(yaml.safe_dump({"dns": {"ratelimit": 0}}), encoding="utf-8")
+    mod.main(str(cfg))
+    assert yaml.safe_load(cfg.read_text(encoding="utf-8"))["dns"] == {"ratelimit": 0}
+
+
 # ------------------------------------------------------------------ גוגל ≠ ג'מיני
 
 

@@ -137,6 +137,7 @@
 | נמחק `querylog.json.1` (18GB) והדיסק ירד מ-100% ל-58% | — |
 | פורט 53 (TCP+UDP) הוגבל ל-`wg0` בלבד, גם ב-live וגם ב-`/etc/iptables/rules.v4` | `/root/fp-backups/rules.v4.*` |
 | AdGuard: `ratelimit: 30`, `querylog.interval: 168h` | `/root/fp-backups/AdGuardHome.yaml.*` |
+| **עודכן 16.10.2026:** ההגבלה נספרה לכל ‎/24 — כל הטלפונים ב-VPN (10.8.0.x) חלקו 30 שאילתות בשנייה, ומעבר לזה AdGuard זרק שאילתות בלי תשובה ("VPN מחובר ואין אינטרנט"; נמדד חי: 30/80 נענו). עכשיו ‎/32 — 300 לכל טלפון (`deploy/adguard_patch.py`). פורט 53 פתוח רק מתוך המנהרה, כך שהגנת ההגברה נשמרת ברמת חומת האש | — |
 | journald: `SystemMaxUse=300M`, `SystemKeepFree=2G` | `ops/journald/` |
 | `fp-disk-guard.timer`: כל 15 דקות, אם הדיסק מעל 85% מנקה לוגים | `ops/disk-guard/` |
 | אומת: DNS עונה מתוך השרת ו**לא** עונה מבחוץ. Redis שומר שוב | — |

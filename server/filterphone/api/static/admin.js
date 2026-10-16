@@ -42,7 +42,7 @@ const LOG_KINDS = {
   vpn_up: ["ok", "VPN חזר"], vpn_down: ["bad", "VPN כבה"], accessibility_on: ["ok", "המגן הופעל"],
   accessibility_off: ["bad", "המגן כובה"], management_on: ["ok", "מנהל מכשיר פעיל"],
   management_removed: ["bad", "מנהל המכשיר הוסר"], battery_unrestricted: ["ok", "סוללה: ללא הגבלה"],
-  battery_restricted: ["warn", "סוללה: מוגבלת"], outside_vpn: ["bad", "דיווח מחוץ למנהרה"], policy_error: ["warn", "שגיאת מדיניות"],
+  battery_restricted: ["warn", "סוללה: מוגבלת"], outside_vpn: ["bad", "דיווח מחוץ למנהרה"], vpn_no_data: ["bad", "VPN בלי תעבורה"], vpn_data_ok: ["ok", "התעבורה ב-VPN חזרה"], policy_error: ["warn", "שגיאת מדיניות"],
   app_updated: ["ok", "האפליקציה עודכנה"], app_update_failed: ["warn", "עדכון האפליקציה נכשל"],
   paused: ["warn", "ההגנה הושהתה"], resumed: ["ok", "ההגנה חזרה"], unmanage_requested: ["warn", "נשלחה הסרת ניהול"],
   management_cleared: ["warn", "הניהול הוסר"], uninstalled: ["bad", "הלקוח הסיר את ההגנה (בהשהיה)"],

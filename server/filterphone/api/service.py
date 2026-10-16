@@ -119,7 +119,9 @@ _HB_BOOL = ("device_owner", "device_admin", "battery_unrestricted", "background_
             "notifications")
 _HB_SECTIONS = {
     "vpn": {"state": str, "handshake_age_s": int, "always_on": bool, "lockdown": bool, "last_health_ok": int,
-            "reconnects": int, "error": str},
+            "reconnects": int, "error": str,
+            # בדיקת תעבורה אמיתית במנהרה (DataProbe): handshake טרי לא מוכיח שיש אינטרנט
+            "data_ok": bool, "data_error": str, "data_fail_age_s": int, "data_fails": int},
     "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool,
                       "self_heal": bool, "restored": int, "errors": int, "error": str},
     "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
@@ -1020,6 +1022,7 @@ class Services:
                     self.log_device(c, row["id"], up if after == good else down)
             if prev.get("via_vpn") is not False and hb.get("via_vpn") is False:
                 self.log_device(c, row["id"], "outside_vpn", "דיווח שהגיע שלא דרך המנהרה")
+            self._log_data_checks(c, row["id"], prev.get("vpn") or {}, hb.get("vpn") or {})
             if hb.get("policy_error") and hb.get("policy_error") != prev.get("policy_error"):
                 self.log_device(c, row["id"], "policy_error", hb["policy_error"])
             if prev.get("app_version") and hb.get("app_version") and prev["app_version"] != hb["app_version"]:
@@ -1053,6 +1056,21 @@ class Services:
         if fresh["status"] == "active":
             out["managed_apps"] = self.device_managed_apps()   # קטלוג מאושר; required יותקנו אוטומטית במנהל מכשיר
         return out
+
+    def _log_data_checks(self, c: sqlite3.Connection, device_id: int, prev: dict, vpn: dict) -> None:
+        """בדיקות התעבורה של הטלפון: "המנהרה למעלה בלי אינטרנט" נרשם ביומן המכשיר (עם השלב שנכשל
+        וכמה פעמים מאז הדיווח הקודם), וכשהתעבורה חוזרת — גם זה. הדיווח יומי / בפתיחת האפליקציה, ולכן
+        מונה הכשלים (המצטבר בטלפון) הוא מה שמראה כשלים שקרו בין דיווחים."""
+        fails, before = vpn.get("data_fails"), prev.get("data_fails")
+        new_fails = fails - before if isinstance(fails, int) and isinstance(before, int) and fails > before else 0
+        if new_fails or (vpn.get("data_ok") is False and prev.get("data_ok") is not False):
+            age = vpn.get("data_fail_age_s")
+            when = f", לפני {age // 60} דק'" if isinstance(age, int) else ""
+            times = f" ×{new_fails}" if new_fails > 1 else ""
+            self.log_device(c, device_id, "vpn_no_data",
+                            f"מנהרה למעלה בלי תעבורה: {vpn.get('data_error') or '?'}{times}{when}")
+        if vpn.get("data_ok") is True and prev.get("data_ok") is False:
+            self.log_device(c, device_id, "vpn_data_ok", "התעבורה במנהרה חזרה")
 
     def _admin_command(self, row: sqlite3.Row, t: int) -> dict | None:
         """פקודת מנהל שמועברת לטלפון בערוץ המאומת (heartbeat): השהיה או הסרת ניהול. התוקף מגיע
