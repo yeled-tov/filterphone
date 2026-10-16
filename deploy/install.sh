@@ -258,11 +258,20 @@ bash "$SRC/deploy/wabot_install.sh" || warn "בוט הוואטסאפ לא הות
 log "Caddy (HTTPS ל-${FP_PUBLIC_HOST:-api.filterphone.com}) ודף הורדת האפליקציה"
 install -d -m 755 /var/www/filterphone
 install -m 644 "$SRC/deploy/www/index.html" /var/www/filterphone/index.html
-sed "s/__PUBLIC_HOST__/${FP_PUBLIC_HOST:-api.filterphone.com}/" "$SRC/deploy/Caddyfile" > /etc/caddy/Caddyfile
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+caddy_new=$(mktemp)
+sed "s/__PUBLIC_HOST__/${FP_PUBLIC_HOST:-api.filterphone.com}/" "$SRC/deploy/Caddyfile" > "$caddy_new"
+caddy validate --config "$caddy_new" --adapter caddyfile >/dev/null
 systemctl enable caddy >/dev/null
-# טעינה מחדש "חלקה" (בלי לנתק חיבורים) — Caddy מגיש גם את ה-API שהאפליקציה מדברת איתו
-if systemctl is-active --quiet caddy; then systemctl reload caddy; else systemctl restart caddy; fi
+# Caddy מגיש גם את ה-API שהאפליקציה מדברת איתו. "admin off" = אין reload, רק restart (ניתוק קצר),
+# ולכן מפעילים מחדש רק כשההגדרות באמת השתנו. דף ההורדה וה-APK הם קבצים — לא דורשים הפעלה מחדש.
+if cmp -s "$caddy_new" /etc/caddy/Caddyfile && systemctl is-active --quiet caddy; then
+    echo "  Caddy: ההגדרות לא השתנו — בלי הפעלה מחדש"
+    rm -f "$caddy_new"
+else
+    install -m 644 "$caddy_new" /etc/caddy/Caddyfile
+    rm -f "$caddy_new"
+    systemctl restart caddy
+fi
 
 # ------------------------------------------------------------ 13א. ערוץ העלאה מ-GitHub
 # הפקודה היחידה שמפתח ההעלאה של GitHub Actions מורשה להריץ (forced command) — ראו deploy/ci_deploy.sh
