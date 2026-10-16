@@ -183,7 +183,8 @@ for line in sh("wg", "show", "wg0", "transfer").splitlines():
 for line in sh("wg", "show", "wg0", "latest-handshakes").splitlines():
     k, _, t = line.partition("\t")
     hs[k] = int(t or 0)
-learned = collections.Counter(f.split("|", 1)[0] for f in sh("redis-cli", "--raw", "HKEYS", "fp:pt").splitlines() if "|" in f)
+learned_keys = {f.lower() for f in sh("redis-cli", "--raw", "HKEYS", "fp:pt").splitlines() if "|" in f}
+learned = collections.Counter(f.split("|", 1)[0] for f in learned_keys)
 print("== תעבורה במנהרה לכל מכשיר (מהטלפון → / ← אל הטלפון), handshake, מעקפים שנלמדו:")
 for k, d in sorted(devs.items(), key=lambda kv: -hs.get(kv[0], 0))[:12]:
     rx, tx = tr.get(k, (0, 0))
@@ -211,6 +212,91 @@ for d in recent:
     for r in rows[-40:]:
         print(f"      {il(r['ts'])}  {r['kind']:22s} {r['detail'][:110]}")
 
+# AdGuard: הגבלת הקצב + העומס האמיתי לפי שנייה (מיומן השאילתות). שאילתה שנחסמה בהגבלת הקצב לא
+# נרשמת ביומן ולא מקבלת תשובה — רואים אותה כ"תקרה שטוחה": שניות שבהן הסכום נעצר בדיוק על המגבלה.
+rl, rl_len = 0, 24
+try:
+    import yaml
+    agdns = (yaml.safe_load(open("/opt/AdGuardHome/AdGuardHome.yaml", encoding="utf-8")) or {}).get("dns") or {}
+    rl = int(agdns.get("ratelimit") or 0)
+    rl_len = int(agdns.get("ratelimit_subnet_len_ipv4") or 24)
+    print("== AdGuard — הגבלת קצב:", {k: agdns.get(k) for k in (
+        "ratelimit", "ratelimit_subnet_len_ipv4", "ratelimit_whitelist", "refuse_any", "cache_size",
+        "upstream_mode", "max_goroutines")})
+    print("   upstream:", agdns.get("upstream_dns"), "| bootstrap:", agdns.get("bootstrap_dns"))
+except Exception as e:
+    print("== AdGuard — קריאת ההגדרות נכשלה:", e)
+
+import calendar, os
+ql_path = "/opt/AdGuardHome/data/querylog.json"
+q_since = now - 86400
+per_sec, per_sec_ip, per_hour_ip, sec_hosts = (collections.Counter(), collections.Counter(),
+                                               collections.Counter(), collections.defaultdict(collections.Counter))
+ts_cache = {}
+def q_ts(t):
+    k = t[:19] + t[-6:]
+    v = ts_cache.get(k)
+    if v is None:
+        m = re.match(r"(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)(?:\.\d+)?(Z|[+-]\d\d:\d\d)?$", t)
+        if not m:
+            return None
+        v = calendar.timegm(tuple(int(x) for x in m.groups()[:6]))
+        tzs = m.group(7) or "Z"
+        if tzs != "Z":
+            v -= (1 if tzs[0] == "+" else -1) * (int(tzs[1:3]) * 3600 + int(tzs[4:6]) * 60)
+        ts_cache[k] = v
+    return v
+try:
+    size = os.path.getsize(ql_path)
+    with open(ql_path, "rb") as f:
+        if size > 800_000_000:
+            f.seek(size - 800_000_000)
+            f.readline()
+        for raw in f:
+            line = raw.decode("utf-8", "replace")
+            mt = re.search(r'"T":\s*"([^"]+)"', line)
+            mi = re.search(r'"IP":\s*"([^"]+)"', line)
+            if not mt or not mi:
+                continue
+            ts = q_ts(mt.group(1))
+            if ts is None or ts < q_since:
+                continue
+            ip = mi.group(1)
+            if not ip.startswith("10."):
+                continue
+            s = int(ts)
+            per_sec[s] += 1
+            per_sec_ip[(s, ip)] += 1
+            per_hour_ip[(s // 3600, ip)] += 1
+            mh = re.search(r'"QH":\s*"([^"]+)"', line)
+            if mh:
+                sec_hosts[s][(ip, mh.group(1))] += 1
+    print(f"== AdGuard — יומן שאילתות: {size / 1e6:.0f}MB, {sum(per_sec.values())} שאילתות מהטלפונים ב-24 שעות")
+except FileNotFoundError:
+    print("== AdGuard — אין יומן שאילתות בקובץ", ql_path)
+except Exception as e:
+    print("== AdGuard — קריאת יומן השאילתות נכשלה:", e)
+
+if per_sec:
+    cap = rl if rl else None
+    ips = [d["vpn_ip"] for d in recent[:4]]
+    names = {d["vpn_ip"]: f"#{d['id']}" for d in recent}
+    print(f"== DNS לפי שעה (שעון ישראל) — כל הטלפונים יחד: שאילתות / שיא לשנייה / שניות על התקרה ({cap})"
+          + "".join(f" | {names[i]}: שאילתות שיא" for i in ips))
+    hours = sorted({s // 3600 for s in per_sec})
+    for h in hours[-24:]:
+        secs = [n for s, n in per_sec.items() if s // 3600 == h]
+        sat = sum(1 for n in secs if cap and n >= cap - 1)
+        row = f"   {il(h * 3600)}  {sum(secs):6d} {max(secs):4d}/s {sat:4d}"
+        for i in ips:
+            pk = max((n for (s, ip), n in per_sec_ip.items() if ip == i and s // 3600 == h), default=0)
+            row += f" | {per_hour_ip.get((h, i), 0):6d} {pk:3d}/s"
+        print(row)
+    print("== DNS — השניות העמוסות ביותר (מי שאל ומה):")
+    for s, n in per_sec.most_common(8):
+        top = ", ".join(f"{names.get(ip, ip)}:{host}×{c}" for (ip, host), c in sec_hosts[s].most_common(5))
+        print(f"   {il(s)}:{time.gmtime(s).tm_sec:02d}  {n:4d} שאילתות  — {top[:200]}")
+
 print("== NAT PREROUTING (מונים):")
 print(sh("iptables", "-t", "nat", "-L", "PREROUTING", "-v", "-n", "-x").rstrip())
 print("== FORWARD (מונים):")
@@ -222,9 +308,13 @@ samples = []
 for line in log.splitlines():
     low = line.lower()
     if "handshake failed" in low or "tls" in low and ("fail" in low or "error" in low):
+        m = re.search(r"\bfor ([a-z0-9][a-z0-9.-]*\.[a-z]{2,})", low) or re.search(r"([a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,})", low)
+        ip = re.search(r"\b(10\.\d+\.\d+\.\d+)\b", line)
         if any(m in low for m in ("does not trust", "certificate unknown", "unknown ca", "bad certificate",
                                   "certificate_unknown", "unknown_ca", "bad_certificate")):
-            c = "distrust→learned"
+            # במצב "תמונות באפליקציות: חסום" שרתי תמונות לא נלמדים בכוונה — כל חיבור אליהם נכשל מחדש
+            c = ("distrust→learned" if not (m and ip) or f"{ip.group(1)}|{m.group(1)}" in learned_keys
+                 else "distrust→NOT-learned(images)")
         elif any(m in low for m in ("disconnect", "reset", "eof", "closed", "timeout", "timed out")):
             c = "client-closed→NOT-learned"
         elif "server" in low:
@@ -232,13 +322,11 @@ for line in log.splitlines():
         else:
             c = "other-tls"
         cats[c] += 1
-        m = re.search(r"\bfor ([a-z0-9][a-z0-9.-]*\.[a-z]{2,})", low) or re.search(r"([a-z0-9-]+(?:\.[a-z0-9-]+)+\.[a-z]{2,})", low)
         if m:
             hosts[(c, m.group(1))] += 1
-        ip = re.search(r"\b(10\.\d+\.\d+\.\d+)\b", line)
         if ip:
             per_ip[ip.group(1)] += 1
-        if len(samples) < 12 and c != "distrust→learned":
+        if len(samples) < 12 and not c.startswith("distrust"):
             samples.append(line[:260])
     elif "traceback" in low or "exception" in low or " error" in low:
         cats["error/exception"] += 1
