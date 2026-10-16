@@ -726,10 +726,11 @@ class _PhoneAppRow extends StatelessWidget {
     final installing = store.progress.containsKey(app.package);
     final p = store.progress[app.package];
     final version = app.versionName.isEmpty ? '' : 'גרסה ${app.versionName}';
+    final pv = info?.playVersion ?? '';
     final sub = switch (info?.status) {
-      'update' => (app.versionName.isNotEmpty && info!.playVersion.isNotEmpty)
-          ? 'גרסה ${app.versionName} ← ${info.playVersion}'
-          : 'עדכון זמין${(info!.playVersion.isNotEmpty) ? ' · ${info.playVersion}' : ''}',
+      'update' => (app.versionName.isNotEmpty && pv.isNotEmpty)
+          ? 'גרסה ${app.versionName} ← $pv'
+          : (pv.isNotEmpty ? 'עדכון זמין · $pv' : 'עדכון זמין'),
       'maybe' => [version, if (info!.playUpdated != null) 'עודכנה ב-Google Play ${_ago(info.playUpdated!)}']
           .where((x) => x.isNotEmpty).join(' · '),
       'current' => [version, 'מעודכנת'].where((x) => x.isNotEmpty).join(' · '),
