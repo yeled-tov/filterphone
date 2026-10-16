@@ -33,7 +33,7 @@ const { replyDelayMs, typingMs, parseHashReply, waNumber } = require('./lib/logi
 const labels = require('./lib/labels');
 const know = require('./lib/knowledge');
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 const API = (process.env.FP_API || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
@@ -475,7 +475,8 @@ async function handleAppSupport(m, waIds) {
   } else {
     try { await srv.reply(deviceId, APP_CHECKING); } catch { /* */ }
     const q = res.tags.find((t) => t.kind === 'ASK')?.arg;
-    const why = res.ai === 'none' ? 'אין מפתח AI מוגדר בדשבורד' : (q || 'צריך את העזרה שלך');
+    const why = res.error ? 'ה-AI לא היה זמין לרגע'
+      : res.ai === 'none' ? 'אין מפתח AI מוגדר בדשבורד' : (q || 'צריך את העזרה שלך');
     const sent = await toAdmin(`${head}\n\n${m.text}\n\n🤔 *הבוט לא ענה לבד* (${why}).\n"השב" כאן והתשובה תחזור ללקוח, או: #${deviceId} <תשובה>`);
     rememberAppThread(sent, deviceId, m.text, phone);
   }

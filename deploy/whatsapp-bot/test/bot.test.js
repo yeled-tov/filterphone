@@ -72,15 +72,56 @@ test('gemini: picks the newest flash model and sends system + history', async ()
   assert.equal(gen.body.contents[2].parts[0].text, 'כמה עולה?');
 });
 
-test('AI failure or no key → polite fixed answer and hand off to a human', async () => {
+test('AI outage → polite answer and a question to the owner (bot stays in the chat); no key → human', async () => {
+  ai._resetModelCache();
   const boom = async () => ({ ok: false, status: 429, json: async () => ({}) });
   const r = await ai.answer({ ai_provider: 'gemini', ai_key: 'K', ai_model: 'gemini-2.5-flash' },
     { inHours: false, hoursText: HOURS, history: [], text: 'שלום' }, boom);
   assert.match(r.text, /מחוץ לשעות הפעילות/);
-  assert.deepEqual(r.tags, [{ kind: 'HUMAN', arg: '' }]);
+  assert.equal(r.tags.length, 1);
+  assert.equal(r.tags[0].kind, 'ASK');                     // לא HUMAN — לא מוציאים את הבוט מהשיחה
   assert.match(r.error, /429/);
   const n = await ai.answer({ ai_provider: 'none', ai_key: '' }, { inHours: true, hoursText: HOURS, history: [], text: 'x' });
   assert.equal(n.ai, 'none');
+  assert.deepEqual(n.tags, [{ kind: 'HUMAN', arg: '' }]);
+});
+
+test('gemini 503 (busy) → tries again, then a fallback model, and answers', async () => {
+  ai._resetModelCache();
+  const gens = [];
+  const fakeFetch = async (url) => {
+    if (url.includes('/models?')) {
+      return { ok: true, json: async () => ({ models: [
+        { name: 'models/gemini-2.5-flash', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-2.0-flash', supportedGenerationMethods: ['generateContent'] },
+        { name: 'models/gemini-2.5-flash-lite', supportedGenerationMethods: ['generateContent'] }] }) };
+    }
+    const model = /models\/([^:]+):generateContent/.exec(url)[1];
+    gens.push(model);
+    if (model === 'gemini-2.5-flash') return { ok: false, status: 503, json: async () => ({}) };
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'כן, אפשר לחסום טיקטוק 👍' }] } }] }) };
+  };
+  const res = await ai.answer({ ai_provider: 'gemini', ai_key: 'K', ai_model: '' },
+    { inHours: true, hoursText: HOURS, history: [], text: 'אפשר לחסום טיקטוק?' }, fakeFetch);
+  assert.equal(res.text, 'כן, אפשר לחסום טיקטוק 👍');
+  assert.equal(res.ai, 'gemini');
+  assert.equal(res.error, undefined);
+  assert.deepEqual(gens, ['gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash']);
+});
+
+test('gemini: a key/permission error is not retried', async () => {
+  ai._resetModelCache();
+  let calls = 0;
+  const denied = async () => { calls += 1; return { ok: false, status: 403, json: async () => ({}) }; };
+  const r = await ai.answer({ ai_provider: 'gemini', ai_key: 'BAD', ai_model: 'gemini-2.5-flash' },
+    { inHours: true, hoursText: HOURS, history: [], text: 'x' }, denied);
+  assert.match(r.error, /403/);
+  assert.equal(calls, 1);
+});
+
+test('fallback models: stable flash newest first, then flash-lite', () => {
+  assert.deepEqual(ai.geminiFallbacks(['gemini-2.0-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash',
+    'gemini-2.5-pro', 'gemini-3.0-flash-preview'], 'gemini-2.5-flash'), ['gemini-2.0-flash', 'gemini-2.5-flash-lite']);
 });
 
 test('state: handoff pause, rate limit, persistence and lookup by phone', () => {
