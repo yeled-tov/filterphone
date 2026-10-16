@@ -72,13 +72,14 @@ jobs:
       - name: בניית APK
         run: |
           V=1.0.${{ github.run_number }}
-          ARGS="--release --build-number=${{ github.run_number }} --build-name=$V"
+          # APK אוניברסלי יחיד — עובד על כל מעבד (arm64 / arm / x86_64). לא מפצלים ל-arm64:
+          # הפיצול יצר versionCode כפול (2xxx) ו-APK נפרד שנהג אחרת ושבר אינטרנט אצל חלק מהטלפונים.
+          # versionCode מתחיל מעל טווח ה-arm64 הישן (2xxx) כדי שגם טלפון שנתקע על הגרסה הישנה יוכל להתעדכן.
+          CODE=$(( 3000 + ${{ github.run_number }} ))
+          ARGS="--release --build-number=$CODE --build-name=$V"
           mkdir -p ../dist
-          # גרסה לכל המעבדים (גיבוי) + גרסה קלה ל-arm64 (כמעט כל הטלפונים)
           flutter build apk $ARGS
           cp build/app/outputs/flutter-apk/app-release.apk ../dist/FilterPhone-$V-universal.apk
-          flutter build apk $ARGS --split-per-abi --target-platform android-arm64
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/FilterPhone-$V-arm64.apk
 
       # בדיקות היחידה של הקוד הנייטיבי (מדיניות, זיהוי תמונות פרופיל, השהיות, עדכון עצמי) + lint.
       # אחרי הבנייה: היא יוצרת את gradlew ואת local.properties

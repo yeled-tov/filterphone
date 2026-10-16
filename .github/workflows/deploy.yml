@@ -114,11 +114,12 @@ jobs:
 
           cd app
           mkdir -p dist
-          ARGS="--release --build-number=$BUILD_NUMBER --build-name=$VERSION_NAME"
+          # APK אוניברסלי יחיד (arm64 / arm / x86_64). versionCode מעל טווח ה-arm64 הישן (2xxx)
+          # כדי שגם טלפון שנתקע על הגרסה הקלה הישנה יתעדכן לגרסה האוניברסלית התקינה.
+          CODE=$(( 3000 + BUILD_NUMBER ))
+          ARGS="--release --build-number=$CODE --build-name=$VERSION_NAME"
           flutter build apk $ARGS
           cp build/app/outputs/flutter-apk/app-release.apk "dist/FilterPhone-$VERSION_NAME-universal.apk"
-          flutter build apk $ARGS --split-per-abi --target-platform android-arm64
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/FilterPhone-$VERSION_NAME-arm64.apk"
 
       - name: בדיקות ו-lint (Kotlin)
         if: inputs.what == 'both' || inputs.what == 'apk'
@@ -156,7 +157,9 @@ jobs:
       - name: פרסום האפליקציה
         if: inputs.what == 'both' || inputs.what == 'apk'
         run: |
-          cp app/dist/*-arm64.apk FilterPhone.apk
+          # APK אחד אוניברסלי, מפורסם בשני השמות: FilterPhone.apk (הורדה ראשית + עדכון עצמי)
+          # ו-FilterPhone-universal.apk (הקמת Device Owner ב-QR, אותם בתים בדיוק)
+          cp app/dist/*-universal.apk FilterPhone.apk
           cp app/dist/*-universal.apk FilterPhone-universal.apk
           cp app/dist/FilterPhone.json .
           echo "מפרסם את הגרסה ${{ steps.app_version.outputs.version }} שנבנתה ונחתמה ב-workflow הזה"

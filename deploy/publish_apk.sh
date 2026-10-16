@@ -14,13 +14,13 @@ trap 'rm -rf "$tmp"' EXIT
 run_id=$(gh run list -R "$REPO" --workflow app.yml --branch main --status success --limit 1 --json databaseId -q '.[0].databaseId')
 [ -n "$run_id" ] || { echo "אין בנייה מוצלחת של האפליקציה"; exit 1; }
 gh run download "$run_id" -R "$REPO" -n FilterPhone-APK -D "$tmp"
-arm64=$(ls "$tmp"/*-arm64.apk | head -1)
 universal=$(ls "$tmp"/*-universal.apk | head -1)
-echo "מפרסם $(basename "$arm64") + $(basename "$universal") (בנייה $run_id)"
+echo "מפרסם $(basename "$universal") (בנייה $run_id)"
 
-# FilterPhone.apk = arm64 (קל, מתאים כמעט לכל טלפון); FilterPhone-universal.apk = לכל המעבדים;
+# APK אחד אוניברסלי (כל המעבדים), מפורסם בשני השמות: FilterPhone.apk = הורדה ראשית ועדכון עצמי;
+# FilterPhone-universal.apk = הקמת Device Owner ב-QR (אותם בתים).
 # FilterPhone.json = הגרסה והטביעות — מהן השרת מציע עדכון לטלפונים (במנהל מכשיר: עדכון שקט)
-scp -o BatchMode=yes "$arm64" "$SERVER:/tmp/FilterPhone.apk"
+scp -o BatchMode=yes "$universal" "$SERVER:/tmp/FilterPhone.apk"
 scp -o BatchMode=yes "$universal" "$SERVER:/tmp/FilterPhone-universal.apk"
 json=""
 if [ -f "$tmp/FilterPhone.json" ]; then

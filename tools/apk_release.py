@@ -3,7 +3,7 @@
 
     python3 tools/apk_release.py --aapt2 <path/to/aapt2> dist/
 
-לכל APK בתיקייה (FilterPhone-<גרסה>-arm64.apk / -universal.apk) נבדק, מתוך ה-APK עצמו:
+ה-APK האוניברסלי שנבנה (FilterPhone-<גרסה>-universal.apk) נבדק, מתוך ה-APK עצמו:
   - שם החבילה, versionCode / versionName, minSdk ו-targetSdk;
   - שאינו debuggable, שאין גיבוי (allowBackup) ושאין תעבורה לא מוצפנת (cleartext);
   - ההרשאות שההגנה צריכה — ושאין הרשאות פרטיות (הודעות, אנשי קשר, מיקום, מיקרופון...);
@@ -28,8 +28,9 @@ from pathlib import Path
 PACKAGE = "com.filterphone.app"
 MIN_SDK = 26
 MIN_TARGET_SDK = 35
-# השם בדף ההורדה לכל סוג בנייה (כמו ב-deploy.yml / publish_apk.sh)
-PUBLISHED = {"arm64": "FilterPhone.apk", "universal": "FilterPhone-universal.apk"}
+# בנייה אחת אוניברסלית (כל המעבדים), מפורסמת כ-FilterPhone.apk. אין יותר פיצול arm64:
+# הוא יצר versionCode כפול ו-APK שנהג אחרת ושבר אינטרנט אצל חלק מהטלפונים.
+PUBLISHED = {"universal": "FilterPhone.apk"}
 
 REQUIRED_PERMISSIONS = {
     "android.permission.INTERNET",
