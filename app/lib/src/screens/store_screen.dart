@@ -425,7 +425,7 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
                 FilledButton.icon(
                   onPressed: () => _toast(_store.updateAll()),
                   icon: const Icon(Icons.system_update_alt_rounded, size: 20),
-                  label: Text('עדכון כל ה-${pending.length}'),
+                  label: const Text('עדכון הכול'),
                 ),
               ],
             ]),
