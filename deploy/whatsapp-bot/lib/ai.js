@@ -66,9 +66,20 @@ function pickGemini(names) {
 
 let modelCache = { key: '', model: '', at: 0 };
 
+// זמן קצוב לכל קריאת AI — בלעדיו קריאה תקועה הייתה משאירה את הבוט "חושב" לנצח (נראה איטי/תקוע).
+const AI_TIMEOUT_MS = Number(process.env.FP_AI_TIMEOUT_MS) || 20000;
+
+/** fetch עם timeout (AbortController). בכשל/פסק-זמן נזרקת שגיאה → answer() נופל לתשובת גיבוי. */
+function tfetch(fetchImpl, url, opts = {}) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), AI_TIMEOUT_MS);
+  return Promise.resolve(fetchImpl(url, { ...opts, signal: ac.signal }))
+    .finally(() => clearTimeout(timer));
+}
+
 async function geminiModel(key, fetchImpl = fetch) {
   if (modelCache.key === key && Date.now() - modelCache.at < 6 * 3600e3) return modelCache.model;
-  const r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`);
+  const r = await tfetch(fetchImpl, `https://generativelanguage.googleapis.com/v1beta/models?pageSize=200&key=${encodeURIComponent(key)}`);
   if (!r.ok) throw new Error(`gemini models HTTP ${r.status}`);
   const names = ((await r.json()).models || [])
     .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
@@ -83,7 +94,7 @@ async function askGemini({ key, model, system, history, text, fetchImpl = fetch 
   const contents = [...history, { role: 'user', content: text }].map((h) => ({
     role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }],
   }));
-  const r = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {
+  const r = await tfetch(fetchImpl, `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -101,7 +112,7 @@ async function askGemini({ key, model, system, history, text, fetchImpl = fetch 
 
 async function askGroq({ key, model, system, history, text, fetchImpl = fetch }) {
   const m = model || 'llama-3.3-70b-versatile';
-  const r = await fetchImpl('https://api.groq.com/openai/v1/chat/completions', {
+  const r = await tfetch(fetchImpl, 'https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({ model: m, max_tokens: 500, temperature: 0.6,

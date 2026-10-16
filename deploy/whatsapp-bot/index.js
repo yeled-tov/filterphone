@@ -87,7 +87,9 @@ let lastOutboxId = 0;
 const botMsgIds = new Set();  // הודעות שהבוט שלח — כדי לא להתייחס אליהן כאילו אתה כתבת
 // אותו דבר לפי תוכן: וואטסאפ לפעמים מדווח על ההודעה לפני ש-sendMessage מחזיר את המזהה
 const outgoing = new Map();   // טקסט → עד מתי לצפות לו
-const appThreads = new Map(); // הודעת העברה בצ'אט שלך → מכשיר (לתשובה ב"השב")
+const appThreads = new Map(); // הודעת העברה בצ'אט שלך → {deviceId, question, phone} (לתשובה ב"השב")
+// מה שהלקוח רואה באפליקציה כשהבוט לא ענה לבד ומעביר אליך (הודעת ביניים נעימה)
+const APP_CHECKING = 'קיבלנו את פנייתך 🙏 בודקים ונחזור אליך כאן בהקדם.';
 const pending = new Map();    // תשובות שמחכות (5 שניות בשעות הפעילות)
 const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0 };
 let knowledge = [];           // מה שהבוט למד ממך (מהשרת)
@@ -406,12 +408,8 @@ async function pollOutbox() {
         const done = [];
         const waIds = {};
         for (const m of messages) {
-          const head = `📩 *פנייה מהאפליקציה* · ${m.customer || 'לקוח'}${m.phone ? ' · ' + m.phone : ''} · מכשיר #${m.device_id}`;
-          const sent = await toAdmin(`${head}\n\n${m.text}\n\n↩️ "השב" על ההודעה, או: #${m.device_id} <תשובה>`);
-          if (sent?.id?._serialized) {
-            waIds[m.id] = sent.id._serialized;
-            appThreads.set(sent.id._serialized, m.device_id);
-          }
+          try { await handleAppSupport(m, waIds); }
+          catch (e) { console.warn('app-support:', e.message); }
           done.push(m.id);
           lastOutboxId = Math.max(lastOutboxId, m.id);
         }
@@ -423,6 +421,63 @@ async function pollOutbox() {
     console.warn('outbox:', e.message);
   } finally {
     setTimeout(pollOutbox, OUTBOX_EVERY_MS);
+  }
+}
+
+function rememberAppThread(sent, deviceId, question, phone) {
+  if (sent?.id?._serialized) appThreads.set(sent.id._serialized, { deviceId, question, phone });
+}
+
+/**
+ * פנייה מצ'אט התמיכה באפליקציה: הבוט עונה ללקוח *בתוך האפליקציה* ב-AI (אותו מוח של וואטסאפ + מה שלמד).
+ *   • בטוח בתשובה → עונה ללקוח מיד באפליקציה, ואצלך בצ'אט מופיע מה ענה (אפשר לתקן/להוסיף ב"השב").
+ *   • לא בטוח / אין מפתח AI → הלקוח מקבל "בודקים ונחזור", ואתה מקבל את השאלה; תשובתך חוזרת ללקוח ונשמרת.
+ *   • יש לבוט את מזהה המכשיר, לכן הוא יכול לחסום מיד (BLOCK) ולהעביר פעולה רגישה לאישורך (ESCALATE).
+ */
+async function handleAppSupport(m, waIds) {
+  const deviceId = m.device_id;
+  const phone = String(m.phone || '').replace(/\D/g, '');
+  const head = `📩 *פנייה מהאפליקציה* · ${m.customer || 'לקוח'}${m.phone ? ' · ' + m.phone : ''} · מכשיר #${deviceId}`;
+  let crm = null;
+  if (phone) { try { crm = await srv.customer(phone); } catch { /* לא לקוח — עדיין עונים */ } }
+
+  const sel = know.select(await loadKnowledge(), m.text);
+  const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: inHours(),
+    hoursText: cfg.hours, crm, history: [], text: m.text, knowledge: know.promptSection(sel),
+    askWhenUnsure: cfg.ask_when_unsure !== false });
+  if (sel.qas.length) srv.used(sel.qas.map((q) => q.id)).catch(() => {});
+  if (res.error) { stats.ai_errors += 1; status.error = `AI: ${res.error}`; }
+  else if (status.error?.startsWith('AI:')) status.error = '';
+  status.ai = res.ai;
+
+  // פעולות שהבוט רשאי לבצע מתוך הפנייה (יש לו את מזהה המכשיר): חסימה מיידית, והסלמה לאישורך
+  const deviceOps = crm?.devices?.length === 1 ? crm.devices[0].device_id : deviceId;
+  for (const t of res.tags) {
+    if (t.kind === 'BLOCK' && t.arg) {
+      await srv.block(deviceOps, [t.arg]).catch((e) => console.warn('block:', e.message));
+    } else if (t.kind === 'ESCALATE') {
+      await srv.escalate(deviceOps, t.arg || m.text).catch((e) => console.warn('escalate:', e.message));
+      await toAdmin(`🔐 *בקשה לאישורך* · מכשיר #${deviceOps}${m.phone ? ' · ' + m.phone : ''}\n${t.arg || m.text}\n(בדשבורד → בקשות)`);
+    }
+  }
+
+  const unsure = !res.text || res.ai === 'none' || res.tags.some((t) => t.kind === 'ASK' || t.kind === 'HUMAN');
+  if (!unsure) {
+    let out = res.text;
+    if (res.tags.some((t) => t.kind === 'ADDRESS')) {
+      const block = ai.addressBlock(cfg.business_info);
+      if (block) out = `${out ? out + '\n\n' : ''}${block}`;
+    }
+    try { await srv.reply(deviceId, out); stats.app_replies += 1; }
+    catch (e) { await toAdmin(`⚠️ התשובה למכשיר #${deviceId} לא נשלחה: ${e.message}`); }
+    const sent = await toAdmin(`${head}\n\n${m.text}\n\n🤖 *הבוט ענה ללקוח:*\n${out}\n\n↩️ לתיקון/תוספת: "השב" או #${deviceId} <טקסט>`);
+    rememberAppThread(sent, deviceId, m.text, phone);
+  } else {
+    try { await srv.reply(deviceId, APP_CHECKING); } catch { /* */ }
+    const q = res.tags.find((t) => t.kind === 'ASK')?.arg;
+    const why = res.ai === 'none' ? 'אין מפתח AI מוגדר בדשבורד' : (q || 'צריך את העזרה שלך');
+    const sent = await toAdmin(`${head}\n\n${m.text}\n\n🤔 *הבוט לא ענה לבד* (${why}).\n"השב" כאן והתשובה תחזור ללקוח, או: #${deviceId} <תשובה>`);
+    rememberAppThread(sent, deviceId, m.text, phone);
   }
 }
 
@@ -470,11 +525,20 @@ async function onAdmin(msg, body, selfChat) {
   if (ask) return answerAsk(msg, ask, body);
   // תשובה ללקוח באפליקציה: "#123 טקסט", או "השב" על הודעת פנייה
   let reply = parseHashReply(body);
-  if (!reply && quotedId && appThreads.has(quotedId)) reply = { deviceId: appThreads.get(quotedId), text: body };
+  if (!reply && quotedId && appThreads.has(quotedId)) {
+    const t = appThreads.get(quotedId);
+    reply = { deviceId: t.deviceId, text: body, thread: t };
+  }
   if (reply) {
     try {
       await srv.reply(reply.deviceId, reply.text);
       stats.app_replies += 1;
+      // לימוד: תשובתך לפנייה מהאפליקציה נשמרת, כדי שהבוט יֵדע לבד בפעם הבאה
+      if (reply.thread?.question) {
+        srv.learn({ kind: 'qa', question: reply.thread.question, answer: reply.text,
+          phone: reply.thread.phone || '', source: 'app' })
+          .then(() => { stats.learned += 1; loadKnowledge(true); }).catch(() => {});
+      }
       await msg.react('✅').catch(() => {});
     } catch (e) {
       await toAdmin(`⚠️ התשובה למכשיר #${reply.deviceId} לא נשלחה: ${e.message}`);
