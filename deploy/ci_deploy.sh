@@ -227,6 +227,32 @@ try:
 except Exception as e:
     print("== AdGuard — קריאת ההגדרות נכשלה:", e)
 
+# בדיקה חיה של הגבלת הקצב: 80 שאילתות בבת אחת מ-127.0.0.1 — "דלי" נפרד מזה של הטלפונים (10.8.0.x),
+# כך שהבדיקה לא גוזלת להם כלום. כמה קיבלו תשובה תוך 2 שניות? (שאילתה שנחסמה בהגבלה — לא נענית בכלל)
+import socket, struct
+def dns_burst(n=80, server=("127.0.0.1", 53)):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    q = b"".join(bytes([len(p)]) + p.encode() for p in "example.com".split(".")) + b"\0" + struct.pack(">HH", 1, 1)
+    t0 = time.time()
+    for i in range(n):
+        s.sendto(struct.pack(">HHHHHH", i, 0x0100, 1, 0, 0, 0) + q, server)
+    sent_in = time.time() - t0
+    got = set()
+    s.settimeout(0.25)
+    while time.time() - t0 < 2.5 and len(got) < n:
+        try:
+            got.add(struct.unpack(">H", s.recv(4096)[:2])[0])
+        except socket.timeout:
+            pass
+    s.close()
+    return len(got), sent_in
+try:
+    ans, took = dns_burst()
+    print(f"== AdGuard — בדיקה חיה: 80 שאילתות ב-{took * 1000:.0f}ms מ-127.0.0.1 → נענו {ans}/80"
+          + (" ← הגבלת הקצב זורקת שאילתות" if ans < 80 else " ← בלי זריקות"))
+except Exception as e:
+    print("== AdGuard — הבדיקה החיה נכשלה:", e)
+
 import calendar, os
 ql_path = "/opt/AdGuardHome/data/querylog.json"
 q_since = now - 86400
