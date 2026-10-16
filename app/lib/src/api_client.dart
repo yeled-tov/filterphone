@@ -1,4 +1,5 @@
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -458,6 +459,29 @@ class StoreApp {
 }
 
 class ApiClient {
+  /// הודעה מדויקת לפי סוג התקלה ברשת (במקום "אין אינטרנט" לכל דבר) — כדי שהמשתמש, התמיכה והאבחון
+  /// יידעו איפה זה נתקע. הקוד בסוגריים (dns / timeout / tls / reset / offline) עוזר לתמיכה.
+  static String describeNetworkError(Object e) {
+    final s = e.toString().toLowerCase();
+    if (e is TimeoutException || s.contains('timed out') || s.contains('timeout')) {
+      return 'השרת לא ענה בזמן — כנראה האינטרנט איטי או נתקע. נסו שוב בעוד רגע. (timeout)';
+    }
+    if (s.contains('failed host lookup') || s.contains('no address associated') || s.contains('nodename nor servname')) {
+      return 'הטלפון לא מצליח לאתר את השרת (DNS). בדקו שיש אינטרנט ונסו שוב בעוד רגע. (dns)';
+    }
+    if (s.contains('network is unreachable') || s.contains('no route to host')) {
+      return 'אין כרגע חיבור לאינטרנט בטלפון. התחברו ל-Wi-Fi או לנתונים ונסו שוב. (offline)';
+    }
+    if (s.contains('handshake') || s.contains('certificate') || s.contains('tls')) {
+      return 'החיבור המאובטח לשרת נכשל. בדקו שהתאריך והשעה בטלפון נכונים ונסו שוב. (tls)';
+    }
+    if (s.contains('connection refused') || s.contains('connection reset') || s.contains('connection closed') ||
+        s.contains('broken pipe')) {
+      return 'החיבור לשרת נקטע. נסו שוב בעוד רגע. (reset)';
+    }
+    return 'אין חיבור לשרת. בדקו את החיבור לאינטרנט ונסו שוב.';
+  }
+
   ApiClient({http.Client? client, String? baseUrl})
       : _http = client ?? http.Client(),
         _base = baseUrl ?? apiBaseUrl;
@@ -647,8 +671,8 @@ class ApiClient {
         'DELETE' => _http.delete(uri, headers: headers),
         _ => _http.get(uri, headers: headers),
       }.timeout(_timeout);
-    } on Exception {
-      throw ApiException(0, 'אין חיבור לשרת. בדקו את החיבור לאינטרנט ונסו שוב.');
+    } on Exception catch (e) {
+      throw ApiException(0, describeNetworkError(e));
     }
 
     Object? decoded;

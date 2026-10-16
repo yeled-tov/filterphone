@@ -29,6 +29,8 @@ import java.util.concurrent.TimeUnit
  *   - חיבור שנכשל (למשל אין עדיין DNS אחרי אתחול) — ניסיון חוזר עם השהיה הולכת וגדלה (Backoff),
  *     ואם השם לא מתפענח — חיבור לכתובת ה-IP החלופית מהשרת (endpoint_fallback).
  *   - בדיקת תקינות: מנהרה "למעלה" בלי handshake טרי כשיש רשת — מחברים מחדש.
+ *   - בדיקת תעבורה (DataProbe): handshake טרי לא מוכיח שיש אינטרנט. בקשת HTTP אמיתית במנהרה, לכל
+ *     היותר פעם בדקה; שני כשלים ברצף כשהרשת של הטלפון עצמה תקינה — מחברים מחדש.
  * לעולם לא בלולאה: כל ניסיון עובר דרך ה-Backoff.
  */
 object TunnelManager {
@@ -40,6 +42,8 @@ object TunnelManager {
     private const val K_WANTED = "vpn_wanted"
     private const val STALE_HANDSHAKE_MS = 3 * 60_000L // WireGuard מחדש handshake כל 2 דקות כשיש תעבורה
     private const val CONNECT_TIMEOUT_S = 25L
+    private const val DATA_CHECK_EVERY_MS = 60_000L    // בדיקת תעבורה — לכל היותר פעם בדקה (סוללה)
+    private const val DATA_FAILS_TO_RECONNECT = 2      // כשל בודד יכול להיות רגעי — לא מחברים מחדש עליו
 
     private lateinit var appContext: Context
     private val backend: GoBackend by lazy { GoBackend(appContext) }
@@ -47,6 +51,12 @@ object TunnelManager {
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
     private val listeners = CopyOnWriteArrayList<(Tunnel.State) -> Unit>()
     private val backoff: Backoff by lazy { Backoff(ProtectionState.prefs(appContext), "vpn") }
+    /** חיבור מחדש בגלל "אין תעבורה" — השהיה נפרדת: אם הבעיה בשרת, חיבור מחדש לא יעזור ולא חוזרים עליו כל דקה. */
+    private val dataBackoff: Backoff by lazy {
+        Backoff(ProtectionState.prefs(appContext), "vpn_data", longArrayOf(120_000, 300_000, 600_000, 900_000))
+    }
+    @Volatile private var lastDataCheck = 0L
+    @Volatile private var dataFailsInRow = 0
 
     @Volatile var state: Tunnel.State = Tunnel.State.DOWN
         private set
@@ -241,8 +251,9 @@ object TunnelManager {
     }
 
     /**
-     * בדיקת תקינות: המנהרה למעלה וה-handshake האחרון טרי. מנהרה "תקועה" (יש רשת אבל אין handshake
-     * כמה דקות) — מחברים מחדש. נקרא מהשירות הקדמי ומהמשימה התקופתית.
+     * בדיקת תקינות: המנהרה למעלה, ה-handshake האחרון טרי, ותעבורה באמת עוברת בה (dataCheck).
+     * מנהרה "תקועה" (יש רשת אבל אין handshake כמה דקות) — מחברים מחדש. נקרא מהשירות הקדמי
+     * (הפעלה, מסך נדלק, שינוי רשת) ומהמשימה התקופתית. רץ ברקע — לא ב-main thread.
      */
     fun healthCheck(): Boolean {
         if (!isInitialized || !wantsConnection() || !hasConfig()) return false
@@ -252,12 +263,47 @@ object TunnelManager {
         if (age != null && age < STALE_HANDSHAKE_MS) {
             ProtectionState.mark(appContext, ProtectionState.VPN_HEALTH_OK)
             refreshBypass("health")            // רשת ביטחון: התקנה/הסרה שלא נקלטה בזמן אמת
-            return true
+            return dataCheck()
         }
         val upFor = SystemClock.elapsedRealtime() - upSince
         if (upFor < STALE_HANDSHAKE_MS || !hasUnderlyingNetwork()) return true   // רק עלתה / אין רשת בכלל
         if (!backoff.ready()) return false
-        Log.w(TAG, "tunnel up but no fresh handshake (${age?.div(1000)}s) — restarting")
+        return reconnect("no fresh handshake (${age?.div(1000)}s)")
+    }
+
+    /**
+     * תעבורה אמיתית במנהרה (DataProbe) — לכל היותר פעם בדקה. כשל נספר רק כשהרשת של הטלפון עצמה
+     * מאומתת אצל אנדרואיד (אחרת אין אינטרנט בכלל — לא אשמת המנהרה). כל כשל נשמר ומדווח לשרת;
+     * שני כשלים ברצף — חיבור מחדש (עם השהיה נפרדת שגדלה, כדי שתקלה בשרת לא תיצור לולאה).
+     */
+    private fun dataCheck(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (lastDataCheck != 0L && now - lastDataCheck < DATA_CHECK_EVERY_MS) return dataFailsInRow == 0
+        lastDataCheck = now
+        val failure = DataProbe.run()
+        ProtectionState.mark(appContext, ProtectionState.VPN_DATA_CHECKED)
+        if (failure == null) {
+            if (dataFailsInRow > 0) Log.i(TAG, "tunnel traffic flows again after $dataFailsInRow failed checks")
+            dataFailsInRow = 0
+            dataBackoff.succeeded()
+            ProtectionState.mark(appContext, ProtectionState.VPN_DATA_OK)
+            return true
+        }
+        if (failure == "blocked" || !underlyingValidated()) return true   // לא ניתן להסיק — לא מחברים מחדש
+        dataFailsInRow++
+        Log.w(TAG, "tunnel up with a fresh handshake but no traffic ($failure), $dataFailsInRow in a row")
+        ProtectionState.mark(appContext, ProtectionState.VPN_DATA_FAIL)
+        ProtectionState.setString(appContext, ProtectionState.VPN_DATA_ERROR, failure)
+        ProtectionState.inc(appContext, ProtectionState.VPN_DATA_FAILS)
+        if (dataFailsInRow < DATA_FAILS_TO_RECONNECT || !dataBackoff.ready() || !backoff.ready()) return false
+        dataBackoff.failed()
+        lastDataCheck = 0L                       // אחרי החיבור מחדש — בודקים שוב בהזדמנות הבאה
+        return reconnect("no traffic: $failure")
+    }
+
+    /** מוריד ומעלה את המנהרה (handshake חדש, ואם השם לא מתפענח — הכתובת החלופית). */
+    private fun reconnect(why: String): Boolean {
+        Log.w(TAG, "tunnel unhealthy ($why) — restarting")
         return try {
             worker.submit<Tunnel.State> {
                 backend.setState(tunnel, Tunnel.State.DOWN, null)
@@ -268,6 +314,17 @@ object TunnelManager {
         } catch (e: Exception) {
             Recovery.scheduleRetry(appContext, backoff.failed())
             false
+        }
+    }
+
+    /** לפחות רשת אחת שאינה VPN שאנדרואיד אימת שיש בה אינטרנט (NET_CAPABILITY_VALIDATED). */
+    private fun underlyingValidated(): Boolean {
+        val cm = appContext.getSystemService(ConnectivityManager::class.java) ?: return false
+        return cm.allNetworks.any { n ->
+            cm.getNetworkCapabilities(n)?.let {
+                it.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) &&
+                    !it.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+            } ?: false
         }
     }
 
@@ -325,6 +382,9 @@ object TunnelManager {
             "error" to (lastError ?: ProtectionState.string(appContext, ProtectionState.VPN_ERROR)),
             "lastHealthOkMs" to ProtectionState.time(appContext, ProtectionState.VPN_HEALTH_OK),
             "reconnects" to ProtectionState.count(appContext, ProtectionState.VPN_RECONNECTS),
+            "dataOkMs" to ProtectionState.time(appContext, ProtectionState.VPN_DATA_OK),
+            "dataFailMs" to ProtectionState.time(appContext, ProtectionState.VPN_DATA_FAIL),
+            "dataError" to ProtectionState.string(appContext, ProtectionState.VPN_DATA_ERROR),
             "bypass" to appliedBypass.toList(),
         )
     }

@@ -659,6 +659,10 @@ class _StatusDetails extends StatelessWidget {
                 good: p.batteryUnrestricted == null ? null : p.backgroundOk),
             row('סנכרון מדיניות אחרון', _ago(p.lastPolicySync)),
             row('בדיקת VPN אחרונה שעברה', _ago(p.lastVpnHealthOk ?? c.vpn.lastHealthOk)),
+            if (c.vpn.dataOk != null)
+              row('תעבורה במנהרה',
+                  c.vpn.dataOk! ? 'עוברת (${_ago(c.vpn.lastDataOk)})' : 'לא עברה ${_ago(c.vpn.lastDataFail)}',
+                  good: c.vpn.dataOk),
             if (!p.deviceOwner && !p.deviceAdmin) ...[
               const SizedBox(height: 8),
               Text('הגנה מפני הסרה: אפשר להפעיל "מנהל מכשיר" — זה מקשה על הסרת FilterPhone ומודיע למנהל '

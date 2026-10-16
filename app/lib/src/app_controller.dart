@@ -843,6 +843,8 @@ class AppController extends ChangeNotifier {
   Map<String, Object?> supportDiag({String topic = ''}) => {
         'vpn': vpn.state,
         'vpn_error': ?vpn.error,
+        'vpn_data_ok': ?vpn.dataOk,
+        if (vpn.dataOk == false) 'vpn_data_error': ?vpn.dataError,
         'accessibility': guardEnabled,
         'device_owner': deviceOwner,
         'battery_unrestricted': ?protection.batteryUnrestricted,

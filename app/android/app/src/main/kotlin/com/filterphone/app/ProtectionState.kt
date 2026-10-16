@@ -13,6 +13,11 @@ object ProtectionState {
     const val VPN_HEALTH_OK = "vpn_health_ok_at"     // מתי לאחרונה המנהרה עבדה (handshake טרי)
     const val VPN_RECONNECTS = "vpn_reconnects"      // כמה פעמים חיברנו מחדש לבד
     const val VPN_ERROR = "vpn_error"
+    const val VPN_DATA_CHECKED = "vpn_data_checked_at" // מתי לאחרונה נבדקה תעבורה אמיתית במנהרה (DataProbe)
+    const val VPN_DATA_OK = "vpn_data_ok_at"         // מתי לאחרונה תעבורה עברה
+    const val VPN_DATA_FAIL = "vpn_data_fail_at"     // מתי לאחרונה המנהרה הייתה למעלה בלי תעבורה
+    const val VPN_DATA_ERROR = "vpn_data_error"      // באיזה שלב נכשלה (dns / connect / timeout / http:bad)
+    const val VPN_DATA_FAILS = "vpn_data_fails"      // כמה בדיקות תעבורה נכשלו בסך הכול
     const val POLICY_SYNC = "policy_sync_at"          // מתי לאחרונה קיבלנו / אישרנו מדיניות מהשרת
     const val HEARTBEAT_OK = "heartbeat_ok_at"
     const val HEARTBEAT_ERROR = "heartbeat_error"

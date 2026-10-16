@@ -18,6 +18,9 @@ class VpnStatus {
     this.hasKey = true,
     this.lastHealthOk,
     this.reconnects = 0,
+    this.lastDataOk,
+    this.lastDataFail,
+    this.dataError,
   });
 
   final String state; // UP / DOWN / TOGGLE
@@ -32,6 +35,17 @@ class VpnStatus {
   final bool hasKey; // המפתח הפרטי קיים (false = ה-Keystore נמחק — צריך מפתח חדש)
   final DateTime? lastHealthOk; // בדיקת התקינות האחרונה שעברה (handshake טרי)
   final int reconnects;
+  final DateTime? lastDataOk; // בדיקת תעבורה אמיתית במנהרה שעברה לאחרונה
+  final DateTime? lastDataFail; // המנהרה הייתה למעלה בלי תעבורה (לאחרונה)
+  final String? dataError; // באיזה שלב נכשלה: dns / connect / timeout / http:bad
+
+  /// null = עוד לא נבדק. false = בבדיקה האחרונה המנהרה הייתה למעלה אבל תעבורה לא עברה.
+  bool? get dataOk {
+    final ok = lastDataOk, fail = lastDataFail;
+    if (ok == null && fail == null) return null;
+    if (fail == null) return true;
+    return ok != null && !ok.isBefore(fail);
+  }
 
   bool get isUp => state == 'UP';
 
@@ -50,6 +64,9 @@ class VpnStatus {
       hasKey: m['hasKey'] as bool? ?? true,
       lastHealthOk: _time(m['lastHealthOkMs']),
       reconnects: (m['reconnects'] as num?)?.toInt() ?? 0,
+      lastDataOk: _time(m['dataOkMs']),
+      lastDataFail: _time(m['dataFailMs']),
+      dataError: m['dataError'] as String?,
     );
   }
 

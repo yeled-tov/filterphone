@@ -36,6 +36,15 @@ object Sync {
         ProtectionState.time(context, ProtectionState.VPN_HEALTH_OK).takeIf { it > 0 }?.let { vpn.put("last_health_ok", it / 1000) }
         vpn.put("reconnects", ProtectionState.count(context, ProtectionState.VPN_RECONNECTS))
         ProtectionState.string(context, ProtectionState.VPN_ERROR)?.let { vpn.put("error", it.take(80)) }
+        // בדיקת התעבורה האמיתית (DataProbe): האם עברה בבדיקה האחרונה, ומתי / למה נכשלה לאחרונה
+        val dataOk = ProtectionState.time(context, ProtectionState.VPN_DATA_OK)
+        val dataFail = ProtectionState.time(context, ProtectionState.VPN_DATA_FAIL)
+        if (dataOk > 0 || dataFail > 0) vpn.put("data_ok", dataOk >= dataFail)
+        if (dataFail > 0) {
+            vpn.put("data_fail_age_s", ((System.currentTimeMillis() - dataFail) / 1000).coerceAtLeast(0))
+            ProtectionState.string(context, ProtectionState.VPN_DATA_ERROR)?.let { vpn.put("data_error", it.take(40)) }
+        }
+        vpn.put("data_fails", ProtectionState.count(context, ProtectionState.VPN_DATA_FAILS))
 
         val policy = GuardPolicy.get(context)
         val needsAccessibility = policy.screens.isNotEmpty() || policy.waProfile != null || policy.keywords != null ||
