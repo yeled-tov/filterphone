@@ -84,6 +84,10 @@ jobs:
           flutter build apk --release --build-number=$(( CODE - 2000 )) --build-name=$V \
             --split-per-abi --target-platform android-arm64
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/FilterPhone-$V-arm64.apk
+          # הבניות משאירות Gradle daemon (‎-Xmx8G) ו-Kotlin daemon. בלי לעצור אותם, שלב הבדיקות (עוד JVM
+          # של 8GB) מכלה את הזיכרון של המכונה — והיא נתקעת עד שאפילו ביטול לא עובד
+          (cd android && ./gradlew --stop) || true
+          pkill -f KotlinCompileDaemon || true
 
       # בדיקות היחידה של הקוד הנייטיבי (מדיניות, זיהוי תמונות פרופיל, השהיות, עדכון עצמי) + lint.
       # אחרי הבנייה: היא יוצרת את gradlew ואת local.properties

@@ -123,6 +123,9 @@ jobs:
           flutter build apk --release --build-number=$(( CODE - 2000 )) --build-name=$VERSION_NAME \
             --split-per-abi --target-platform android-arm64
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/FilterPhone-$VERSION_NAME-arm64.apk"
+          # הבניות משאירות Gradle daemon (‎-Xmx8G) ו-Kotlin daemon — עוצרים לפני שלב הבדיקות (אחרת אין זיכרון)
+          (cd android && ./gradlew --stop) || true
+          pkill -f KotlinCompileDaemon || true
 
       - name: בדיקות ו-lint (Kotlin)
         if: inputs.what == 'both' || inputs.what == 'apk'
