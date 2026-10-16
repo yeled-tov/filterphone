@@ -17,6 +17,8 @@ class BootReceiver : BroadcastReceiver() {
         TunnelManager.init(context)
         Recovery.scheduleDaily(context)
         if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            // העדכון הותקן: ה-VPN שהורד לקראתו (אנדרואיד 16) חוזר עכשיו — לא מחכים לסוף ההשהיה
+            TunnelManager.endUpdatePause()
             // עדכון עצמי במנהל מכשיר: מחזירים מיד חסימות ששוחררו לזמן ההתקנה
             Recovery.runAsync(context) { SelfUpdate.restoreRestrictions(context) }
         }

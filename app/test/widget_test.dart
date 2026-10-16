@@ -181,9 +181,9 @@ class FakeNative implements NativeBridge {
       );
 
   @override
-  Future<bool> openUpdatePage() async {
+  Future<String> openUpdatePage() async {
     updatePageOpens++;
-    return true;
+    return 'page';
   }
 
   @override

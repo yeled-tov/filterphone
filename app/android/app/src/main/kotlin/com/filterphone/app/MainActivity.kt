@@ -267,10 +267,21 @@ class MainActivity : FlutterActivity() {
             "protectionStatus" -> background(result) { protectionStatus() }
             "syncNow" -> background(result) { Sync.heartbeat(this) }
             "startProtection" -> result.success(Recovery.startProtection(this))
-            // גרסה חדשה בלי מנהל מכשיר: דף ההורדה בדפדפן (המשתמש מתקין בעצמו)
+            // גרסה חדשה בלי מנהל מכשיר: דף ההורדה בדפדפן (המשתמש מתקין בעצמו). באנדרואיד 16 — התקנה
+            // מתוך האפליקציה, כדי להוריד את ה-VPN רגע לפני (באג של אנדרואיד 16 — TunnelManager.pauseForUpdate).
+            // תשובה: page / installing / permission (לאשר "התקנת אפליקציות לא מוכרות") / קוד שגיאה
             "openUpdatePage" -> {
-                val page = SelfUpdate.available(this)?.get("page")
-                result.success(page != null && tryStart(Intent(Intent.ACTION_VIEW, Uri.parse(page))))
+                if (SelfUpdate.installInApp(this)) {
+                    if (!packageManager.canRequestPackageInstalls()) {
+                        val settings = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+                        result.success(if (tryStart(settings)) "permission" else "error")
+                    } else {
+                        background(result) { SelfUpdate.installRequested(this) ?: "installing" }
+                    }
+                } else {
+                    val page = SelfUpdate.available(this)?.get("page")
+                    result.success(if (page != null && tryStart(Intent(Intent.ACTION_VIEW, Uri.parse(page)))) "page" else "error")
+                }
             }
             "launchTarget" -> { result.success(launchTarget); launchTarget = null }
             "clearSupportNotification" -> { SupportNotify.clear(this); result.success(true) }

@@ -39,7 +39,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   כל כישלון: לא מתקינים, מדווחים לשרת (heartbeat → "update"), ומנסים שוב בהשהיה הולכת וגדלה.
  *
  * בלי מנהל מכשיר אנדרואיד לא מתיר עדכון שקט: רק נשמר שיש גרסה חדשה, והאפליקציה מציגה הודעה
- * עם קישור לדף ההורדה — המשתמש מתקין בעצמו.
+ * עם קישור לדף ההורדה — המשתמש מתקין בעצמו. באנדרואיד 16 — במקום הדפדפן, האפליקציה מורידה ובודקת
+ * את הקובץ בעצמה ומבקשת מאנדרואיד להתקין (המשתמש מאשר בחלון של אנדרואיד), כדי שתוכל להוריד את
+ * ה-VPN רגע לפני ההתקנה (באג של אנדרואיד 16 — TunnelManager.pauseForUpdate).
  */
 object SelfUpdate {
     private const val TAG = "FilterPhone"
@@ -49,11 +51,15 @@ object SelfUpdate {
     private const val K_CODE = "code"
     private const val K_ERROR = "error"
     private const val K_PAGE = "page"              // דף ההורדה — להודעה כשאין מנהל מכשיר
+    private const val K_URL = "url"                // הקובץ המוצע — להתקנה מתוך האפליקציה (אנדרואיד 16)
+    private const val K_SHA = "sha256"
+    private const val K_SIZE = "size"
     private const val K_FIRST_SEEN = "first_seen"
     private const val K_STATE_AT = "state_at"
     private const val K_RELAXED = "relaxed_install_apps"
     private const val K_RELAXED_AT = "relaxed_at"
     const val ACTION_RESULT = "com.filterphone.app.UPDATE_RESULT"
+    const val ACTION_RESULT_USER = "com.filterphone.app.UPDATE_RESULT_USER"   // התקנה שהמשתמש מאשר
     const val MAX_BYTES = 200L * 1024 * 1024
     private const val METERED_AFTER_MS = 3L * 24 * 3600 * 1000
     private const val INSTALL_STALE_MS = 30L * 60 * 1000
@@ -120,8 +126,9 @@ object SelfUpdate {
                 .putLong(K_FIRST_SEEN, System.currentTimeMillis()).apply()     // גרסה חדשה — השהיות מההתחלה
         }
         if (!DeviceOwnerManager.isDeviceOwner(app)) {
-            p.edit().putString(K_PAGE, c.url.substringBeforeLast('/') + "/").apply()
-            setState(app, "available", null)
+            p.edit().putString(K_PAGE, c.url.substringBeforeLast('/') + "/")
+                .putString(K_URL, c.url).putString(K_SHA, c.sha256).putLong(K_SIZE, c.size).apply()
+            if (p.getString(K_STATE, null) != "installing" || installStale(p)) setState(app, "available", null)
             return
         }
         if (p.getString(K_STATE, null) == "installing" && !installStale(p)) return
@@ -150,43 +157,112 @@ object SelfUpdate {
         }
     }
 
-    /** מוריד, בודק ומתקין. מחזיר קוד שגיאה, או null אם ההתקנה נשלחה (התוצאה תגיע ל-UpdateReceiver). */
-    private fun install(context: Context, c: Candidate): String? {
+    /** מוריד ובודק את הקובץ. (הקובץ, null) — או (null, קוד שגיאה). */
+    private fun fetch(context: Context, c: Candidate): Pair<File?, String?> {
         val dir = File(context.noBackupFilesDir, "update").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
-        if (dir.usableSpace < c.size * 2 + 50L * 1024 * 1024) return "no_space"
+        if (dir.usableSpace < c.size * 2 + 50L * 1024 * 1024) return null to "no_space"
         val apk = File(dir, "FilterPhone.apk")
         setState(context, "installing", null)
-        download(c, apk)?.let { apk.delete(); return it }
-        verifyArchive(context, apk, c)?.let { apk.delete(); return it }
+        download(c, apk)?.let { apk.delete(); return null to it }
+        verifyArchive(context, apk, c)?.let { apk.delete(); return null to it }
+        return apk to null
+    }
 
+    /** כותב את הקובץ ל-PackageInstaller ושולח. התוצאה תגיע ל-UpdateReceiver עם [action]. */
+    private fun commit(context: Context, apk: File, c: Candidate, action: String, requestCode: Int) {
+        val installer = context.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+            setAppPackageName(context.packageName)
+            setSize(apk.length())
+        }
+        val id = installer.createSession(params)
+        installer.openSession(id).use { session ->
+            session.openWrite("base.apk", 0, apk.length()).use { out ->
+                apk.inputStream().use { it.copyTo(out, 1 shl 16) }
+                session.fsync(out)
+            }
+            val intent = Intent(context, UpdateReceiver::class.java).setAction(action)
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+            // אנדרואיד 16 (מנהל מכשיר — התקנה שקטה מיד): ה-VPN יורד ממש לפני ההתקנה
+            if (action == ACTION_RESULT) TunnelManager.pauseForUpdate()
+            session.commit(PendingIntent.getBroadcast(context, requestCode, intent, flags).intentSender)
+        }
+        Log.i(TAG, "self-update: committed ${c.versionName} (${c.versionCode})")
+    }
+
+    /** מנהל מכשיר: מוריד, בודק ומתקין בשקט. קוד שגיאה, או null אם ההתקנה נשלחה. */
+    private fun install(context: Context, c: Candidate): String? {
+        val (apk, error) = fetch(context, c)
+        if (apk == null) return error
         try {
             if (context.getSystemService(UserManager::class.java)?.hasUserRestriction(UserManager.DISALLOW_INSTALL_APPS) == true) {
                 prefs(context).edit().putBoolean(K_RELAXED, true).putLong(K_RELAXED_AT, System.currentTimeMillis()).commit()
                 context.getSystemService(DevicePolicyManager::class.java)
                     ?.clearUserRestriction(DeviceAdmin.component(context), UserManager.DISALLOW_INSTALL_APPS)
             }
-            val installer = context.packageManager.packageInstaller
-            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-                setAppPackageName(context.packageName)
-                setSize(apk.length())
-            }
-            val id = installer.createSession(params)
-            installer.openSession(id).use { session ->
-                session.openWrite("base.apk", 0, apk.length()).use { out ->
-                    apk.inputStream().use { it.copyTo(out, 1 shl 16) }
-                    session.fsync(out)
-                }
-                val intent = Intent(context, UpdateReceiver::class.java).setAction(ACTION_RESULT)
-                val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-                    (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
-                session.commit(PendingIntent.getBroadcast(context, 4301, intent, flags).intentSender)
-            }
-            Log.i(TAG, "self-update: committed ${c.versionName} (${c.versionCode})")
+            commit(context, apk, c, ACTION_RESULT, 4301)
             return null
         } catch (e: Exception) {
             restoreRestrictions(context)
+            if (TunnelManager.endUpdatePause()) TunnelManager.ensureConnected("update-failed")
             throw e
+        }
+    }
+
+    /** בלי מנהל מכשיר, באנדרואיד 16: מתקינים מתוך האפליקציה (ולא מהדפדפן) — כדי להוריד את ה-VPN לפני. */
+    fun installInApp(context: Context): Boolean =
+        TunnelManager.updateBugAffected && !DeviceOwnerManager.isDeviceOwner(context)
+
+    /**
+     * עדכון שהמשתמש ביקש (בלי מנהל מכשיר): מוריד ובודק, ושולח ל-PackageInstaller. אנדרואיד יבקש אישור
+     * (STATUS_PENDING_USER_ACTION → confirm). רץ ברקע. קוד שגיאה, או null אם נשלח.
+     */
+    fun installRequested(context: Context): String? {
+        val app = context.applicationContext
+        val p = prefs(app)
+        val c = Candidate(
+            url = p.getString(K_URL, null) ?: return "no_update",
+            sha256 = p.getString(K_SHA, null) ?: return "no_update",
+            versionCode = p.getLong(K_CODE, -1L).takeIf { it > 0 } ?: return "no_update",
+            versionName = p.getString(K_VERSION, null) ?: "",
+            size = p.getLong(K_SIZE, -1L).takeIf { it in 1..MAX_BYTES } ?: return "no_update",
+        )
+        if (!busy.compareAndSet(false, true)) return "busy"
+        return try {
+            val (apk, error) = fetch(app, c)
+            if (apk == null) {
+                setState(app, "available", error)
+                error
+            } else {
+                commit(app, apk, c, ACTION_RESULT_USER, 4302)
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "self-update (user) failed", e)
+            setState(app, "available", e.javaClass.simpleName.take(40))
+            "install_${e.javaClass.simpleName}".take(40)
+        } finally {
+            busy.set(false)
+        }
+    }
+
+    /**
+     * אנדרואיד מבקש מהמשתמש לאשר את ההתקנה. באנדרואיד 16 ה-VPN יורד עכשיו — מיד אחרי האישור ההתקנה
+     * רצה, ולא מקבלים הזדמנות נוספת. ביטול / כישלון — onResult מחבר מחדש (ולכל היותר אחרי 2 דקות).
+     */
+    fun confirmRequested(context: Context, confirm: Intent?) {
+        if (confirm == null) {
+            onResult(context, PackageInstaller.STATUS_FAILURE, "no confirm intent", userInitiated = true)
+            return
+        }
+        TunnelManager.pauseForUpdate()
+        try {
+            context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            Log.w(TAG, "install confirmation did not open", e)
+            onResult(context, PackageInstaller.STATUS_FAILURE, "confirm: ${e.javaClass.simpleName}", userInitiated = true)
         }
     }
 
@@ -267,8 +343,8 @@ object SelfUpdate {
     fun installedVersionCode(context: Context): Long =
         runCatching { versionCode(context.packageManager.getPackageInfo(context.packageName, 0)) }.getOrDefault(0L)
 
-    /** תוצאת ההתקנה (מ-UpdateReceiver). בהצלחה התהליך כבר רץ בגרסה החדשה. */
-    fun onResult(context: Context, status: Int, message: String?) {
+    /** תוצאת ההתקנה (מ-UpdateReceiver). בהצלחה התהליך כבר רץ בגרסה החדשה. רץ ברקע. */
+    fun onResult(context: Context, status: Int, message: String?, userInitiated: Boolean = false) {
         restoreRestrictions(context)
         File(context.noBackupFilesDir, "update").listFiles()?.forEach { it.delete() }
         when (status) {
@@ -280,9 +356,12 @@ object SelfUpdate {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> setState(context, "failed", "needs_user_action")
             else -> {
                 Log.w(TAG, "self-update: status $status ${message.orEmpty().take(120)}")
-                setState(context, "failed", "install_status_$status")
+                // המשתמש ביטל / נכשל — ההודעה "יש גרסה חדשה" נשארת, כדי שאפשר לנסות שוב
+                setState(context, if (userInitiated) "available" else "failed", "install_status_$status")
             }
         }
+        // ה-VPN הורד לקראת ההתקנה (אנדרואיד 16) — מחברים מחדש מיד
+        if (TunnelManager.endUpdatePause()) TunnelManager.ensureConnected("update-result")
         Recovery.syncSoon(context)
     }
 
@@ -344,11 +423,20 @@ class UpdateReceiver : BroadcastReceiver() {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
         when (intent.action) {
-            SelfUpdate.ACTION_RESULT -> {
+            SelfUpdate.ACTION_RESULT, SelfUpdate.ACTION_RESULT_USER -> {
+                val user = intent.action == SelfUpdate.ACTION_RESULT_USER
+                val confirm: Intent? = if (user && status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                    if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                    else @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                } else null
                 val pending = goAsync()
                 Recovery.runAsync(context) {
                     try {
-                        SelfUpdate.onResult(context.applicationContext, status, message)
+                        if (user && status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                            SelfUpdate.confirmRequested(context.applicationContext, confirm)
+                        } else {
+                            SelfUpdate.onResult(context.applicationContext, status, message, userInitiated = user)
+                        }
                     } finally {
                         pending.finish()
                     }

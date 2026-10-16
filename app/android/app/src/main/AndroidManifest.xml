@@ -19,6 +19,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- "הסרת הכול" (רק בהשהיה מאושרת): פתיחת חלון הסרת האפליקציה של אנדרואיד — המשתמש מאשר -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- עדכון FilterPhone מתוך האפליקציה (אנדרואיד 16, בלי מנהל מכשיר) — המשתמש מאשר בחלון של אנדרואיד -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".FilterPhoneApp"

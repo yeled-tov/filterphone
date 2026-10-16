@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.VpnService
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import com.wireguard.android.backend.BackendException
@@ -44,6 +45,8 @@ object TunnelManager {
     private const val CONNECT_TIMEOUT_S = 25L
     private const val DATA_CHECK_EVERY_MS = 60_000L    // בדיקת תעבורה — לכל היותר פעם בדקה (סוללה)
     private const val DATA_FAILS_TO_RECONNECT = 2      // כשל בודד יכול להיות רגעי — לא מחברים מחדש עליו
+    private const val K_UPDATE_PAUSE = "vpn_update_pause_until"
+    private const val UPDATE_PAUSE_MS = 2 * 60_000L     // לכל היותר — אחר כך מתחברים גם אם לא הגיע אישור
 
     private lateinit var appContext: Context
     private val backend: GoBackend by lazy { GoBackend(appContext) }
@@ -140,6 +143,7 @@ object TunnelManager {
     fun connect(): Future<Tunnel.State> = worker.submit<Tunnel.State> {
         setWanted(true)
         backoff.succeeded()
+        endUpdatePause()
         if (AdminState.isPaused(appContext)) state else bringUp()   // בהשהיה מאושרת — ה-VPN כבוי
     }
 
@@ -157,6 +161,43 @@ object TunnelManager {
         }
         return true
     }
+
+    // ---------------------------------------------------------------- עדכון האפליקציה באנדרואיד 16
+
+    /**
+     * אנדרואיד 16 (API 36): עדכון של אפליקציית VPN בזמן שה-VPN שלה פעיל משאיר אותה בלי רשת עד
+     * הפעלה מחדש של הטלפון — באג של אנדרואיד (Google issuetracker 441315112 / 447433152, דווח על ידי
+     * Mullvad, Proton ועוד; לא קורה באנדרואיד 17). ה-VPN "מחובר" ואין אינטרנט, וגם האפליקציה עצמה לא
+     * מגיעה לשרת. הדרך שהם ממליצים עליה: לעדכן כשה-VPN כבוי. לכן ממש לפני ההתקנה מורידים את המנהרה
+     * (הרצון לחיבור נשמר), ואחרי העדכון (MY_PACKAGE_REPLACED), כישלון / ביטול, או 2 דקות — מתחברים.
+     * ב-lockdown אין דליפה: בלי מנהרה אנדרואיד חוסם את התעבורה.
+     */
+    val updateBugAffected: Boolean get() = Build.VERSION.SDK_INT == 36
+
+    /** מוריד את המנהרה לקראת התקנת עדכון (רק באנדרואיד 16). רץ ברקע — לא ב-main thread. */
+    fun pauseForUpdate() {
+        if (!isInitialized || !updateBugAffected) return
+        prefs().edit().putLong(K_UPDATE_PAUSE, System.currentTimeMillis() + UPDATE_PAUSE_MS).commit()
+        if (state != Tunnel.State.DOWN) {
+            runCatching { worker.submit<Tunnel.State> { backend.setState(tunnel, Tunnel.State.DOWN, null) }.get(10, TimeUnit.SECONDS) }
+                .onFailure { Log.w(TAG, "tunnel down before the update failed", it) }
+            appliedBypass = emptySet()
+        }
+        Log.i(TAG, "tunnel down for the app update (Android 16 VPN-update bug)")
+    }
+
+    /** העדכון הסתיים / נכשל / בוטל: מבטל את ההשהיה. true אם הייתה כזו (ואז כדאי לחבר). */
+    fun endUpdatePause(): Boolean {
+        if (!isInitialized) return false
+        val p = prefs()
+        if (p.getLong(K_UPDATE_PAUSE, 0L) == 0L) return false
+        p.edit().remove(K_UPDATE_PAUSE).commit()
+        return true
+    }
+
+    private fun updatePaused(): Boolean = System.currentTimeMillis() < prefs().getLong(K_UPDATE_PAUSE, 0L)
+
+    private fun prefs() = appContext.getSharedPreferences("fp", Context.MODE_PRIVATE)
 
     private fun bringUp(): Tunnel.State {
         // האפליקציות שמחוץ למנהרה (FilterTube וכו') — רק מה שמותקן ועבר את בדיקת החתימה.
@@ -227,6 +268,7 @@ object TunnelManager {
         }
         if (!wantsConnection() || !hasConfig()) return false
         if (pausedGate()) return false
+        if (updatePaused()) return false                     // מותקן עדכון (אנדרואיד 16) — מתחברים אחריו
         if (!isPermissionGranted()) {
             // בלי אישור VPN מהמשתמש אין מה לעשות ברקע — מוצג באפליקציה ובהתראה
             ProtectionState.setString(appContext, ProtectionState.VPN_ERROR, "vpn permission revoked")
@@ -258,6 +300,7 @@ object TunnelManager {
     fun healthCheck(): Boolean {
         if (!isInitialized || !wantsConnection() || !hasConfig()) return false
         if (pausedGate()) return true                        // מושהה בכוונה — "תקין"
+        if (updatePaused()) return true                      // מותקן עדכון — מתחברים אחריו
         if (state != Tunnel.State.UP) return ensureConnected("health")
         val age = handshakeAgeMs()
         if (age != null && age < STALE_HANDSHAKE_MS) {
@@ -267,6 +310,7 @@ object TunnelManager {
         }
         val upFor = SystemClock.elapsedRealtime() - upSince
         if (upFor < STALE_HANDSHAKE_MS || !hasUnderlyingNetwork()) return true   // רק עלתה / אין רשת בכלל
+        UpdateBugNotice.maybeShow(appContext)
         if (!backoff.ready()) return false
         return reconnect("no fresh handshake (${age?.div(1000)}s)")
     }
@@ -295,6 +339,7 @@ object TunnelManager {
         ProtectionState.mark(appContext, ProtectionState.VPN_DATA_FAIL)
         ProtectionState.setString(appContext, ProtectionState.VPN_DATA_ERROR, failure)
         ProtectionState.inc(appContext, ProtectionState.VPN_DATA_FAILS)
+        UpdateBugNotice.maybeShow(appContext)
         if (dataFailsInRow < DATA_FAILS_TO_RECONNECT || !dataBackoff.ready() || !backoff.ready()) return false
         dataBackoff.failed()
         lastDataCheck = 0L                       // אחרי החיבור מחדש — בודקים שוב בהזדמנות הבאה

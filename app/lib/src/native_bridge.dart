@@ -232,8 +232,10 @@ abstract class NativeBridge {
   /// מנהל מכשיר רגיל (לא Device Owner): מקשה על הסרה בלבד.
   Future<bool> requestDeviceAdmin();
 
-  /// דף ההורדה בדפדפן — כשיש גרסה חדשה ואין מנהל מכשיר (המשתמש מתקין בעצמו).
-  Future<bool> openUpdatePage();
+  /// גרסה חדשה בלי מנהל מכשיר. בדרך כלל — דף ההורדה בדפדפן ("page"). באנדרואיד 16 — התקנה מתוך
+  /// האפליקציה ("installing"), או מסך ההגדרות לאישור "התקנת אפליקציות לא מוכרות" ("permission").
+  /// אחרת — קוד שגיאה.
+  Future<String> openUpdatePage();
 
   /// קוד הפעלה שהגיע ב-QR של הקמת Device Owner: {code, api}, או null.
   Future<Map<String, String?>?> provisioningInfo();
@@ -419,7 +421,7 @@ class ChannelNativeBridge implements NativeBridge {
   Future<bool> requestDeviceAdmin() => _call<bool>('requestDeviceAdmin');
 
   @override
-  Future<bool> openUpdatePage() => _call<bool>('openUpdatePage');
+  Future<String> openUpdatePage() async => await _channel.invokeMethod<String>('openUpdatePage') ?? 'error';
 
   @override
   Future<Map<String, String?>?> provisioningInfo() async {

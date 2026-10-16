@@ -549,11 +549,26 @@ class AppController extends ChangeNotifier {
   }
 
   /// גרסה חדשה (בלי מנהל מכשיר): דף ההורדה בדפדפן. ההתקנה — של המשתמש, בחלון של אנדרואיד.
+  /// באנדרואיד 16 האפליקציה מורידה ומתקינה בעצמה, ומורידה את ה-VPN רק לרגע ההתקנה: עדכון של
+  /// אפליקציית VPN כשה-VPN פעיל משאיר שם את הטלפון בלי אינטרנט עד הפעלה מחדש (באג של אנדרואיד).
   Future<void> openUpdatePage() async {
+    error = null;
     try {
-      if (!await native.openUpdatePage()) error = 'לא נפתח דף ההורדה';
+      final r = await native.openUpdatePage();
+      switch (r) {
+        case 'page':
+          break;
+        case 'installing':
+          notice = 'העדכון ירד ונבדק. אשרו את ההתקנה בחלון של אנדרואיד — ה-VPN יתנתק לרגע ההתקנה ויחזור מיד אחריה.';
+        case 'permission':
+          notice = 'כדי לעדכן מתוך האפליקציה: אשרו ל-FilterPhone "התקנת אפליקציות לא מוכרות", חזרו ולחצו שוב על העדכון.';
+        case 'busy':
+          notice = 'העדכון כבר בהורדה — רגע…';
+        default:
+          error = 'העדכון לא הותקן ($r). נסו שוב, או הורידו מדף ההורדה.';
+      }
     } on PlatformException catch (e) {
-      error = 'לא נפתח דף ההורדה: ${e.message ?? e.code}';
+      error = 'לא נפתח העדכון: ${e.message ?? e.code}';
     }
     notifyListeners();
   }
