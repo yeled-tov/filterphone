@@ -182,19 +182,33 @@ ag_restore() {   # ה-DNS של כל הלקוחות תלוי ב-AdGuard: בכל �
     cp -a "$BACKUP/AdGuardHome.yaml" /opt/AdGuardHome/AdGuardHome.yaml
     systemctl start adguardhome
 }
-systemctl stop adguardhome
-if ! ag_out=$(python3 "$SRC/deploy/adguard_patch.py" /opt/AdGuardHome/AdGuardHome.yaml "${AG_ARGS[@]}"); then
-    ag_restore
-    die "עדכון הגדרות AdGuard נכשל — ההגדרות הקודמות שוחזרו ו-AdGuard פועל"
+# AdGuard הוא ה-DNS של כל הטלפונים: עצירה שלו = "אין אינטרנט" בכל הטלפונים עד שהוא עולה.
+# לכן קודם מריצים את העדכון על עותק — ואם ההגדרות כבר נכונות, לא נוגעים בו בכלל.
+ag_out=""
+ag_tmp=$(mktemp)
+cp -a /opt/AdGuardHome/AdGuardHome.yaml "$ag_tmp"
+if systemctl is-active --quiet adguardhome \
+    && python3 "$SRC/deploy/adguard_patch.py" "$ag_tmp" "${AG_ARGS[@]}" >/dev/null 2>&1 \
+    && python3 -c 'import sys, yaml; a, b = (yaml.safe_load(open(p, encoding="utf-8")) for p in sys.argv[1:3]); sys.exit(a != b)' \
+        /opt/AdGuardHome/AdGuardHome.yaml "$ag_tmp"; then
+    echo "  AdGuard: ההגדרות כבר עדכניות — בלי הפעלה מחדש (ה-DNS של הטלפונים לא נקטע)"
+else
+    systemctl stop adguardhome
+    if ! ag_out=$(python3 "$SRC/deploy/adguard_patch.py" /opt/AdGuardHome/AdGuardHome.yaml "${AG_ARGS[@]}"); then
+        rm -f "$ag_tmp"
+        ag_restore
+        die "עדכון הגדרות AdGuard נכשל — ההגדרות הקודמות שוחזרו ו-AdGuard פועל"
+    fi
+    echo "$ag_out"
+    systemctl start adguardhome
+    sleep 3
+    if ! systemctl is-active --quiet adguardhome; then
+        warn "AdGuard לא עלה עם ההגדרות החדשות — משחזר את הקודמות"
+        ag_restore
+        ag_out=""
+    fi
 fi
-echo "$ag_out"
-systemctl start adguardhome
-sleep 3
-if ! systemctl is-active --quiet adguardhome; then
-    warn "AdGuard לא עלה עם ההגדרות החדשות — משחזר את הקודמות"
-    ag_restore
-    ag_out=""
-fi
+rm -f "$ag_tmp"
 if [ ${#AG_ARGS[@]} -gt 0 ] && grep -q "משתמש API" <<<"$ag_out"; then
     AG_URL=$(python3 "$SRC/deploy/adguard_patch.py" /opt/AdGuardHome/AdGuardHome.yaml --print-url)
     {
@@ -213,10 +227,28 @@ log "שירותי systemd"
 install -m 644 "$SRC"/deploy/systemd/*.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable fp-engine.service fp-proxy.service fp-api.service >/dev/null
-systemctl restart fp-engine.service
-for _ in $(seq 1 60); do [ -S /run/filterphone/engine.sock ] && break; sleep 1; done
-[ -S /run/filterphone/engine.sock ] || die "המנוע לא עלה — journalctl -u fp-engine"
-systemctl restart fp-proxy.service fp-api.service
+# המנוע והפרוקסי הם שרשרת התעבורה של הטלפונים: כל HTTPS של טלפון עובר בפרוקסי. הפעלה מחדש שלהם
+# מנתקת לרגע את האינטרנט בכל הטלפונים — לכן רק כשהקוד / ההגדרות שלהם באמת השתנו (העלאה של API,
+# דשבורד או בוט בלבד לא נוגעת בהם). הטביעה: הקבצים שלהם + התלויות + קובץ ההגדרות של השרת.
+DATAPATH_STAMP=$DATA/.datapath.sha256
+datapath_hash=$( { (cd "$SRC" && find server/filterphone/proxy server/filterphone/engine \
+        server/filterphone/settings.py server/filterphone/protocol.py server/filterphone/metrics.py \
+        server/filterphone/sdnotify.py server/filterphone/logs.py server/filterphone/__init__.py \
+        server/pyproject.toml deploy/systemd/fp-engine.service deploy/systemd/fp-proxy.service \
+        -type f ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 | sort -z | xargs -0 sha256sum)
+    sha256sum "$ETC/filterphone.env"; } | sha256sum | cut -d' ' -f1)
+if [ "$datapath_hash" != "$(cat "$DATAPATH_STAMP" 2>/dev/null || true)" ] \
+    || ! systemctl is-active --quiet fp-engine.service || ! systemctl is-active --quiet fp-proxy.service; then
+    systemctl restart fp-engine.service
+    for _ in $(seq 1 60); do [ -S /run/filterphone/engine.sock ] && break; sleep 1; done
+    [ -S /run/filterphone/engine.sock ] || die "המנוע לא עלה — journalctl -u fp-engine"
+    systemctl restart fp-proxy.service
+    echo "$datapath_hash" > "$DATAPATH_STAMP"
+    echo "  מנוע ופרוקסי: עודכנו והופעלו מחדש"
+else
+    echo "  מנוע ופרוקסי: בלי שינוי — לא מופעלים מחדש (האינטרנט של הטלפונים לא נקטע)"
+fi
+systemctl restart fp-api.service
 
 # ------------------------------------------------------------ 12א. בוט הוואטסאפ (לא עוצר את ההתקנה)
 log "בוט הוואטסאפ (fp-wabot)"
@@ -229,7 +261,8 @@ install -m 644 "$SRC/deploy/www/index.html" /var/www/filterphone/index.html
 sed "s/__PUBLIC_HOST__/${FP_PUBLIC_HOST:-api.filterphone.com}/" "$SRC/deploy/Caddyfile" > /etc/caddy/Caddyfile
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 systemctl enable caddy >/dev/null
-systemctl restart caddy
+# טעינה מחדש "חלקה" (בלי לנתק חיבורים) — Caddy מגיש גם את ה-API שהאפליקציה מדברת איתו
+if systemctl is-active --quiet caddy; then systemctl reload caddy; else systemctl restart caddy; fi
 
 # ------------------------------------------------------------ 13א. ערוץ העלאה מ-GitHub
 # הפקודה היחידה שמפתח ההעלאה של GitHub Actions מורשה להריץ (forced command) — ראו deploy/ci_deploy.sh

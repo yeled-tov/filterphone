@@ -193,6 +193,24 @@ for k, d in sorted(devs.items(), key=lambda kv: -hs.get(kv[0], 0))[:12]:
           f"learned={learned.get(d['vpn_ip'], 0)}")
 print(f"== Redis: fp:pt={sum(learned.values())} מעקפים | uptime={sh('redis-cli', 'INFO', 'server').split('uptime_in_seconds:')[-1].split()[0]}s")
 
+# ציר זמן לכל מכשיר פעיל לאחרונה (24 שעות): VPN למטה/למעלה, החלפת מפתח, עדכון אפליקציה, "מחוץ ל-VPN"...
+try:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("Asia/Jerusalem")
+except Exception:
+    tz = None
+def il(ts):
+    return datetime.fromtimestamp(ts, tz).strftime("%d/%m %H:%M") if tz else time.strftime("%d/%m %H:%M", time.gmtime(ts))
+print("== ציר זמן לכל מכשיר (24 שעות אחרונות, שעון ישראל):")
+recent = [d for k, d in sorted(devs.items(), key=lambda kv: -hs.get(kv[0], 0)) if now - hs.get(k, 0) < 86400][:5]
+for d in recent:
+    rows = db.execute("SELECT ts, kind, detail FROM device_log WHERE device_id = ? AND ts > ? ORDER BY ts",
+                      (d["id"], int(now - 86400))).fetchall()
+    print(f"   #{d['id']} {d['name']!r} — {len(rows)} אירועים")
+    for r in rows[-40:]:
+        print(f"      {il(r['ts'])}  {r['kind']:22s} {r['detail'][:110]}")
+
 print("== NAT PREROUTING (מונים):")
 print(sh("iptables", "-t", "nat", "-L", "PREROUTING", "-v", "-n", "-x").rstrip())
 print("== FORWARD (מונים):")
