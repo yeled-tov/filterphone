@@ -15,12 +15,13 @@ run_id=$(gh run list -R "$REPO" --workflow app.yml --branch main --status succes
 [ -n "$run_id" ] || { echo "אין בנייה מוצלחת של האפליקציה"; exit 1; }
 gh run download "$run_id" -R "$REPO" -n FilterPhone-APK -D "$tmp"
 universal=$(ls "$tmp"/*-universal.apk | head -1)
-echo "מפרסם $(basename "$universal") (בנייה $run_id)"
+light=$(ls "$tmp"/*-arm64.apk | head -1)
+echo "מפרסם $(basename "$light") + $(basename "$universal") (בנייה $run_id)"
 
-# APK אחד אוניברסלי (כל המעבדים), מפורסם בשני השמות: FilterPhone.apk = הורדה ראשית ועדכון עצמי;
-# FilterPhone-universal.apk = הקמת Device Owner ב-QR (אותם בתים).
-# FilterPhone.json = הגרסה והטביעות — מהן השרת מציע עדכון לטלפונים (במנהל מכשיר: עדכון שקט)
-scp -o BatchMode=yes "$universal" "$SERVER:/tmp/FilterPhone.apk"
+# FilterPhone.apk = הקל (arm64, רוב הטלפונים — הורדה ראשית ועדכון עצמי);
+# FilterPhone-universal.apk = כל המעבדים (הקמת Device Owner ב-QR, טלפונים של 32 ביט).
+# FilterPhone.json = הגרסה, המעבדים והטביעות — מהן השרת מציע עדכון לטלפונים (במנהל מכשיר: עדכון שקט)
+scp -o BatchMode=yes "$light" "$SERVER:/tmp/FilterPhone.apk"
 scp -o BatchMode=yes "$universal" "$SERVER:/tmp/FilterPhone-universal.apk"
 json=""
 if [ -f "$tmp/FilterPhone.json" ]; then

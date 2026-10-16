@@ -30,6 +30,19 @@ class SelfUpdateTest {
     }
 
     @Test
+    fun sameVersionCodeLightFileFirstGoesToArm64AndUniversalTo32Bit() {
+        // כמו ש-FilterPhone.json מתפרסם: הקל (arm64) ראשון, האוניברסלי אחריו — אותו versionCode
+        val light = "https://api.filterphone.com/download/FilterPhone.apk"
+        val universal = "https://api.filterphone.com/download/FilterPhone-universal.apk"
+        val u = update(file(3101, listOf("arm64-v8a"), url = light),
+                       file(3101, listOf("arm64-v8a", "armeabi-v7a", "x86_64"), url = universal))
+        assertEquals(light, SelfUpdate.pick(u, installed = 3095, abis = listOf("arm64-v8a", "armeabi-v7a"))!!.url)
+        assertEquals(universal, SelfUpdate.pick(u, installed = 3095, abis = listOf("armeabi-v7a", "armeabi"))!!.url)
+        // אותו קוד שכבר מותקן (אוניברסלי או קל) — לא "מתעדכנים" ביניהם סתם
+        assertNull(SelfUpdate.pick(u, installed = 3101, abis = listOf("arm64-v8a")))
+    }
+
+    @Test
     fun neverDowngradesOrReinstalls() {
         val u = update(file(2008, listOf("arm64-v8a")), file(8, emptyList()))
         assertNull(SelfUpdate.pick(u, installed = 2008, abis = listOf("arm64-v8a")))

@@ -3,7 +3,8 @@
 
     python3 tools/apk_release.py --aapt2 <path/to/aapt2> dist/
 
-ה-APK האוניברסלי שנבנה (FilterPhone-<גרסה>-universal.apk) נבדק, מתוך ה-APK עצמו:
+שני ה-APK שנבנו — הקל (FilterPhone-<גרסה>-arm64.apk) והאוניברסלי (FilterPhone-<גרסה>-universal.apk) —
+נבדקים, כל אחד מתוך ה-APK עצמו:
   - שם החבילה, versionCode / versionName, minSdk ו-targetSdk;
   - שאינו debuggable, שאין גיבוי (allowBackup) ושאין תעבורה לא מוצפנת (cleartext);
   - ההרשאות שההגנה צריכה — ושאין הרשאות פרטיות (הודעות, אנשי קשר, מיקום, מיקרופון...);
@@ -28,9 +29,12 @@ from pathlib import Path
 PACKAGE = "com.filterphone.app"
 MIN_SDK = 26
 MIN_TARGET_SDK = 35
-# בנייה אחת אוניברסלית (כל המעבדים), מפורסמת כ-FilterPhone.apk. אין יותר פיצול arm64:
-# הוא יצר versionCode כפול ו-APK שנהג אחרת ושבר אינטרנט אצל חלק מהטלפונים.
-PUBLISHED = {"universal": "FilterPhone.apk"}
+# סוג → השם בדף ההורדה. הסדר חשוב: ב-FilterPhone.json הקל ראשון, וכשה-versionCode שווה הטלפון בוחר
+# את הראשון שמתאים למעבד שלו (SelfUpdate.pick) — arm64 לוקח את הקל, 32 ביט את האוניברסלי.
+PUBLISHED = {"arm64": "FilterPhone.apk", "universal": "FilterPhone-universal.apk"}
+# המעבדים בכל קובץ: הקל — arm64 בלבד; האוניברסלי — לפחות arm64 ו-arm (32 ביט)
+ABIS_EXACT = {"arm64": {"arm64-v8a"}}
+ABIS_AT_LEAST = {"universal": {"arm64-v8a", "armeabi-v7a"}}
 
 REQUIRED_PERMISSIONS = {
     "android.permission.INTERNET",
@@ -168,6 +172,16 @@ def main() -> int:
             print(f"✗ {found[0].name}: {e}")
         failed |= bool(errors)
         if info:
+            abis = set(info["abis"])
+            abi_errors = []
+            if kind in ABIS_EXACT and abis != ABIS_EXACT[kind]:
+                abi_errors.append(f"מעבדים {sorted(abis)} (צריך בדיוק {sorted(ABIS_EXACT[kind])})")
+            if kind in ABIS_AT_LEAST and not ABIS_AT_LEAST[kind] <= abis:
+                abi_errors.append(f"מעבדים {sorted(abis)} (צריך לפחות {sorted(ABIS_AT_LEAST[kind])})")
+            for e in abi_errors:
+                print(f"✗ {found[0].name}: {e}")
+            errors += abi_errors
+            failed |= bool(errors)
             names.add(info["version_name"])
             print(f"{'✗' if errors else '✓'} {found[0].name}: versionCode {info['version_code']} · targetSdk {info['target_sdk']} · "
                   f"{', '.join(info['abis']) or '—'} · {info['size'] / 1e6:.1f}MB")
@@ -175,6 +189,10 @@ def main() -> int:
                           "size": info["size"], "sha256": info["sha256"]})
     if len(names) > 1:
         print(f"✗ גרסאות שונות בין הקבצים: {sorted(names)}")
+        failed = True
+    # אותו versionCode לכל הקבצים: אחרת טלפון עלול "להיתקע" על סוג אחד (קוד גבוה שהשני לא יעבור לעולם)
+    if len({f["version_code"] for f in files}) > 1:
+        print(f"✗ versionCode שונה בין הקבצים: {[(f['name'], f['version_code']) for f in files]}")
         failed = True
     if failed:
         return 1

@@ -72,14 +72,18 @@ jobs:
       - name: בניית APK
         run: |
           V=1.0.${{ github.run_number }}
-          # APK אוניברסלי יחיד — עובד על כל מעבד (arm64 / arm / x86_64). לא מפצלים ל-arm64:
-          # הפיצול יצר versionCode כפול (2xxx) ו-APK נפרד שנהג אחרת ושבר אינטרנט אצל חלק מהטלפונים.
-          # versionCode מתחיל מעל טווח ה-arm64 הישן (2xxx) כדי שגם טלפון שנתקע על הגרסה הישנה יוכל להתעדכן.
+          # versionCode מעל טווח ה-arm64 הישן (2xxx), כדי שגם טלפון שנשאר על גרסה ישנה יתעדכן.
           CODE=$(( 3000 + ${{ github.run_number }} ))
-          ARGS="--release --build-number=$CODE --build-name=$V"
           mkdir -p ../dist
-          flutter build apk $ARGS
+          # 1. אוניברסלי (כל המעבדים) — הקמה ב-QR וטלפונים של 32 ביט
+          flutter build apk --release --build-number=$CODE --build-name=$V
           cp build/app/outputs/flutter-apk/app-release.apk ../dist/FilterPhone-$V-universal.apk
+          # 2. קל — arm64 בלבד (רוב הטלפונים). בפיצול Flutter מוסיף 2000 ל-versionCode של arm64, ולכן
+          #    בונים עם CODE-2000: שני הקבצים יוצאים עם אותו versionCode (apk_release.py מוודא), וכך אפשר
+          #    לעבור ביניהם לשני הכיוונים בגרסה הבאה — בלי טווחי קודים ובלי טלפון "תקוע".
+          flutter build apk --release --build-number=$(( CODE - 2000 )) --build-name=$V \
+            --split-per-abi --target-platform android-arm64
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/FilterPhone-$V-arm64.apk
 
       # בדיקות היחידה של הקוד הנייטיבי (מדיניות, זיהוי תמונות פרופיל, השהיות, עדכון עצמי) + lint.
       # אחרי הבנייה: היא יוצרת את gradlew ואת local.properties
