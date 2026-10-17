@@ -47,6 +47,7 @@ class ProtectionService : Service() {
     private fun checkHealth(why: String) {
         Recovery.runAsync(applicationContext) {
             TunnelManager.healthCheck()
+            Watchdog.run(applicationContext, why)       // מגן / מנהל מכשיר / מה שחסר — מחזיר לבד או מתריע
             main.post { updateNotification() }
         }
     }

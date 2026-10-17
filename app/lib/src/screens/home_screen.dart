@@ -12,6 +12,7 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = controller;
+    final running = c.setupStep != null && c.setupStep != SetupStep.done;
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -54,7 +55,6 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 16),
               ],
               _StatusHero(controller: c),
-              const SizedBox(height: 4),
               if (c.protection.updateAvailable != null) ...[
                 const SizedBox(height: 16),
                 _UpdateCard(controller: c),
@@ -63,20 +63,19 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 _Message(controller: c),
               ],
-              if (!c.adminPauseActive && (!c.isProtected || !c.deviceOwner || c.setupStep != null)) ...[
+              // רק מה שחסר. כשהכול תקין — אין כאן רשימת הרשאות בכלל (המצב הטכני המלא: הגדרות)
+              if (!c.adminPauseActive && (c.missingRequired.isNotEmpty || running)) ...[
                 const SizedBox(height: 16),
-                _OneTapCard(controller: c),
+                _FixCard(controller: c),
+                if (!c.deviceOwner || running) ...[
+                  const SizedBox(height: 16),
+                  OneTapCard(controller: c),
+                ],
               ],
-              const SizedBox(height: 16),
-              _Checklist(controller: c),
-              const SizedBox(height: 16),
-              _StatusDetails(controller: c),
               if (c.device?.isActive ?? false) ...[
                 const SizedBox(height: 16),
-                _BlocksCard(controller: c),
+                _ActiveCard(controller: c),
               ],
-              const SizedBox(height: 16),
-              _ServerProof(controller: c),
             ],
           ),
         ),
@@ -188,8 +187,8 @@ class _PauseCard extends StatelessWidget {
 }
 
 /// הקמה בלחיצה אחת: עם root — הכול לבד; בלי root — כל אישור של אנדרואיד נפתח בתורו.
-class _OneTapCard extends StatelessWidget {
-  const _OneTapCard({required this.controller});
+class OneTapCard extends StatelessWidget {
+  const OneTapCard({super.key, required this.controller});
   final AppController controller;
 
   static const _howTo = {
@@ -485,93 +484,121 @@ class _Stat extends StatelessWidget {
   }
 }
 
-class _Checklist extends StatelessWidget {
-  const _Checklist({required this.controller});
+/// הפריטים שחסרים — כל אחד עם הסבר קצר וכפתור שפותח בדיוק את החלון של אנדרואיד שצריך.
+/// בטאב הסינון (_FixCard) ובחלון שקופץ לבד כשהרשאה נופלת (AppShell).
+class MissingChecksList extends StatelessWidget {
+  const MissingChecksList({super.key, required this.controller, required this.only});
   final AppController controller;
+  final List<Check> only;
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
-    final checks = c.checks;
-    return Card(
-      child: Column(
-        children: [
-          _CheckTile(
-            ok: checks[Check.vpn]!,
-            title: 'חיבור לסינון (VPN)',
-            okText: 'מחובר',
-            todo: 'הסינון לא פעיל כרגע.',
-            actionLabel: 'חיבור',
-            onAction: c.busy ? null : c.connectVpn,
-          ),
-          const Divider(height: 1),
-          _CheckTile(
-            ok: checks[Check.certificate]!,
-            title: 'תעודת סינון',
-            okText: 'מותקנת',
-            todo: 'בלי התעודה אי אפשר לסנן תמונות באתרים מאובטחים.',
-            actionLabel: 'התקנה',
-            onAction: c.busy ? null : c.installCertificate,
-          ),
-          const Divider(height: 1),
-          _CheckTile(
-            ok: checks[Check.alwaysOn]!,
-            optional: true,
-            title: 'VPN תמיד מופעל',
-            okText: c.vpn.lockdown == true ? 'פעיל, כולל חסימה בלי VPN' : 'פעיל',
-            todo: 'בהגדרות ה-VPN בחרו FilterPhone והפעילו "VPN תמיד מופעל" '
-                'ו"חסימת חיבורים ללא VPN".',
-            actionLabel: 'הגדרות',
-            onAction: c.openVpnSettings,
-          ),
-          const Divider(height: 1),
-          _CheckTile(
-            ok: checks[Check.battery]!,
-            title: 'פעולה ברקע (סוללה)',
-            okText: 'ללא הגבלה — אנדרואיד לא יעצור את הסינון',
-            todo: 'כדי לחסוך סוללה אנדרואיד עוצר אפליקציות ברקע — וזה עלול לנתק את הסינון ואת המגן. '
-                'צריך לאשר ל-FilterPhone לפעול ללא הגבלת סוללה.',
-            actionLabel: 'אישור',
-            onAction: c.requestBatteryExemption,
-          ),
-          if (c.guardNeeded) ...[
-            const Divider(height: 1),
-            _CheckTile(
-              ok: checks[Check.guard]!,
+    Widget tile(Check k) => switch (k) {
+          Check.vpn => _CheckTile(
+              ok: false,
+              title: 'חיבור לסינון (VPN)',
+              okText: 'מחובר',
+              todo: 'הסינון לא פעיל כרגע. לחצו "חיבור" ואשרו בחלון של אנדרואיד.',
+              actionLabel: 'חיבור',
+              onAction: c.busy ? null : c.connectVpn,
+            ),
+          Check.certificate => _CheckTile(
+              ok: false,
+              title: 'תעודת סינון',
+              okText: 'מותקנת',
+              todo: 'בלי התעודה אי אפשר לסנן תמונות באתרים מאובטחים.',
+              actionLabel: 'התקנה',
+              onAction: c.busy ? null : c.installCertificate,
+            ),
+          Check.battery => _CheckTile(
+              ok: false,
+              title: 'פעולה ברקע (סוללה)',
+              okText: 'ללא הגבלה',
+              todo: 'אנדרואיד עלול לעצור את הסינון ברקע כדי לחסוך סוללה. צריך לאשר ל-FilterPhone לפעול ללא הגבלה.',
+              actionLabel: 'אישור',
+              onAction: c.requestBatteryExemption,
+            ),
+          Check.guard => _CheckTile(
+              ok: false,
               title: 'מגן FilterPhone',
-              okText: c.deviceOwner ? 'פעיל (מנהל מכשיר)' : 'פעיל — אפליקציות ומסכים חסומים לא נפתחים',
-              todo: 'המנהל חסם אפליקציות או מסכים בטלפון הזה. כדי שזה יעבוד: '
-                  'בהגדרות הנגישות מפעילים את "מגן FilterPhone". '
-                  'המגן רואה רק איזו אפליקציה נפתחה — לא הודעות, לא תוכן ולא הקלדות.',
+              okText: 'פעיל',
+              todo: 'המגן כבוי — ולכן אפליקציות ומסכים שנחסמו נפתחים. בהגדרות הנגישות מפעילים את '
+                  '"מגן FilterPhone". המגן רואה רק איזו אפליקציה נפתחה — לא הודעות, לא תוכן ולא הקלדות.',
               actionLabel: 'הפעלה',
               onAction: c.openGuardSettings,
             ),
-          ],
-          if (!checks[Check.privateDns]!) ...[
-            const Divider(height: 1),
-            const _CheckTile(
+          Check.privateDns => const _CheckTile(
               ok: false,
               title: 'DNS פרטי',
               okText: '',
-              todo: 'מוגדר "DNS פרטי" שעוקף את הסינון וחוסם את הגלישה. '
-                  'בהגדרות ← חיבורים ← DNS פרטי ← כבוי.',
+              todo: 'מוגדר "DNS פרטי" שעוקף את הסינון וחוסם את הגלישה. בהגדרות ← חיבורים ← DNS פרטי ← כבוי.',
             ),
-          ],
+          Check.alwaysOn => _CheckTile(
+              ok: false,
+              optional: true,
+              title: 'VPN תמיד מופעל',
+              okText: '',
+              todo: 'בהגדרות ה-VPN בחרו FilterPhone והפעילו "VPN תמיד מופעל" ו"חסימת חיבורים ללא VPN".',
+              actionLabel: 'הגדרות',
+              onAction: c.openVpnSettings,
+            ),
+        };
+    return Column(
+      children: [
+        for (var i = 0; i < only.length; i++) ...[
+          if (i > 0) const Divider(height: 1),
+          tile(only[i]),
+        ],
+      ],
+    );
+  }
+}
+
+/// "נדרשת פעולה" — רק מה שחסר (אחרי ההקמה הכרטיס הזה לא מופיע בכלל).
+class _FixCard extends StatelessWidget {
+  const _FixCard({required this.controller});
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final missing = controller.missingRequired;
+    if (missing.isEmpty) return const SizedBox.shrink();
+    return Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Text(missing.length == 1 ? 'עוד דבר אחד וסיימנו' : 'עוד ${missing.length} דברים וסיימנו',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          ),
+          MissingChecksList(controller: controller, only: missing),
         ],
       ),
     );
   }
 }
 
-/// מה חסום בטלפון הזה (מעבר לסינון התמונות), ובקשת שינוי למנהל.
-class _BlocksCard extends StatelessWidget {
-  const _BlocksCard({required this.controller});
+/// מה פעיל אצל הלקוח הזה: הסינון לפי הרמה, הגנות נוספות, החסימות — ובקשת שינוי למנהל.
+class _ActiveCard extends StatelessWidget {
+  const _ActiveCard({required this.controller});
   final AppController controller;
 
   @override
   Widget build(BuildContext context) {
-    final d = controller.device!;
+    final c = controller;
+    final d = c.device!;
     final theme = Theme.of(context);
+    Widget item(IconData icon, String text) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Row(children: [
+            Icon(icon, size: 20, color: StatusColors.ok(context)),
+            const SizedBox(width: 10),
+            Expanded(child: Text(text, style: theme.textTheme.bodyMedium)),
+          ]),
+        );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -579,18 +606,24 @@ class _BlocksCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(children: [
-              Icon(Icons.block, color: theme.colorScheme.primary),
+              Icon(Icons.verified_rounded, color: theme.colorScheme.primary),
               const SizedBox(width: 8),
-              Expanded(child: Text('חסימות פעילות', style: theme.textTheme.titleMedium)),
-              if (d.sitesToday > 0) Text('${d.sitesToday} היום', style: theme.textTheme.bodySmall),
+              Expanded(child: Text('מה פעיל אצלך', style: theme.textTheme.titleMedium)),
+              if (d.sitesToday > 0) Text('${d.sitesToday} חסימות היום', style: theme.textTheme.bodySmall),
             ]),
-            const SizedBox(height: 10),
-            if (d.blocks.isEmpty)
-              Text('רק סינון תמונות ואתרים לפי הרמה.', style: theme.textTheme.bodyMedium)
-            else
+            const SizedBox(height: 8),
+            item(Icons.image_search_rounded, 'סינון תמונות ואתרים — ${d.levelName}'),
+            if (c.guardNeeded && c.checks[Check.guard]!) item(Icons.shield_moon_rounded, 'מגן FilterPhone — אפליקציות ומסכים שנחסמו לא נפתחים'),
+            if (c.deviceOwner) item(Icons.admin_panel_settings_rounded, 'מכשיר מנוהל — אי אפשר להסיר או לעקוף את ההגנה'),
+            if (!c.deviceOwner && c.vpn.alwaysOn == true) item(Icons.lock_rounded, 'הסינון תמיד מופעל'),
+            if (d.blocks.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('חסום בטלפון הזה', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 6),
               Wrap(spacing: 6, runSpacing: 6, children: [
                 for (final b in d.blocks) Chip(label: Text(b.title), visualDensity: VisualDensity.compact),
               ]),
+            ],
             const SizedBox(height: 12),
             if (d.hasPendingChange)
               Padding(
@@ -616,8 +649,8 @@ class _BlocksCard extends StatelessWidget {
 }
 
 /// פירוט המצב — מה באמת פועל עכשיו בטלפון (לא רק "מוגן / לא מוגן").
-class _StatusDetails extends StatelessWidget {
-  const _StatusDetails({required this.controller});
+class StatusDetailsCard extends StatelessWidget {
+  const StatusDetailsCard({super.key, required this.controller});
   final AppController controller;
 
   static String _ago(DateTime? t) {
@@ -655,6 +688,18 @@ class _StatusDetails extends StatelessWidget {
                 p.guardEnabled ? (p.guardRunning ? 'פעיל' : 'מופעל, ממתין') : (c.guardNeeded ? 'כבוי' : 'לא נדרש'),
                 good: p.guardEnabled || !c.guardNeeded),
             row('מנהל מכשיר (Device Owner)', p.deviceOwner ? 'פעיל' : 'לא פעיל'),
+            row('VPN תמיד מופעל',
+                c.vpn.alwaysOn == null
+                    ? 'לא ידוע'
+                    : c.vpn.alwaysOn!
+                        ? (c.vpn.lockdown == true ? 'פעיל + חסימה בלי VPN' : 'פעיל')
+                        : 'כבוי',
+                good: c.vpn.alwaysOn),
+            if (c.vpn.alwaysOn == false)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(onPressed: c.openVpnSettings, child: const Text('הפעלת "VPN תמיד מופעל"')),
+              ),
             row('סוללה', p.batteryUnrestricted == null ? 'לא ידוע' : (p.backgroundOk ? 'ללא הגבלה' : 'מוגבלת'),
                 good: p.batteryUnrestricted == null ? null : p.backgroundOk),
             row('סנכרון מדיניות אחרון', _ago(p.lastPolicySync)),
@@ -762,8 +807,8 @@ class _Message extends StatelessWidget {
   }
 }
 
-class _ServerProof extends StatelessWidget {
-  const _ServerProof({required this.controller});
+class ServerProofLine extends StatelessWidget {
+  const ServerProofLine({super.key, required this.controller});
   final AppController controller;
 
   @override
@@ -826,7 +871,7 @@ class _UpdateCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'מורידים מדף ההורדה ומתקינים מעל הקיימת — ההגדרות והסינון נשמרים.',
+                        'FilterPhone מוריד ומתקין את העדכון — ההגדרות והסינון נשמרים.',
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
@@ -838,7 +883,7 @@ class _UpdateCard extends StatelessWidget {
             FilledButton.icon(
               onPressed: controller.openUpdatePage,
               icon: const Icon(Icons.download_rounded, size: 18),
-              label: const Text('להורדה'),
+              label: const Text('עדכון עכשיו'),
             ),
           ],
         ),

@@ -107,6 +107,21 @@ class AppController extends ChangeNotifier {
   String _appVersion = '';
   String androidId = '';          // ה-ANDROID_ID המקורי של המכשיר — לתצוגה למשתמש ולתמיכה
 
+  /// הגדרות תצוגה (נשמרות בטלפון): ערכת נושא system / light / dark, וגודל טקסט (1.0 = רגיל).
+  String themeMode = 'system';
+  double textScale = 1.0;
+  static const _kTheme = 'ui_theme';
+  static const _kTextScale = 'ui_text_scale';
+  static const textScales = [1.0, 1.15, 1.3];
+
+  /// מצב ההרשאות נקרא מהטלפון לפחות פעם אחת (לפני זה לא "דורשים" כלום — עוד לא ידוע מה חסר).
+  bool statusLoaded = false;
+
+  /// גדל בכל חזרה לאפליקציה — חלון "חסרה הרשאה" מוצג שוב אם עדיין חסר.
+  int resumeTick = 0;
+
+  String get appVersion => _appVersion;
+
   Timer? _timer;
   StreamSubscription<String>? _vpnSub;
 
@@ -131,6 +146,21 @@ class AppController extends ChangeNotifier {
         Check.battery: protection.backgroundOk,
       };
 
+  /// מה מהנדרש חסר עכשיו (בלי "תמיד מופעל", שהוא המלצה).
+  List<Check> get missingRequired => [
+        for (final k in [Check.vpn, Check.certificate, Check.privateDns, Check.battery, if (guardNeeded) Check.guard])
+          if (!checks[k]!) k,
+      ];
+
+  /// מה לדרוש מהמשתמש עכשיו — בחלון שקופץ לבד. ריק כשאין טעם לדרוש: עוד לא ידוע, השהיה מאושרת,
+  /// מכשיר לא פעיל / הוסר, או שההקמה בלחיצה אחת עוד רצה (היא פותחת את החלונות בעצמה).
+  List<Check> get attentionNeeded {
+    if (phase != Phase.home || !statusLoaded || adminPauseActive || deviceRemoved) return const [];
+    if (!(device?.isActive ?? false)) return const [];
+    if (setupStep != null && setupStep != SetupStep.done) return const [];
+    return missingRequired;
+  }
+
   /// מוגן = המנהרה פעילה, התעודה מותקנת, DNS פרטי לא עוקף, אנדרואיד לא עוצר את FilterPhone ברקע
   /// (סוללה) — ואם המנהל חסם אפליקציות, גם מגן FilterPhone פעיל.
   /// "תמיד מופעל" מומלץ מאוד אבל לא תנאי (אנדרואיד לא תמיד מדווח עליו).
@@ -144,6 +174,7 @@ class AppController extends ChangeNotifier {
   // ------------------------------------------------------------------ הפעלה
 
   Future<void> start() async {
+    await _loadUiPrefs();
     try {
       _appVersion = '${(await native.deviceInfo())['appVersion'] ?? ''}';
       androidId = await native.androidId();
@@ -548,9 +579,9 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// גרסה חדשה (בלי מנהל מכשיר): דף ההורדה בדפדפן. ההתקנה — של המשתמש, בחלון של אנדרואיד.
-  /// באנדרואיד 16 האפליקציה מורידה ומתקינה בעצמה, ומורידה את ה-VPN רק לרגע ההתקנה: עדכון של
-  /// אפליקציית VPN כשה-VPN פעיל משאיר שם את הטלפון בלי אינטרנט עד הפעלה מחדש (באג של אנדרואיד).
+  /// גרסה חדשה (בלי מנהל מכשיר): האפליקציה מורידה, בודקת ומבקשת מאנדרואיד להתקין — המשתמש מאשר
+  /// בחלון של אנדרואיד. באנדרואיד 16 ה-VPN יורד רק לרגע ההתקנה (באג של אנדרואיד 16 בעדכון כשה-VPN
+  /// פעיל). אם אין עדיין אישור "התקנת אפליקציות לא מוכרות" — נפתח המסך לאשר אותו.
   Future<void> openUpdatePage() async {
     error = null;
     try {
@@ -559,7 +590,7 @@ class AppController extends ChangeNotifier {
         case 'page':
           break;
         case 'installing':
-          notice = 'העדכון ירד ונבדק. אשרו את ההתקנה בחלון של אנדרואיד — ה-VPN יתנתק לרגע ההתקנה ויחזור מיד אחריה.';
+          notice = 'העדכון ירד ונבדק. אשרו את ההתקנה בחלון של אנדרואיד — ההגנה חוזרת מיד אחריה.';
         case 'permission':
           notice = 'כדי לעדכן מתוך האפליקציה: אשרו ל-FilterPhone "התקנת אפליקציות לא מוכרות", חזרו ולחצו שוב על העדכון.';
         case 'busy':
@@ -641,6 +672,7 @@ class AppController extends ChangeNotifier {
       guardEnabled = await native.isGuardEnabled();
       if (_caPem != null) caInstalled = await native.isCaInstalled(_caPem!);
       protection = await native.protectionStatus();
+      statusLoaded = true;
     } on PlatformException catch (e) {
       debugPrint('native refresh failed: $e');
     }
@@ -810,6 +842,7 @@ class AppController extends ChangeNotifier {
 
   /// האפליקציה חזרה לחזית (המשתמש סיים עם חלון של אנדרואיד) — ממשיכים בהקמה, ומרעננים.
   Future<void> onAppResumed() async {
+    resumeTick++;
     unawaited(checkLaunchTarget());
     if (setupStep != null && setupStep != SetupStep.done) {
       await _continueSetup();
@@ -905,6 +938,40 @@ class AppController extends ChangeNotifier {
       supportSending = false;
       notifyListeners();
     }
+  }
+
+  /// הצעת ייעול מהלקוח — מגיעה ישר לוואטסאפ של המנהל (דרך התמיכה, בלי מענה אוטומטי). null = נשלח.
+  Future<String?> sendSuggestion(String text) {
+    final body = text.trim();
+    if (body.isEmpty) return Future.value('כתבו את ההצעה קודם');
+    return sendSupport('💡 הצעת ייעול: $body', topic: 'suggestion');
+  }
+
+  // ------------------------------------------------------------------ הגדרות תצוגה
+
+  Future<void> _loadUiPrefs() async {
+    try {
+      final t = await store.read(_kTheme);
+      if (t != null && const ['system', 'light', 'dark'].contains(t)) themeMode = t;
+      final scale = double.tryParse(await store.read(_kTextScale) ?? '');
+      if (scale != null && textScales.contains(scale)) textScale = scale;
+    } on Exception catch (e) {
+      debugPrint('ui prefs: $e');
+    }
+  }
+
+  Future<void> setThemeMode(String mode) async {
+    if (!const ['system', 'light', 'dark'].contains(mode) || mode == themeMode) return;
+    themeMode = mode;
+    notifyListeners();
+    await store.write(_kTheme, mode);
+  }
+
+  Future<void> setTextScale(double scale) async {
+    if (!textScales.contains(scale) || scale == textScale) return;
+    textScale = scale;
+    notifyListeners();
+    await store.write(_kTextScale, '$scale');
   }
 
   Future<void> clearSupportNotification() async {

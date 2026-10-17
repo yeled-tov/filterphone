@@ -21,6 +21,11 @@
     <string name="protection_paused">ההגנה מושהית באישור המנהל — הטלפון פתוח עד לסיום ההשהיה</string>
     <!-- מוצג על ידי אנדרואיד כשלוחצים על אפליקציה "אפורה" או על הגדרה שנחסמה (מנהל מכשיר) -->
     <string name="alerts_channel">התראות חשובות</string>
+    <string name="watchdog_title">FilterPhone צריך אישור כדי להמשיך להגן</string>
+    <string name="watchdog_vpn">חיבור הסינון (VPN) בוטל</string>
+    <string name="watchdog_guard">מגן FilterPhone כבוי</string>
+    <string name="watchdog_battery">אנדרואיד מגביל את FilterPhone ברקע</string>
+    <string name="watchdog_tap">לחצו כאן — FilterPhone ייפתח ישר על מה שצריך לאשר.</string>
     <string name="update_bug_title">צריך להפעיל מחדש את הטלפון</string>
     <string name="update_bug_text">באנדרואיד 16, אחרי עדכון של FilterPhone, באג של אנדרואיד חוסם את האינטרנט. הפעלה מחדש של הטלפון מתקנת את זה.</string>
     <string name="support_channel">תשובות מהתמיכה</string>

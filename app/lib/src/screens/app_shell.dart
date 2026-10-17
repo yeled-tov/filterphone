@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show listEquals, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -11,6 +11,7 @@ import '../support_bot.dart';
 import '../theme.dart';
 import 'change_request_screen.dart';
 import 'home_screen.dart';
+import 'settings_screen.dart';
 
 part 'support_screen.dart';
 part 'store_screen.dart';
@@ -28,22 +29,58 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   AppController get c => widget.controller;
 
+  // חלון "חסרה הרשאה": מה הוצג לאחרונה, באיזו חזרה לאפליקציה, והאם הוא פתוח עכשיו
+  Set<Check>? _demandedFor;
+  int _demandedAtResume = -1;
+  bool _sheetOpen = false;
+  Timer? _demandTimer;
+
   @override
   void initState() {
     super.initState();
     c.addListener(_onController);
     if (c.takeRequestedTab() == 'support') _index = _supportTab;
+    _onController();
   }
 
   @override
   void dispose() {
+    _demandTimer?.cancel();
     c.removeListener(_onController);
     super.dispose();
   }
 
-  /// נפתחנו מהתראה "יש תשובה מהתמיכה" — ישר לצ'אט.
+  /// נפתחנו מהתראה "יש תשובה מהתמיכה" — ישר לצ'אט. ואם הרשאה נדרשת חסרה — דורשים אותה.
   void _onController() {
     if (c.takeRequestedTab() == 'support' && mounted) setState(() => _index = _supportTab);
+    final missing = c.attentionNeeded;
+    if (missing.isEmpty) {
+      _demandTimer?.cancel();
+      _demandedFor = null;
+      return;
+    }
+    if (_sheetOpen) return;
+    if (_demandedFor != null && setEquals(_demandedFor, missing.toSet()) && _demandedAtResume == c.resumeTick) return;
+    // רגע של סבלנות: אחרי פתיחה / חזרה ה-VPN מתחבר לבד — לא קופצים על מצב רגעי
+    _demandTimer?.cancel();
+    _demandTimer = Timer(const Duration(seconds: 3), _demand);
+  }
+
+  Future<void> _demand() async {
+    final missing = c.attentionNeeded;
+    if (!mounted || _sheetOpen || missing.isEmpty) return;
+    _demandedFor = missing.toSet();
+    _demandedAtResume = c.resumeTick;
+    _sheetOpen = true;
+    setState(() => _index = 0);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => MissingPermissionSheet(controller: c),
+    );
+    _sheetOpen = false;
   }
 
   void _openTab(int i) => setState(() => _index = i);
@@ -188,12 +225,6 @@ class ProfileScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label הועתק')));
   }
 
-  void _changeRequest(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ChangeRequestScreen(controller: controller)),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -306,57 +337,63 @@ class ProfileScreen extends StatelessWidget {
                 _InfoRow(label: 'ניהול מכשיר', value: d?.status == 'active' && controller.deviceOwner ? 'Device Owner פעיל' : 'לא פעיל'),
               ],
             ),
-            const SizedBox(height: 12),
-            _ProfileCard(
-              title: 'מה פעיל בהגנה',
-              icon: Icons.shield_rounded,
-              children: [
-                _ProtectionRow('רמת סינון', d?.levelName ?? '—', d != null),
-                _ProtectionRow('VPN', controller.vpn.isUp ? 'מחובר' : 'לא מחובר', controller.vpn.isUp),
-                _ProtectionRow('נגישות', controller.protection.guardEnabled ? 'מופעלת' : 'לא מופעלת', controller.protection.guardEnabled || !controller.guardNeeded),
-                _ProtectionRow('סוללה', controller.protection.backgroundOk ? 'ללא הגבלה' : 'מוגבלת', controller.protection.backgroundOk),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _ProfileCard(
-              title: 'חסימות פעילות',
-              icon: Icons.block_rounded,
-              children: [
-                if (d?.blocks.isEmpty ?? true)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 4),
-                    child: Text('אין חסימות נוספות מעבר לרמת הסינון.'),
-                  )
-                else
-                  Wrap(
-                    spacing: 7,
-                    runSpacing: 7,
-                    children: [
-                      for (final block in d!.blocks)
-                        Chip(
-                          label: Text(block.title),
-                          visualDensity: VisualDensity.compact,
-                        ),
-                    ],
-                  ),
-              ],
-            ),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: d == null ? null : () => _changeRequest(context),
-              icon: const Icon(Icons.tune_rounded),
-              label: const Text('בקשת שינוי בהגנה'),
-            ),
-            const SizedBox(height: 8),
-            if (controller.protection.updateAvailable != null)
-              OutlinedButton.icon(
-                onPressed: controller.openUpdatePage,
-                icon: const Icon(Icons.system_update_rounded),
-                label: Text('עדכון FilterPhone ${controller.protection.updateAvailable}'),
+            FilledButton.tonalIcon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => SettingsScreen(controller: controller)),
               ),
+              icon: const Icon(Icons.settings_rounded),
+              label: const Text('הגדרות'),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "FilterPhone צריך אישור": קופץ לבד כשהרשאה נדרשת חסרה (כובתה / בוטלה / נמחקה), ומבקש בדיוק
+/// את מה שחסר — כל פריט עם הכפתור שפותח את החלון של אנדרואיד. נסגר לבד כשהכול חוזר.
+class MissingPermissionSheet extends StatelessWidget {
+  const MissingPermissionSheet({super.key, required this.controller});
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final missing = controller.attentionNeeded;
+        if (missing.isEmpty) {
+          // סוגרים רק את החלון הזה — ורק פעם אחת (לא מסך שנפתח מתחתיו)
+          final route = ModalRoute.of(context);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (route != null && route.isCurrent) route.navigator?.pop();
+          });
+        }
+        final theme = Theme.of(context);
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Icon(Icons.gpp_maybe_rounded, size: 46, color: StatusColors.warn(context)),
+              const SizedBox(height: 8),
+              Text('FilterPhone צריך אישור כדי להמשיך להגן',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('משהו שההגנה צריכה כובה או בוטל. לחצו על הכפתור ואשרו — זה לוקח כמה שניות.',
+                    textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+              ),
+              const SizedBox(height: 8),
+              MissingChecksList(controller: controller, only: missing),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -422,30 +459,6 @@ class _InfoRow extends StatelessWidget {
               onPressed: action,
               icon: const Icon(Icons.copy_rounded, size: 18),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProtectionRow extends StatelessWidget {
-  const _ProtectionRow(this.label, this.value, this.good);
-  final String label;
-  final String value;
-  final bool good;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = good ? StatusColors.ok(context) : StatusColors.warn(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        children: [
-          Icon(good ? Icons.check_circle_rounded : Icons.warning_amber_rounded, size: 18, color: color),
-          const SizedBox(width: 9),
-          Expanded(child: Text(label)),
-          Text(value, style: theme.textTheme.bodyMedium?.copyWith(color: color, fontWeight: FontWeight.w800)),
         ],
       ),
     );

@@ -50,6 +50,7 @@ def test_outbox_reply_and_crm(env):
     client.post("/v1/device/support", headers=auth(token), json={"text": "האינטרנט לא עובד"})
     out = client.get("/v1/bot/outbox", headers=auth(BOT)).json()["messages"]
     assert len(out) == 1 and out[0]["text"] == "האינטרנט לא עובד" and out[0]["phone"] == "0501234567"
+    assert out[0]["topic"] == ""
     mid = out[0]["id"]
     # סימון כ"הועבר" — לא חוזר שוב
     assert client.post("/v1/bot/forwarded", headers=auth(BOT), json={"ids": [mid]}).json()["marked"] == 1
@@ -84,3 +85,14 @@ def test_safe_block_is_applied_but_critical_needs_admin_approval(env):
     assert any("בוט וואטסאפ" in (rq.get("note") or "") for rq in reqs)
     # המכשיר עדיין פעיל — הבוט לא השהה לבד
     assert client.get(f"/v1/admin/devices/{did}", headers=admin_headers(client)).json()["status"] == "active"
+
+
+def test_suggestion_reaches_the_bot_with_its_topic(env):
+    """הצעת ייעול מההגדרות באפליקציה — הבוט מזהה לפי topic ומעביר ישר למנהל (בלי מענה AI)."""
+    svc, client = env
+    set_bot(client)
+    _, token = active_customer(svc, client)
+    client.post("/v1/device/support", headers=auth(token),
+                json={"text": "💡 הצעת ייעול: מצב לילה", "diag": {"topic": "suggestion", "vpn": "UP"}})
+    out = client.get("/v1/bot/outbox", headers=auth(BOT)).json()["messages"]
+    assert [(m["topic"], m["text"]) for m in out] == [("suggestion", "💡 הצעת ייעול: מצב לילה")]

@@ -437,6 +437,15 @@ function rememberAppThread(sent, deviceId, question, phone) {
 async function handleAppSupport(m, waIds) {
   const deviceId = m.device_id;
   const phone = String(m.phone || '').replace(/\D/g, '');
+  // הצעת ייעול (הגדרות באפליקציה): ישר אליך, בלי מענה AI — והלקוח מקבל "תודה"
+  if (m.topic === 'suggestion') {
+    const text = String(m.text || '').replace(/^💡\s*הצעת ייעול:\s*/, '');
+    const sent = await toAdmin(`💡 *הצעת ייעול* · ${m.customer || 'לקוח'}${m.phone ? ' · ' + m.phone : ''} · מכשיר #${deviceId}\n\n${text}\n\n↩️ "השב" כאן — והתשובה תגיע ללקוח באפליקציה`);
+    rememberAppThread(sent, deviceId, m.text, phone);
+    try { await srv.reply(deviceId, 'תודה! ההצעה הועברה למנהל 🙏'); } catch { /* */ }
+    stats.app_suggestions = (stats.app_suggestions || 0) + 1;
+    return;
+  }
   const head = `📩 *פנייה מהאפליקציה* · ${m.customer || 'לקוח'}${m.phone ? ' · ' + m.phone : ''} · מכשיר #${deviceId}`;
   let crm = null;
   if (phone) { try { crm = await srv.customer(phone); } catch { /* לא לקוח — עדיין עונים */ } }

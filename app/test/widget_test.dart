@@ -8,6 +8,7 @@ import 'package:filterphone/src/app_controller.dart';
 import 'package:filterphone/src/native_bridge.dart';
 import 'package:filterphone/src/screens/app_shell.dart';
 import 'package:filterphone/src/screens/home_screen.dart';
+import 'package:filterphone/src/screens/settings_screen.dart';
 import 'package:filterphone/src/support_bot.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -1250,15 +1251,191 @@ void main() {
     ));
     await tester.pump();
     expect(find.text('גרסה חדשה של FilterPhone (1.0.8)'), findsOneWidget);
-    await tester.tap(find.text('להורדה'));
+    await tester.tap(find.text('עדכון עכשיו'));
     await tester.pump();
     expect(native.updatePageOpens, 1);
     // אחרי העדכון הטלפון כבר לא מדווח על גרסה חדשה — ההודעה נעלמת
     native.updateAvailable = null;
     await c.refresh();
     await tester.pump();
-    expect(find.text('להורדה'), findsNothing);
+    expect(find.text('עדכון עכשיו'), findsNothing);
     c.dispose();
+  });
+
+  group('filter tab, permission window and settings', () {
+    MemoryStore activeStore() => MemoryStore()
+      ..data['device_token'] = 'device-token'
+      ..data['ca_pem'] = 'PEM'
+      ..data['vpn_config_hash'] = 'x';
+
+    Widget rtl(Widget child) => MaterialApp(home: Directionality(textDirection: TextDirection.rtl, child: child));
+
+    Future<void> tallScreen(WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 2600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+    }
+
+    testWidgets('protected phone: no permissions list — only what is active for this customer', (tester) async {
+      await tallScreen(tester);
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP';
+      final c = makeController(native, quietServer(), activeStore());
+      await c.start();
+      await tester.pumpWidget(rtl(ListenableBuilder(listenable: c, builder: (_, _) => HomeScreen(controller: c))));
+      await tester.pump();
+      expect(c.isProtected, isTrue);
+      expect(c.attentionNeeded, isEmpty);
+      expect(find.text('מה פעיל אצלך'), findsOneWidget);
+      expect(find.text('סינון תמונות ואתרים — מחמיר'), findsOneWidget);
+      expect(find.byType(MissingChecksList), findsNothing);
+      expect(find.text('הקמה בלחיצה אחת'), findsNothing);
+      expect(find.text('מצב ההגנה'), findsNothing);                // הפירוט הטכני — בהגדרות
+      c.dispose();
+    });
+
+    testWidgets('a dropped permission: the filter tab asks only for what is missing', (tester) async {
+      await tallScreen(tester);
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP'
+        ..batteryUnrestricted = false;
+      final c = makeController(native, quietServer(), activeStore());
+      await c.start();
+      await tester.pumpWidget(rtl(ListenableBuilder(listenable: c, builder: (_, _) => HomeScreen(controller: c))));
+      await tester.pump();
+      expect(c.attentionNeeded, [Check.battery]);
+      expect(find.text('עוד דבר אחד וסיימנו'), findsOneWidget);
+      expect(find.text('פעולה ברקע (סוללה)'), findsOneWidget);
+      expect(find.text('תעודת סינון'), findsNothing);
+      expect(find.text('חיבור לסינון (VPN)'), findsNothing);
+      await tester.tap(find.descendant(of: find.byType(MissingChecksList), matching: find.text('אישור')));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+      expect(native.batteryRequests, 1);
+      c.dispose();
+    });
+
+    testWidgets('the permission window asks for what dropped and closes by itself once it is back', (tester) async {
+      // הגדרות ה-VPN כבר שמורות וזהות לשרת — הסנכרון לא מחבר מחדש באמצע הבדיקה
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP'
+        ..savedVpn = Map<String, Object?>.from(_vpn);
+      final store = activeStore()..data['vpn_config_hash'] = base64Encode(utf8.encode(jsonEncode(_vpn)));
+      final c = makeController(native, quietServer(), store);
+      await c.start();
+      await tester.pumpWidget(rtl(Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: FilledButton(
+              onPressed: () => showModalBottomSheet<void>(
+                  context: context, builder: (_) => MissingPermissionSheet(controller: c)),
+              child: const Text('פתיחה'),
+            ),
+          ),
+        ),
+      )));
+      // ה-VPN נותק (למשל ניקוי נתונים) — החלון דורש בדיוק את זה
+      native.state = 'DOWN';
+      await c.refresh();
+      expect(c.attentionNeeded, [Check.vpn]);
+      await tester.tap(find.text('פתיחה'));
+      await tester.pumpAndSettle();
+      expect(find.text('FilterPhone צריך אישור כדי להמשיך להגן'), findsOneWidget);
+      expect(find.text('חיבור לסינון (VPN)'), findsOneWidget);
+      expect(find.text('פעולה ברקע (סוללה)'), findsNothing);
+      native.state = 'UP';
+      await c.refresh();
+      await tester.pumpAndSettle();
+      expect(find.text('FilterPhone צריך אישור כדי להמשיך להגן'), findsNothing);
+      c.dispose();
+    });
+
+    testWidgets('profile: no duplicate protection cards, and a settings button', (tester) async {
+      await tallScreen(tester);
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP';
+      final c = makeController(native, quietServer(), activeStore());
+      await c.start();
+      await tester.pumpWidget(rtl(ListenableBuilder(listenable: c, builder: (_, _) => ProfileScreen(controller: c))));
+      await tester.pump();
+      expect(find.text('מה פעיל בהגנה'), findsNothing);
+      expect(find.text('חסימות פעילות'), findsNothing);
+      await tester.tap(find.text('הגדרות'));
+      await tester.pumpAndSettle();
+      expect(find.text('מראה'), findsOneWidget);
+      expect(find.text('הצעות ייעול'), findsOneWidget);
+      c.dispose();
+    });
+
+    testWidgets('settings: theme and text size are kept, updates install in the app, suggestions reach the admin',
+        (tester) async {
+      await tallScreen(tester);
+      final sent = <Map<String, Object?>>[];
+      final server = MockClient((req) async {
+        const json = {'content-type': 'application/json; charset=utf-8'};
+        switch (req.url.path) {
+          case '/v1/device':
+            return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+                'via_vpn': true}), 200, headers: json);
+          case '/v1/device/vpn':
+            return http.Response(jsonEncode(_vpn), 200, headers: json);
+          case '/v1/device/support' when req.method == 'POST':
+            final body = Map<String, Object?>.from(jsonDecode(req.body) as Map);
+            sent.add(body);
+            return http.Response(jsonEncode({'id': 1, 'from': 'customer', 'text': body['text'], 'ts': 1000}), 201,
+                headers: json);
+          case '/v1/device/support':
+            return http.Response(jsonEncode({'messages': []}), 200, headers: json);
+        }
+        return http.Response('{}', 200, headers: json);
+      });
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP'
+        ..updateAvailable = '1.0.9';
+      final store = activeStore();
+      final c = makeController(native, server, store);
+      await c.start();
+      await tester.pumpWidget(rtl(SettingsScreen(controller: c)));
+      await tester.pump();
+      // מראה
+      await tester.tap(find.text('כהה'));
+      await tester.pump();
+      expect(c.themeMode, 'dark');
+      await tester.tap(find.text('גדול'));
+      await tester.pump();
+      expect(c.textScale, 1.15);
+      expect(store.data['ui_theme'], 'dark');
+      expect(store.data['ui_text_scale'], '1.15');
+      // עדכון מתוך האפליקציה (בלי מנהל מכשיר)
+      await tester.tap(find.text('הורדה והתקנה של גרסה 1.0.9'));
+      await tester.pump();
+      expect(native.updatePageOpens, 1);
+      // הצעת ייעול
+      await tester.enterText(find.byType(TextField), 'שיהיה גם מצב לילה אוטומטי');
+      await tester.tap(find.text('שליחת ההצעה'));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+      expect(sent.single['text'], '💡 הצעת ייעול: שיהיה גם מצב לילה אוטומטי');
+      expect(Map<String, Object?>.from(sent.single['diag'] as Map)['topic'], 'suggestion');
+      expect(find.text('תודה! ההצעה נשלחה למנהל 🙏'), findsOneWidget);
+      c.dispose();
+      // ההגדרות נשמרות בטלפון — גם אחרי פתיחה מחדש
+      final again = makeController(FakeNative(), quietServer(), store);
+      await again.start();
+      expect(again.themeMode, 'dark');
+      expect(again.textScale, 1.15);
+      again.dispose();
+    });
+
+    test('a suggestion needs text', () async {
+      final c = makeController(FakeNative(), quietServer(), activeStore());
+      await c.start();
+      expect(await c.sendSuggestion('   '), 'כתבו את ההצעה קודם');
+      c.dispose();
+    });
   });
 
   testWidgets('registration form walks through all four steps', (tester) async {

@@ -47,8 +47,7 @@ object Sync {
         vpn.put("data_fails", ProtectionState.count(context, ProtectionState.VPN_DATA_FAILS))
 
         val policy = GuardPolicy.get(context)
-        val needsAccessibility = policy.screens.isNotEmpty() || policy.waProfile != null || policy.keywords != null ||
-            (policy.apps.isNotEmpty() && !DeviceOwnerManager.isDeviceOwner(context))
+        val needsAccessibility = Watchdog.guardRequired(context)
         val accessibility = JSONObject()
             .put("enabled", GuardPolicy.isServiceEnabled(context))
             .put("running", GuardService.isRunning)
@@ -203,6 +202,7 @@ class SyncJob : JobService() {
                 TunnelManager.ensureConnected(if (params.jobId == Recovery.JOB_RETRY) "retry" else "job")
                 if (params.jobId != Recovery.JOB_RETRY) {
                     TunnelManager.healthCheck()
+                    Watchdog.run(app, "job")
                     Recovery.startProtection(app)        // ייתכן שאנדרואיד יסרב מהרקע — זה בסדר
                     Sync.heartbeat(app)                  // כולל בדיקת גרסה + התקנה אוטומטית (במנהל מכשיר)
                     // מנהל מכשיר: יישור ההגדרות (למשל נעילת VPN אחרי שההגדרות הגיעו)

@@ -39,9 +39,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   כל כישלון: לא מתקינים, מדווחים לשרת (heartbeat → "update"), ומנסים שוב בהשהיה הולכת וגדלה.
  *
  * בלי מנהל מכשיר אנדרואיד לא מתיר עדכון שקט: רק נשמר שיש גרסה חדשה, והאפליקציה מציגה הודעה
- * עם קישור לדף ההורדה — המשתמש מתקין בעצמו. באנדרואיד 16 — במקום הדפדפן, האפליקציה מורידה ובודקת
- * את הקובץ בעצמה ומבקשת מאנדרואיד להתקין (המשתמש מאשר בחלון של אנדרואיד), כדי שתוכל להוריד את
- * ה-VPN רגע לפני ההתקנה (באג של אנדרואיד 16 — TunnelManager.pauseForUpdate).
+ * עם כפתור "עדכון": האפליקציה מורידה ובודקת את הקובץ בעצמה ומבקשת מאנדרואיד להתקין (המשתמש מאשר
+ * בחלון של אנדרואיד). באנדרואיד 16 ה-VPN יורד רגע לפני ההתקנה (באג — TunnelManager.pauseForUpdate).
  */
 object SelfUpdate {
     private const val TAG = "FilterPhone"
@@ -211,9 +210,9 @@ object SelfUpdate {
         }
     }
 
-    /** בלי מנהל מכשיר, באנדרואיד 16: מתקינים מתוך האפליקציה (ולא מהדפדפן) — כדי להוריד את ה-VPN לפני. */
-    fun installInApp(context: Context): Boolean =
-        TunnelManager.updateBugAffected && !DeviceOwnerManager.isDeviceOwner(context)
+    /** בלי מנהל מכשיר: מתקינים מתוך האפליקציה (ולא מהדפדפן) — הורדה ובדיקה כמו בעדכון השקט, ובאנדרואיד
+     *  16 גם הורדת ה-VPN לרגע ההתקנה. במנהל מכשיר העדכון שקט ממילא. */
+    fun installInApp(context: Context): Boolean = !DeviceOwnerManager.isDeviceOwner(context)
 
     /**
      * עדכון שהמשתמש ביקש (בלי מנהל מכשיר): מוריד ובודק, ושולח ל-PackageInstaller. אנדרואיד יבקש אישור

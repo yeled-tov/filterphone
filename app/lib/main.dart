@@ -46,8 +46,23 @@ class _FilterPhoneAppState extends State<FilterPhoneApp> with WidgetsBindingObse
     if (widget.controller.phase == Phase.pending) widget.controller.refreshPending();
   }
 
+  static ThemeMode _mode(String m) => switch (m) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      };
+
   @override
   Widget build(BuildContext context) {
+    // ערכת הנושא וגודל הטקסט מההגדרות — מתעדכנים מיד כשמשנים
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) => _app(context),
+    );
+  }
+
+  Widget _app(BuildContext context) {
+    final c = widget.controller;
     return MaterialApp(
       title: 'FilterPhone',
       debugShowCheckedModeBanner: false,
@@ -60,6 +75,13 @@ class _FilterPhoneAppState extends State<FilterPhoneApp> with WidgetsBindingObse
       ],
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
+      themeMode: _mode(c.themeMode),
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        // גודל הטקסט של הטלפון × ההגדרה באפליקציה (למשל "גדול" לאנשים מבוגרים)
+        final scaler = c.textScale == 1.0 ? mq.textScaler : TextScaler.linear(mq.textScaler.scale(1) * c.textScale);
+        return MediaQuery(data: mq.copyWith(textScaler: scaler), child: child ?? const SizedBox.shrink());
+      },
       home: ListenableBuilder(
         listenable: widget.controller,
         builder: (context, _) => switch (widget.controller.phase) {
