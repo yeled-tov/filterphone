@@ -50,7 +50,7 @@ def test_outbox_reply_and_crm(env):
     client.post("/v1/device/support", headers=auth(token), json={"text": "האינטרנט לא עובד"})
     out = client.get("/v1/bot/outbox", headers=auth(BOT)).json()["messages"]
     assert len(out) == 1 and out[0]["text"] == "האינטרנט לא עובד" and out[0]["phone"] == "0501234567"
-    assert out[0]["topic"] == ""
+    assert out[0]["topic"] == "" and out[0]["diag"] == {}
     mid = out[0]["id"]
     # סימון כ"הועבר" — לא חוזר שוב
     assert client.post("/v1/bot/forwarded", headers=auth(BOT), json={"ids": [mid]}).json()["marked"] == 1

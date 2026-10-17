@@ -339,7 +339,7 @@ assert len(CATALOG) == len(OPTIONS), "duplicate option id"
 DEFAULT_LEVEL = 1       # מחמיר
 DEFAULT_OPTIONS: tuple[str, ...] = (
     *(o.id for o in OPTIONS if o.category == "social"),      # כל הרשתות החברתיות
-    "browsers_all",                                          # בלי דפדפן בכלל (כולל Chrome)
+    "browsers_other",                                        # רק Chrome (שעובר סינון); כל שאר הדפדפנים חסומים
     "telegram",
     "youtube",                                               # כולל YouTube Music
     "play_store", "galaxy_store",                            # חנויות — חסומות לכניסה

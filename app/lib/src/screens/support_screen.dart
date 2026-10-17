@@ -1,26 +1,19 @@
 part of 'app_shell.dart';
 
-/// לשונית התמיכה: עוזר אוטומטי (עונה מיד, גם בלי אינטרנט, לפי המצב האמיתי של הטלפון) ושיחה עם נציג
-/// (נשמרת בשרת; המנהל עונה מהממשק או מהוואטסאפ שלו, והתשובה מגיעה לכאן + התראה).
+/// לשונית התמיכה: שתי דרכים לפנות למנהל —
+///   • "תמיכה באפליקציה" — כותבים כאן, וההודעה מגיעה למנהל (ואם הוא לא זמין, הבוט עונה). התשובה
+///     חוזרת לכאן עם התראה. מצב הסינון מצורף אוטומטית כדי שלא נצטרך לשאול.
+///   • "תמיכה בוואטסאפ" — פותח את הוואטסאפ של המנהל עם מזהה המכשיר ומספר הטלפון כבר מוכנים בהודעה.
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key, required this.controller, this.visible = true, this.onOpenTab});
   final AppController controller;
 
-  /// הלשונית מוצגת עכשיו — רק אז מרעננים את השיחה עם הנציג.
+  /// הלשונית מוצגת עכשיו — רק אז מרעננים את השיחה עם המנהל.
   final bool visible;
   final void Function(int tab)? onOpenTab;
 
   @override
   State<SupportScreen> createState() => _SupportScreenState();
-}
-
-enum _Mode { bot, human }
-
-class _BotLine {
-  const _BotLine({required this.fromBot, required this.text, this.actions = const []});
-  final bool fromBot;
-  final String text;
-  final List<BotAction> actions;
 }
 
 class _SupportScreenState extends State<SupportScreen> {
@@ -29,15 +22,6 @@ class _SupportScreenState extends State<SupportScreen> {
 
   final _text = TextEditingController();
   final _scroll = ScrollController();
-  final List<_BotLine> _bot = [
-    const _BotLine(
-      fromBot: true,
-      text: 'שלום 👋 אני העוזר של FilterPhone. אני רואה את מצב הסינון בטלפון ויכול לעזור מיד — '
-          'גם כשאין אינטרנט. במה אפשר לעזור?',
-    ),
-  ];
-  _Mode _mode = _Mode.bot;
-  String _topic = '';
   Timer? _timer;
 
   AppController get c => widget.controller;
@@ -45,7 +29,6 @@ class _SupportScreenState extends State<SupportScreen> {
   @override
   void initState() {
     super.initState();
-    if (c.supportUnread > 0) _mode = _Mode.human;
     if (widget.visible) _onShown();
   }
 
@@ -53,7 +36,6 @@ class _SupportScreenState extends State<SupportScreen> {
   void didUpdateWidget(SupportScreen old) {
     super.didUpdateWidget(old);
     if (widget.visible && !old.visible) {
-      if (c.supportUnread > 0) _mode = _Mode.human;
       _onShown();
     } else if (!widget.visible && old.visible) {
       _timer?.cancel();
@@ -69,28 +51,13 @@ class _SupportScreenState extends State<SupportScreen> {
   }
 
   void _onShown() {
-    if (_mode == _Mode.human) _startHuman();
-  }
-
-  void _startHuman() {
     if (!c.canChatWithSupport) return;
     unawaited(c.clearSupportNotification());
     unawaited(c.loadSupport().then((_) => _toBottom()));
     _timer?.cancel();
     _timer = Timer.periodic(_poll, (_) {
-      if (mounted && widget.visible && _mode == _Mode.human) c.loadSupport();
+      if (mounted && widget.visible) c.loadSupport();
     });
-  }
-
-  void _setMode(_Mode m) {
-    if (m == _mode) return;
-    setState(() => _mode = m);
-    if (m == _Mode.human) {
-      _startHuman();
-    } else {
-      _timer?.cancel();
-    }
-    _toBottom();
   }
 
   /// גלילה להודעה האחרונה — אחרי שהיא נבנתה (ברשימה עצלה הגובה הכולל ידוע רק אחרי הציור),
@@ -107,18 +74,7 @@ class _SupportScreenState extends State<SupportScreen> {
   Future<void> _send([String? preset]) async {
     final value = (preset ?? _text.text).trim();
     if (value.isEmpty) return;
-    if (_mode == _Mode.bot) {
-      _text.clear();
-      final reply = SupportBot.answer(value, c.botContext);
-      if (reply.topic.isNotEmpty && reply.topic != 'other') _topic = reply.topic;
-      setState(() {
-        _bot.add(_BotLine(fromBot: false, text: value));
-        _bot.add(_BotLine(fromBot: true, text: reply.text, actions: reply.actions));
-      });
-      await _toBottom();
-      return;
-    }
-    final error = await c.sendSupport(value, topic: _topic);
+    final error = await c.sendSupport(value);
     if (!mounted) return;
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
@@ -131,7 +87,7 @@ class _SupportScreenState extends State<SupportScreen> {
   Future<void> _run(BotAction a) async {
     switch (a) {
       case BotAction.human:
-        _setMode(_Mode.human);
+        break;                                     // כבר במסך התמיכה
       case BotAction.reconnectVpn:
         await c.connectVpn();
       case BotAction.openGuard:
@@ -150,11 +106,15 @@ class _SupportScreenState extends State<SupportScreen> {
     }
   }
 
+  /// פותח את הוואטסאפ של המנהל עם מזהה המכשיר ומספר הטלפון כבר בהודעה — כדי שהמנהל ידע מיד במי מדובר.
   Future<void> _openWhatsApp() async {
     final d = c.device;
+    final phone = c.customerPhone;
     final message = [
       'שלום, אני צריך עזרה ב-FilterPhone.',
-      if (d != null) 'מכשיר #${d.id} · ${d.name}',
+      if (d != null) 'מכשיר #${d.id}${d.name.isNotEmpty ? ' · ${d.name}' : ''}',
+      if (phone.isNotEmpty) 'טלפון: $phone',
+      if (c.androidId.isNotEmpty) 'מזהה: ${c.androidId}',
       'VPN: ${c.vpn.isUp ? 'מחובר' : 'מנותק'}',
     ].join('\n');
     try {
@@ -170,40 +130,14 @@ class _SupportScreenState extends State<SupportScreen> {
     final hasWhatsApp = c.supportWhatsApp.trim().isNotEmpty;
     return _SectionScaffold(
       title: 'שירות ותמיכה',
-      actions: [
-        if (hasWhatsApp)
-          IconButton(tooltip: 'וואטסאפ', onPressed: _openWhatsApp, icon: const Icon(Icons.chat_rounded)),
-      ],
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: SegmentedButton<_Mode>(
-              showSelectedIcon: false,
-              segments: [
-                const ButtonSegment(value: _Mode.bot, icon: Icon(Icons.bolt_rounded), label: Text('עוזר מיידי')),
-                ButtonSegment(
-                  value: _Mode.human,
-                  icon: Badge(
-                    isLabelVisible: c.supportUnread > 0,
-                    label: Text('${c.supportUnread}'),
-                    child: const Icon(Icons.support_agent),
-                  ),
-                  label: const Text('נציג'),
-                ),
-              ],
-              selected: {_mode},
-              onSelectionChanged: (s) => _setMode(s.first),
-            ),
-          ),
-          Expanded(
-            child: _mode == _Mode.bot ? _botView(context) : _humanView(context, hasWhatsApp),
-          ),
-          if (_mode == _Mode.bot || c.canChatWithSupport)
+          Expanded(child: _chat(context, hasWhatsApp)),
+          if (c.canChatWithSupport)
             _ChatComposer(
               controller: _text,
-              busy: _mode == _Mode.human && c.supportSending,
-              hint: _mode == _Mode.bot ? 'שאלו את העוזר...' : 'הודעה לנציג...',
+              busy: c.supportSending,
+              hint: 'כתבו הודעה למנהל...',
               onSend: _send,
             ),
         ],
@@ -211,116 +145,70 @@ class _SupportScreenState extends State<SupportScreen> {
     );
   }
 
-  Widget _botView(BuildContext context) {
-    return ListView(
-      controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-      children: [
-        _QuickCheck(controller: c, onAction: _run),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final q in SupportBot.quick) ActionChip(label: Text(q), onPressed: () => _send(q)),
-          ],
-        ),
-        const SizedBox(height: 14),
-        for (final line in _bot) ...[
-          _ChatBubble(text: line.text, mine: !line.fromBot),
-          if (line.actions.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [for (final a in line.actions) _actionButton(a)],
-              ),
-            ),
-          const SizedBox(height: 10),
-        ],
-      ],
-    );
-  }
-
-  Widget _actionButton(BotAction a) {
-    final (label, icon) = switch (a) {
-      BotAction.reconnectVpn => ('חיבור מחדש', Icons.vpn_lock_rounded),
-      BotAction.openGuard => ('הפעלת המגן', Icons.shield_rounded),
-      BotAction.battery => ('סוללה ללא הגבלה', Icons.battery_charging_full_rounded),
-      BotAction.setup => ('הקמה אוטומטית', Icons.auto_fix_high_rounded),
-      BotAction.changeRequest => ('בקשת שינוי', Icons.edit_note_rounded),
-      BotAction.store => ('לאפליקציות', Icons.apps_rounded),
-      BotAction.update => ('עדכון', Icons.system_update_rounded),
-      BotAction.human => ('לדבר עם נציג', Icons.support_agent_rounded),
-    };
-    return a == BotAction.human
-        ? OutlinedButton.icon(onPressed: () => _run(a), icon: Icon(icon, size: 18), label: Text(label))
-        : FilledButton.tonalIcon(onPressed: () => _run(a), icon: Icon(icon, size: 18), label: Text(label));
-  }
-
-  Widget _humanView(BuildContext context, bool hasWhatsApp) {
+  Widget _chat(BuildContext context, bool hasWhatsApp) {
     final theme = Theme.of(context);
-    if (!c.canChatWithSupport) {
-      return ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          Text('שיחה עם נציג זמינה אחרי ההרשמה.', style: theme.textTheme.titleMedium, textAlign: TextAlign.center),
-          if (hasWhatsApp) ...[
-            const SizedBox(height: 16),
-            FilledButton.icon(onPressed: _openWhatsApp, icon: const Icon(Icons.chat_rounded), label: const Text('פנייה בוואטסאפ')),
-          ],
-        ],
-      );
-    }
     final thread = c.supportThread;
     return ListView(
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer.withValues(alpha: .55),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.support_agent),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'כתבו כאן — ההודעה מגיעה לנציג, והתשובה תופיע כאן (ותקבלו התראה). '
-                  'מצב הסינון בטלפון מצורף אוטומטית, כדי שלא נצטרך לשאול.',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (hasWhatsApp)
-          Align(
-            alignment: AlignmentDirectional.centerStart,
-            child: TextButton.icon(
-              onPressed: _openWhatsApp,
-              icon: const Icon(Icons.chat_rounded, size: 18),
-              label: const Text('מעדיפים וואטסאפ? לחצו כאן'),
+        _QuickCheck(controller: c, onAction: _run),
+        const SizedBox(height: 12),
+        if (hasWhatsApp) ...[
+          Card(
+            color: const Color(0xFF25D366).withValues(alpha: .12),
+            child: ListTile(
+              leading: const Icon(Icons.chat_rounded, color: Color(0xFF128C7E)),
+              title: const Text('תמיכה בוואטסאפ'),
+              subtitle: const Text('פתיחת שיחה עם המנהל — מזהה המכשיר והטלפון כבר מוכנים בהודעה.'),
+              trailing: const Icon(Icons.open_in_new_rounded, size: 18),
+              onTap: _openWhatsApp,
             ),
           ),
-        const SizedBox(height: 10),
-        if (thread == null)
-          const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
-        else if (thread.isEmpty)
+          const SizedBox(height: 12),
+        ],
+        if (!c.canChatWithSupport)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
-            child: Text('עוד אין הודעות. כתבו את השאלה למטה 👇',
-                textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+            padding: const EdgeInsets.all(24),
+            child: Text('תמיכה באפליקציה זמינה אחרי ההרשמה. בינתיים אפשר לפנות בוואטסאפ.',
+                textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
           )
-        else
-          for (final m in thread) ...[
-            _ChatBubble(text: m.text, mine: !m.fromSupport, time: m.time, author: m.fromSupport ? 'נציג' : null),
-            const SizedBox(height: 10),
-          ],
+        else ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withValues(alpha: .55),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.support_agent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'תמיכה באפליקציה: כתבו כאן וההודעה מגיעה למנהל (ואם הוא לא זמין — נחזור אליכם). '
+                    'מצב הסינון מצורף אוטומטית, כדי שלא נצטרך לשאול.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (thread == null)
+            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
+          else if (thread.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Text('עוד אין הודעות. כתבו את השאלה למטה 👇',
+                  textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+            )
+          else
+            for (final m in thread) ...[
+              _ChatBubble(text: m.text, mine: !m.fromSupport, time: m.time, author: m.fromSupport ? 'מנהל' : null),
+              const SizedBox(height: 10),
+            ],
+        ],
       ],
     );
   }

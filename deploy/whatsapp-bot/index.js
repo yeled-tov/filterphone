@@ -29,7 +29,7 @@ const { State } = require('./lib/state');
 const fp = require('./lib/fp');
 const ai = require('./lib/ai');
 const { israelNow, isOpen } = require('./lib/hours');
-const { replyDelayMs, typingMs, parseHashReply, waNumber } = require('./lib/logic');
+const { replyDelayMs, settleDelayMs, combineBurst, typingMs, parseHashReply, waNumber } = require('./lib/logic');
 const labels = require('./lib/labels');
 const know = require('./lib/knowledge');
 
@@ -90,7 +90,8 @@ const outgoing = new Map();   // טקסט → עד מתי לצפות לו
 const appThreads = new Map(); // הודעת העברה בצ'אט שלך → {deviceId, question, phone} (לתשובה ב"השב")
 // מה שהלקוח רואה באפליקציה כשהבוט לא ענה לבד ומעביר אליך (הודעת ביניים נעימה)
 const APP_CHECKING = 'קיבלנו את פנייתך 🙏 בודקים ונחזור אליך כאן בהקדם.';
-const pending = new Map();    // תשובות שמחכות (5 שניות בשעות הפעילות)
+const pending = new Map();    // תשובות שמחכות (חלון שקט אחרי ההודעה האחרונה)
+const bursts = new Map();     // הודעות רצופות של אותו לקוח שעדיין לא ענינו עליהן (chatId → {parts,...})
 const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0 };
 let knowledge = [];           // מה שהבוט למד ממך (מהשרת)
 let knowledgeAt = 0;
@@ -446,6 +447,18 @@ async function handleAppSupport(m, waIds) {
     stats.app_suggestions = (stats.app_suggestions || 0) + 1;
     return;
   }
+  // דוח אבחון (הגדרות באפליקציה): ישר אליך עם המצב הטכני, בלי מענה AI
+  if (m.topic === 'diag') {
+    const d = m.diag || {};
+    const lines = ['vpn', 'vpn_error', 'accessibility', 'device_owner', 'battery_unrestricted', 'ca_installed',
+      'paused', 'policy_version', 'level', 'app_version', 'sdk']
+      .filter((k) => d[k] !== undefined && d[k] !== '')
+      .map((k) => `• ${k}: ${d[k]}`).join('\n');
+    const sent = await toAdmin(`📋 *דוח אבחון* · ${m.customer || 'לקוח'}${m.phone ? ' · ' + m.phone : ''} · מכשיר #${deviceId}\n${lines || '(אין נתונים)'}\n\n↩️ "השב" כאן — והתשובה תגיע ללקוח באפליקציה`);
+    rememberAppThread(sent, deviceId, m.text, phone);
+    try { await srv.reply(deviceId, 'הדוח התקבל אצל המנהל ✓'); } catch { /* */ }
+    return;
+  }
   const head = `📩 *פנייה מהאפליקציה* · ${m.customer || 'לקוח'}${m.phone ? ' · ' + m.phone : ''} · מכשיר #${deviceId}`;
   let crm = null;
   if (phone) { try { crm = await srv.customer(phone); } catch { /* לא לקוח — עדיין עונים */ } }
@@ -517,8 +530,7 @@ async function onAdmin(msg, body, selfChat) {
   adminLastSeen = Date.now();
   if (!selfChat) {
     const chatId = msg.to;
-    clearTimeout(pending.get(chatId));
-    pending.delete(chatId);
+    cancelPending(chatId);
     const c = state.chat(chatId);
     c.known = true;
     state.remember(chatId, 'assistant', body);
@@ -813,15 +825,31 @@ async function onCustomer(msg, text) {
       (adminActive ? '\n_הבוט יענה בעוד 5 שניות — אם לא תענה_' : ''));
     if (!adminActive) adminRead = await adminReadSoon(notice);
   }
-  schedule(msg, chatId, phone, text, open, replyDelayMs({ inHours: open, adminActive, adminRead }));
+  schedule(msg, chatId, phone, text, open, settleDelayMs({ inHours: open, adminActive, adminRead }));
 }
 
+/** צובר הודעות רצופות של אותו לקוח, ומאפס את הטיימר בכל הודעה חדשה — עונים רק אחרי שהוא הפסיק
+ *  לכתוב (חלון שקט), ועל כל ההודעות יחד כשאלה אחת (ולא באמצע על ההודעה הראשונה בלבד). */
 function schedule(msg, chatId, phone, text, open, delay) {
+  const b = bursts.get(chatId) || { parts: [] };
+  b.parts.push(text);
+  b.msg = msg;                                   // ההודעה האחרונה — כדי לסמן/להגיב עליה
+  b.phone = phone;
+  b.open = open;
+  bursts.set(chatId, b);
   clearTimeout(pending.get(chatId));
   pending.set(chatId, setTimeout(() => {
     pending.delete(chatId);
-    replyNow(msg, chatId, phone, text, open).catch((e) => console.error('reply:', e.message));
+    bursts.delete(chatId);
+    replyNow(b.msg, chatId, b.phone, combineBurst(b.parts), b.open).catch((e) => console.error('reply:', e.message));
   }, delay));
+}
+
+/** מבטל תשובה שמחכה (ענית בעצמך / הלקוח הועבר לנציג). */
+function cancelPending(chatId) {
+  clearTimeout(pending.get(chatId));
+  pending.delete(chatId);
+  bursts.delete(chatId);
 }
 
 /** הבוט מעביר אליך את השיחה: מוציא אותה מהרשימה "בוט" (או מסמן "ממתין לנציג"). */

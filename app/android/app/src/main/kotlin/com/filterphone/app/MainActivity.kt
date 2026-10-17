@@ -32,6 +32,7 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterActivity() {
     private val main = Handler(Looper.getMainLooper())
     private var pendingVpn: MethodChannel.Result? = null
+    private var launchingChild = false     // פתחנו מסך של אנדרואיד — יציאה כזו לא מסירה מהאחרונים
     private var pendingCert: MethodChannel.Result? = null
     private var vpnListener: ((Tunnel.State) -> Unit)? = null
     private var installProgress: InstalledApps.Progress? = null
@@ -47,6 +48,23 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         intent.getStringExtra(SupportNotify.EXTRA_OPEN)?.let { launchTarget = it }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        launchingChild = false        // חזרנו לחזית — אם נצא עכשיו ליישומים אחרונים, זו יציאה אמיתית
+    }
+
+    /**
+     * המשתמש יצא ליישומים האחרונים / מסך הבית — מסירים את FilterPhone מהרשימה כדי שלא יהיה אפשר
+     * להחליק ולסגור אותו (ההגנה ממשיכה בשירות הקדמי). רק אחרי ההקמה (יש כבר הגדרות), ולא כשאנחנו
+     * עצמנו פתחנו מסך של אנדרואיד (הרשאה / הגדרות) — אז צריך לחזור לאפליקציה כרגיל.
+     */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (!launchingChild && GuardPolicy.credentials(this) != null) {
+            runCatching { finishAndRemoveTask() }
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -122,6 +140,7 @@ class MainActivity : FlutterActivity() {
                     pendingVpn?.success(false)      // בקשה קודמת שלא נענתה — לא משאירים אותה תלויה
                     pendingVpn = result
                     try {
+                        launchingChild = true
                         startActivityForResult(intent, REQ_VPN)
                     } catch (e: ActivityNotFoundException) {
                         pendingVpn = null
@@ -143,6 +162,7 @@ class MainActivity : FlutterActivity() {
                 CertHelper.isInstalled(pem)
             }
             "installCa" -> {
+                launchingChild = true          // פותח מסך התקנת תעודה — לא יציאה אמיתית
                 val mode = CertHelper.install(this, call.argument<String>("pem")!!, REQ_CERT)
                 if (mode == "dialog") pendingCert = result else result.success(mode)
             }
@@ -302,6 +322,12 @@ class MainActivity : FlutterActivity() {
                     result.error("WhatsAppUnavailable", "לא ניתן לפתוח את WhatsApp במכשיר", null)
                 }
             }
+            // שיתוף FilterPhone עם חבר — חלון השיתוף של אנדרואיד
+            "shareText" -> {
+                val text = call.argument<String>("text").orEmpty()
+                val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+                result.success(tryStart(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)))
+            }
             // סוללה
             "requestBatteryExemption" -> result.success(requestBatteryExemption())
             // התראות (אנדרואיד 13+): ההתראה "הסינון פעיל"
@@ -374,6 +400,7 @@ class MainActivity : FlutterActivity() {
 
     /** פותח מסך; אם אין כזה ביצרן — false (בלי חלופה). */
     private fun tryStart(intent: Intent): Boolean = try {
+        launchingChild = true          // אנחנו פותחים מסך — יציאה כזו לא מסירה את האפליקציה מהאחרונים
         startActivity(intent)
         true
     } catch (e: ActivityNotFoundException) {

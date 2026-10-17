@@ -54,6 +54,7 @@ class SettingsScreen extends StatelessWidget {
               ),
               _UpdatesSection(controller: c),
               _SuggestionSection(controller: c),
+              _SupportToolsSection(controller: c),
               // המצב הטכני המלא (מה שהיה בטאב הסינון) — כרטיס משלו
               const SizedBox(height: 12),
               StatusDetailsCard(controller: c),
@@ -199,6 +200,63 @@ class _SuggestionSectionState extends State<_SuggestionSection> {
           onPressed: _sending ? null : _send,
           icon: const Icon(Icons.send_rounded),
           label: const Text('שליחת ההצעה'),
+        ),
+      ],
+    );
+  }
+}
+
+/// כלי תמיכה: שליחת דוח אבחון למנהל בלחיצה, ושיתוף FilterPhone עם חבר.
+class _SupportToolsSection extends StatefulWidget {
+  const _SupportToolsSection({required this.controller});
+  final AppController controller;
+
+  @override
+  State<_SupportToolsSection> createState() => _SupportToolsSectionState();
+}
+
+class _SupportToolsSectionState extends State<_SupportToolsSection> {
+  bool _sending = false;
+
+  Future<void> _sendDiag() async {
+    setState(() => _sending = true);
+    final error = await widget.controller.sendDiagnosticReport();
+    if (!mounted) return;
+    setState(() => _sending = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(error ?? 'דוח האבחון נשלח למנהל ✓'),
+    ));
+  }
+
+  Future<void> _share() async {
+    try {
+      await widget.controller.native.shareText(widget.controller.shareText);
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('לא ניתן לשתף: ${e.message ?? e.code}')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.controller;
+    return _Section(
+      title: 'עוד',
+      icon: Icons.handyman_outlined,
+      children: [
+        if (c.canChatWithSupport)
+          OutlinedButton.icon(
+            onPressed: _sending ? null : _sendDiag,
+            icon: _sending
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.description_outlined),
+            label: const Text('שליחת דוח אבחון לתמיכה'),
+          ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(
+          onPressed: _share,
+          icon: const Icon(Icons.ios_share_rounded),
+          label: const Text('שיתוף FilterPhone עם חבר'),
         ),
       ],
     );

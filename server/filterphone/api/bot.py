@@ -27,12 +27,18 @@ SAFE_OPTIONS = frozenset(CATALOG)            # הוספת כל חסימה מהק
 CRITICAL_ACTIONS = ("pause", "unblock", "open", "level_down", "uninstall", "disable", "transfer")
 
 
+def _diag(diag: str | None) -> dict:
+    """ה-diag שהאפליקציה צירפה לפנייה (מצב טכני). מילון ריק אם אין / לא תקין."""
+    try:
+        d = json.loads(diag or "{}")
+    except (ValueError, TypeError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
 def _topic(diag: str | None) -> str:
     """נושא הפנייה מהאפליקציה (למשל suggestion — הצעת ייעול, שהולכת ישר למנהל בלי מענה אוטומטי)."""
-    try:
-        t = json.loads(diag or "{}").get("topic", "")
-    except (ValueError, AttributeError):
-        return ""
+    t = _diag(diag).get("topic", "")
     return t if isinstance(t, str) else ""
 
 
@@ -80,7 +86,7 @@ class BotDesk:
                 " ORDER BY m.id LIMIT ?", (max(0, after), limit)).fetchall()
         return [{"id": r["id"], "device_id": r["device_id"], "device_name": r["device_name"],
                  "customer": r["customer"] or "", "phone": r["phone"] or "", "text": r["body"],
-                 "topic": _topic(r["diag"])} for r in rows]
+                 "topic": _topic(r["diag"]), "diag": _diag(r["diag"])} for r in rows]
 
     def mark_forwarded(self, ids: list[int], wa_ids: dict[int, str] | None = None) -> int:
         wa_ids = wa_ids or {}

@@ -7,7 +7,7 @@ const path = require('path');
 const { isOpen, parseRanges } = require('../lib/hours');
 const ai = require('../lib/ai');
 const { State } = require('../lib/state');
-const { replyDelayMs, typingMs, parseHashReply, waNumber } = require('../lib/logic');
+const { replyDelayMs, settleDelayMs, combineBurst, typingMs, parseHashReply, waNumber } = require('../lib/logic');
 const labels = require('../lib/labels');
 
 const HOURS = '13:00-15:00, 20:00-22:30';
@@ -146,10 +146,18 @@ test('small decisions: reply delay, typing time, #reply, phone format', () => {
   assert.equal(replyDelayMs({ inHours: false, adminActive: true, adminRead: true }), 0);
   assert.equal(replyDelayMs({ inHours: true, adminActive: true }), 5000);
   assert.equal(replyDelayMs({ inHours: true, adminActive: false, adminRead: false }), 0);
+  // חלון שקט: תמיד מחכים שהלקוח יסיים לכתוב — לפחות 7 שניות, וגם לא פחות מההמתנה למנהל
+  assert.equal(settleDelayMs({ inHours: false, adminActive: false, adminRead: false }), 7000);
+  assert.equal(settleDelayMs({ inHours: true, adminActive: true }), 7000);
+  assert.equal(settleDelayMs({ inHours: true, adminActive: true }, 4000), 5000);   // ההמתנה למנהל גדולה יותר
   assert.ok(typingMs('קצר') >= 1200 && typingMs('x'.repeat(5000)) === 6000);
   assert.deepEqual(parseHashReply('#42 תפעיל מחדש'), { deviceId: 42, text: 'תפעיל מחדש' });
   assert.equal(parseHashReply('שלום'), null);
   assert.equal(waNumber('052-718-6881'), '972527186881');
+  // כמה הודעות רצופות = שאלה אחת (בלי כפילות עוקבת ובלי ריקות)
+  assert.equal(combineBurst(['שלום', 'אני רוצה', 'לשנות רמה']), 'שלום\nאני רוצה\nלשנות רמה');
+  assert.equal(combineBurst(['היי', 'היי', '  ', 'עוד']), 'היי\nעוד');
+  assert.equal(combineBurst([]), '');
 });
 
 test('the "בוט" list: found by name, other lists kept, new customer vs. your own chat', () => {

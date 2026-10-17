@@ -873,6 +873,9 @@ class AppController extends ChangeNotifier {
   /// שיחה עם נציג דרך השרת — אחרי הרשמה / הפעלה (יש אסימון).
   bool get canChatWithSupport => _token != null;
 
+  /// מספר הטלפון של הלקוח (מהשרת) — לצירוף לפנייה בוואטסאפ, כדי שהמנהל יזהה מיד במי מדובר.
+  String get customerPhone => device?.customer?.phone ?? '';
+
   /// המצב שהעוזר האוטומטי מסתכל עליו.
   BotContext get botContext => BotContext(
         active: device?.isActive ?? false,
@@ -946,6 +949,14 @@ class AppController extends ChangeNotifier {
     if (body.isEmpty) return Future.value('כתבו את ההצעה קודם');
     return sendSupport('💡 הצעת ייעול: $body', topic: 'suggestion');
   }
+
+  /// שליחת דוח אבחון לתמיכה — המצב הטכני המלא נשלח כהודעה למנהל (ה-diag מצורף ממילא). null = נשלח.
+  Future<String?> sendDiagnosticReport() =>
+      sendSupport('📋 דוח אבחון מהמכשיר (נשלח מההגדרות).', topic: 'diag');
+
+  /// טקסט שיתוף להזמנת חבר. הקישור נקבע בבנייה (FP_SHARE_URL) או ברירת מחדל לאתר.
+  String get shareText => 'שמעת על FilterPhone? טלפון כשר אמיתי עם סינון תמונות חכם. '
+      'להצטרפות: $shareUrl';
 
   // ------------------------------------------------------------------ הגדרות תצוגה
 

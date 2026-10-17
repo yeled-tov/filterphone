@@ -221,8 +221,18 @@ class FakeNative implements NativeBridge {
   }
 
   final whatsappOpens = <String>[];
+  String waNumber = '';
+  String waMessage = '';
   @override
-  Future<void> openSupportWhatsApp(String number, String message) async => whatsappOpens.add(number);
+  Future<void> openSupportWhatsApp(String number, String message) async {
+    waNumber = number;
+    waMessage = message;
+    whatsappOpens.add(number);
+  }
+
+  final shared = <String>[];
+  @override
+  Future<void> shareText(String text) async => shared.add(text);
 
   String? launch;
   int supportNotificationClears = 0;
@@ -1161,7 +1171,7 @@ void main() {
     c.dispose();
   });
 
-  testWidgets('support tab: instant assistant with quick check, then a representative', (tester) async {
+  testWidgets('support tab: quick self-check, in-app chat with the manager, and WhatsApp', (tester) async {
     final native = FakeNative()
       ..caInstalled = true
       ..batteryUnrestricted = false;
@@ -1172,7 +1182,7 @@ void main() {
             'ca': {'pem': 'x'}}), 201, headers: json),
         '/v1/device/vpn' => http.Response(jsonEncode(_vpn), 200, headers: json),
         '/v1/device' => http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1,
-            'level_name': 'מחמיר', 'via_vpn': true}), 200, headers: json),
+            'level_name': 'מחמיר', 'via_vpn': true, 'customer': {'name': 'דוד', 'phone': '0521234567'}}), 200, headers: json),
         '/v1/device/support' => http.Response(jsonEncode({'messages': [
             {'id': 1, 'from': 'support', 'text': 'שלום, איך אפשר לעזור?', 'ts': 1000}]}), 200, headers: json),
         _ => http.Response('{}', 200, headers: json),
@@ -1185,20 +1195,22 @@ void main() {
     });
     await tester.pumpWidget(MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
         child: SupportScreen(controller: c))));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pump();
+    // אין יותר "עוזר מיידי" — התמיכה היא ישירות עם המנהל
+    expect(find.text('עוזר מיידי'), findsNothing);
     // בדיקה מהירה: הסוללה מוגבלת → כפתור תיקון
     expect(find.text('אנדרואיד מגביל את FilterPhone ברקע'), findsOneWidget);
     await tester.tap(find.text('תיקון').first);
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
     expect(native.batteryRequests, 1);
-    // העוזר עונה מיד, בלי שרת
-    await tester.tap(find.text('איך מתקינים אפליקציה?'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('לשונית "אפליקציות"'), findsOneWidget);
-    // מעבר לנציג: השיחה נטענת מהשרת וההתראה נמחקת
-    await tester.tap(find.text('נציג'));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-    await tester.pump();
+    // תמיכה בוואטסאפ: מזהה המכשיר והטלפון של הלקוח בהודעה
+    await tester.tap(find.text('תמיכה בוואטסאפ'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    expect(native.waNumber, '972527186881');
+    expect(native.waMessage, contains('מכשיר #'));
+    expect(native.waMessage, contains('0521234567'));
+    // השיחה עם המנהל נטענת מהשרת וההתראה נמחקת
     expect(find.text('שלום, איך אפשר לעזור?'), findsOneWidget);
     expect(native.supportNotificationClears, 1);
     await tester.pumpWidget(const SizedBox());                        // עוצר את הרענון התקופתי

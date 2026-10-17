@@ -780,7 +780,7 @@ def test_default_options_apply_to_code_enrolled_devices(env):
                                         "platform": "android", "app_version": "2.0.0"}).json()
     me = client.get("/v1/device", headers={"Authorization": f"Bearer {e['token']}"}).json()
     blocks = {b["id"] for b in me["blocks"]}
-    assert {"instagram", "tiktok", "browsers_all", "telegram", "youtube", "play_store", "galaxy_store"} <= blocks
+    assert {"instagram", "tiktok", "browsers_other", "telegram", "youtube", "play_store", "galaxy_store"} <= blocks
     assert me["level"] == 1
     # קוד עם רשימה ריקה מפורשת → בלי חסימות
     r2 = client.post("/v1/admin/codes", headers=h, json={"label": "ללא", "level": 2, "options": []})
