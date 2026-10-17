@@ -1188,6 +1188,8 @@ void main() {
         _ => http.Response('{}', 200, headers: json),
       };
     });
+    await tester.binding.setSurfaceSize(const Size(800, 2600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     final c = makeController(native, server);
     await tester.runAsync(() async {
       await c.start();
