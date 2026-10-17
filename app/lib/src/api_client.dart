@@ -276,6 +276,8 @@ class DeviceStatus {
     this.storeCategories = kStoreCategories,
     this.supportUnread = 0,
     this.supportWhatsApp = '',
+    this.isAdmin = false,
+    this.adminUnread = 0,
   });
 
   final int id;
@@ -304,6 +306,10 @@ class DeviceStatus {
   /// תשובות מהתמיכה שעוד לא נקראו, ומספר וואטסאפ לפנייה ישירה (אם המנהל הגדיר).
   final int supportUnread;
   final String supportWhatsApp;
+
+  /// מכשיר המנהל: רואה את כל פניות הלקוחות ועונה מתוך האפליקציה. adminUnread = כמה שיחות ממתינות.
+  final bool isAdmin;
+  final int adminUnread;
 
   bool get isActive => status == 'active';
   bool get isPending => status == 'pending';
@@ -348,6 +354,8 @@ class DeviceStatus {
       ],
       supportUnread: (support['unread'] as num?)?.toInt() ?? 0,
       supportWhatsApp: support['whatsapp'] as String? ?? '',
+      isAdmin: j['admin'] is Map,
+      adminUnread: ((j['admin'] as Map?)?['support_unread'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -366,6 +374,40 @@ class SupportMessage {
         fromSupport: j['from'] == 'support',
         text: j['text'] as String? ?? '',
         time: DateTime.fromMillisecondsSinceEpoch(((j['ts'] as num?)?.toInt() ?? 0) * 1000),
+      );
+}
+
+/// שורת שיחה ברשימת ניהול התמיכה (מכשיר המנהל): מי, מתי, מה נכתב לאחרונה, וכמה לא נקראו.
+class SupportThreadInfo {
+  const SupportThreadInfo({
+    required this.deviceId,
+    required this.deviceName,
+    required this.customer,
+    required this.lastText,
+    required this.lastFromSupport,
+    required this.lastTime,
+    required this.unread,
+    required this.status,
+  });
+
+  final int deviceId;
+  final String deviceName;
+  final String customer;
+  final String lastText;
+  final bool lastFromSupport;
+  final DateTime lastTime;
+  final int unread;
+  final String status;
+
+  factory SupportThreadInfo.fromJson(Map<String, Object?> j) => SupportThreadInfo(
+        deviceId: (j['device_id'] as num?)?.toInt() ?? 0,
+        deviceName: j['device_name'] as String? ?? '',
+        customer: j['customer'] as String? ?? '',
+        lastText: j['last_text'] as String? ?? '',
+        lastFromSupport: j['last_from'] == 'support',
+        lastTime: DateTime.fromMillisecondsSinceEpoch(((j['last_ts'] as num?)?.toInt() ?? 0) * 1000),
+        unread: (j['unread'] as num?)?.toInt() ?? 0,
+        status: j['status'] as String? ?? '',
       );
 }
 
@@ -650,6 +692,31 @@ class ApiClient {
         'text': text,
         'diag': diag,
       }));
+
+  // --- ניהול תמיכה (מכשיר המנהל בלבד) ---
+
+  /// כל השיחות של הלקוחות (למכשיר המנהל). מחזיר (שיחות, סה"כ לא נקראו).
+  Future<(List<SupportThreadInfo>, int)> adminSupportThreads(String token) async {
+    final j = await _send('GET', '/v1/device/admin/support', token: token);
+    final threads = [
+      for (final t in (j['threads'] as List? ?? const []))
+        if (t is Map) SupportThreadInfo.fromJson(Map<String, Object?>.from(t)),
+    ];
+    return (threads, (j['unread'] as num?)?.toInt() ?? 0);
+  }
+
+  /// השיחה המלאה עם לקוח מסוים (ומסמן את הודעותיו כנקראו).
+  Future<List<SupportMessage>> adminSupportThread(String token, int deviceId) async {
+    final j = await _send('GET', '/v1/device/admin/support/$deviceId', token: token);
+    return [
+      for (final m in (j['messages'] as List? ?? const []))
+        if (m is Map) SupportMessage.fromJson(Map<String, Object?>.from(m)),
+    ];
+  }
+
+  /// תשובת המנהל ללקוח (מתוך האפליקציה).
+  Future<void> adminSupportReply(String token, int deviceId, String text) =>
+      _send('POST', '/v1/device/admin/support/$deviceId', token: token, body: {'text': text});
 
   Future<Map<String, Object?>> _send(
     String method,

@@ -656,6 +656,9 @@ def _routes(app: FastAPI) -> None:
     def device(request: Request, svc: SvcDep, desk: DeskDep, row: DeviceRow):
         out = svc.device_status(row, client_ip(request))
         out["support"] = desk.device_unread(row["id"]) | {"whatsapp": desk.wa_config().public_number}
+        if desk.is_admin_device(row):
+            # מכשיר המנהל: רואה כמה פניות ממתינות, וכך האפליקציה מציגה את כפתור "ניהול תמיכה"
+            out["admin"] = {"support_unread": desk.admin_unread()}
         return out
 
     @app.delete("/v1/device", status_code=204)
@@ -719,6 +722,28 @@ def _routes(app: FastAPI) -> None:
     @app.get("/v1/device/support")
     def device_support_list(desk: DeskDep, row: DeviceRow, after: int = 0):
         return desk.device_messages(row, after)
+
+    # --- ניהול תמיכה מתוך האפליקציה (מכשיר המנהל בלבד) ---
+
+    def _require_admin_device(desk: SupportDesk, row) -> None:
+        if not desk.is_admin_device(row):
+            raise ApiError(403, "אין הרשאת ניהול למכשיר הזה")
+
+    @app.get("/v1/device/admin/support")
+    def device_admin_support(desk: DeskDep, row: DeviceRow):
+        _require_admin_device(desk, row)
+        return {"threads": desk.threads(), "unread": desk.admin_unread()}
+
+    @app.get("/v1/device/admin/support/{device_id}")
+    def device_admin_thread(device_id: int, desk: DeskDep, row: DeviceRow):
+        _require_admin_device(desk, row)
+        return desk.thread(device_id)
+
+    @app.post("/v1/device/admin/support/{device_id}", status_code=201)
+    def device_admin_reply(device_id: int, body: SupportReplyIn, desk: DeskDep, row: DeviceRow):
+        _require_admin_device(desk, row)
+        _limit(support_limiter, f"adm:{row['id']}")
+        return desk.reply(device_id, "מנהל", body.text, via="app-admin")
 
     @app.post("/v1/device/resume")
     def device_resume(svc: SvcDep, row: DeviceRow):

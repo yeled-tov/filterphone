@@ -158,6 +158,27 @@ class _SupportScreenState extends State<SupportScreen> {
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       children: [
+        if (c.isAdminDevice) ...[
+          Card(
+            color: theme.colorScheme.tertiaryContainer.withValues(alpha: .5),
+            child: ListTile(
+              leading: Badge(
+                isLabelVisible: c.adminSupportUnread > 0,
+                label: Text('${c.adminSupportUnread}'),
+                child: const Icon(Icons.inbox_rounded),
+              ),
+              title: const Text('ניהול תמיכה'),
+              subtitle: Text(c.adminSupportUnread > 0
+                  ? '${c.adminSupportUnread} פניות ממתינות לך'
+                  : 'כל הפניות של הלקוחות — מענה מכאן'),
+              trailing: const Icon(Icons.chevron_left_rounded),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => SupportConsoleScreen(controller: c)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         _QuickCheck(controller: c, onAction: _run),
         const SizedBox(height: 12),
         if (hasWhatsApp) ...[

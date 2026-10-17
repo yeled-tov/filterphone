@@ -876,6 +876,36 @@ class AppController extends ChangeNotifier {
   /// מספר הטלפון של הלקוח (מהשרת) — לצירוף לפנייה בוואטסאפ, כדי שהמנהל יזהה מיד במי מדובר.
   String get customerPhone => device?.customer?.phone ?? '';
 
+  /// מכשיר המנהל — מותר לו לנהל תמיכה מתוך האפליקציה (רואה את כל השיחות ועונה).
+  bool get isAdminDevice => device?.isAdmin ?? false;
+  int get adminSupportUnread => device?.adminUnread ?? 0;
+
+  /// רשימת השיחות של כל הלקוחות (מכשיר המנהל). זורק ApiException אם אין הרשאה.
+  Future<(List<SupportThreadInfo>, int)> adminThreads() async {
+    final token = _token;
+    if (token == null) return (<SupportThreadInfo>[], 0);
+    return api.adminSupportThreads(token);
+  }
+
+  Future<List<SupportMessage>> adminThread(int deviceId) async {
+    final token = _token;
+    if (token == null) return const [];
+    return api.adminSupportThread(token, deviceId);
+  }
+
+  /// תשובת המנהל ללקוח. null = נשלח; אחרת הודעת שגיאה.
+  Future<String?> adminReply(int deviceId, String text) async {
+    final token = _token;
+    final body = text.trim();
+    if (token == null || body.isEmpty) return 'אין מה לשלוח';
+    try {
+      await api.adminSupportReply(token, deviceId, body);
+      return null;
+    } on ApiException catch (e) {
+      return e.status == 0 ? 'אין חיבור לשרת — ההודעה לא נשלחה.' : e.message;
+    }
+  }
+
   /// המצב שהעוזר האוטומטי מסתכל עליו.
   BotContext get botContext => BotContext(
         active: device?.isActive ?? false,

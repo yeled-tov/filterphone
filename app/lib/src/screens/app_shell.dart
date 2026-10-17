@@ -12,6 +12,7 @@ import '../theme.dart';
 import 'change_request_screen.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
+import 'support_console_screen.dart';
 
 part 'support_screen.dart';
 part 'store_screen.dart';

@@ -289,3 +289,60 @@ def test_wa_client_speaks_the_graph_api(monkeypatch):
     finally:
         srv.shutdown()
 
+
+
+def _active_with_phone(client, phone, n, name="לקוח"):
+    """רישום מכשיר עם טלפון + אישור המנהל → מכשיר פעיל עם לקוח (לבדיקת ניהול תמיכה)."""
+    reg = {"name": name, "phone": phone, "email": "", "level": 1, "options": [], "note": "",
+           "device_name": "מכשיר", "platform": "android", "app_version": "2.0.0"}
+    r = client.post("/v1/register", json={**reg, "public_key": wg_key(n), "device_uid": str(n) * 32})
+    did, token = r.json()["device_id"], r.json()["token"]
+    h = admin_headers(client)
+    req = next(x for x in client.get("/v1/admin/requests", headers=h).json() if x["device_id"] == did)
+    client.post(f"/v1/admin/requests/{req['id']}/approve", headers=h, json={"options": []})
+    return did, token
+
+
+def test_admin_device_manages_support_from_the_app(env):
+    """מכשיר המנהל (טלפון הלקוח שלו = מספר הוואטסאפ של המנהל) מנהל תמיכה מתוך האפליקציה:
+    רואה את כל השיחות, קורא שיחה, ועונה — ללקוח רגיל אין גישה (403)."""
+    svc, client = env
+    configure(client, admin_number="052-111-2233")          # הוואטסאפ של המנהל
+    admin_did, admin_tok = _active_with_phone(client, "0521112233", 40, name="המנהל")
+    cust_did, cust_tok = _active_with_phone(client, "0509998877", 41)
+
+    # הלקוח כותב לתמיכה
+    client.post("/v1/device/support", headers=auth(cust_tok), json={"text": "אין אינטרנט"})
+
+    # מכשיר המנהל: הדגל admin מופיע בסטטוס
+    me = client.get("/v1/device", headers=auth(admin_tok)).json()
+    assert me.get("admin", {}).get("support_unread") == 1
+
+    # רשימת השיחות
+    threads = client.get("/v1/device/admin/support", headers=auth(admin_tok)).json()
+    assert threads["unread"] == 1
+    assert any(t["device_id"] == cust_did and t["last_text"] == "אין אינטרנט" for t in threads["threads"])
+
+    # קריאת השיחה + מענה שחוזר ללקוח
+    thread = client.get(f"/v1/device/admin/support/{cust_did}", headers=auth(admin_tok)).json()
+    assert [m["text"] for m in thread["messages"]] == ["אין אינטרנט"]
+    r = client.post(f"/v1/device/admin/support/{cust_did}", headers=auth(admin_tok), json={"text": "נסה להתחבר מחדש"})
+    assert r.status_code == 201
+    chat = client.get("/v1/device/support", headers=auth(cust_tok)).json()["messages"]
+    assert chat[-1]["text"] == "נסה להתחבר מחדש" and chat[-1]["from"] == "support"
+
+    # לקוח רגיל — אין לו גישה לניהול
+    assert client.get("/v1/device/admin/support", headers=auth(cust_tok)).status_code == 403
+    assert "admin" not in client.get("/v1/device", headers=auth(cust_tok)).json()
+
+
+def test_admin_device_by_explicit_meta(env):
+    """גם בלי התאמת טלפון: מכשיר שנקבע במפורש בדשבורד (meta admin_device_id) הוא מכשיר המנהל."""
+    svc, client = env
+    did, token = device(svc, client, n=42)
+    assert client.get("/v1/device/admin/support", headers=auth(token)).status_code == 403
+    with svc.db() as c:
+        c.execute("INSERT INTO meta (key, value) VALUES ('admin_device_id', ?)"
+                  " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(did),))
+        c.commit()
+    assert client.get("/v1/device/admin/support", headers=auth(token)).status_code == 200

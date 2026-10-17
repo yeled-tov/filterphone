@@ -1444,6 +1444,50 @@ void main() {
       again.dispose();
     });
 
+    testWidgets('admin device: the support tab shows a support-console entry with unread count', (tester) async {
+      await tallScreen(tester);
+      final threadsCalled = <bool>[];
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP';
+      final server = MockClient((req) async {
+        const json = {'content-type': 'application/json; charset=utf-8'};
+        switch (req.url.path) {
+          case '/v1/device':
+            return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+                'via_vpn': true, 'admin': {'support_unread': 2}}), 200, headers: json);
+          case '/v1/device/vpn':
+            return http.Response(jsonEncode(_vpn), 200, headers: json);
+          case '/v1/device/admin/support':
+            threadsCalled.add(true);
+            return http.Response(jsonEncode({'unread': 2, 'threads': [
+              {'device_id': 7, 'device_name': 'גלקסי', 'customer': 'דוד', 'last_text': 'אין אינטרנט',
+               'last_from': 'customer', 'last_ts': 1000, 'unread': 1, 'status': 'active'},
+            ]}), 200, headers: json);
+          case '/v1/device/support':
+            return http.Response(jsonEncode({'messages': []}), 200, headers: json);
+        }
+        return http.Response('{}', 200, headers: json);
+      });
+      final c = makeController(native, server, activeStore());
+      await c.start();
+      await tester.pumpWidget(rtl(SupportScreen(controller: c)));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+      expect(c.isAdminDevice, isTrue);
+      expect(find.text('ניהול תמיכה'), findsOneWidget);
+      expect(find.text('2 פניות ממתינות לך'), findsOneWidget);
+      // פתיחת הקונסולה — רשימת השיחות נטענת מהשרת
+      await tester.tap(find.text('ניהול תמיכה'));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pumpAndSettle();
+      expect(threadsCalled, isNotEmpty);
+      expect(find.text('דוד'), findsOneWidget);
+      expect(find.text('אין אינטרנט'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
     test('a suggestion needs text', () async {
       final c = makeController(FakeNative(), quietServer(), activeStore());
       await c.start();

@@ -82,6 +82,18 @@ def wa_number(phone: str | None) -> str:
     return p[1:] if p.startswith("+") else ""
 
 
+def _national(phone: str | None) -> str:
+    """ה"חלק הלאומי" של מספר — בלי קידומת בינלאומית (972 / 00972 / +972) ובלי 0 מוביל. ריק אם קצר מדי.
+    כך '972521112233', '+972-52-111-2233' ו-'052-111-2233' כולם → '521112233'."""
+    d = re.sub(r"\D", "", str(phone or ""))
+    d = d.removeprefix("00")
+    if d.startswith("972"):
+        d = d[3:]
+    elif d.startswith("0"):
+        d = d[1:]
+    return d if len(d) >= 8 else ""
+
+
 def verify_signature(app_secret: str, body: bytes, header: str | None) -> bool:
     """X-Hub-Signature-256: sha256=<hex> — HMAC של הגוף הגולמי עם ה-App Secret."""
     if not app_secret or not header or not header.startswith("sha256="):
@@ -351,6 +363,32 @@ class SupportDesk:
         return {"unread": n, "last_id": last or 0}
 
     # --- המנהל ---
+
+    def admin_device_id(self) -> int:
+        """מזהה המכשיר של המנהל, אם נקבע במפורש בדשבורד (meta admin_device_id)."""
+        with self.svc.db() as c:
+            r = c.execute("SELECT value FROM meta WHERE key = 'admin_device_id'").fetchone()
+        try:
+            return int(r["value"]) if r and r["value"] else 0
+        except (ValueError, TypeError):
+            return 0
+
+    def is_admin_device(self, row: sqlite3.Row) -> bool:
+        """האם זה מכשיר המנהל — ולכן מותר לו לנהל תמיכה מתוך האפליקציה. מזוהה לפי מזהה מכשיר שנקבע
+        במפורש בדשבורד, או לפי התאמה בין טלפון הלקוח של המכשיר למספר הוואטסאפ של המנהל (שהמנהל הגדיר).
+        נכשל סגור: בלי קביעה מפורשת ובלי מספר מנהל — אף מכשיר אינו מנהל."""
+        if row["status"] != "active":
+            return False
+        if self.admin_device_id() == row["id"]:
+            return True
+        # המספר בוואטסאפ נשמר בפורמט בינלאומי (972...) וטלפון הלקוח בפורמט מקומי (0...) —
+        # משווים את ה"חלק הלאומי" (בלי קידומת מדינה / 0 מוביל) כדי שיתאימו.
+        admin = _national(self.wa_config().admin_number)
+        if not admin or not row["customer_id"]:
+            return False
+        with self.svc.db() as c:
+            cust = c.execute("SELECT phone FROM customers WHERE id = ?", (row["customer_id"],)).fetchone()
+        return bool(cust and _national(cust["phone"]) == admin)
 
     def admin_unread(self) -> int:
         with self.svc.db() as c:
