@@ -440,13 +440,13 @@ class GuardService : AccessibilityService() {
             if (root.packageName?.toString() != PlayLock.PLAY) return true
             val boxes = ArrayList<PlayLock.Box>(64)
             val (texts, search) = collectOrdered(root, boxes)
-            when {
-                PlayLock.verdict(texts, search, s.titles) == PlayLock.Verdict.RETURN -> {
-                    hideCurtain()
-                    returnToPlayTarget(s.pkg, now)
-                }
-                PlayLock.isTargetPage(texts, s.titles) -> updateCurtain(root, boxes, now)
-                else -> hideCurtain()                          // חלון ביניים (חשבון, אישורים) — בלי דף
+            if (PlayLock.verdict(texts, search, s.titles) == PlayLock.Verdict.RETURN) {
+                hideCurtain()
+                returnToPlayTarget(s.pkg, now)
+            } else {
+                // עמוד מותר (האפליקציה שנבחרה): מכסים מתחת לכפתור ההתקנה/עדכון אם הוא במסך — גם אם שם
+                // האפליקציה לא זוהה בראש (עברית / מבנה Play אחר). חלון ביניים בלי כפתור — בלי דף.
+                updateCurtain(root, boxes, PlayLock.isTargetPage(texts, s.titles), now)
             }
         } catch (e: Exception) {
             Log.w(TAG, "play window check failed", e)
@@ -466,19 +466,23 @@ class GuardService : AccessibilityService() {
      * "דף לבן" מתחת לכפתור ההתקנה בעמוד של האפליקציה שנבחרה — אי אפשר לראות או לגלול ל"אפליקציות דומות".
      * גללו בכל זאת (מהחלק העליון) — הדף עוקב אחרי הכפתור, והעמוד חוזר לראש.
      */
-    private fun updateCurtain(root: AccessibilityNodeInfo, boxes: List<PlayLock.Box>, now: Long) {
+    private fun updateCurtain(root: AccessibilityNodeInfo, boxes: List<PlayLock.Box>, isTarget: Boolean, now: Long) {
         val screenH = curtain.screenHeight()
         val buttonTop = PlayLock.curtainTop(boxes, screenH, curtain.marginPx())
-        // הכלל: בעמוד האפליקציה הדף הלבן תמיד מכסה. זוהה כפתור — מתחתיו בדיוק; לא זוהה (עמוד נטען /
-        // גלול / מבנה רכיבים אחר) — קו ברירת מחדל בטוח, ובמקביל גלילה לראש העמוד כדי שהכפתור יחזור.
+        // זוהה כפתור ראשי — הדף הלבן מתחתיו בדיוק (עובד בכל עמוד מותר, גם בלי זיהוי שם האפליקציה).
+        // לא זוהה כפתור אך זה עמוד האפליקציה שנבחרה (נטען / גלול) — קו ברירת מחדל בטוח + גלילה לראש.
+        // חלון ביניים (חשבון / אישורים) בלי כפתור — בלי דף.
         val top: Int
         if (buttonTop != null) {
             if (buttonTop > curtainBase) curtainBase = buttonTop
             if (buttonTop < curtainBase - curtain.marginPx() * 3) scrollPlayBack(root, now)
             top = buttonTop
-        } else {
+        } else if (isTarget) {
             scrollPlayBack(root, now)
             top = PlayLock.fallbackTop(screenH)
+        } else {
+            hideCurtain()
+            return
         }
         curtain.show(top)
         main.removeCallbacks(curtainCheck)
