@@ -29,7 +29,12 @@ class _SupportScreenState extends State<SupportScreen> {
   @override
   void initState() {
     super.initState();
+    c.addListener(_onChange);     // השיחה / הבדיקה המהירה מתעדכנות חי (תשובה מהמנהל, הרשאה שנפלה)
     if (widget.visible) _onShown();
+  }
+
+  void _onChange() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -44,6 +49,7 @@ class _SupportScreenState extends State<SupportScreen> {
 
   @override
   void dispose() {
+    c.removeListener(_onChange);
     _timer?.cancel();
     _text.dispose();
     _scroll.dispose();
