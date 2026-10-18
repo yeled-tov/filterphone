@@ -21,8 +21,11 @@ function client(api, token, fetchImpl = fetch) {
     outbox: (after) => call('GET', `/v1/bot/outbox?after=${after || 0}`),
     forwarded: (ids, waIds) => call('POST', '/v1/bot/forwarded', { ids, wa_ids: waIds }),
     reply: (deviceId, text) => call('POST', '/v1/bot/reply', { device_id: deviceId, text }),
-    customer: (phone) => call('GET', `/v1/bot/customer?phone=${encodeURIComponent(phone)}`),
+    customer: (phone, hint = {}) => call('GET', `/v1/bot/customer?phone=${encodeURIComponent(phone)}` +
+      (hint.device ? `&device=${encodeURIComponent(hint.device)}` : '') + (hint.aid ? `&aid=${encodeURIComponent(hint.aid)}` : '')),
     block: (deviceId, options) => call('POST', '/v1/bot/block', { device_id: deviceId, options }),
+    open: (deviceId, item, minutes) => call('POST', '/v1/bot/open', { device_id: deviceId, item, minutes }),
+    close: (deviceId, item) => call('POST', '/v1/bot/close', { device_id: deviceId, item }),
     escalate: (deviceId, note) => call('POST', '/v1/bot/escalate', { device_id: deviceId, note }),
     // מצב לימוד: מה שהבוט למד ממך (שאלות ותשובות, עובדות)
     knowledge: () => call('GET', '/v1/bot/knowledge'),

@@ -2,10 +2,11 @@
 /**
  * "המוח" של הבוט: Gemini (ברירת מחדל) או Groq. ההוראות נבנות ממידע העסק שבדשבורד ומה שהבוט למד
  * ממך, והבוט מסמן פעולות בתגיות בסוף התשובה — [[ADDRESS]] / [[HUMAN]] / [[BLOCK:מזהה]] /
- * [[ESCALATE:תיאור]] / [[ASK:מה חסר]] (לא יודע — שואל אותך בצ'אט עם עצמך).
+ * [[OPEN:מזהה:דקות]] / [[CLOSE:מזהה]] / [[ESCALATE:תיאור]] / [[ASK:מה חסר]] (לא יודע — שואל אותך).
+ * מה מותר לחסום / לפתוח — רשימה סגורה מהשרת לכל מכשיר (lib/actions.js).
  */
 
-function systemPrompt({ botName, businessInfo, inHours, hoursText, crm, knowledge = '', askWhenUnsure = false }) {
+function systemPrompt({ botName, businessInfo, inHours, hoursText, crm, knowledge = '', askWhenUnsure = false, actions = '' }) {
   const who = crm
     ? `\nהפונה הוא לקוח קיים: ${crm.customer.name || 'לקוח'}, ${crm.devices.length} מכשירים. אל תחשוף מספרים או פרטים פנימיים.`
     : '';
@@ -25,14 +26,15 @@ ${inHours ? 'כעת שעות פעילות — נציג זמין בהמשך אם 
 ${businessInfo}
 === סוף המידע ===
 ${knowledge ? `\n${knowledge}\n` : ''}${who}
+${actions ? `\n${actions}\n` : ''}
 תגיות (בשורה נפרדת בסוף, רק כשצריך):
 • שואלים על כתובת / איך מגיעים → [[ADDRESS]]
 • מבקשים נציג, התקנה, תיאום, או מחיר מדויק שלא מופיע במידע → [[HUMAN]]
-• לקוח קיים מבקש לחסום אפליקציה/אתר בטלפון שלו → [[BLOCK:מזהה]] (למשל [[BLOCK:tiktok]])
-• לקוח מבקש פעולה רגישה (להשהות סינון, לפתוח חסימה, להוריד רמה) → אל תבטיח/י שבוצע; כתוב/כתבי שזה עובר לאישור, וסיים/י ב-[[ESCALATE:תיאור קצר]]${askTag}`;
+${actions ? '• חסימה / פתיחה זמנית / סגירה — לפי הרשימות למעלה ([[BLOCK]] / [[OPEN]] / [[CLOSE]])' : '• לקוח קיים מבקש לחסום אפליקציה/אתר בטלפון שלו → [[BLOCK:מזהה]] (למשל [[BLOCK:tiktok]])'}
+• לקוח מבקש פעולה רגישה שלא ברשימות (להשהות סינון, פתיחה קבועה, להוריד רמה) → אל תבטיח/י שבוצע; כתוב/כתבי שזה עובר לאישור, וסיים/י ב-[[ESCALATE:תיאור קצר]]${askTag}`;
 }
 
-const TAG = /\[\[(ADDRESS|HUMAN|BLOCK|ESCALATE|ASK)(?::([^\]]*))?\]\]/g;
+const TAG = /\[\[(ADDRESS|HUMAN|BLOCK|OPEN|CLOSE|ESCALATE|ASK)(?::([^\]]*))?\]\]/g;
 
 /** מפריד בין הטקסט ללקוח לבין התגיות. תומך גם במילים הישנות ADDRESS / HANDOFF. */
 function parseTags(raw) {
@@ -116,14 +118,47 @@ function geminiFallbacks(names, exclude) {
   return [...by(flash), ...by(lite)].filter((n) => n !== exclude);
 }
 
-async function geminiGenerate(model, key, body, fetchImpl) {
-  const r = await tfetch(fetchImpl, `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+// מגבלת האורך כוללת גם את ה"חשיבה" של המודל (Gemini 2.5 ומעלה). עם 500 החשיבה אכלה את רוב התקציב
+// והתשובה נחתכה באמצע מילה — וגם התגית שבסוף (פעולה) נחתכה ולא בוצעה. עכשיו: הרבה מקום, ובמודלים
+// המהירים בלי חשיבה בכלל (מהיר יותר — הלקוח מקבל תשובה מיד).
+const MAX_OUTPUT_TOKENS = 2048;
+
+/** הגדרת החשיבה לפי המודל: flash / flash-lite של 2.5 — כבויה; 3.x flash — מינימלית; אחרים — ברירת מחדל. */
+function thinkingFor(model) {
+  if (/^gemini-2\.5-flash/.test(model)) return { thinkingBudget: 0 };
+  if (/^gemini-3(\.\d+)?-flash/.test(model)) return { thinkingLevel: 'minimal' };
+  return null;
+}
+
+/** תשובה שנחתכה (MAX_TOKENS): עד סוף המשפט השלם האחרון — לא שולחים חצי מילה ללקוח. */
+function trimCut(text) {
+  const t = String(text || '').trim();
+  const cut = Math.max(t.lastIndexOf('.'), t.lastIndexOf('!'), t.lastIndexOf('?'), t.lastIndexOf('\n'), t.lastIndexOf('🙏'));
+  return cut > t.length * 0.4 ? t.slice(0, cut + 1).trim() : t;
+}
+
+function geminiBody({ system, contents }, model, withThinking = true) {
+  const thinking = withThinking ? thinkingFor(model) : null;
+  return JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents,
+    generationConfig: { temperature: 0.6, maxOutputTokens: MAX_OUTPUT_TOKENS, ...(thinking ? { thinkingConfig: thinking } : {}) },
   });
+}
+
+async function geminiGenerate(model, key, req, fetchImpl) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+  let r = await tfetch(fetchImpl, url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: geminiBody(req, model) });
+  if (r.status === 400 && thinkingFor(model)) {
+    // המודל לא מכיר את הגדרת החשיבה — שוב בלעדיה (ולא נופלים ל"נציג יחזור")
+    r = await tfetch(fetchImpl, url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: geminiBody(req, model, false) });
+  }
   if (!r.ok) throw new AiHttpError('gemini', r.status);
   const j = await r.json();
-  const out = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim();
+  const cand = j.candidates?.[0];
+  let out = (cand?.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
   if (!out) throw new Error('gemini: empty answer');
+  if (cand?.finishReason === 'MAX_TOKENS') out = trimCut(out);
   return { text: out, model };
 }
 
@@ -135,11 +170,7 @@ async function askGemini({ key, model, system, history, text, fetchImpl = fetch 
   const contents = [...history, { role: 'user', content: text }].map((h) => ({
     role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }],
   }));
-  const body = JSON.stringify({
-    systemInstruction: { parts: [{ text: system }] },
-    contents,
-    generationConfig: { temperature: 0.6, maxOutputTokens: 500 },
-  });
+  const req = { system, contents };
   const started = Date.now();
   const first = model || await geminiModel(key, fetchImpl);
   const plan = [first, first];
@@ -151,7 +182,7 @@ async function askGemini({ key, model, system, history, text, fetchImpl = fetch 
       if (plan[i] === plan[i - 1]) await sleep(RETRY_MS);
     }
     try {
-      return await geminiGenerate(plan[i], key, body, fetchImpl);
+      return await geminiGenerate(plan[i], key, req, fetchImpl);
     } catch (e) {
       lastErr = e;
       if (!retryable(e)) throw e;
@@ -168,7 +199,7 @@ async function askGemini({ key, model, system, history, text, fetchImpl = fetch 
 
 async function askGroq({ key, model, system, history, text, fetchImpl = fetch }) {
   const m = model || 'llama-3.3-70b-versatile';
-  const body = JSON.stringify({ model: m, max_tokens: 500, temperature: 0.6,
+  const body = JSON.stringify({ model: m, max_tokens: 1024, temperature: 0.6,
     messages: [{ role: 'system', content: system }, ...history, { role: 'user', content: text }] });
   let lastErr = null;
   for (let i = 0; i < 2; i++) {
@@ -180,8 +211,10 @@ async function askGroq({ key, model, system, history, text, fetchImpl = fetch })
         body,
       });
       if (!r.ok) throw new AiHttpError('groq', r.status);
-      const out = ((await r.json()).choices?.[0]?.message?.content || '').trim();
+      const choice = (await r.json()).choices?.[0];
+      let out = (choice?.message?.content || '').trim();
       if (!out) throw new Error('groq: empty answer');
+      if (choice?.finish_reason === 'length') out = trimCut(out);
       return { text: out, model: m };
     } catch (e) {
       lastErr = e;
@@ -224,4 +257,5 @@ function fallback({ inHours, hoursText, history }, { outage = false } = {}) {
 }
 
 module.exports = { systemPrompt, parseTags, addressBlock, pickGemini, geminiFallbacks, askGemini, askGroq, answer, fallback,
+  thinkingFor, trimCut,
   _resetModelCache: () => { modelCache = { key: '', names: [], at: 0 }; } };

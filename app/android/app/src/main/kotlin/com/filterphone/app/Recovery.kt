@@ -27,6 +27,7 @@ object Recovery {
     const val JOB_RETRY = 4203
     const val JOB_RESUME = 4204          // סוף השהיה שהמנהל אישר — מחזירים את כל ההגנה בזמן
     const val JOB_DAILY = 4205           // תחזוקה יומית: בדיקת גרסה + התקנה + סנכרון
+    const val JOB_TEMP = 4206            // סוף פתיחה זמנית — חוסמים שוב בזמן (גם בלי רשת)
     const val DAILY_HOUR = 2             // ~02:00 מקומי
     private const val DAILY_WINDOW_MS = 3 * 60 * 60_000L   // חלון ביצוע: עד 05:00 (כשיש רשת/טעינה)
 
@@ -111,7 +112,23 @@ object Recovery {
 
     fun cancelAll(context: Context) {
         val js = scheduler(context) ?: return
-        listOf(JOB_PERIODIC, JOB_NOW, JOB_RETRY, JOB_RESUME, JOB_DAILY).forEach { js.cancel(it) }
+        listOf(JOB_PERIODIC, JOB_NOW, JOB_RETRY, JOB_RESUME, JOB_DAILY, JOB_TEMP).forEach { js.cancel(it) }
+    }
+
+    /** בסוף פתיחה זמנית (untilMs): מנהל המכשיר והמגן מחילים שוב — מה שנפתח נחסם. null — מבטל. */
+    fun scheduleTempExpiry(context: Context, untilMs: Long?) {
+        val js = scheduler(context) ?: return
+        if (untilMs == null) {
+            runCatching { js.cancel(JOB_TEMP) }
+            return
+        }
+        val delay = (untilMs - System.currentTimeMillis() + 1_000).coerceAtLeast(1_000)
+        val job = JobInfo.Builder(JOB_TEMP, component(context))
+            .setMinimumLatency(delay)
+            .setOverrideDeadline(delay + 30_000)
+            .setPersisted(true)
+            .build()
+        runCatching { js.schedule(job) }.onFailure { Log.w(TAG, "temp expiry job not scheduled", it) }
     }
 
     /** בסוף ההשהיה (גם אם האפליקציה סגורה / הטלפון אותחל): VPN, מגן, מנהל מכשיר — הכול חוזר. */

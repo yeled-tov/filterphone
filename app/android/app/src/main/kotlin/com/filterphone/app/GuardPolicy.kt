@@ -88,6 +88,10 @@ object GuardPolicy {
         val allowlistOnly: Boolean = false,
         /** האפליקציות המאושרות (הקטלוג + Chrome). החיוניות ואפליקציות הבסיס מותרות בנפרד בטלפון. */
         val allowed: Set<String> = emptySet(),
+        /** פתוח זמנית (הבוט / המנהל): חבילה → עד מתי (מילישניות). אחרי הזמן — נחסם שוב לבד, גם בלי רשת. */
+        val tempAllow: Map<String, Long> = emptyMap(),
+        /** הגבלת מנהל מכשיר שהוסרה זמנית (למשל disallow_tethering) → עד מתי. */
+        val tempDpc: Map<String, Long> = emptyMap(),
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty() &&
             !allowlistOnly
@@ -133,6 +137,8 @@ object GuardPolicy {
         ProtectionState.mark(context, ProtectionState.POLICY_SYNC)
         runCatching { DeviceOwnerManager.apply(context, policy) }.onFailure { Log.w(TAG, "device owner apply failed", it) }
         GuardService.onPolicyChanged()
+        // פתיחה זמנית: בסוף הזמן חוסמים שוב — גם בלי רשת ובלי לחכות לשרת
+        Recovery.scheduleTempExpiry(context, nextTempExpiry(policy))
         // רשימת "מחוץ ל-VPN" אולי השתנתה — המנהרה נבנית מחדש רק אם יש הבדל
         runCatching { if (TunnelManager.isInitialized) TunnelManager.refreshBypass("policy") }
         return true
@@ -201,8 +207,37 @@ object GuardPolicy {
             allowed = o.optJSONObject("allowlist")?.optJSONArray("apps")
                 ?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }.toSet() }
                 ?: emptySet(),
+            tempAllow = parseTemp(o.optJSONArray("temp_allow"), "package"),
+            tempDpc = parseTemp(o.optJSONArray("temp_allow"), "dpc"),
         )
     }
+
+    /** [{"package"|"dpc": ..., "until": שניות}] → שם → עד מתי (מילישניות). רשומה פגומה — מדלגים. */
+    private fun parseTemp(a: JSONArray?, key: String): Map<String, Long> {
+        if (a == null) return emptyMap()
+        val out = HashMap<String, Long>()
+        for (i in 0 until a.length()) {
+            val t = a.optJSONObject(i) ?: continue
+            val name = t.optString(key).trim()
+            val until = t.optLong("until", 0L)
+            if (name.isNotEmpty() && until > 0) out[name] = until * 1000
+        }
+        return out
+    }
+
+    /** פתוח זמנית עכשיו? */
+    fun tempAllowed(policy: Policy, pkg: String, now: Long = System.currentTimeMillis()): Boolean =
+        (policy.tempAllow[pkg] ?: 0L) > now
+
+    fun activeTempApps(policy: Policy, now: Long = System.currentTimeMillis()): Set<String> =
+        policy.tempAllow.filterValues { it > now }.keys
+
+    fun activeTempDpc(policy: Policy, now: Long = System.currentTimeMillis()): Set<String> =
+        policy.tempDpc.filterValues { it > now }.keys
+
+    /** מתי נגמרת הפתיחה הזמנית הקרובה (מילישניות), או null — כדי לתזמן חסימה מחדש בדיוק בזמן. */
+    fun nextTempExpiry(policy: Policy, now: Long = System.currentTimeMillis()): Long? =
+        (policy.tempAllow.values + policy.tempDpc.values).filter { it > now }.minOrNull()
 
     private fun JSONObject.optArrayStrict(key: String): JSONArray? {
         val v = opt(key) ?: return null
@@ -246,6 +281,7 @@ object GuardPolicy {
      * אחרת "חזרה למסך הבית" הייתה נתקעת בלולאה או שהטלפון היה הופך ללא שמיש.
      */
     fun check(context: Context, policy: Policy, pkg: String, cls: String?): Block? {
+        if (tempAllowed(policy, pkg)) return null                  // נפתח זמנית (הבוט / המנהל) — עד שהזמן נגמר
         val app = pkg in policy.apps
         val screen = !app && cls != null &&
             policy.screens.any { s -> s.pkg == pkg && s.match.any { cls.contains(it, ignoreCase = true) } }

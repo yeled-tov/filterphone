@@ -197,6 +197,14 @@ class SyncJob : JobService() {
         val app = applicationContext
         executor.execute {
             try {
+                if (params.jobId == Recovery.JOB_TEMP) {
+                    // סוף פתיחה זמנית: חוסמים שוב עכשיו (בלי רשת), ומתזמנים את הבאה אם יש
+                    val policy = GuardPolicy.get(app)
+                    runCatching { DeviceOwnerManager.apply(app, policy) }
+                    GuardService.onPolicyChanged()
+                    Recovery.scheduleTempExpiry(app, GuardPolicy.nextTempExpiry(policy))
+                    return@execute
+                }
                 TunnelManager.init(app)
                 if (params.jobId == Recovery.JOB_RESUME) Recovery.onPauseChanged(app)   // סוף ההשהיה
                 TunnelManager.ensureConnected(if (params.jobId == Recovery.JOB_RETRY) "retry" else "job")

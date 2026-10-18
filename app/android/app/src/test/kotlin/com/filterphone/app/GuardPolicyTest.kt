@@ -135,4 +135,25 @@ class GuardPolicyTest {
         assertFalse(GuardPolicy.allowlistBlocks("com.android.vending", allowed, launcher, exempt))    // חלון משלה
         assertFalse(GuardPolicy.allowlistBlocks("com.google.android.gms", allowed, launcher, exempt)) // בלי אייקון
     }
+
+    @Test
+    fun tempOpeningHoldsUntilItsTimeAndThenBlocksAgainByItself() {
+        val p = GuardPolicy.parseStrict(
+            """{"blocked_apps":["com.android.vending"],"dpc":{"disallow_tethering":true},
+               "temp_allow":[{"package":"com.android.vending","until":1000},{"dpc":"disallow_tethering","until":1600},
+                             {"package":"","until":5},{"until":7}]}"""
+        )
+        assertEquals(mapOf("com.android.vending" to 1_000_000L), p.tempAllow)
+        assertEquals(mapOf("disallow_tethering" to 1_600_000L), p.tempDpc)
+        assertTrue(GuardPolicy.tempAllowed(p, "com.android.vending", now = 999_000))
+        assertFalse(GuardPolicy.tempAllowed(p, "com.android.vending", now = 1_000_000))     // הזמן נגמר — חסום שוב
+        assertFalse(GuardPolicy.tempAllowed(p, "com.whatsapp", now = 0))
+        assertEquals(setOf("disallow_tethering"), GuardPolicy.activeTempDpc(p, now = 1_200_000))
+        assertEquals(emptySet<String>(), GuardPolicy.activeTempApps(p, now = 1_200_000))
+        assertEquals(1_000_000L, GuardPolicy.nextTempExpiry(p, now = 0))
+        assertEquals(1_600_000L, GuardPolicy.nextTempExpiry(p, now = 1_000_000))
+        assertNull(GuardPolicy.nextTempExpiry(p, now = 1_600_000))
+        // שרת ישן / בלי פתיחה — ריק
+        assertTrue(GuardPolicy.parseStrict("""{"blocked_apps":["a.b"]}""").tempAllow.isEmpty())
+    }
 }

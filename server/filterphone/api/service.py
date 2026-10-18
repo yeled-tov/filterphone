@@ -40,15 +40,23 @@ from .apk import ApkError, read_apk
 from .catalog import (
     CATALOG,
     DEFAULT_OPTIONS,
+    DPC_DEFAULTS,
+    DPC_ITEM_PREFIX,
     KNOWN_APP_HOSTS,
     LEVELS,
+    MAX_TEMP_OPEN,
+    TEMP_OPEN_DEFAULT_MIN,
+    TEMP_OPEN_MAX_MIN,
     Compiled,
     DeviceSettings,
     clean_cert,
     clean_package,
     compile_settings,
+    effective_options,
+    item_title,
     policy_checksum,
     summary,
+    temp_item,
 )
 from .fetch import FetchError, fetch_image
 from .observe import REGISTRY as API_METRICS
@@ -280,6 +288,8 @@ class Services:
     adguard: AdGuard | None = None
     dirty: threading.Event = field(default_factory=threading.Event)   # משהו השתנה — לסנכרן DNS
     redis_stale: bool = False           # כתיבה ל-Redis נכשלה — הסנכרון התקופתי יכתוב הכול מחדש
+    next_temp_expiry: float | None = None   # הפתיחה הזמנית הבאה שפגה (None = לא ידוע — לבדוק במסד)
+    temp_lock: threading.Lock = field(default_factory=threading.Lock)   # פתיחה חדשה מול הלולאה שמפקיעה
 
     def __post_init__(self) -> None:
         if self.adguard is None:
@@ -1403,6 +1413,7 @@ class Services:
             "pause": {"active": self.is_paused(r), "until": r["pause_until"], "reason": r["pause_reason"],
                       "by": r["pause_by"]} if r["pause_until"] else None,
             "unmanage_requested": bool(r["unmanage_at"]),
+            "temp_opens": self.temp_opens(r),
         })
         return out
 
@@ -1465,6 +1476,99 @@ class Services:
             new = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
         self.push_device(new)      # פרוקסי → passthrough מיידי
         return self.device_detail(device_id)
+
+    # ------------------------------------------------------------ פתיחה זמנית
+
+    @staticmethod
+    def is_blocked(row: sqlite3.Row, item: str) -> bool:
+        """האם הפריט (אפשרות מהקטלוג / dpc:<מפתח>) חסום עכשיו במכשיר — בלי להתחשב בפתיחה זמנית."""
+        settings = DeviceSettings.load(row["policy"])
+        if item in CATALOG:
+            return item in effective_options(settings.options)
+        if item.startswith(DPC_ITEM_PREFIX):
+            return bool({**DPC_DEFAULTS, **settings.dpc}.get(item[len(DPC_ITEM_PREFIX):]))
+        return False
+
+    @staticmethod
+    def temp_opens(row: sqlite3.Row, t: int | None = None) -> list[dict]:
+        t = t if t is not None else db.now()
+        settings = DeviceSettings.load(row["policy"])
+        return [{"item": k, "title": item_title(k), "until": v} for k, v in settings.temp_open.items() if v > t]
+
+    def _change_temp(self, device_id: int, add: dict[str, int] | None, remove: set[str] | None,
+                     actor: str, kind: str, detail: str) -> sqlite3.Row:
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            settings = DeviceSettings.load(row["policy"])
+            for k in remove or ():
+                settings.temp_open.pop(k, None)
+            for k, v in (add or {}).items():
+                if k not in settings.temp_open and len(settings.temp_open) >= MAX_TEMP_OPEN:
+                    raise ApiError(409, "יותר מדי פתיחות זמניות פעילות במכשיר")
+                settings.temp_open[k] = v
+            c.execute("UPDATE devices SET policy = ? WHERE id = ?", (settings.dump(), device_id))
+            self.bump_policy(c, device_id)
+            self.log_device(c, device_id, kind, detail)
+            self.audit(actor, kind, f"device:{device_id}", detail, c)
+            new = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        self.push_device(new)       # ברשת — מיד; בטלפון — בדיווח הבא (או מיד כשנפתח משהו חסום)
+        return new
+
+    def temp_open(self, device_id: int, raw_item: str, minutes: int | None, actor: str, reason: str = "") -> dict:
+        """פותח משהו חסום לזמן קצוב (עד שעה). בסוף התוקף נחסם שוב לבד — גם בטלפון, גם בלי חיבור."""
+        item = temp_item(raw_item)
+        if not item:
+            raise ApiError(400, "לא מוכר מה לפתוח")
+        minutes = max(1, min(int(minutes or TEMP_OPEN_DEFAULT_MIN), TEMP_OPEN_MAX_MIN))
+        row = self.device_row(device_id)
+        if row["status"] != "active":
+            raise ApiError(409, "המכשיר לא פעיל")
+        title = item_title(item)
+        if not self.is_blocked(row, item):
+            return {"ok": True, "item": item, "title": title, "already_open": True, "until": None}
+        until = db.now() + minutes * 60
+        detail = f"{title} · {minutes} דק'" + (f" · {reason}" if reason else "")
+        with self.temp_lock:        # אחרת הלולאה עלולה לדרוס את "הבאה שפגה" באמצע — והפתיחה לא תיסגר
+            self._change_temp(device_id, {item: until}, None, actor, "temp_open", detail[:200])
+            if self.next_temp_expiry is not None:
+                self.next_temp_expiry = min(self.next_temp_expiry, until)
+        return {"ok": True, "item": item, "title": title, "until": until, "minutes": minutes}
+
+    def temp_close(self, device_id: int, raw_item: str, actor: str) -> dict:
+        """סוגר פתיחה זמנית לפני הזמן (חוסם שוב עכשיו)."""
+        item = temp_item(raw_item)
+        row = self.device_row(device_id)
+        if not item or item not in DeviceSettings.load(row["policy"]).temp_open:
+            return {"ok": True, "item": item, "closed": False}
+        self._change_temp(device_id, None, {item}, actor, "temp_closed", f"{item_title(item)} · נסגר לפני הזמן")
+        return {"ok": True, "item": item, "title": item_title(item), "closed": True}
+
+    def expire_temp_opens(self, t: int | None = None) -> int:
+        """נקרא כל כמה שניות מהלולאה: פתיחות זמניות שפג תוקפן — נחסמות שוב (ברשת מיד, ובטלפון גרסה חדשה
+        בלי הפריט; הטלפון עצמו כבר חסם בזמן). זול כשאין מה לעשות. מחזיר כמה מכשירים עודכנו."""
+        t = t if t is not None else db.now()
+        if self.next_temp_expiry is not None and self.next_temp_expiry > t:
+            return 0
+        with self.temp_lock:
+            return self._expire_temp_locked(t)
+
+    def _expire_temp_locked(self, t: int) -> int:
+        with self.db() as c:
+            rows = c.execute("SELECT id, policy FROM devices WHERE policy LIKE '%\"temp_open\"%'").fetchall()
+        changed = 0
+        upcoming = float("inf")
+        for r in rows:
+            opened = DeviceSettings.load(r["policy"]).temp_open
+            expired = {k for k, v in opened.items() if v <= t}
+            upcoming = min([upcoming, *(v for v in opened.values() if v > t)])
+            if expired:
+                self._change_temp(r["id"], None, expired, "system", "temp_closed",
+                                  ", ".join(item_title(k) for k in sorted(expired)) + " · התוקף פג")
+                changed += 1
+        self.next_temp_expiry = upcoming
+        return changed
 
     def resume_device(self, device_id: int, admin: str) -> dict:
         """ביטול ההשהיה מיד (לפני שהתוקף פג) — ההגנה המלאה חוזרת."""

@@ -2,6 +2,7 @@ package com.filterphone.app
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Rect
 import android.os.Build
@@ -13,6 +14,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import java.util.ArrayDeque
+import java.util.concurrent.Executors
 
 /**
  * מגן FilterPhone — שירות נגישות שאוכף בטלפון עצמו את מה שהמנהל חסם:
@@ -31,6 +33,7 @@ class GuardService : AccessibilityService() {
     private var lastBlockAt = 0L
     private var lastBlockPkg = ""
     private var lastToastAt = 0L
+    private var lastServerCheckAt = 0L
     private var foreground: String? = null
     private var contentEvents = false
     private var scanKeywords = false
@@ -618,6 +621,7 @@ class GuardService : AccessibilityService() {
             GuardPolicy.Block.APP -> {
                 block(pkg, GLOBAL_ACTION_HOME, R.string.guard_app_blocked)
                 ProtectionState.inc(this, ProtectionState.APPS_BLOCKED)
+                checkServerForOpening(pkg)
                 return
             }
             GuardPolicy.Block.SCREEN -> {
@@ -794,6 +798,26 @@ class GuardService : AccessibilityService() {
         return true
     }
 
+    /**
+     * פתחו אפליקציה חסומה: אולי הבוט / המנהל פתחו אותה זמנית ממש עכשיו (הטלפון מושך מדיניות רק כל
+     * כמה דקות). בודקים מול השרת מיד — ואם היא פתוחה עכשיו, פותחים אותה בשבילו. פעם ב-30 שניות לכל היותר.
+     */
+    private fun checkServerForOpening(pkg: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastServerCheckAt < SERVER_CHECK_GAP_MS) return
+        lastServerCheckAt = now
+        val app = applicationContext
+        io.execute {
+            val ok = runCatching { Sync.heartbeat(app) }.getOrDefault(false)
+            if (!ok || !GuardPolicy.tempAllowed(GuardPolicy.get(app), pkg)) return@execute
+            main.post {
+                runCatching {
+                    packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }.onFailure { Log.w(TAG, "reopen after temp-open failed", it) }
+            }
+        }
+    }
+
     /** המדיניות השתנתה (או השירות רק התחבר): בודקים את מה שפתוח עכשיו, בלי לחכות למעבר מסך. */
     private fun recheckNow() {
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
@@ -851,6 +875,8 @@ class GuardService : AccessibilityService() {
         private const val PLAY_SCAN_MS = 300L
         private const val CURTAIN_CHECK_MS = 1_500L
         private const val SYSTEM_UI = "com.android.systemui"
+        private const val SERVER_CHECK_GAP_MS = 30_000L
+        private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "fp-guard-io").apply { isDaemon = true } }
 
         /** החנות פתחה חלון התקנה ב-Play — שינויי תוכן ב-Play נחוצים מעכשיו (מכל חוט). */
         fun onPlaySession() {

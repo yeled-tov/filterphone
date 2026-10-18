@@ -119,6 +119,11 @@ async def _keep_in_sync(svc: Services) -> None:
                 await asyncio.to_thread(svc.sync_redis_if_needed)
             except Exception as e:
                 log.error("redis policy resync failed: %s", e)
+        try:
+            # פתיחות זמניות שפג תוקפן — נחסמות שוב (זול כשאין: בודק רק כשהגיע הזמן של הקרובה)
+            await asyncio.to_thread(svc.expire_temp_opens)
+        except Exception as e:
+            log.error("temp-open expiry failed: %s", e)
         if now - last_prune >= PRUNE_EVERY_S:
             last_prune = now
             try:
@@ -405,6 +410,12 @@ class BotBlockIn(BaseModel):
     options: list[str] = Field(min_length=1, max_length=100)
 
 
+class BotTempIn(BaseModel):
+    device_id: int
+    item: str = Field(min_length=1, max_length=80)
+    minutes: int | None = Field(default=None, ge=1, le=60)
+
+
 class BotEscalateIn(BaseModel):
     device_id: int
     note: str = Field(default="", max_length=1500)
@@ -529,6 +540,12 @@ class DevicePatch(BaseModel):
 
 class PauseIn(BaseModel):
     minutes: int = Field(default=60, ge=1, le=1440)
+    reason: str = Field(default="", max_length=200)
+
+
+class TempOpenIn(BaseModel):
+    item: str = Field(min_length=1, max_length=80)
+    minutes: int = Field(default=10, ge=1, le=60)
     reason: str = Field(default="", max_length=200)
 
 
@@ -891,8 +908,8 @@ def _routes(app: FastAPI) -> None:
         return {"ok": True}
 
     @app.get("/v1/bot/customer")
-    def bot_customer(phone: str, bot: BotDep):
-        return bot.customer(phone)
+    def bot_customer(phone: str, bot: BotDep, device: int | None = None, aid: str = ""):
+        return bot.customer(phone, device=device, aid=aid)
 
     @app.get("/v1/bot/outbox")
     def bot_outbox(bot: BotDep, after: int = 0):
@@ -909,6 +926,14 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/bot/block")
     def bot_block(body: BotBlockIn, bot: BotDep):
         return bot.block(body.device_id, body.options)
+
+    @app.post("/v1/bot/open")
+    def bot_open(body: BotTempIn, bot: BotDep):
+        return bot.open(body.device_id, body.item, body.minutes)
+
+    @app.post("/v1/bot/close")
+    def bot_close(body: BotTempIn, bot: BotDep):
+        return bot.close(body.device_id, body.item)
 
     @app.post("/v1/bot/escalate", status_code=201)
     def bot_escalate(body: BotEscalateIn, bot: BotDep):
@@ -1077,6 +1102,15 @@ def _routes(app: FastAPI) -> None:
         n = svc.clear_passthrough(d["vpn_ip"])
         svc.audit(admin["username"], "reset_apps", f"device:{device_id}", str(n))
         return {"cleared": n}
+
+    @app.post("/v1/admin/devices/{device_id}/temp-open")
+    def admin_temp_open(device_id: int, body: TempOpenIn, svc: SvcDep, admin: AdminRow):
+        """פתיחה זמנית (עד שעה) של משהו חסום — נחסם שוב לבד בסוף התוקף."""
+        return svc.temp_open(device_id, body.item, body.minutes, admin["username"], body.reason)
+
+    @app.delete("/v1/admin/devices/{device_id}/temp-open/{item}")
+    def admin_temp_close(device_id: int, item: str, svc: SvcDep, admin: AdminRow):
+        return svc.temp_close(device_id, item, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/account-window")
     def account_window(device_id: int, svc: SvcDep, admin: AdminRow):

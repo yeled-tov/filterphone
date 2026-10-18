@@ -7,8 +7,10 @@ const path = require('path');
 const { isOpen, parseRanges } = require('../lib/hours');
 const ai = require('../lib/ai');
 const { State } = require('../lib/state');
-const { replyDelayMs, settleDelayMs, combineBurst, typingMs, parseHashReply, waNumber } = require('../lib/logic');
+const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber } = require('../lib/logic');
 const labels = require('../lib/labels');
+const aimark = require('../lib/aimark');
+const acts = require('../lib/actions');
 
 const HOURS = '13:00-15:00, 20:00-22:30';
 const at = (day, hh, mm = 0) => ({ day, minutes: hh * 60 + mm });
@@ -109,6 +111,39 @@ test('gemini 503 (busy) → tries again, then a fallback model, and answers', as
   assert.deepEqual(gens, ['gemini-2.5-flash', 'gemini-2.5-flash', 'gemini-2.0-flash']);
 });
 
+test('gemini: room for the whole answer, no thinking on fast models; a cut answer ends at a full sentence', async () => {
+  ai._resetModelCache();
+  const bodies = [];
+  const fakeFetch = async (url, opts = {}) => {
+    bodies.push(JSON.parse(opts.body));
+    return { ok: true, json: async () => ({ candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [
+      { text: 'חושב…', thought: true },
+      { text: 'שלום! קיבלתי את הפרטים. במה אוכל לעזור לך במכש' }] } }] }) };
+  };
+  const res = await ai.answer({ ai_provider: 'gemini', ai_key: 'K', ai_model: 'gemini-2.5-flash' },
+    { inHours: true, hoursText: HOURS, history: [], text: 'שלום' }, fakeFetch);
+  assert.equal(res.text, 'שלום! קיבלתי את הפרטים.');            // בלי חצי מילה, ובלי טקסט ה"חשיבה"
+  assert.ok(bodies[0].generationConfig.maxOutputTokens >= 2048);
+  assert.deepEqual(bodies[0].generationConfig.thinkingConfig, { thinkingBudget: 0 });
+  assert.deepEqual(ai.thinkingFor('gemini-3-flash'), { thinkingLevel: 'minimal' });
+  assert.equal(ai.thinkingFor('gemini-2.5-pro'), null);
+});
+
+test('gemini: a model that rejects the thinking setting is asked again without it', async () => {
+  ai._resetModelCache();
+  const bodies = [];
+  const fakeFetch = async (url, opts = {}) => {
+    const b = JSON.parse(opts.body);
+    bodies.push(b);
+    if (b.generationConfig.thinkingConfig) return { ok: false, status: 400, json: async () => ({}) };
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'בטח, אפשר.' }] } }] }) };
+  };
+  const res = await ai.answer({ ai_provider: 'gemini', ai_key: 'K', ai_model: 'gemini-3-flash' },
+    { inHours: true, hoursText: HOURS, history: [], text: 'אפשר?' }, fakeFetch);
+  assert.equal(res.text, 'בטח, אפשר.');
+  assert.equal(bodies.length, 2);
+});
+
 test('gemini: a key/permission error is not retried', async () => {
   ai._resetModelCache();
   let calls = 0;
@@ -147,9 +182,6 @@ test('small decisions: reply delay, typing time, #reply, phone format', () => {
   assert.equal(replyDelayMs({ inHours: true, adminActive: true }), 5000);
   assert.equal(replyDelayMs({ inHours: true, adminActive: false, adminRead: false }), 0);
   // חלון שקט: תמיד מחכים שהלקוח יסיים לכתוב — לפחות 7 שניות, וגם לא פחות מההמתנה למנהל
-  assert.equal(settleDelayMs({ inHours: false, adminActive: false, adminRead: false }), 7000);
-  assert.equal(settleDelayMs({ inHours: true, adminActive: true }), 7000);
-  assert.equal(settleDelayMs({ inHours: true, adminActive: true }, 4000), 5000);   // ההמתנה למנהל גדולה יותר
   assert.ok(typingMs('קצר') >= 1200 && typingMs('x'.repeat(5000)) === 6000);
   assert.deepEqual(parseHashReply('#42 תפעיל מחדש'), { deviceId: 42, text: 'תפעיל מחדש' });
   assert.equal(parseHashReply('שלום'), null);
@@ -279,4 +311,52 @@ test('learning: questions the bot asked you survive a restart and close when you
   assert.equal(s2.getAsk('msg1', 1000 + 8 * 24 * 3600e3), null);                  // אחרי שבוע — נשכח
   clearTimeout(s._timer);
   clearTimeout(s2._timer);
+});
+
+test('AI mark: the WhatsApp label unless turned off or rejected this week; text tag only as a fallback', () => {
+  const now = Date.now();
+  assert.equal(aimark.nativeOn({ mark_ai: true }, 0, now), true);
+  assert.equal(aimark.nativeOn({}, 0, now), true);                               // ברירת מחדל: פעיל
+  assert.equal(aimark.nativeOn({ mark_ai: false }, 0, now), false);
+  assert.equal(aimark.nativeOn({ mark_ai: true }, now - 3600e3, now), false);      // נדחה לפני שעה
+  assert.equal(aimark.nativeOn({ mark_ai: true }, now - 8 * 24 * 3600e3, now), true);   // ניסיון חוזר אחרי שבוע
+  assert.equal(aimark.withTextTag({ mark_ai: true, ai_tag: '🤖 אוטומטי' }, 'שלום'), 'שלום\n\n🤖 אוטומטי');
+  assert.equal(aimark.withTextTag({ mark_ai: false, ai_tag: '🤖 אוטומטי' }, 'שלום'), 'שלום');
+  assert.equal(aimark.withTextTag({ mark_ai: true, ai_tag: '' }, 'שלום'), 'שלום');
+  assert.equal(aimark.BIZ_BOT_TYPE, 'biz_1p');
+});
+
+test('actions: device # and Android ID from the app message; minutes capped at an hour', () => {
+  const msg = 'שלום, אני צריך עזרה ב-FilterPhone.\nמכשיר DUOQIN F22Pro · #16\nטלפון: 0527186881\nמזהה: 7d1ac306b6d02fe3\nVPN: מחובר';
+  assert.deepEqual(acts.deviceHint(msg), { device: 16, aid: '7d1ac306b6d02fe3' });
+  assert.deepEqual(acts.deviceHint('תפתח לי את החנות', { device: 16, aid: 'abc' }), { device: 16, aid: 'abc' });   // נשמר מקודם
+  assert.deepEqual(acts.parseOpen('play_store:90'), { item: 'play_store', minutes: 60 });
+  assert.deepEqual(acts.parseOpen('hotspot'), { item: 'hotspot', minutes: 10 });
+  assert.deepEqual(acts.parseOpen('play_store:0'), { item: 'play_store', minutes: 10 });
+});
+
+test('actions: the AI gets a closed list per device, or is told how to identify the customer', () => {
+  assert.match(acts.promptSection(null), /תמיכה בוואטסאפ/);
+  const two = { selected: null, devices: [{ device_id: 3, name: 'A' }, { device_id: 4, name: 'B' }] };
+  assert.match(acts.promptSection(two), /#3 A, #4 B/);
+  const one = { selected: 16, devices: [{ device_id: 16, temp_open: [] }],
+    actions: { open: [{ id: 'play_store', title: 'כניסה לחנות Google Play' }], block: [{ id: 'tiktok', title: 'טיקטוק' }],
+      max_minutes: 60, default_minutes: 10 } };
+  const p = acts.promptSection(one);
+  assert.match(p, /\[\[OPEN:מזהה:דקות\]\]/);
+  assert.match(p, /play_store = כניסה לחנות Google Play/);
+  assert.match(p, /tiktok = טיקטוק/);
+  assert.match(p, /לכל היותר 60/);
+  const sys = ai.systemPrompt({ businessInfo: 'x', inHours: true, hoursText: HOURS, actions: p });
+  assert.match(sys, /play_store = כניסה לחנות Google Play/);
+  assert.deepEqual(ai.parseTags('פותח לך 👍\n[[OPEN:play_store:15]]').tags, [{ kind: 'OPEN', arg: 'play_store:15' }]);
+});
+
+test('actions: confirmation lines tell the customer exactly what happened', () => {
+  const until = Math.floor(Date.UTC(2026, 9, 18, 11, 40) / 1000);   // 14:40 בישראל
+  assert.match(acts.confirmLine('OPEN', { title: 'כניסה לחנות Google Play', until, minutes: 10 }), /פתוח עד 14:40 \(10 דק'\)/);
+  assert.match(acts.confirmLine('OPEN', { title: 'נקודה חמה', already_open: true }), /כבר פתוח/);
+  assert.match(acts.confirmLine('BLOCK', { titles: ['נקודה חמה (שיתוף אינטרנט)'] }), /נחסם: נקודה חמה/);
+  assert.match(acts.confirmLine('BLOCK', { titles: [] }), /כבר חסום/);
+  assert.equal(acts.confirmLine('CLOSE', { closed: false }), '');
 });

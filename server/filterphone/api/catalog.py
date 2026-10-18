@@ -464,6 +464,41 @@ _HOST_RE = re.compile(r"^(?:\*\.)?(?:[a-z0-9*](?:[a-z0-9*-]{0,61}[a-z0-9*])?\.)+
 _PKG_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$")
 
 
+# פתיחה זמנית (הבוט / המנהל): משהו שחסום נפתח לזמן קצוב, ובסוף התוקף נחסם שוב לבד — בשרת (ברשת) וגם
+# בטלפון עצמו (הטלפון מקבל את שעת הסיום וחוסם בזמן גם בלי חיבור). פריט = אפשרות מהקטלוג או "dpc:<מפתח>".
+TEMP_OPEN_DEFAULT_MIN = 10
+TEMP_OPEN_MAX_MIN = 60
+MAX_TEMP_OPEN = 10
+DPC_ITEM_PREFIX = "dpc:"
+# שמות קצרים (לבוט ולתצוגה) להגבלות מנהל המכשיר
+DPC_ITEMS: dict[str, str] = {
+    "hotspot": "dpc:disallow_tethering",
+}
+DPC_ITEM_TITLES: dict[str, str] = {
+    "dpc:disallow_tethering": "נקודה חמה (שיתוף אינטרנט)",
+    "dpc:disallow_unknown_sources": "התקנת APK מקבצים",
+    "dpc:disallow_add_user": "משתמשים נוספים / אורח",
+    "dpc:disallow_private_dns": "DNS פרטי",
+}
+
+
+def temp_item(raw: str) -> str:
+    """מנרמל פריט לפתיחה/חסימה: hotspot → dpc:disallow_tethering; אפשרות מהקטלוג כמו שהיא; אחרת ''."""
+    item = str(raw or "").strip().lower()
+    item = DPC_ITEMS.get(item, item)
+    if item in CATALOG:
+        return item
+    if item.startswith(DPC_ITEM_PREFIX) and isinstance(DPC_DEFAULTS.get(item[len(DPC_ITEM_PREFIX):]), bool):
+        return item
+    return ""
+
+
+def item_title(item: str) -> str:
+    if item in CATALOG:
+        return CATALOG[item].title
+    return DPC_ITEM_TITLES.get(item, item)
+
+
 def public_catalog() -> dict:
     """לטופס ההרשמה באפליקציה."""
     return {"levels": [{"level": k, **v} for k, v in LEVELS.items() if k > 0],
@@ -566,6 +601,7 @@ class DeviceSettings:
     dpc: dict = field(default_factory=dict)     # רק מה ששונה מ-DPC_DEFAULTS
     keywords: dict = field(default_factory=dict)  # חסימת מילות חיפוש: {enabled, extra, removed} מעל ברירת המחדל
     vpn_bypass: dict = field(default_factory=dict)  # אפליקציות מחוץ ל-VPN: {enabled, extra, removed, pins}
+    temp_open: dict = field(default_factory=dict)   # פתיחות זמניות: פריט → עד מתי (שניות מאז 1970)
 
     @property
     def custom_apps(self) -> list[str]:
@@ -657,6 +693,17 @@ class DeviceSettings:
             out["pins"] = dict(sorted(pins.items()))
         return out
 
+    @staticmethod
+    def _load_temp_open(raw) -> dict:
+        if not isinstance(raw, dict):
+            return {}
+        out: dict = {}
+        for k, v in raw.items():
+            item = temp_item(k)
+            if item and isinstance(v, int) and not isinstance(v, bool) and v > 0:
+                out[item] = v
+        return dict(sorted(out.items())[:MAX_TEMP_OPEN])
+
     @classmethod
     def load(cls, raw: str | None) -> DeviceSettings:
         try:
@@ -674,15 +721,18 @@ class DeviceSettings:
             dpc=cls._load_dpc(d.get("dpc")),
             keywords=cls._load_keywords(d.get("keywords")),
             vpn_bypass=cls._load_vpn_bypass(d.get("vpn_bypass")),
+            temp_open=cls._load_temp_open(d.get("temp_open")),
         )
 
     def dump(self) -> str:
         # custom_apps נשמר גם הוא — כדי שגרסה קודמת של השרת (חזרה לאחור) תמשיך לחסום
-        return json.dumps({"options": self.options, "custom_hosts": self.custom_hosts,
-                           "allow_hosts": self.allow_hosts, "custom_apps": self.custom_apps,
-                           "app_rules": self.app_rules, "app_images": self.app_images, "dpc": self.dpc,
-                           "keywords": self.keywords, "vpn_bypass": self.vpn_bypass},
-                          ensure_ascii=False, separators=(",", ":"))
+        d = {"options": self.options, "custom_hosts": self.custom_hosts,
+             "allow_hosts": self.allow_hosts, "custom_apps": self.custom_apps,
+             "app_rules": self.app_rules, "app_images": self.app_images, "dpc": self.dpc,
+             "keywords": self.keywords, "vpn_bypass": self.vpn_bypass}
+        if self.temp_open:
+            d["temp_open"] = self.temp_open
+        return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
         d = json.loads(self.dump())
@@ -831,6 +881,7 @@ class Compiled:
     split_apps: tuple[str, ...] = ()            # חסומות רק במסכים שלהן (SPLIT_APPS), לא כאפליקציה שלמה
     accessibility_only: tuple[str, ...] = ()    # חסומות בנגישות בלבד — לא מוסתרות במנהל המכשיר
     wa_screens: tuple[str, ...] = ()            # מסכים בוואטסאפ שנחסמים לפי תוכן (updates/channels/status)
+    temp_allow: tuple[dict, ...] = ()           # פתוח זמנית בטלפון: [{"package"|"dpc", "until"}]
 
     def proxy_json(self, level: int) -> str:
         """מה שהפרוקסי קורא (fp:policy ב-Redis)."""
@@ -858,12 +909,33 @@ class Compiled:
             "vpn_bypass": self.vpn_bypass,
             "accessibility_only": list(self.accessibility_only),
             "wa_screens": list(self.wa_screens),
+            # רק כשיש — כדי שמדיניות בלי פתיחה זמנית תישאר זהה (בלי גרסה חדשה לכל המכשירים)
+            **({"temp_allow": list(self.temp_allow)} if self.temp_allow else {}),
         }
+
+
+def _temp_allow(s: DeviceSettings, opts: list[Option]) -> tuple[dict, ...]:
+    """מה שפתוח זמנית בטלפון, עם שעת הסיום (הטלפון חוסם שוב לבד בזמן). אפליקציה שחסומה גם באפשרות
+    אחרת (שלא נפתחה) או בכלל של המנהל — נשארת חסומה."""
+    if not s.temp_open:
+        return ()
+    still = {p for o in opts if o.id not in s.temp_open for p in o.apps}
+    still |= {p for p, r in s.app_rules.items() if r["mode"] in DEVICE_MODES}
+    active = {o.id for o in opts}
+    out: list[dict] = []
+    for item, until in sorted(s.temp_open.items()):
+        if item in CATALOG and item in active:
+            out += [{"package": p, "until": until} for p in CATALOG[item].apps if p not in still]
+        elif item.startswith(DPC_ITEM_PREFIX):
+            out.append({"dpc": item[len(DPC_ITEM_PREFIX):], "until": until})
+    return tuple(out)
 
 
 def compile_settings(level: int, s: DeviceSettings) -> Compiled:
     opts = [CATALOG[o] for o in effective_options(s.options) if o in CATALOG]
-    hosts = {h for o in opts for h in o.hosts} | set(s.custom_hosts)
+    # ברשת: מה שנפתח זמנית לא נחסם עד שהתוקף פג (השרת מסיר אותו בזמן — expire_temp_opens)
+    net = [o for o in opts if o.id not in s.temp_open]
+    hosts = {h for o in net for h in o.hosts} | set(s.custom_hosts)
     unknown: list[str] = []
     for pkg, rule in s.app_rules.items():
         if rule["mode"] in NETWORK_MODES:
@@ -888,9 +960,9 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         hosts=tuple(sorted(hosts)),
         apps=tuple(sorted(device_apps)),
         screens=tuple({"package": p, "match": sorted(m)} for p, m in sorted(screens.items())),
-        paths=tuple({"host": h, "re": r} for o in opts for h, r in o.paths),
-        images="block" if any(o.images == "block" for o in opts) else "filter",
-        video=any(o.video for o in opts),
+        paths=tuple({"host": h, "re": r} for o in net for h, r in o.paths),
+        images="block" if any(o.images == "block" for o in net) else "filter",
+        video=any(o.video for o in net),
         app_images=app_images,
         app_rules=tuple({"package": p, "mode": r["mode"]} for p, r in s.app_rules.items()),
         protections=tuple(sorted({k for o in opts for k in o.protections})),
@@ -902,6 +974,7 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         accessibility_only=tuple(sorted(p for p, full in ACCESSIBILITY_ONLY_APPS.items()
                                         if p in device_apps and full not in s.options)),
         wa_screens=tuple(sorted({k for o in opts for k in o.wa_screens})),
+        temp_allow=_temp_allow(s, opts),
     )
 
 

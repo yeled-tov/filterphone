@@ -10,12 +10,6 @@ function replyDelayMs({ inHours, adminActive, adminRead }) {
   return adminActive || adminRead ? 5000 : 0;
 }
 
-/** כמה לחכות שהלקוח יסיים לכתוב לפני שעונים: לפחות חלון שקט [settleMs] אחרי ההודעה האחרונה,
- *  וגם לא פחות מההמתנה למנהל (replyDelayMs). ככה לא עונים באמצע כשהלקוח שולח כמה הודעות ברצף. */
-function settleDelayMs(opts, settleMs = 7000) {
-  return Math.max(settleMs, replyDelayMs(opts));
-}
-
 /** כמה הודעות רצופות של הלקוח = שאלה אחת: מחברים לפסקאות, בלי כפילויות עוקבות ובלי ריקות. */
 function combineBurst(parts) {
   const out = [];
@@ -44,4 +38,4 @@ function waNumber(raw) {
   return d;
 }
 
-module.exports = { replyDelayMs, settleDelayMs, combineBurst, typingMs, parseHashReply, waNumber };
+module.exports = { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber };

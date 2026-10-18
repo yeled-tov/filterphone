@@ -29,11 +29,13 @@ const { State } = require('./lib/state');
 const fp = require('./lib/fp');
 const ai = require('./lib/ai');
 const { israelNow, isOpen } = require('./lib/hours');
-const { replyDelayMs, settleDelayMs, combineBurst, typingMs, parseHashReply, waNumber } = require('./lib/logic');
+const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber } = require('./lib/logic');
 const labels = require('./lib/labels');
 const know = require('./lib/knowledge');
+const aimark = require('./lib/aimark');
+const acts = require('./lib/actions');
 
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 const API = (process.env.FP_API || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
@@ -85,13 +87,16 @@ let me = '';                  // המספר שלי (972…@c.us)
 let adminLastSeen = 0;
 let lastOutboxId = 0;
 const botMsgIds = new Set();  // הודעות שהבוט שלח — כדי לא להתייחס אליהן כאילו אתה כתבת
+const acks = new Map();       // מזהה הודעה → {ack, at} (האישורים האחרונים מוואטסאפ — לבדיקת סימון ה-AI)
+const ackWaiters = new Map();
 // אותו דבר לפי תוכן: וואטסאפ לפעמים מדווח על ההודעה לפני ש-sendMessage מחזיר את המזהה
 const outgoing = new Map();   // טקסט → עד מתי לצפות לו
 const appThreads = new Map(); // הודעת העברה בצ'אט שלך → {deviceId, question, phone} (לתשובה ב"השב")
 // מה שהלקוח רואה באפליקציה כשהבוט לא ענה לבד ומעביר אליך (הודעת ביניים נעימה)
 const APP_CHECKING = 'קיבלנו את פנייתך 🙏 בודקים ונחזור אליך כאן בהקדם.';
-const pending = new Map();    // תשובות שמחכות (חלון שקט אחרי ההודעה האחרונה)
-const bursts = new Map();     // הודעות רצופות של אותו לקוח שעדיין לא ענינו עליהן (chatId → {parts,...})
+const pending = new Map();    // תשובות שמחכות (5 שניות כשאתה פעיל — שתספיק לענות בעצמך)
+const bursts = new Map();     // הודעות של לקוח שעוד לא נענו (chatId → {parts, gen,...}) — הודעה חדשה בזמן
+                              // שהבוט עוד כותב מבטלת את התשובה הקודמת, והתשובה החדשה עונה על הכול
 const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0 };
 let knowledge = [];           // מה שהבוט למד ממך (מהשרת)
 let knowledgeAt = 0;
@@ -222,6 +227,7 @@ async function start() {
   });
   c.on('disconnected', (r) => onDisconnected(c, r));
   c.on('message_create', (msg) => onMessage(msg).catch((e) => console.error('message:', e.message)));
+  c.on('message_ack', (m, ack) => onAck(m?.id?._serialized, ack));
   client = c;
   try {
     await c.initialize();
@@ -365,7 +371,7 @@ async function catchUp() {
 
 // ------------------------------------------------------------------ שליחה
 
-async function send(to, text, { typing = false } = {}) {
+async function send(to, text, { typing = false, guard = null, extra = null } = {}) {
   if (!client) return null;
   if (typing) {
     try {
@@ -375,10 +381,60 @@ async function send(to, text, { typing = false } = {}) {
       await chat.clearState();
     } catch { /* לא קריטי */ }
   }
+  if (guard && !guard()) return null;                    // בינתיים הגיעה הודעה חדשה — התשובה הזו כבר לא רלוונטית
   const key = String(text).trim();
   outgoing.set(key, Date.now() + 60e3);
-  const m = await client.sendMessage(to, text);
+  const m = await client.sendMessage(to, text, extra ? { extra } : {});
   if (m?.id?._serialized) botMsgIds.add(m.id._serialized);
+  return m;
+}
+
+function onAck(id, ack) {
+  if (!id) return;
+  const now = Date.now();
+  acks.set(id, { ack, at: now });
+  for (const [k, v] of acks) if (now - v.at > 120e3) acks.delete(k);
+  ackWaiters.get(id)?.(ack);
+}
+
+/** האישור הראשון מוואטסאפ על ההודעה: 1+ = התקבלה בשרת, ‎-1 = נדחתה, null = לא הגיע בזמן. */
+function waitAck(id, ms) {
+  return new Promise((resolve) => {
+    const done = (ack) => { clearTimeout(t); ackWaiters.delete(id); resolve(ack); };
+    const t = setTimeout(() => done(null), ms);
+    const seen = acks.get(id)?.ack;
+    if (seen === -1 || seen >= 1) { done(seen); return; }
+    ackWaiters.set(id, (ack) => { if (ack === -1 || ack >= 1) done(ack); });
+  });
+}
+
+function aiMarkFailed(why) {
+  if (state.data.aiMarkFailedAt && Date.now() - state.data.aiMarkFailedAt < aimark.RETRY_AFTER_MS) return;
+  state.data.aiMarkFailedAt = Date.now();
+  state.save();
+  console.warn('סימון AI של וואטסאפ לא התקבל:', why);
+  toAdmin('ℹ️ וואטסאפ לא קיבל את סימון ה-AI המקורי בחשבון הזה — בינתיים הבוט מסמן בטקסט (מהדשבורד). ננסה שוב בעוד שבוע.')
+    .catch(() => {});
+}
+
+/** תשובה של הבוט ללקוח — עם הסימון ✦AI של וואטסאפ ליד השעה (או בטקסט, אם וואטסאפ לא מאפשר). */
+async function sendAi(to, text, opts = {}) {
+  if (!aimark.nativeOn(cfg, state.data.aiMarkFailedAt)) return send(to, aimark.withTextTag(cfg, text), opts);
+  let m;
+  try {
+    m = await send(to, text, { ...opts, extra: { bizBotType: aimark.BIZ_BOT_TYPE } });
+  } catch (e) {
+    aiMarkFailed(e.message);
+    return send(to, aimark.withTextTag(cfg, text), { ...opts, typing: false });
+  }
+  const id = m?.id?._serialized;
+  if (id) {
+    waitAck(id, 20e3).then((ack) => {
+      if (ack !== -1) return;
+      aiMarkFailed('ack -1');
+      send(to, aimark.withTextTag(cfg, text)).catch((e) => console.warn('resend:', e.message));
+    });
+  }
   return m;
 }
 
@@ -430,10 +486,51 @@ function rememberAppThread(sent, deviceId, question, phone) {
 }
 
 /**
+ * מבצע את הפעולות שה-AI ביקש (חסימה / פתיחה זמנית / סגירה) במכשיר שזוהה — לפני שהתשובה נשלחת, כדי
+ * שהלקוח יקבל אישור אמיתי (עם השעה) ולא הבטחה. השרת אוכף את הגבולות (מה מותר, עד שעה); מה שנדחה —
+ * עובר לאישורך. מחזיר שורות אישור ללקוח, ומה בוצע (בשבילך).
+ */
+async function runActions(deviceId, crm, tags) {
+  const confirms = [];
+  const done = [];
+  const wanted = tags.filter((t) => ['BLOCK', 'OPEN', 'CLOSE'].includes(t.kind) && t.arg);
+  if (!wanted.length) return { confirms, done };
+  if (!deviceId) {
+    confirms.push('כדי שאוכל לבצע את זה — שלחו לי את ההודעה מאפליקציית FilterPhone (טאב "תמיכה" ← "תמיכה בוואטסאפ"), שם מופיעים מספר המכשיר והמזהה.');
+    return { confirms, done };
+  }
+  for (const t of wanted) {
+    try {
+      if (t.kind === 'BLOCK') {
+        const r = await srv.block(deviceId, t.arg.split(',').map((x) => x.trim()).filter(Boolean));
+        confirms.push(acts.confirmLine('BLOCK', r));
+        if (r.titles?.length) done.push(`🔒 חסם: ${r.titles.join(', ')}`);
+      } else if (t.kind === 'OPEN') {
+        const o = acts.parseOpen(t.arg, { max: crm?.actions?.max_minutes || 60, def: crm?.actions?.default_minutes || 10 });
+        const r = await srv.open(deviceId, o.item, o.minutes);
+        confirms.push(acts.confirmLine('OPEN', r));
+        if (!r.already_open) done.push(`🔓 פתח זמנית: ${r.title} ל-${r.minutes} דק' (עד ${acts.ilTime(r.until)})`);
+      } else {
+        const r = await srv.close(deviceId, t.arg.trim());
+        const line = acts.confirmLine('CLOSE', r);
+        if (line) { confirms.push(line); done.push(`🔒 סגר מוקדם: ${r.title}`); }
+      }
+    } catch (e) {
+      console.warn(`action ${t.kind}:${t.arg}:`, e.message);
+      confirms.push('⚠️ את זה אני לא יכול לבצע לבד — העברתי לאישור המנהל.');
+      done.push(`⚠️ לא בוצע (${t.kind} ${t.arg}): ${e.message} — נשלח לאישורך`);
+      await srv.escalate(deviceId, `${t.kind === 'OPEN' ? 'פתיחה' : t.kind === 'BLOCK' ? 'חסימה' : 'סגירה'}: ${t.arg}`)
+        .catch(() => {});
+    }
+  }
+  return { confirms: [...new Set(confirms)], done };
+}
+
+/**
  * פנייה מצ'אט התמיכה באפליקציה: הבוט עונה ללקוח *בתוך האפליקציה* ב-AI (אותו מוח של וואטסאפ + מה שלמד).
  *   • בטוח בתשובה → עונה ללקוח מיד באפליקציה, ואצלך בצ'אט מופיע מה ענה (אפשר לתקן/להוסיף ב"השב").
  *   • לא בטוח / אין מפתח AI → הלקוח מקבל "בודקים ונחזור", ואתה מקבל את השאלה; תשובתך חוזרת ללקוח ונשמרת.
- *   • יש לבוט את מזהה המכשיר, לכן הוא יכול לחסום מיד (BLOCK) ולהעביר פעולה רגישה לאישורך (ESCALATE).
+ *   • יש לבוט את מזהה המכשיר, לכן הוא חוסם / פותח זמנית בעצמו, ומעביר פעולה רגישה לאישורך (ESCALATE).
  */
 async function handleAppSupport(m, waIds) {
   const deviceId = m.device_id;
@@ -461,23 +558,23 @@ async function handleAppSupport(m, waIds) {
   }
   const head = `📩 *פנייה מהאפליקציה* · ${m.customer || 'לקוח'}${m.phone ? ' · ' + m.phone : ''} · מכשיר #${deviceId}`;
   let crm = null;
-  if (phone) { try { crm = await srv.customer(phone); } catch { /* לא לקוח — עדיין עונים */ } }
+  if (phone) { try { crm = await srv.customer(phone, { device: deviceId }); } catch { /* לא לקוח — עדיין עונים */ } }
 
   const sel = know.select(await loadKnowledge(), m.text);
   const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: inHours(),
     hoursText: cfg.hours, crm, history: [], text: m.text, knowledge: know.promptSection(sel),
-    askWhenUnsure: cfg.ask_when_unsure !== false });
+    askWhenUnsure: cfg.ask_when_unsure !== false, actions: acts.promptSection(crm) });
   if (sel.qas.length) srv.used(sel.qas.map((q) => q.id)).catch(() => {});
   if (res.error) { stats.ai_errors += 1; status.error = `AI: ${res.error}`; }
   else if (status.error?.startsWith('AI:')) status.error = '';
   status.ai = res.ai;
 
-  // פעולות שהבוט רשאי לבצע מתוך הפנייה (יש לו את מזהה המכשיר): חסימה מיידית, והסלמה לאישורך
-  const deviceOps = crm?.devices?.length === 1 ? crm.devices[0].device_id : deviceId;
+  // פעולות שהבוט מבצע בעצמו (יש לו את מזהה המכשיר): חסימה / פתיחה זמנית, והסלמה לאישורך
+  const deviceOps = deviceId;                                          // מהאפליקציה — המכשיר ודאי
+  const ran = await runActions(deviceOps, crm, res.tags);
+  if (ran.done.length) await toAdmin(`🤖 *הבוט ביצע* · מכשיר #${deviceOps}${m.phone ? ' · ' + m.phone : ''}\n${ran.done.join('\n')}`);
   for (const t of res.tags) {
-    if (t.kind === 'BLOCK' && t.arg) {
-      await srv.block(deviceOps, [t.arg]).catch((e) => console.warn('block:', e.message));
-    } else if (t.kind === 'ESCALATE') {
+    if (t.kind === 'ESCALATE') {
       await srv.escalate(deviceOps, t.arg || m.text).catch((e) => console.warn('escalate:', e.message));
       await toAdmin(`🔐 *בקשה לאישורך* · מכשיר #${deviceOps}${m.phone ? ' · ' + m.phone : ''}\n${t.arg || m.text}\n(בדשבורד → בקשות)`);
     }
@@ -485,7 +582,7 @@ async function handleAppSupport(m, waIds) {
 
   const unsure = !res.text || res.ai === 'none' || res.tags.some((t) => t.kind === 'ASK' || t.kind === 'HUMAN');
   if (!unsure) {
-    let out = res.text;
+    let out = [res.text, ...ran.confirms].filter(Boolean).join('\n\n');
     if (res.tags.some((t) => t.kind === 'ADDRESS')) {
       const block = ai.addressBlock(cfg.business_info);
       if (block) out = `${out ? out + '\n\n' : ''}${block}`;
@@ -649,7 +746,7 @@ async function answerAsk(msg, ask, ownerText) {
     if (!res.error && res.ai !== 'none' && res.text) { out = res.text; byAi = true; }
   }
   try {
-    await send(ask.chatId, byAi && cfg.mark_ai !== false && cfg.ai_tag ? `${out}\n\n${cfg.ai_tag}` : out, { typing: true });
+    await (byAi ? sendAi(ask.chatId, out, { typing: true }) : send(ask.chatId, out, { typing: true }));
     state.remember(ask.chatId, 'assistant', out);
     stats.replies += 1;
   } catch (e) {
@@ -790,6 +887,7 @@ async function onCustomer(msg, text) {
   const phone = c.phone;
   state.remember(chatId, 'user', text);
   c.lastIn = msg.id?._serialized || '';
+  c.deviceHint = acts.deviceHint(text, c.deviceHint || {});          // "מכשיר #16" + מזהה — מההודעה של האפליקציה
   noteCustomerQuestion(chatId, c, text);
 
   if (!cfg?.enabled) return;
@@ -825,27 +923,38 @@ async function onCustomer(msg, text) {
       (adminActive ? '\n_הבוט יענה בעוד 5 שניות — אם לא תענה_' : ''));
     if (!adminActive) adminRead = await adminReadSoon(notice);
   }
-  schedule(msg, chatId, phone, text, open, settleDelayMs({ inHours: open, adminActive, adminRead }));
+  schedule(msg, chatId, phone, text, open, replyDelayMs({ inHours: open, adminActive, adminRead }));
 }
 
-/** צובר הודעות רצופות של אותו לקוח, ומאפס את הטיימר בכל הודעה חדשה — עונים רק אחרי שהוא הפסיק
- *  לכתוב (חלון שקט), ועל כל ההודעות יחד כשאלה אחת (ולא באמצע על ההודעה הראשונה בלבד). */
+/**
+ * עונים מיד. הלקוח שלח עוד הודעה בזמן שהבוט עוד חושב / "מקליד"? התשובה הקודמת לא נשלחת, והחדשה
+ * עונה על כל ההודעות יחד — כך הבוט לא עונה על חצי שאלה וגם לא שולח שתי תשובות כפולות.
+ */
 function schedule(msg, chatId, phone, text, open, delay) {
-  const b = bursts.get(chatId) || { parts: [] };
+  const b = bursts.get(chatId) || { parts: [], gen: 0 };
   b.parts.push(text);
   b.msg = msg;                                   // ההודעה האחרונה — כדי לסמן/להגיב עליה
   b.phone = phone;
   b.open = open;
+  b.gen += 1;
   bursts.set(chatId, b);
+  const gen = b.gen;
   clearTimeout(pending.get(chatId));
   pending.set(chatId, setTimeout(() => {
     pending.delete(chatId);
-    bursts.delete(chatId);
-    replyNow(b.msg, chatId, b.phone, combineBurst(b.parts), b.open).catch((e) => console.error('reply:', e.message));
+    const n = b.parts.length;
+    const current = () => bursts.get(chatId) === b && b.gen === gen;
+    replyNow(b.msg, chatId, b.phone, combineBurst(b.parts), b.open, current)
+      .then(() => {
+        if (bursts.get(chatId) !== b || b.gen !== gen) return;   // הגיעה הודעה חדשה — התשובה הבאה עונה על הכול
+        b.parts.splice(0, n);
+        if (!b.parts.length) bursts.delete(chatId);
+      })
+      .catch((e) => console.error('reply:', e.message));
   }, delay));
 }
 
-/** מבטל תשובה שמחכה (ענית בעצמך / הלקוח הועבר לנציג). */
+/** מבטל תשובה שמחכה או שנכתבת עכשיו (ענית בעצמך / הלקוח הועבר לנציג). */
 function cancelPending(chatId) {
   clearTimeout(pending.get(chatId));
   pending.delete(chatId);
@@ -861,7 +970,7 @@ async function handOff(chatId) {
   return true;
 }
 
-async function replyNow(msg, chatId, phone, text, open) {
+async function replyNow(msg, chatId, phone, text, open, current = () => true) {
   if (botLabel ? !(await inBotList(chatId)) : state.paused(chatId)) return;   // ענית בינתיים / הוצאת מהרשימה
   state.chat(chatId).answered = msg.id?._serialized || '';
   if (!state.allowReply(chatId)) {                                    // הרבה מדי ברצף — מעבירים אליך
@@ -872,39 +981,42 @@ async function replyNow(msg, chatId, phone, text, open) {
     return;
   }
   let crm = null;
-  try { crm = await srv.customer(phone); } catch { /* לא לקוח — עדיין עונים */ }
+  try { crm = await srv.customer(phone, state.chat(chatId).deviceHint || {}); } catch { /* לא לקוח — עדיין עונים */ }
   const history = state.chat(chatId).history.slice(0, -1);
   // מה שלמד ממך: העובדות + שאלות דומות שכבר ענית עליהן (הודעה קצרה — יחד עם ההודעה הקודמת של הלקוח)
   const prevUser = [...history].reverse().find((h) => h.role === 'user')?.content || '';
   const sel = know.select(await loadKnowledge(), text.length < 25 && prevUser ? `${prevUser}\n${text}` : text);
   const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: open,
     hoursText: cfg.hours, crm, history, text, knowledge: know.promptSection(sel),
-    askWhenUnsure: cfg.ask_when_unsure !== false });
+    askWhenUnsure: cfg.ask_when_unsure !== false, actions: acts.promptSection(crm) });
   if (sel.qas.length) srv.used(sel.qas.map((q) => q.id)).catch(() => {});
+  if (!current()) return;
+  // פעולות במכשיר (חסימה / פתיחה זמנית) — מבוצעות לפני השליחה, והלקוח מקבל אישור אמיתי עם השעה
+  const deviceId = crm?.selected || null;
+  const ran = await runActions(deviceId, crm, res.tags);
+  if (ran.done.length) {
+    toAdmin(`🤖 *הבוט ביצע* · ${phone} · מכשיר #${deviceId}\n${ran.done.join('\n')}\n🔗 https://wa.me/${phone}`).catch(() => {});
+  }                                             // הגיעה הודעה חדשה — עונים עליה (ועל זו) יחד
   if (res.error) { stats.ai_errors += 1; console.warn('AI:', res.error); status.error = `AI: ${res.error}`; }
   else if (status.error?.startsWith('AI:')) status.error = '';
   status.ai = res.ai;
-  let out = res.text;
+  let out = [res.text, ...ran.confirms].filter(Boolean).join('\n\n');
   if (res.tags.some((t) => t.kind === 'ADDRESS')) {
     const block = ai.addressBlock(cfg.business_info);
     if (block) out = `${out ? out + '\n\n' : ''}${block}`;
   }
   if (out) {
-    // סימון שהבוט ענה (כמו הסימון של וואטסאפ) — אם הופעל בדשבורד
-    const tagged = cfg.mark_ai !== false && cfg.ai_tag ? `${out}\n\n${cfg.ai_tag}` : out;
-    await send(chatId, tagged, { typing: true });
+    // עם הסימון ✦AI של וואטסאפ (או בטקסט, אם וואטסאפ לא מאפשר) — אם הופעל בדשבורד
+    if (!(await sendAi(chatId, out, { typing: true, guard: current }))) return;
     state.remember(chatId, 'assistant', out);
     stats.replies += 1;
   }
-  const deviceId = crm?.devices?.length === 1 ? crm.devices[0].device_id : null;
   for (const t of res.tags) {
     if (t.kind === 'HUMAN') {
       await handOff(chatId);
       const sum = state.chat(chatId).history.slice(-6).map((h) => `${h.role === 'user' ? 'לקוח' : 'בוט'}: ${h.content}`).join('\n');
       const back = botLabel ? `בשיחה: הכפתור למעלה → "${botLabel.name}"` : '"בוט" → 5';
       await toAdmin(`🙋 *לקוח מבקש נציג* · ${phone}\n🔗 https://wa.me/${phone}\n\n${sum}\n\n_להחזרת הבוט ללקוח: ${back}_`);
-    } else if (t.kind === 'BLOCK' && t.arg && deviceId) {
-      await srv.block(deviceId, [t.arg]).catch((e) => console.warn('block:', e.message));
     } else if (t.kind === 'ESCALATE' && deviceId) {
       await srv.escalate(deviceId, t.arg || text).catch((e) => console.warn('escalate:', e.message));
       await toAdmin(`🔐 *בקשה לאישורך* · ${phone} · מכשיר #${deviceId}\n${t.arg || text}\n(בדשבורד → בקשות)`);

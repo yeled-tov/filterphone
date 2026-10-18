@@ -5,8 +5,10 @@
   * למשוך פניות של לקוחות מהאפליקציה ולשלוח אותן לוואטסאפ של המנהל (outbox).
   * להחזיר תשובות של המנהל (מהוואטסאפ) ללקוח באפליקציה.
   * לזהות לקוח לפי טלפון (CRM) כדי לענות עניינית.
-  * לבצע פעולות *בטוחות* לבד (למשל חסימה), ולהעביר פעולות *קריטיות* (השהיה, פתיחה, הורדת רמה)
-    לאישור המנהל — הבוט לעולם לא מבצע אותן לבד.
+  * לבצע פעולות לבד, בגבולות קבועים:
+      - חסימה (הידוק) — לצמיתות: אפליקציות/אתרים מהקטלוג, נקודה חמה ועוד הגבלות בטוחות.
+      - פתיחה זמנית של דברים "קטנים" (חנות Play, נקודה חמה) — עד שעה, ואז נחסם שוב לבד.
+  * כל השאר (השהיה, פתיחה קבועה, הורדת רמה) — רק כבקשה לאישור המנהל; הבוט לעולם לא מבצע לבד.
 
 הרשאות מדורגות = הגנה: גם אם הבוט (או מי שמשוחח איתו) ינסה, פעולה קריטית רק נרשמת כבקשה.
 """
@@ -17,13 +19,18 @@ import json
 import logging
 
 from . import db, security
-from .catalog import CATALOG
+from .catalog import CATALOG, DPC_ITEM_PREFIX, TEMP_OPEN_DEFAULT_MIN, TEMP_OPEN_MAX_MIN, item_title, temp_item
 from .service import ApiError, Services
 
 log = logging.getLogger("filterphone.bot")
 
 # פעולות שהבוט מבצע לבד = רק *הידוק* (חסימה נוספת). כל הקלה / פעולה הרסנית — רק באישור המנהל.
 SAFE_OPTIONS = frozenset(CATALOG)            # הוספת כל חסימה מהקטלוג היא "בטוחה" (מהדקת)
+# הגבלות מנהל מכשיר שהבוט יכול להדליק לבד (הידוק בלבד; לא כאלה שמפריעות לתקן מרחוק או לחשבון Google)
+SAFE_DPC_BLOCK = frozenset({"dpc:disallow_tethering", "dpc:disallow_unknown_sources", "dpc:disallow_add_user",
+                            "dpc:disallow_private_dns"})
+# מה הבוט רשאי לפתוח זמנית (עד TEMP_OPEN_MAX_MIN דקות, ואז נחסם שוב לבד). רק דברים "קטנים".
+BOT_TEMP_OPEN = frozenset({"play_store", "galaxy_store", "dpc:disallow_tethering"})
 CRITICAL_ACTIONS = ("pause", "unblock", "open", "level_down", "uninstall", "disable", "transfer")
 
 
@@ -56,22 +63,51 @@ class BotDesk:
 
     # --- CRM: זיהוי לקוח לפי טלפון (לבוט, לענות עניינית) ---
 
-    def customer(self, phone: str) -> dict:
+    def customer(self, phone: str, device: int | None = None, aid: str = "") -> dict:
+        """הלקוח לפי מספר הוואטסאפ. אם המספר לא רשום — גם לפי "מכשיר #N" + מזהה אנדרואיד מההודעה שהאפליקציה
+        מנסחת (רק מי שהטלפון בידו יודע את המזהה). selected = המכשיר שהבוט פועל עליו (או None — לשאול)."""
+        from .support import device_uid_for
         with self.svc.db() as c:
-            cust = self.svc._customer_by_phone(c, phone)
-            devices = c.execute(
-                "SELECT id, name, level, status, policy FROM devices WHERE customer_id = ? ORDER BY id", (cust["id"],)
-            ).fetchall()
-        return {
-            "customer": {"id": cust["id"], "name": cust["name"], "phone": security.normalize_phone(phone)},
+            try:
+                cust = self.svc._customer_by_phone(c, phone)
+                devices = c.execute("SELECT * FROM devices WHERE customer_id = ? ORDER BY id", (cust["id"],)).fetchall()
+            except ApiError:
+                row = c.execute("SELECT * FROM devices WHERE id = ?", (device,)).fetchone() if device else None
+                aid = (aid or "").strip().lower()
+                if row is None or not aid or not row["device_uid"] or row["device_uid"] != device_uid_for(aid):
+                    raise
+                cust = c.execute("SELECT * FROM customers WHERE id = ?", (row["customer_id"],)).fetchone()
+                if cust is None:
+                    raise
+                devices = [row]
+        ids = [d["id"] for d in devices]
+        selected = device if device in ids else (ids[0] if len(ids) == 1 else None)
+        out = {
+            "customer": {"id": cust["id"], "name": cust["name"], "phone": cust["phone"]},
             "devices": [self._device_summary(d) for d in devices],
+            "selected": selected,
         }
+        if selected is not None:
+            out["actions"] = self.actions(next(d for d in devices if d["id"] == selected))
+        return out
 
     def _device_summary(self, d) -> dict:
         from .catalog import DeviceSettings, summary
         settings = DeviceSettings.load(d["policy"])
         return {"device_id": d["id"], "name": d["name"], "level": d["level"], "status": d["status"],
-                "blocks": [b["id"] for b in summary(settings)]}
+                "blocks": [b["id"] for b in summary(settings)], "temp_open": self.svc.temp_opens(d)}
+
+    def actions(self, row) -> dict:
+        """מה הבוט יכול לעשות עכשיו במכשיר הזה — נשלח ל-AI כרשימה סגורה (מזהה + שם)."""
+        opened = {o["item"] for o in self.svc.temp_opens(row)}
+        can_open = [{"id": i, "title": item_title(i)} for i in sorted(BOT_TEMP_OPEN)
+                    if self.svc.is_blocked(row, i) and i not in opened]
+        can_block = [{"id": o, "title": CATALOG[o].title} for o in sorted(SAFE_OPTIONS)
+                     if not self.svc.is_blocked(row, o)]
+        can_block += [{"id": i, "title": item_title(i)} for i in sorted(SAFE_DPC_BLOCK)
+                      if not self.svc.is_blocked(row, i)]
+        return {"open": can_open, "block": can_block, "opened": sorted(opened),
+                "max_minutes": TEMP_OPEN_MAX_MIN, "default_minutes": TEMP_OPEN_DEFAULT_MIN}
 
     # --- העברת פניות מהאפליקציה לוואטסאפ של המנהל ---
 
@@ -110,17 +146,38 @@ class BotDesk:
     # --- פעולות מדורגות ---
 
     def block(self, device_id: int, options: list[str]) -> dict:
-        """פעולה בטוחה: הוספת חסימות (מהדק). מוחל מיד. אפשרות לא מהקטלוג נדחית."""
-        opts = sorted({o for o in options if o in SAFE_OPTIONS})
-        if not opts:
+        """פעולה בטוחה: הוספת חסימות (מהדק) — לצמיתות, מוחל מיד. אפשרויות מהקטלוג והגבלות מנהל מכשיר
+        בטוחות (למשל hotspot = נקודה חמה). משהו אחר נדחה. פתיחה זמנית פעילה של אותו דבר — נסגרת."""
+        items = {temp_item(o) for o in options}
+        opts = sorted(i for i in items if i in SAFE_OPTIONS)
+        dpc = sorted(i for i in items if i in SAFE_DPC_BLOCK)
+        if not opts and not dpc:
             raise ApiError(400, "לא צוינו חסימות תקינות")
         row = self.svc.device_row(device_id)
         from .catalog import DeviceSettings
-        current = set(DeviceSettings.load(row["policy"]).options)
-        merged = sorted(current | set(opts))
-        self.svc.update_device(device_id, {"options": merged}, admin="whatsapp-bot")
-        added = [o for o in opts if o not in current]
-        return {"ok": True, "added": added, "blocks": merged}
+        settings = DeviceSettings.load(row["policy"])
+        added = [i for i in opts + dpc if not self.svc.is_blocked(row, i)]
+        changes: dict = {}
+        if opts:
+            changes["options"] = sorted(set(settings.options) | set(opts))
+        if dpc:
+            changes["dpc"] = {i[len(DPC_ITEM_PREFIX):]: True for i in dpc}
+        self.svc.update_device(device_id, changes, admin="whatsapp-bot")
+        for i in opts + dpc:
+            if i in settings.temp_open:
+                self.svc.temp_close(device_id, i, "whatsapp-bot")
+        return {"ok": True, "added": added, "titles": [item_title(i) for i in added],
+                "blocks": changes.get("options", settings.options)}
+
+    def open(self, device_id: int, item: str, minutes: int | None = None) -> dict:
+        """פתיחה זמנית — רק מה שברשימת BOT_TEMP_OPEN, ועד TEMP_OPEN_MAX_MIN דקות. אחר כך נחסם שוב לבד."""
+        it = temp_item(item)
+        if it not in BOT_TEMP_OPEN:
+            raise ApiError(403, "את זה הבוט לא פותח לבד — צריך אישור מנהל")
+        return self.svc.temp_open(device_id, it, minutes or TEMP_OPEN_DEFAULT_MIN, "whatsapp-bot")
+
+    def close(self, device_id: int, item: str) -> dict:
+        return self.svc.temp_close(device_id, item, "whatsapp-bot")
 
     def escalate(self, device_id: int, note: str, level: int | None = None,
                  options: list[str] | None = None) -> dict:

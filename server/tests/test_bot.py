@@ -2,7 +2,7 @@
 import pytest
 from helpers import admin_headers, wg_key
 
-from filterphone.api.app import device_limiter, support_limiter
+from filterphone.api.app import device_limiter, register_limiter, support_limiter
 
 BOT = "bot-secret-token-123456"
 
@@ -11,6 +11,7 @@ BOT = "bot-secret-token-123456"
 def _limits():
     support_limiter._hits.clear()
     device_limiter._hits.clear()
+    register_limiter._hits.clear()
 
 
 def auth(t):
@@ -96,3 +97,75 @@ def test_suggestion_reaches_the_bot_with_its_topic(env):
                 json={"text": "💡 הצעת ייעול: מצב לילה", "diag": {"topic": "suggestion", "vpn": "UP"}})
     out = client.get("/v1/bot/outbox", headers=auth(BOT)).json()["messages"]
     assert [(m["topic"], m["text"]) for m in out] == [("suggestion", "💡 הצעת ייעול: מצב לילה")]
+
+
+def _policy(client, token):
+    return client.get("/v1/device", headers=auth(token)).json()["device_policy"]
+
+
+def test_bot_opens_play_for_minutes_and_it_closes_by_itself(env):
+    svc, client = env
+    set_bot(client)
+    did, token = active_customer(svc, client)
+    before = _policy(client, token)["version"]
+    actions = client.get("/v1/bot/customer?phone=0501234567", headers=auth(BOT)).json()["actions"]
+    assert {"id": "play_store", "title": "כניסה לחנות Google Play"} in actions["open"]
+    r = client.post("/v1/bot/open", headers=auth(BOT), json={"device_id": did, "item": "play_store"})
+    assert r.status_code == 200, r.text
+    until = r.json()["until"]
+    assert r.json()["minutes"] == 10
+    pol = _policy(client, token)
+    assert pol["version"] > before
+    assert "com.android.vending" in pol["blocked_apps"]           # הטלפון חוסם שוב לבד בשעה שנקבעה
+    assert pol["temp_allow"] == [{"package": "com.android.vending", "until": until}]
+    # כבר פתוח — לא מוצע שוב; פריט שהבוט לא פותח לבד → 403 (רק באישור מנהל)
+    assert client.get("/v1/bot/customer?phone=0501234567", headers=auth(BOT)).json()["actions"]["opened"] == ["play_store"]
+    r = client.post("/v1/bot/open", headers=auth(BOT), json={"device_id": did, "item": "browsers_other"})
+    assert r.status_code == 403
+    assert client.post("/v1/bot/open", headers=auth(BOT),
+                       json={"device_id": did, "item": "play_store", "minutes": 61}).status_code == 400
+    # התוקף פג → נחסם שוב (בלי temp_allow), ונרשם ביומן המכשיר
+    assert svc.expire_temp_opens(until - 1) == 0
+    assert svc.expire_temp_opens(until + 1) == 1
+    pol = _policy(client, token)
+    assert "temp_allow" not in pol
+    log = client.get(f"/v1/admin/devices/{did}", headers=admin_headers(client)).json()["device_log"]
+    assert [e["kind"] for e in log][:2] == ["temp_closed", "temp_open"]
+
+
+def test_temp_open_unblocks_the_network_until_it_expires(env):
+    svc, client = env
+    did, token = active_customer(svc, client)
+    h = admin_headers(client)
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"options": ["play_store", "youtube"]})
+    row = svc.device_row(did)
+    yt = set(svc.compiled(row).hosts)
+    assert "youtube.com" in yt
+    r = client.post(f"/v1/admin/devices/{did}/temp-open", headers=h, json={"item": "youtube", "minutes": 5})
+    assert r.status_code == 200, r.text
+    assert "youtube.com" not in svc.compiled(svc.device_row(did)).hosts
+    assert client.get(f"/v1/admin/devices/{did}", headers=h).json()["temp_opens"][0]["item"] == "youtube"
+    # המנהל סוגר לפני הזמן
+    assert client.delete(f"/v1/admin/devices/{did}/temp-open/youtube", headers=h).json()["closed"] is True
+    assert "youtube.com" in svc.compiled(svc.device_row(did)).hosts
+
+
+def test_bot_blocks_hotspot_permanently_and_identifies_by_device_and_android_id(env):
+    svc, client = env
+    set_bot(client)
+    from filterphone.api.support import device_uid_for
+    aid = "7d1ac306b6d02fe3"
+    did, token = active_customer(svc, client, uid=device_uid_for(aid))
+    client.patch(f"/v1/admin/devices/{did}", headers=admin_headers(client), json={"dpc": {"disallow_tethering": False}})
+    assert _policy(client, token)["dpc"]["disallow_tethering"] is False
+    r = client.post("/v1/bot/block", headers=auth(BOT), json={"device_id": did, "options": ["hotspot"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["titles"] == ["נקודה חמה (שיתוף אינטרנט)"]
+    assert _policy(client, token)["dpc"]["disallow_tethering"] is True
+    # מספר וואטסאפ אחר (לא רשום): מזוהה רק עם מספר המכשיר + מזהה האנדרואיד הנכון
+    q = f"/v1/bot/customer?phone=0539999999&device={did}"
+    assert client.get(q, headers=auth(BOT)).status_code == 404
+    assert client.get(q + "&aid=0000000000000000", headers=auth(BOT)).status_code == 404
+    j = client.get(q + f"&aid={aid}", headers=auth(BOT)).json()
+    assert j["selected"] == did and j["customer"]["name"] == "משה"
+    assert all(b["id"] != "dpc:disallow_tethering" for b in j["actions"]["block"])   # כבר חסום

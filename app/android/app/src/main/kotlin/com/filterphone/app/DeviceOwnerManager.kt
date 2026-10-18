@@ -149,7 +149,9 @@ object DeviceOwnerManager {
         val dpm = dpm(context) ?: return null
         val admin = DeviceAdmin.component(context)
         val paused = AdminState.isPaused(context)   // השהיה שהמנהל אישר — הטלפון פתוח (PAUSED)
-        val want = if (paused) PAUSED else effective(policy.dpc)
+        // פתוח זמנית (למשל נקודה חמה ל-10 דקות) — ההגבלה מורפית עד הזמן, ואז חוזרת (Recovery.JOB_TEMP)
+        val want = if (paused) PAUSED else effective(policy.dpc) +
+            GuardPolicy.activeTempDpc(policy).filter { it in DEFAULTS }.associateWith { false }
         val applied = mutableListOf<String>()
         val failed = mutableListOf<String>()
         val pending = mutableListOf<String>()
@@ -260,7 +262,8 @@ object DeviceOwnerManager {
         val hiddenBefore = p.getStringSet(K_HIDDEN, emptySet())!!.toSet()
         val suspendedBefore = p.getStringSet(K_SUSPENDED, emptySet())!!.toSet()
         // נחסמות בנגישות בלבד (Play) — לא מוסתרות, כדי שימשיכו לעבוד ברקע; מה שהוסתר בעבר — חוזר
-        val blocked = policy.apps - policy.accessibilityOnly - GuardPolicy.untouchable(context)
+        val blocked = policy.apps - policy.accessibilityOnly - GuardPolicy.untouchable(context) -
+            GuardPolicy.activeTempApps(policy)
         val wantHidden = if (mode == AppMode.HIDE) blocked else emptySet()
         val wantSuspended = if (mode == AppMode.SUSPEND) blocked else emptySet()
         for (pkg in hiddenBefore - wantHidden) runCatching { dpm.setApplicationHidden(admin, pkg, false) }

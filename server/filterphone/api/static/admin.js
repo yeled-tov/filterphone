@@ -52,6 +52,7 @@ const LOG_KINDS = {
   uninstall_blocked: ["bad", "ניסיון הסרה בלי השהיה — נחסם"], transferred: ["warn", "הוחלף למכשיר אחר"],
   restored: ["ok", "ההגנה שוחזרה (אותו טלפון)"], transfer_in: ["ok", "הועבר מטלפון קודם"],
   transfer_started: ["warn", "נוצר קוד החלפה"], transfer_done: ["warn", "הוחלף למכשיר אחר"], rekey: ["", "מפתח VPN חודש"],
+  temp_open: ["warn", "נפתח זמנית"], temp_closed: ["ok", "נחסם שוב"],
 };
 const UPDATE_STATES = {
   available: ["warn", "גרסה חדשה זמינה — הטלפון צריך להתקין ידנית"],
@@ -128,6 +129,7 @@ function ago(ts) {
 }
 const date = (ts) => ts ? new Date(ts * 1000).toLocaleDateString("he-IL") : "—";
 const dateTime = (ts) => ts ? new Date(ts * 1000).toLocaleString("he-IL", { dateStyle: "short", timeStyle: "short" }) : "—";
+const time = (ts) => ts ? new Date(ts * 1000).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }) : "—";
 const dayLabel = (d) => `${Number(d.slice(6, 8))}.${Number(d.slice(4, 6))}`;
 const num = (n) => Number(n || 0).toLocaleString("he-IL");
 const toDateInput = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 10) : "";
@@ -742,6 +744,7 @@ async function viewDevice(id) {
   const keywordCardEl = keywordCard(d, patch);
   const bypassCardEl = vpnBypassCard(d, patch);
   const maintenanceCardEl = maintenanceCard(d);
+  const tempCardEl = tempOpenCard(d, id);
 
   // --- סטטיסטיקה ואירועים
   const statsCard = card("7 הימים האחרונים", null, statsBars(d.history));
@@ -770,7 +773,7 @@ async function viewDevice(id) {
   return [back, header,
     complianceCardEl,
     el("div", { class: "grid two" }, customerCard, logCard),
-    maintenanceCardEl,
+    maintenanceCardEl, tempCardEl,
     levelCard, policyCard, appsCard, appImagesCard, customCard, keywordCardEl, bypassCardEl, dpcCardEl,
     el("div", { class: "grid two" }, statsCard, learnedCard),
     eventsCard, historyCard];
@@ -854,6 +857,30 @@ function capabilityChips(c) {
   ];
   return el("span", { class: "row gap wrap" },
     items.map(([k, t]) => chip(t, c[k] ? "ok" : "")));
+}
+
+/** פתיחות זמניות (מהבוט או מכאן): מה פתוח ועד מתי, סגירה מוקדמת, ופתיחה מהירה של חנות Play / נקודה חמה. */
+function tempOpenCard(d, id) {
+  const list = d.temp_opens || [];
+  const minutes = el("select", { "aria-label": "לכמה זמן", style: "width:auto" },
+    [10, 30, 60].map((m) => el("option", { value: m }, `${m} דק'`)));
+  const open = (item) => async () => {
+    const r = await attempt(() => api(`/v1/admin/devices/${id}/temp-open`, { method: "POST",
+      body: { item, minutes: Number(minutes.value) } }));
+    toast(r.already_open ? `${r.title} כבר פתוח` : `${r.title} פתוח עד ${time(r.until)} — ייחסם שוב לבד`);
+    render();
+  };
+  return card("פתיחה זמנית", "נפתח לזמן קצוב (עד שעה) ונחסם שוב לבד — גם בטלפון, גם בלי חיבור. הבוט יכול לפתוח כך חנות Play ונקודה חמה כשהלקוח מבקש.",
+    list.length ? el("div", { class: "dpc-list" }, list.map((t) => el("div", { class: "app-row" },
+      el("div", { class: "grow" }, el("b", {}, t.title), el("small", {}, `פתוח עד ${time(t.until)}`)),
+      el("button", { class: "ghost small", onclick: async () => {
+        await attempt(() => api(`/v1/admin/devices/${id}/temp-open/${encodeURIComponent(t.item)}`, { method: "DELETE" }));
+        toast(`${t.title} — נחסם שוב`);
+        render();
+      } }, "לחסום עכשיו")))) : empty("אין כרגע פתיחה זמנית."),
+    el("div", { class: "row end gap" }, minutes,
+      el("button", { class: "ghost small", onclick: open("play_store") }, "לפתוח את חנות Play"),
+      el("button", { class: "ghost small", onclick: open("hotspot") }, "לפתוח נקודה חמה")));
 }
 
 function deviceLogCard(d) {
@@ -1901,8 +1928,8 @@ async function viewWabot() {
       el("div", { class: "row gap wrap" }, keyLink,
         el("span", { class: "muted small" }, "נכנסים עם חשבון גוגל → Create API key → מעתיקים ומדביקים כאן → שמירה → בדיקת מפתח.")),
       testOut,
-      toggleRow(markAi, "סימון שהבוט ענה (כמו הסימון של וואטסאפ)", "בסוף כל הודעה אוטומטית מתווסף הסימון שלמטה — כך אתה (והלקוח) רואים שזו תשובה של הבוט."),
-      el("label", {}, "הסימון", aiTag),
+      toggleRow(markAi, "סימון AI של וואטסאפ (✦ AI ליד השעה)", "כל תשובה של הבוט מסומנת אצל הלקוח ב-AI ליד השעה, כמו בעסקים שעונים עם AI. אם וואטסאפ לא מאפשר את זה בחשבון — הבוט מוסיף במקום זה את הטקסט שלמטה."),
+      el("label", {}, "טקסט גיבוי (רק אם הסימון של וואטסאפ לא זמין)", aiTag),
       el("div", { class: "row end gap" },
         v.key_set ? el("button", { class: "danger small", onclick: async () => {
           if (!await confirmDialog("למחוק את המפתח?", "הבוט יענה תשובה קבועה ויעביר אליך עד שתזינו מפתח חדש.", "מחיקה", true)) return;
