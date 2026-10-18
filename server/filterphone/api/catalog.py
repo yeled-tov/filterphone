@@ -346,6 +346,17 @@ DEFAULT_OPTIONS: tuple[str, ...] = (
     "apk_sites", "vpn_apps",                                 # מניעת עקיפת הסינון
 )
 assert all(o in CATALOG for o in DEFAULT_OPTIONS), "unknown default option"
+
+# בסיס לכל המכשירים (גם קיימים, בלי קשר למה שנבחר): כניסה לחנות Play חסומה (ההתקנה רק דרך חנות
+# FilterPhone, בחלון נעול עם דף לבן), וכל הדפדפנים חוץ מ-Chrome (שעובר סינון מלא) חסומים.
+# אפשרות חזקה יותר שנבחרה (play_store_full / browsers_all) נשארת בתוקף.
+BASELINE_OPTIONS: tuple[str, ...] = ("play_store", "browsers_other")
+assert all(o in CATALOG for o in BASELINE_OPTIONS), "unknown baseline option"
+
+
+def effective_options(options: list[str]) -> list[str]:
+    """האפשרויות שבאמת נאכפות: מה שנבחר + הבסיס לכולם (בלי כפילויות, בסדר יציב)."""
+    return list(dict.fromkeys([*options, *BASELINE_OPTIONS]))
 assert {o.category for o in OPTIONS} <= {c["id"] for c in CATEGORIES}
 
 # שרתים מוכרים לכל אפליקציה (מהקטלוג) — לחסימת אפליקציה "ברשת" גם כשהיא נבחרה בנפרד
@@ -459,7 +470,7 @@ def public_catalog() -> dict:
 def admin_catalog() -> dict:
     return {"levels": [{"level": k, **v} for k, v in LEVELS.items()],
             "categories": CATEGORIES,
-            "options": [o.admin() for o in OPTIONS],
+            "options": [{**o.admin(), "baseline": o.id in BASELINE_OPTIONS} for o in OPTIONS],
             "defaults": {"level": DEFAULT_LEVEL, "options": list(DEFAULT_OPTIONS)}}
 
 
@@ -847,7 +858,7 @@ class Compiled:
 
 
 def compile_settings(level: int, s: DeviceSettings) -> Compiled:
-    opts = [CATALOG[o] for o in s.options if o in CATALOG]
+    opts = [CATALOG[o] for o in effective_options(s.options) if o in CATALOG]
     hosts = {h for o in opts for h in o.hosts} | set(s.custom_hosts)
     unknown: list[str] = []
     for pkg, rule in s.app_rules.items():
@@ -899,7 +910,8 @@ def policy_checksum(level: int, comp: Compiled) -> str:
 
 def summary(s: DeviceSettings) -> list[dict]:
     """רשימת החסימות הפעילות — לתצוגה (בממשק הניהול ובאפליקציה)."""
-    out = [{"id": o, "title": CATALOG[o].title, "category": CATALOG[o].category} for o in s.options]
+    out = [{"id": o, "title": CATALOG[o].title, "category": CATALOG[o].category}
+           for o in effective_options(s.options) if o in CATALOG]
     if s.custom_hosts:
         out.append({"id": "custom_hosts", "title": f"אתרים נוספים ({len(s.custom_hosts)})", "category": "custom"})
     if s.app_rules:

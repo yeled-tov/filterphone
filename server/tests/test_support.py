@@ -346,3 +346,37 @@ def test_admin_device_by_explicit_meta(env):
                   " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(did),))
         c.commit()
     assert client.get("/v1/device/admin/support", headers=auth(token)).status_code == 200
+
+
+def _register(client, phone, uid, n):
+    reg = {"name": "מנהל", "phone": phone, "email": "", "level": 1, "options": [], "note": "",
+           "device_name": "DUOQIN", "platform": "android", "app_version": "2.0.0"}
+    r = client.post("/v1/register", json={**reg, "public_key": wg_key(n), "device_uid": uid})
+    did, token = r.json()["device_id"], r.json()["token"]
+    h = admin_headers(client)
+    req = next(x for x in client.get("/v1/admin/requests", headers=h).json() if x["device_id"] == did)
+    client.post(f"/v1/admin/requests/{req['id']}/approve", headers=h, json={"options": []})
+    return did, token
+
+
+def test_admin_device_by_android_id_and_phone(env):
+    """מכשיר המנהל מזוהה לפי מזהה המכשיר (ANDROID_ID → hash) וגם מספר הטלפון — שניהם חייבים להתאים."""
+    svc, client = env
+    uid = sp.device_uid_for(sp.DEFAULT_ADMIN_ANDROID_ID)
+    _, tok = _register(client, sp.DEFAULT_ADMIN_PHONE, uid, 50)
+    assert client.get("/v1/device/admin/support", headers=auth(tok)).status_code == 200
+    # אותו מזהה עם טלפון אחר — לא מנהל
+    _, other = _register(client, "0501112222", uid, 51)
+    assert client.get("/v1/device/admin/support", headers=auth(other)).status_code == 403
+
+
+def test_account_window_opens_google_hosts_for_one_device(env):
+    """אחרי צריבה: חלון של 10 דקות שבו מסך הוספת חשבון Google עובד — רק במכשיר הזה."""
+    svc, client = env
+    did, _ = device(svc, client, n=52)
+    r = client.post(f"/v1/admin/devices/{did}/account-window", headers=admin_headers(client))
+    assert r.status_code == 200 and r.json()["minutes"] == 10
+    ip = svc.device_row(did)["vpn_ip"]
+    hosts = {h["host"] for h in svc.learned_passthrough(ip)}
+    assert "lh3.googleusercontent.com" in hosts and "ssl.gstatic.com" in hosts
+    assert client.post(f"/v1/admin/devices/{did}/account-window").status_code in (401, 403)

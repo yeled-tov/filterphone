@@ -82,6 +82,19 @@ def wa_number(phone: str | None) -> str:
     return p[1:] if p.startswith("+") else ""
 
 
+# מכשיר המנהל — מזוהה לפי מזהה המכשיר שמוצג באפליקציה (ANDROID_ID) יחד עם מספר הטלפון שלו.
+# אפשר לשנות בלי קוד: meta admin_android_id / admin_phone. השרת לא שומר את ה-ANDROID_ID עצמו —
+# רק hash עם שם החבילה (device_uid), ולכן משווים את ה-hash.
+DEFAULT_ADMIN_ANDROID_ID = "7d1ac306b6d02fe3"
+DEFAULT_ADMIN_PHONE = "0527186881"
+APP_PACKAGE = "com.filterphone.app"
+
+
+def device_uid_for(android_id: str) -> str:
+    """כמו DeviceId.of באפליקציה: SHA-256 של "<ANDROID_ID>:<package>", 32 תווים ראשונים."""
+    return hashlib.sha256(f"{android_id.strip().lower()}:{APP_PACKAGE}".encode()).hexdigest()[:32]
+
+
 def _national(phone: str | None) -> str:
     """ה"חלק הלאומי" של מספר — בלי קידומת בינלאומית (972 / 00972 / +972) ובלי 0 מוביל. ריק אם קצר מדי.
     כך '972521112233', '+972-52-111-2233' ו-'052-111-2233' כולם → '521112233'."""
@@ -373,6 +386,14 @@ class SupportDesk:
         except (ValueError, TypeError):
             return 0
 
+    def admin_identity(self) -> tuple[str, str]:
+        """(ANDROID_ID, טלפון) של מכשיר המנהל — מה-meta אם נקבע, אחרת ברירת המחדל."""
+        with self.svc.db() as c:
+            got = {r["key"]: r["value"] for r in
+                   c.execute("SELECT key, value FROM meta WHERE key IN ('admin_android_id', 'admin_phone')")}
+        return (got.get("admin_android_id") or DEFAULT_ADMIN_ANDROID_ID,
+                got.get("admin_phone") or DEFAULT_ADMIN_PHONE)
+
     def is_admin_device(self, row: sqlite3.Row) -> bool:
         """האם זה מכשיר המנהל — ולכן מותר לו לנהל תמיכה מתוך האפליקציה. מזוהה לפי מזהה מכשיר שנקבע
         במפורש בדשבורד, או לפי התאמה בין טלפון הלקוח של המכשיר למספר הוואטסאפ של המנהל (שהמנהל הגדיר).
@@ -381,6 +402,13 @@ class SupportDesk:
             return False
         if self.admin_device_id() == row["id"]:
             return True
+        # מזהה המכשיר + הטלפון של המנהל — שניהם חייבים להתאים
+        aid, admin_phone = self.admin_identity()
+        if aid and admin_phone and row["customer_id"] and row["device_uid"] == device_uid_for(aid):
+            with self.svc.db() as c:
+                cust = c.execute("SELECT phone FROM customers WHERE id = ?", (row["customer_id"],)).fetchone()
+            if cust and _national(cust["phone"]) == _national(admin_phone):
+                return True
         # המספר בוואטסאפ נשמר בפורמט בינלאומי (972...) וטלפון הלקוח בפורמט מקומי (0...) —
         # משווים את ה"חלק הלאומי" (בלי קידומת מדינה / 0 מוביל) כדי שיתאימו.
         admin = _national(self.wa_config().admin_number)

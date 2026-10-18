@@ -224,13 +224,16 @@ function policyEditor(selected, { onChange, requested = new Set(), openAll = fal
       }
     };
     const rows = opts.map((o) => {
-      const input = el("input", { type: "checkbox", checked: selected.has(o.id), "aria-label": o.title,
+      // בסיס לכל המכשירים (Play / דפדפנים חוץ מ-Chrome) — תמיד פעיל, אי אפשר לכבות
+      const input = el("input", { type: "checkbox", checked: selected.has(o.id) || Boolean(o.baseline),
+        disabled: Boolean(o.baseline), "aria-label": o.title,
         onchange: (e) => toggle(o, e.target.checked, e.target) });
       inputs.set(o.id, input);
       return el("div", { class: `opt${requested.has(o.id) ? " requested" : ""}` },
         el("label", { class: "switch" }, input, el("span")),
         el("div", { class: "txt" },
           el("div", { class: "title" }, o.title,
+            o.baseline ? chip("חסום לכולם", "violet") : null,
             o.popular ? chip("מבוקש", "warn") : null,
             requested.has(o.id) ? chip("הלקוח ביקש", "violet") : null,
             ...(o.mechanisms || []).map((m) => chip(...[MECH[m]?.[1] || m, MECH[m]?.[0]]))),
@@ -240,6 +243,7 @@ function policyEditor(selected, { onChange, requested = new Set(), openAll = fal
     });
     const setAll = async (on) => {
       for (const o of opts) {
+        if (o.baseline) continue;
         if (selected.has(o.id) !== on) { if (on) selected.add(o.id); else selected.delete(o.id); inputs.get(o.id).checked = on; }
       }
       updateCount();
@@ -747,7 +751,12 @@ async function viewDevice(id) {
       const r = await attempt(() => api(`/v1/admin/devices/${id}/reset-apps`, { method: "POST" }));
       toast(`אופסו ${r.cleared} כתובות`);
       render();
-    } }, "איפוס")));
+    } }, "איפוס"),
+    el("button", { class: "ghost small", title: "אחרי צריבה: 10 דקות שבהן מסך הוספת חשבון Google עובד", onclick: async () => {
+      await attempt(() => api(`/v1/admin/devices/${id}/account-window`, { method: "POST" }));
+      toast("נפתח חלון של 10 דקות להוספת חשבון Google (תוך דקה)");
+      render();
+    } }, "חלון לחשבון Google")));
   const historyCard = d.requests.length ? card("היסטוריית בקשות", null, el("div", { class: "table-wrap" }, el("table", {},
     el("tbody", {}, d.requests.map((r) => el("tr", {},
       el("td", { class: "nowrap" }, dateTime(r.created_at)),

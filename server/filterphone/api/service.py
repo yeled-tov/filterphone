@@ -1908,6 +1908,24 @@ class Services:
         except redis.RedisError:
             return 0
 
+    # שרתי גוגל שמסך "הוספת חשבון Google" טוען (תמונות/עיצוב). מסך הכניסה של גוגל לא סומך על תעודת
+    # הסינון, ובמצב "תמונות חסומות" השרתים האלה לא נלמדים לבד — ולכן הכניסה נכשלת ("הייתה בעיה
+    # בהתחברות אל lh3.googleusercontent.com"). חלון קצר למכשיר אחד בלבד פותר את זה.
+    ACCOUNT_SETUP_HOSTS: tuple[str, ...] = (
+        "lh3.googleusercontent.com", "lh4.googleusercontent.com", "lh5.googleusercontent.com",
+        "lh6.googleusercontent.com", "lh3.google.com", "ssl.gstatic.com", "www.gstatic.com", "fonts.gstatic.com",
+    )
+
+    def open_account_window(self, ip: str, minutes: int = 10) -> int:
+        """פותח למכשיר אחד, לזמן קצר, את שרתי גוגל של מסך הוספת החשבון (בלי בדיקת HTTPS).
+        הפרוקסי טוען את הרשימה תוך דקה; אחרי התפוגה הכול חוזר לסינון הרגיל."""
+        expires = time.time() + max(1, min(minutes, 30)) * 60
+        try:
+            self.redis.hset(PASSTHROUGH_KEY, mapping={f"{ip}|{h}": expires for h in self.ACCOUNT_SETUP_HOSTS})
+        except redis.RedisError as e:
+            raise ApiError(503, "לא ניתן לפתוח את החלון כרגע — נסו שוב") from e
+        return len(self.ACCOUNT_SETUP_HOSTS)
+
     def learned_passthrough(self, ip: str) -> list[dict]:
         try:
             now = time.time()

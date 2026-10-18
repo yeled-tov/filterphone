@@ -81,7 +81,8 @@ def test_heartbeat_acks_policy_and_returns_new_policy_when_behind(env):
     client.patch(f"/v1/admin/devices/{did}", headers=h, json={"custom_apps": ["com.example.game"]})
     r = client.post("/v1/device/heartbeat", headers=dh, json={"policy_version": 1}).json()
     assert r["policy_version"] == 2 and r["policy"]["version"] == 2
-    assert r["policy"]["blocked_apps"] == ["com.example.game"]
+    assert "com.example.game" in r["policy"]["blocked_apps"]
+    assert "com.android.vending" in r["policy"]["blocked_apps"]           # בסיס לכולם: Play
     d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
     assert d["policy_version"] == 2 and d["device_policy_version"] == 1
     assert d["compliance"]["policy_sync"] == "syncing"          # עוד בזמן החסד
@@ -229,7 +230,7 @@ def test_app_rules_network_accessibility_both(env):
     pol = client.get("/v1/device", headers=dh).json()["device_policy"]
     # בטלפון: רק accessibility / both. רשימת מחרוזות — גם גרסה ישנה של האפליקציה מבינה.
     # אפליקציית גוגל — רק המסכים שלה (ג'מיני ו-Circle to Search רצים מתוכה וממשיכים לעבוד)
-    assert pol["blocked_apps"] == ["com.example.chat"]
+    assert "com.example.chat" in pol["blocked_apps"] and "com.android.chrome" not in pol["blocked_apps"]
     assert "com.google.android.googlequicksearchbox" in {s["package"] for s in pol["blocked_screens"]}
     assert {r_["package"]: r_["mode"] for r_ in pol["app_rules"]}["com.zhiliaoapp.musically"] == "network"
     # ברשת: השרתים של טיקטוק ושל האפליקציה עם הכתובת הידנית — בפרוקסי וב-AdGuard
@@ -247,11 +248,11 @@ def test_app_rules_network_accessibility_both(env):
 def test_legacy_custom_apps_still_block_on_device():
     s = DeviceSettings.load(json.dumps({"custom_apps": ["com.old.app"]}))
     assert s.app_rules == {"com.old.app": {"mode": "accessibility"}}
-    assert compile_settings(2, s).apps == ("com.old.app",)
+    assert "com.old.app" in compile_settings(2, s).apps
     s.update({"custom_apps": ["com.old.app", "com.new.app"]})
-    assert compile_settings(2, s).apps == ("com.new.app", "com.old.app")
+    assert {"com.new.app", "com.old.app"} <= set(compile_settings(2, s).apps)
     s.update({"custom_apps": []})
-    assert compile_settings(2, s).apps == ()
+    assert not {"com.new.app", "com.old.app"} & set(compile_settings(2, s).apps)   # נשאר רק הבסיס
     dumped = json.loads(s.dump())
     assert dumped["custom_apps"] == [] and "app_rules" in dumped
 
@@ -837,3 +838,17 @@ def test_org_name_reaches_the_phone_and_is_editable(env):
     assert r["org_name"] == "פילטר טיוב"
     assert client.put("/v1/admin/branding", headers=h, json={"org_name": ""}).status_code == 400
     assert client.put("/v1/admin/branding", json={"org_name": "x"}).status_code == 401
+
+
+def test_baseline_blocks_play_and_non_chrome_browsers_for_every_device():
+    """לכל מכשיר — גם בלי שנבחר כלום: כניסה ל-Play חסומה (בנגישות, לא מוסתרת), וכל הדפדפנים חוץ
+    מ-Chrome חסומים. אפשרות חזקה יותר (כל הדפדפנים) נשארת בתוקף."""
+    from filterphone.api.catalog import BASELINE_OPTIONS, DeviceSettings, compile_settings, summary
+
+    comp = compile_settings(1, DeviceSettings())
+    assert "com.android.vending" in comp.apps and "com.android.vending" in comp.accessibility_only
+    assert "org.mozilla.firefox" in comp.apps and "com.sec.android.app.sbrowser" in comp.apps
+    assert "com.android.chrome" not in comp.apps
+    assert {b["id"] for b in summary(DeviceSettings())} >= set(BASELINE_OPTIONS)
+    strict = compile_settings(1, DeviceSettings(options=["browsers_all"]))
+    assert "com.android.chrome" in strict.apps
