@@ -6,10 +6,12 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import java.io.ByteArrayOutputStream
+import java.io.File
 
 /**
  * טאב "עדכונים" בחנות: כל האפליקציות שבטלפון (שם, גרסה, מתי עודכנה, אייקון), ופס ההתקנה.
@@ -17,10 +19,12 @@ import java.io.ByteArrayOutputStream
  */
 object InstalledApps {
     private const val ICON_PX = 96
+    private const val PLAY = "com.android.vending"
 
     /**
      * אפליקציות עם אייקון במסך הבית — חוץ מ-FilterPhone, המקלדת ומסך הבית, ואפליקציות מערכת שלא
-     * עודכנו מעולם (הן מגיעות עם הטלפון ולא מ-Play). ממוין לפי שם.
+     * עודכנו מעולם (הן מגיעות עם הטלפון ולא מ-Play). ממוין לפי שם. לכל אחת גם: האם היא אפליקציית
+     * מערכת (שעודכנה), האם הותקנה מ-Google Play, וגודל קובצי ההתקנה — לתגיות ולשורת הגודל בכרטיס.
      */
     fun forUpdates(context: Context): List<Map<String, Any?>> {
         val pm = context.packageManager
@@ -40,9 +44,24 @@ object InstalledApps {
                 "version_code" to ManagedApps.versionCode(pi),
                 "updated_ms" to pi.lastUpdateTime,
                 "icon" to runCatching { iconPng(ai, context) }.getOrNull(),
+                "system" to system,
+                "from_play" to (installerOf(context, pkg) == PLAY),
+                "size_bytes" to apkBytes(ai),
             )
         }.sortedBy { (it["label"] as String).lowercase() }
     }
+
+    @Suppress("DEPRECATION")
+    private fun installerOf(context: Context, pkg: String): String? = runCatching {
+        val pm = context.packageManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) pm.getInstallSourceInfo(pkg).installingPackageName
+        else pm.getInstallerPackageName(pkg)
+    }.getOrNull()
+
+    /** הקובץ הראשי + הפיצולים (split APKs) — מה שתופס האפליקציה עצמה, בלי הנתונים שלה. */
+    private fun apkBytes(ai: ApplicationInfo): Long =
+        listOfNotNull(ai.sourceDir, *(ai.splitSourceDirs ?: emptyArray()))
+            .sumOf { runCatching { File(it).length() }.getOrDefault(0L) }
 
     private fun iconPng(ai: ApplicationInfo, context: Context): String {
         val d = ai.loadIcon(context.packageManager)

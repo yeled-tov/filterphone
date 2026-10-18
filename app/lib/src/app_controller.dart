@@ -114,6 +114,10 @@ class AppController extends ChangeNotifier {
   static const _kTextScale = 'ui_text_scale';
   static const textScales = [1.0, 1.15, 1.3];
 
+  /// טאב העדכונים בחנות: אפליקציות שבחרו לא לעדכן (⊘) — לא נספרות ולא נכללות ב"עדכון הכול".
+  Set<String> updateExcluded = {};
+  static const _kUpdateExcluded = 'store_update_excluded';
+
   /// מצב ההרשאות נקרא מהטלפון לפחות פעם אחת (לפני זה לא "דורשים" כלום — עוד לא ידוע מה חסר).
   bool statusLoaded = false;
 
@@ -996,6 +1000,8 @@ class AppController extends ChangeNotifier {
       if (t != null && const ['system', 'light', 'dark'].contains(t)) themeMode = t;
       final scale = double.tryParse(await store.read(_kTextScale) ?? '');
       if (scale != null && textScales.contains(scale)) textScale = scale;
+      final ex = await store.read(_kUpdateExcluded);
+      if (ex != null) updateExcluded = {...(jsonDecode(ex) as List).whereType<String>()};
     } on Exception catch (e) {
       debugPrint('ui prefs: $e');
     }
@@ -1013,6 +1019,13 @@ class AppController extends ChangeNotifier {
     textScale = scale;
     notifyListeners();
     await store.write(_kTextScale, '$scale');
+  }
+
+  Future<void> setUpdateExcluded(String package, bool excluded) async {
+    if (updateExcluded.contains(package) == excluded) return;
+    updateExcluded = excluded ? {...updateExcluded, package} : ({...updateExcluded}..remove(package));
+    notifyListeners();
+    await store.write(_kUpdateExcluded, jsonEncode(updateExcluded.toList()..sort()));
   }
 
   Future<void> clearSupportNotification() async {

@@ -966,9 +966,11 @@ void main() {
     final native = FakeNative()
       ..caInstalled = true
       ..phoneApps = const [
-        InstalledApp(package: 'com.bnhp.payments.paymentsapp', label: 'ביט', versionName: '6.10', versionCode: 610),
+        InstalledApp(package: 'com.bnhp.payments.paymentsapp', label: 'ביט', versionName: '6.10', versionCode: 610,
+            fromPlay: true, sizeBytes: 214 * 1024 * 1024),
         InstalledApp(package: 'com.waze', label: 'Waze', versionName: '5.1', versionCode: 51, updatedMs: 1000),
-        InstalledApp(package: 'com.google.android.calculator', label: 'מחשבון', versionName: '9.0', versionCode: 90),
+        InstalledApp(package: 'com.google.android.calculator', label: 'מחשבון', versionName: '9.0', versionCode: 90,
+            system: true),
       ];
     final checked = <Object?>[];
     final server = MockClient((req) async {
@@ -1014,9 +1016,17 @@ void main() {
     final sent = (checked.single as Map)['apps'] as List;
     expect(sent.first, {'package': 'com.bnhp.payments.paymentsapp', 'version_name': '6.10', 'updated_ms': 0});
     expect(find.text('2 עדכונים זמינים'), findsOneWidget);
-    expect(find.text('גרסה 6.10 ← 6.18'), findsOneWidget);
+    // כרטיס: שם, חבילה, תגית Google Play, "מותקנת: X ← Y" וגודל
+    expect(find.text('ביט'), findsOneWidget);
+    expect(find.text('com.bnhp.payments.paymentsapp'), findsOneWidget);
+    expect(find.text('Google Play'), findsOneWidget);
+    expect(find.text('מותקנת: 6.10 ← 6.18'), findsOneWidget);
+    expect(find.text('214 MB'), findsOneWidget);
     expect(find.textContaining('עודכנה ב-Google Play לפני 3 ימים'), findsOneWidget);
     expect(find.text('מעודכנות ואחרות (1)'), findsOneWidget);
+    // הכפתור קומפקטי — לא נמתח לכל רוחב הכרטיס (כמו בערכת הנושא)
+    final btn = tester.getSize(find.ancestor(of: find.text('עדכון').first, matching: find.byWidgetPredicate((w) => w is FilledButton)));
+    expect(btn.width, lessThan(200));
 
     // "עדכון" לביט → נפתח עמוד Play נעול; פס "ממתין" (מסתובב — לכן pump ולא pumpAndSettle)
     await tester.tap(find.text('עדכון').first);
@@ -1037,6 +1047,81 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(native.playOpens.last, 'com.waze');
     expect(native.playTitles.last, containsAll(['Waze Navigation', 'וייז', 'Waze']));
+  });
+
+  testWidgets('updates tab: ⊘ excludes an app from updates and update-all, persisted, with restore', (tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final native = FakeNative()
+      ..caInstalled = true
+      ..phoneApps = const [
+        InstalledApp(package: 'com.bnhp.payments.paymentsapp', label: 'ביט', versionName: '6.10', versionCode: 610),
+        InstalledApp(package: 'com.waze', label: 'Waze', versionName: '5.1', versionCode: 51),
+      ];
+    final server = MockClient((req) async {
+      const json = {'content-type': 'application/json; charset=utf-8'};
+      if (req.url.path == '/v1/device') {
+        return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+            'via_vpn': true}), 200, headers: json);
+      }
+      if (req.url.path == '/v1/device/app-updates') {
+        return http.Response(jsonEncode({'apps': {
+          'com.bnhp.payments.paymentsapp': {'status': 'update', 'play_version': '6.18'},
+          'com.waze': {'status': 'update', 'play_version': '5.2'},
+        }}), 200, headers: json);
+      }
+      if (req.url.path == '/v1/device/vpn') return http.Response(jsonEncode(_vpn), 200, headers: json);
+      if (req.url.path == '/v1/enroll') {
+        return http.Response(jsonEncode({'token': 't', 'level': 1, 'level_name': 'מחמיר', 'vpn': _vpn,
+            'ca': {'pem': 'x'}}), 201, headers: json);
+      }
+      return http.Response('{}', 200, headers: json);
+    });
+    final store = MemoryStore();
+    final c = makeController(native, server, store);
+    await tester.runAsync(() async {
+      await c.start();
+      await c.activate('ABCDE-FGHJK', '');
+      await c.refresh();
+    });
+    await tester.pumpWidget(MaterialApp(home: Directionality(textDirection: TextDirection.rtl,
+        child: AppStoreScreen(controller: c))));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('עדכונים'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pumpAndSettle();
+    expect(find.text('2 עדכונים זמינים'), findsOneWidget);
+
+    // ⊘ על וייז → יוצאת מהספירה, עוברת ל"מוחרגות" ונשמרת בטלפון
+    await tester.tap(find.byTooltip('לא לעדכן את האפליקציה הזו').last);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Waze לא תתעדכן'), findsOneWidget);
+    expect(find.text('1 עדכונים זמינים'), findsOneWidget);
+    expect(find.text('מוחרגות מעדכון (1)'), findsOneWidget);
+    expect(jsonDecode(store.data['store_update_excluded']!), ['com.waze']);
+
+    // "עדכון הכול" — רק ביט; וייז המוחרגת לא נפתחת
+    await tester.tap(find.text('עדכון הכול'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(native.playOpens, ['com.bnhp.payments.paymentsapp']);
+
+    // ההחרגה נשארת גם אחרי פתיחה מחדש של האפליקציה
+    final c2 = makeController(native, server, store);
+    await tester.runAsync(c2.start);
+    expect(c2.updateExcluded, {'com.waze'});
+
+    // החזרה לעדכונים
+    await tester.tap(find.text('מוחרגות מעדכון (1)'));
+    await tester.pump(const Duration(milliseconds: 400));          // פס "ממתין" של ביט מסתובב — לכן לא pumpAndSettle
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('החזרה לעדכונים'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(c.updateExcluded, isEmpty);
+    expect(find.text('מוחרגות מעדכון (1)'), findsNothing);
   });
 
   testWidgets('device owner installs directly from the store detail page', (tester) async {

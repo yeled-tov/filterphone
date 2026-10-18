@@ -479,6 +479,9 @@ class InstalledApp {
     this.versionCode = 0,
     this.updatedMs = 0,
     this.icon,
+    this.system = false,
+    this.fromPlay = false,
+    this.sizeBytes = 0,
   });
 
   factory InstalledApp.fromMap(Map<String, Object?> m) => InstalledApp(
@@ -488,6 +491,9 @@ class InstalledApp {
         versionCode: (m['version_code'] as num?)?.toInt() ?? 0,
         updatedMs: (m['updated_ms'] as num?)?.toInt() ?? 0,
         icon: m['icon'] is String ? base64Decode(m['icon'] as String) : null,
+        system: m['system'] == true,
+        fromPlay: m['from_play'] == true,
+        sizeBytes: (m['size_bytes'] as num?)?.toInt() ?? 0,
       );
 
   final String package;
@@ -496,6 +502,15 @@ class InstalledApp {
   final int versionCode;
   final int updatedMs;
   final Uint8List? icon;
+
+  /// אפליקציית מערכת (שהגיעה עם הטלפון ועודכנה).
+  final bool system;
+
+  /// הותקנה מ-Google Play.
+  final bool fromPlay;
+
+  /// גודל קובצי ההתקנה (0 = לא ידוע).
+  final int sizeBytes;
 
   /// מה שנשלח לשרת לבדיקה מול Google Play (בלי האייקון).
   Map<String, Object?> toServer() => {'package': package, 'version_name': versionName, 'updated_ms': updatedMs};

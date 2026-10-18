@@ -125,8 +125,21 @@ class StoreController extends ChangeNotifier {
     _notify();
   }
 
-  List<InstalledApp> get pendingUpdates =>
-      (phoneApps ?? const []).where((a) => updates[a.package]?.needsUpdate ?? false).toList();
+  bool excluded(String pkg) => c.updateExcluded.contains(pkg);
+
+  /// מה שצריך עדכון — בלי מה שהוחרג (⊘).
+  List<InstalledApp> get pendingUpdates => (phoneApps ?? const [])
+      .where((a) => !excluded(a.package) && (updates[a.package]?.needsUpdate ?? false))
+      .toList();
+
+  List<InstalledApp> get excludedApps => (phoneApps ?? const []).where((a) => excluded(a.package)).toList();
+
+  /// ⊘ — לא לעדכן את האפליקציה הזו (גם לא ב"עדכון הכול"); נשמר בטלפון, ואפשר להחזיר.
+  Future<void> setExcluded(InstalledApp a, bool value) async {
+    if (value) _queue.remove(a.package);
+    await c.setUpdateExcluded(a.package, value);
+    _notify();
+  }
 
   StoreApp? catalogApp(String pkg) => apps.where((a) => a.package == pkg).firstOrNull;
 
@@ -325,6 +338,17 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
     if (msg.isNotEmpty && mounted) messenger.showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  void _exclude(InstalledApp a) {
+    final messenger = ScaffoldMessenger.of(context);
+    unawaited(_store.setExcluded(a, true));
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text('${a.label.isNotEmpty ? a.label : a.package} לא תתעדכן'),
+        action: SnackBarAction(label: 'ביטול', onPressed: () => unawaited(_store.setExcluded(a, false))),
+      ));
+  }
+
   Future<void> _requestCustom() async {
     final input = TextEditingController();
     final ok = await showDialog<bool>(
@@ -380,7 +404,8 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
       ];
     }
     final pending = _store.pendingUpdates;
-    final rest = phone.where((a) => !pending.contains(a)).toList();
+    final excluded = _store.excludedApps;
+    final rest = phone.where((a) => !pending.contains(a) && !excluded.contains(a)).toList();
     final hasPending = pending.isNotEmpty;
     final cs = theme.colorScheme;
     return [
@@ -449,8 +474,31 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
         ),
       SliverList.builder(
         itemCount: pending.length,
-        itemBuilder: (_, i) => _PhoneAppRow(store: _store, app: pending[i], onUpdate: () => _toast(_store.updateApp(pending[i]))),
+        itemBuilder: (_, i) => _UpdateCard(
+          store: _store,
+          app: pending[i],
+          onUpdate: () => _toast(_store.updateApp(pending[i])),
+          onExclude: () => _exclude(pending[i]),
+        ),
       ),
+      if (excluded.isNotEmpty)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+            child: ExpansionTile(
+              shape: const Border(),
+              collapsedShape: const Border(),
+              leading: const Icon(Icons.block_rounded),
+              title: Text('מוחרגות מעדכון (${excluded.length})'),
+              subtitle: const Text('לא מתעדכנות, גם לא ב"עדכון הכול"'),
+              childrenPadding: EdgeInsets.zero,
+              children: [
+                for (final a in excluded)
+                  _UpdateCard(store: _store, app: a, onRestore: () => unawaited(_store.setExcluded(a, false))),
+              ],
+            ),
+          ),
+        ),
       if (rest.isNotEmpty)
         SliverToBoxAdapter(
           child: Padding(
@@ -461,7 +509,7 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
               leading: const Icon(Icons.check_circle_outline_rounded),
               title: Text('מעודכנות ואחרות (${rest.length})'),
               childrenPadding: EdgeInsets.zero,
-              children: [for (final a in rest) _PhoneAppRow(store: _store, app: a)],
+              children: [for (final a in rest) _UpdateCard(store: _store, app: a, onExclude: () => _exclude(a))],
             ),
           ),
         ),
@@ -707,58 +755,148 @@ class _CategoryRow extends StatelessWidget {
   }
 }
 
-/// שורה בטאב העדכונים: אייקון אמיתי מהטלפון, שם, מה השתנה — וכפתור "עדכון" או פס התקנה.
-class _PhoneAppRow extends StatelessWidget {
-  const _PhoneAppRow({required this.store, required this.app, this.onUpdate});
+/// כרטיס בטאב העדכונים: אייקון אמיתי מהטלפון, שם וחבילה, תגיות (מערכת / Google Play),
+/// "מותקנת: X ← Y" עם הגודל — וכפתורי "עדכון" ו-⊘ (החרגה), "החזרה" למוחרגות, או פס התקנה.
+class _UpdateCard extends StatelessWidget {
+  const _UpdateCard({required this.store, required this.app, this.onUpdate, this.onExclude, this.onRestore});
   final StoreController store;
   final InstalledApp app;
   final VoidCallback? onUpdate;
+  final VoidCallback? onExclude;
+  final VoidCallback? onRestore;
+
+  // כפתורים קומפקטיים — בלי ה-minimumSize הרחב של ערכת הנושא (שמותח אותם לכל הרוחב)
+  static const _compact = Size(0, 40);
 
   String _ago(int seconds) {
     final days = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(seconds * 1000)).inDays;
     return days <= 0 ? 'היום' : days == 1 ? 'אתמול' : 'לפני $days ימים';
   }
 
+  static String sizeText(int bytes) {
+    if (bytes <= 0) return '';
+    final mb = bytes / (1024 * 1024);
+    return mb >= 10 ? '${mb.round()} MB' : '${mb.toStringAsFixed(1)} MB';
+  }
+
+  Widget _chip(BuildContext context, String text, IconData icon, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(text, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
+        ]),
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final info = store.updates[app.package];
     final installing = store.progress.containsKey(app.package);
     final p = store.progress[app.package];
-    final version = app.versionName.isEmpty ? '' : 'גרסה ${app.versionName}';
-    final pv = info?.playVersion ?? '';
-    final sub = switch (info?.status) {
-      'update' => (app.versionName.isNotEmpty && pv.isNotEmpty)
-          ? 'גרסה ${app.versionName} ← $pv'
-          : (pv.isNotEmpty ? 'עדכון זמין · $pv' : 'עדכון זמין'),
-      'maybe' => [version, if (info!.playUpdated != null) 'עודכנה ב-Google Play ${_ago(info.playUpdated!)}']
-          .where((x) => x.isNotEmpty).join(' · '),
-      'current' => [version, 'מעודכנת'].where((x) => x.isNotEmpty).join(' · '),
-      'unknown' => [version, 'לא מ-Google Play'].where((x) => x.isNotEmpty).join(' · '),
-      _ => version,
-    };
     final label = app.label.isNotEmpty ? app.label : app.package;   // תמיד מציגים שם מזהה כלשהו
+    final pv = info?.playVersion ?? '';
+    final muted = theme.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant);
+    final accent = TextStyle(color: cs.primary, fontWeight: FontWeight.w800);
+
+    final version = <InlineSpan>[
+      const TextSpan(text: 'מותקנת: '),
+      TextSpan(text: app.versionName.isEmpty ? '—' : app.versionName, style: const TextStyle(fontWeight: FontWeight.w600)),
+      ...switch (info?.status) {
+        'update' when pv.isNotEmpty => [const TextSpan(text: ' ← '), TextSpan(text: pv, style: accent)],
+        'update' => [TextSpan(text: ' · עדכון זמין', style: accent)],
+        'maybe' => [
+            TextSpan(
+                text: info!.playUpdated != null ? '\nעודכנה ב-Google Play ${_ago(info.playUpdated!)}' : ' · עדכון זמין',
+                style: accent.copyWith(fontWeight: FontWeight.w600)),
+          ],
+        'current' => [const TextSpan(text: ' · מעודכנת')],
+        'unknown' => [const TextSpan(text: ' · לא מ-Google Play')],
+        _ => const <InlineSpan>[],
+      },
+    ];
+
     final icon = app.icon != null
         ? ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.memory(app.icon!, width: 44, height: 44, gaplessPlayback: true),
+            borderRadius: BorderRadius.circular(14),
+            child: Image.memory(app.icon!, width: 52, height: 52, gaplessPlayback: true),
           )
-        : CircleAvatar(child: Text(label.characters.firstOrNull ?? '?'));
-    return ListTile(
-      leading: icon,
-      title: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: installing
-          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        : CircleAvatar(radius: 26, child: Text(label.characters.firstOrNull ?? '?'));
+
+    final size = sizeText(app.sizeBytes);
+    final Widget bottom;
+    if (installing) {
+      bottom = Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        LinearProgressIndicator(value: p, minHeight: 6, borderRadius: BorderRadius.circular(3)),
+        const SizedBox(height: 4),
+        Text(p == null ? 'ממתין ל-Google Play…' : 'מתקין… ${(p * 100).round()}%',
+            style: theme.textTheme.bodySmall?.copyWith(color: cs.primary)),
+      ]);
+    } else {
+      bottom = Row(children: [
+        Expanded(child: Text(size, style: muted)),
+        if (onRestore != null)
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(minimumSize: _compact, padding: const EdgeInsets.symmetric(horizontal: 14)),
+            onPressed: onRestore,
+            icon: const Icon(Icons.undo_rounded, size: 18),
+            label: const Text('החזרה לעדכונים'),
+          ),
+        if (onUpdate != null)
+          FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: _compact, padding: const EdgeInsets.symmetric(horizontal: 18)),
+            onPressed: onUpdate,
+            icon: const Icon(Icons.download_rounded, size: 18),
+            label: const Text('עדכון'),
+          ),
+        if (onExclude != null) ...[
+          const SizedBox(width: 6),
+          IconButton.outlined(
+            tooltip: 'לא לעדכן את האפליקציה הזו',
+            onPressed: onExclude,
+            icon: const Icon(Icons.block_rounded, size: 20),
+          ),
+        ],
+      ]);
+    }
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          icon,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(app.package,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr, style: muted),
+              if (app.system || app.fromPlay) ...[
+                const SizedBox(height: 6),
+                Wrap(spacing: 6, runSpacing: 4, children: [
+                  if (app.system) _chip(context, 'מערכת', Icons.phone_android_rounded, cs.tertiary),
+                  if (app.fromPlay) _chip(context, 'Google Play', Icons.shop_rounded, StatusColors.ok(context)),
+                ]),
+              ],
               const SizedBox(height: 6),
-              LinearProgressIndicator(value: p, minHeight: 6, borderRadius: BorderRadius.circular(3)),
-              const SizedBox(height: 4),
-              Text(p == null ? 'ממתין ל-Google Play…' : 'מתקין… ${(p * 100).round()}%',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary)),
-            ])
-          : Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: installing || onUpdate == null
-          ? null
-          : FilledButton.tonal(onPressed: onUpdate, child: const Text('עדכון')),
+              Text.rich(TextSpan(children: version), style: theme.textTheme.bodyMedium, maxLines: 2),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        bottom,
+      ]),
     );
   }
 }
