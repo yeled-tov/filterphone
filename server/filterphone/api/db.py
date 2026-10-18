@@ -285,7 +285,15 @@ CREATE TABLE wabot_knowledge (                  -- מה שבוט הוואטסא�
 CREATE INDEX wabot_knowledge_created ON wabot_knowledge(created_at);
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11]
+_V12 = """
+-- קוד הורים: בלי הקוד אי אפשר לשנות את החסימות של הלקוח (גם בדשבורד וגם בבוט). argon2; '' = אין קוד
+ALTER TABLE customers ADD COLUMN parent_code TEXT NOT NULL DEFAULT '';
+ALTER TABLE customers ADD COLUMN parent_code_at INTEGER;
+ALTER TABLE customers ADD COLUMN parent_code_fails INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE customers ADD COLUMN parent_code_lock INTEGER NOT NULL DEFAULT 0;   -- נעול אחרי ניסיונות שגויים עד
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12]
 VERSION = len(MIGRATIONS)
 
 

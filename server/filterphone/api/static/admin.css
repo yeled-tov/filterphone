@@ -330,3 +330,18 @@ input.narrow { width: 6rem; }
 .composer textarea { flex: 1; min-height: 64px; }
 .note { background: var(--accent-soft); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
 ol.steps { padding-inline-start: 20px; display: grid; gap: 6px; line-height: 1.5; }
+
+/* ---------------------------------------------------------------- טאבים בעמוד (דף מכשיר) */
+.tabs {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted);
+  padding: 10px 14px; font-weight: 600; white-space: nowrap; cursor: pointer; flex: 0 0 auto;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-panel { display: grid; gap: 16px; }
+.code-input { width: 100%; letter-spacing: .3em; font-size: 18px; text-align: center; }
+.row.wrap { flex-wrap: wrap; }

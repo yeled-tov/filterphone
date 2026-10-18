@@ -34,8 +34,9 @@ const labels = require('./lib/labels');
 const know = require('./lib/knowledge');
 const aimark = require('./lib/aimark');
 const acts = require('./lib/actions');
+const pcode = require('./lib/parentcode');
 
-const VERSION = '2.4.0';
+const VERSION = '2.5.0';
 const API = (process.env.FP_API || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
@@ -80,6 +81,7 @@ if (!TOKEN) {
 
 const srv = fp.client(API, TOKEN);
 const state = new State(path.join(DATA, 'state.json'));
+const parentCodes = pcode.store();       // פעולות שממתינות לקוד הורים (לפי שיחה / מכשיר באפליקציה)
 let cfg = null;               // ההגדרות מהדשבורד
 let client = null;            // מחובר רק כשהבוט מופעל
 let status = { state: 'off' };
@@ -504,11 +506,13 @@ function rememberAppThread(sent, deviceId, question, phone) {
  * שהלקוח יקבל אישור אמיתי (עם השעה) ולא הבטחה. השרת אוכף את הגבולות (מה מותר, עד שעה); מה שנדחה —
  * עובר לאישורך. מחזיר שורות אישור ללקוח, ומה בוצע (בשבילך).
  */
-async function runActions(deviceId, crm, tags) {
+async function runActions(deviceId, crm, tags, parentCode = null) {
   const confirms = [];
   const done = [];
+  const needCode = [];          // קוד הורים: הפעולות שהשרת דחה בלי קוד / עם קוד שגוי — ממתינות להקלדה
+  const codeErrors = [];
   const wanted = tags.filter((t) => ['BLOCK', 'OPEN', 'CLOSE'].includes(t.kind) && t.arg);
-  if (!wanted.length) return { confirms, done };
+  if (!wanted.length) return { confirms, done, needCode, locked: false };
   if (!deviceId) {
     confirms.push('כדי שאוכל לבצע את זה — שלחו לי את ההודעה מאפליקציית FilterPhone (טאב "תמיכה" ← "תמיכה בוואטסאפ"), שם מופיעים מספר המכשיר והמזהה.');
     return { confirms, done };
@@ -516,12 +520,12 @@ async function runActions(deviceId, crm, tags) {
   for (const t of wanted) {
     try {
       if (t.kind === 'BLOCK') {
-        const r = await srv.block(deviceId, t.arg.split(',').map((x) => x.trim()).filter(Boolean));
+        const r = await srv.block(deviceId, t.arg.split(',').map((x) => x.trim()).filter(Boolean), parentCode);
         confirms.push(acts.confirmLine('BLOCK', r));
         if (r.titles?.length) done.push(`🔒 חסם: ${r.titles.join(', ')}`);
       } else if (t.kind === 'OPEN') {
         const o = acts.parseOpen(t.arg, { max: crm?.actions?.max_minutes || 60, def: crm?.actions?.default_minutes || 10 });
-        const r = await srv.open(deviceId, o.item, o.minutes);
+        const r = await srv.open(deviceId, o.item, o.minutes, parentCode);
         confirms.push(acts.confirmLine('OPEN', r));
         if (!r.already_open) done.push(`🔓 פתח זמנית: ${r.title} ל-${r.minutes} דק' (עד ${acts.ilTime(r.until)})`);
       } else {
@@ -530,6 +534,11 @@ async function runActions(deviceId, crm, tags) {
         if (line) { confirms.push(line); done.push(`🔒 סגר מוקדם: ${r.title}`); }
       }
     } catch (e) {
+      if (pcode.isCodeError(e)) {                  // קוד הורים — לא "לאישור המנהל": הלקוח מקליד את הקוד
+        needCode.push(t);
+        codeErrors.push(e);
+        continue;
+      }
       console.warn(`action ${t.kind}:${t.arg}:`, e.message);
       confirms.push('⚠️ את זה אני לא יכול לבצע לבד — העברתי לאישור המנהל.');
       done.push(`⚠️ לא בוצע (${t.kind} ${t.arg}): ${e.message} — נשלח לאישורך`);
@@ -537,7 +546,27 @@ async function runActions(deviceId, crm, tags) {
         .catch(() => {});
     }
   }
-  return { confirms: [...new Set(confirms)], done };
+  if (codeErrors.length) confirms.push(pcode.message(codeErrors));
+  return { confirms: [...new Set(confirms)], done, needCode, locked: codeErrors.some((e) => e.locked) };
+}
+
+/**
+ * קוד הורים: הלקוח הקליד את הקוד אחרי שהבוט ביקש — מבצעים את הפעולות שחיכו לו. הקוד לא נשמר
+ * בהיסטוריה ולא עובר ל-AI. true = ההודעה טופלה כאן. הודעה שאינה קוד — מבטלת את ההמתנה.
+ */
+async function tryParentCode(key, deviceId, text, reply) {
+  const p = parentCodes.get(key);
+  if (!p) return false;
+  const code = pcode.extract(text);
+  if (!code) { parentCodes.take(key); return false; }
+  const ran = await runActions(p.deviceId || deviceId, p.crm, p.tags, code);
+  if (ran.needCode.length && !ran.locked) parentCodes.set(key, { ...p, tags: ran.needCode });
+  else parentCodes.take(key);
+  if (ran.done.length) {
+    toAdmin(`🤖 *הבוט ביצע (עם קוד הורים)* · מכשיר #${p.deviceId}\n${ran.done.join('\n')}`).catch(() => {});
+  }
+  await reply(ran.confirms.join('\n\n') || '✓');
+  return true;
 }
 
 /**
@@ -570,6 +599,8 @@ async function handleAppSupport(m, waIds) {
     try { await srv.reply(deviceId, 'הדוח התקבל אצל המנהל ✓'); } catch { /* */ }
     return;
   }
+  // קוד הורים שהבוט ביקש — מבוצע כאן (לא עובר ל-AI ולא מועבר אליך)
+  if (await tryParentCode(`app:${deviceId}`, deviceId, m.text, (out) => srv.reply(deviceId, out))) return;
   const head = `📩 *פנייה מהאפליקציה* · ${m.customer || 'לקוח'}${m.phone ? ' · ' + m.phone : ''} · מכשיר #${deviceId}`;
   let crm = null;
   if (phone) { try { crm = await srv.customer(phone, { device: deviceId }); } catch { /* לא לקוח — עדיין עונים */ } }
@@ -586,6 +617,7 @@ async function handleAppSupport(m, waIds) {
   // פעולות שהבוט מבצע בעצמו (יש לו את מזהה המכשיר): חסימה / פתיחה זמנית, והסלמה לאישורך
   const deviceOps = deviceId;                                          // מהאפליקציה — המכשיר ודאי
   const ran = await runActions(deviceOps, crm, res.tags);
+  if (ran.needCode.length && !ran.locked) parentCodes.set(`app:${deviceId}`, { deviceId: deviceOps, crm, tags: ran.needCode });
   if (ran.done.length) await toAdmin(`🤖 *הבוט ביצע* · מכשיר #${deviceOps}${m.phone ? ' · ' + m.phone : ''}\n${ran.done.join('\n')}`);
   for (const t of res.tags) {
     if (t.kind === 'ESCALATE') {
@@ -899,6 +931,8 @@ async function onCustomer(msg, text) {
   const c = state.chat(chatId);
   if (!c.phone) c.phone = await realPhone(msg);
   const phone = c.phone;
+  // קוד הורים שהבוט ביקש — מבוצע כאן, לא נשמר בהיסטוריה ולא נשלח ל-AI
+  if (cfg?.enabled && await tryParentCode(chatId, null, text, (out) => sendAi(chatId, out, { typing: true }))) return;
   state.remember(chatId, 'user', text);
   c.lastIn = msg.id?._serialized || '';
   c.deviceHint = acts.deviceHint(text, c.deviceHint || {});          // "מכשיר #16" + מזהה — מההודעה של האפליקציה
@@ -1008,6 +1042,7 @@ async function replyNow(msg, chatId, phone, text, open, current = () => true) {
   // פעולות במכשיר (חסימה / פתיחה זמנית) — מבוצעות לפני השליחה, והלקוח מקבל אישור אמיתי עם השעה
   const deviceId = crm?.selected || null;
   const ran = await runActions(deviceId, crm, res.tags);
+  if (ran.needCode.length && !ran.locked) parentCodes.set(chatId, { deviceId, crm, tags: ran.needCode });
   if (ran.done.length) {
     toAdmin(`🤖 *הבוט ביצע* · ${phone} · מכשיר #${deviceId}\n${ran.done.join('\n')}\n🔗 https://wa.me/${phone}`).catch(() => {});
   }                                             // הגיעה הודעה חדשה — עונים עליה (ועל זו) יחד

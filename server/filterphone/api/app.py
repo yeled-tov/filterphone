@@ -168,7 +168,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
 
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, e: ApiError):
-        return JSONResponse({"error": e.message}, status_code=e.status)
+        return JSONResponse({"error": e.message, **e.extra}, status_code=e.status)
 
     @app.exception_handler(observe.BodyTooLarge)
     async def _too_large(_: Request, e: observe.BodyTooLarge):
@@ -252,6 +252,11 @@ def bot_dep(request: Request, authorization: Annotated[str | None, Header()] = N
 
 
 SvcDep = Annotated[Services, Depends(svc_dep)]
+# קוד הורים לשינוי חסימות (הדשבורד שולח בכותרת אחרי שהמנהל הקליד אותו)
+ParentCode = Annotated[str | None, Header(alias="X-Parent-Code")]
+# שדות במכשיר שהם "חסימות" — שינוי שלהם דורש את קוד ההורים (שם / תווית — לא)
+_GATED_DEVICE_KEYS = {"level", "status", "options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules",
+                      "app_images", "dpc", "keywords", "vpn_bypass", "track"}
 DeskDep = Annotated[SupportDesk, Depends(support_dep)]
 BotDep = Annotated[BotDesk, Depends(bot_dep)]
 DeviceRow = Annotated[Any, Depends(device_dep)]
@@ -408,12 +413,19 @@ class BotForwardedIn(BaseModel):
 class BotBlockIn(BaseModel):
     device_id: int
     options: list[str] = Field(min_length=1, max_length=100)
+    parent_code: str | None = Field(default=None, max_length=12)   # הלקוח הקליד בשיחה (כשיש קוד הורים)
 
 
 class BotTempIn(BaseModel):
     device_id: int
     item: str = Field(min_length=1, max_length=80)
     minutes: int | None = Field(default=None, ge=1, le=60)
+    parent_code: str | None = Field(default=None, max_length=12)
+
+
+class ParentCodeIn(BaseModel):
+    code: str = Field(min_length=4, max_length=8)
+    old_code: str | None = Field(default=None, max_length=12)
 
 
 class BotEscalateIn(BaseModel):
@@ -541,6 +553,7 @@ class DevicePatch(BaseModel):
     dpc: dict | None = None
     keywords: dict | None = None
     vpn_bypass: dict | None = None
+    track: str | None = Field(default=None, max_length=20)     # מסלול סינון (catalog.TRACKS)
 
 
 class PauseIn(BaseModel):
@@ -946,10 +959,12 @@ def _routes(app: FastAPI) -> None:
 
     @app.post("/v1/bot/block")
     def bot_block(body: BotBlockIn, bot: BotDep):
+        bot.svc.require_parent_code(body.device_id, body.parent_code, "whatsapp-bot")    # אין עקיפה לבוט
         return bot.block(body.device_id, body.options)
 
     @app.post("/v1/bot/open")
     def bot_open(body: BotTempIn, bot: BotDep):
+        bot.svc.require_parent_code(body.device_id, body.parent_code, "whatsapp-bot")
         return bot.open(body.device_id, body.item, body.minutes)
 
     @app.post("/v1/bot/close")
@@ -994,7 +1009,8 @@ def _routes(app: FastAPI) -> None:
         return svc.resolve_swap(swap_id, body.approve, admin["username"], body.as_additional)
 
     @app.post("/v1/admin/requests/{request_id}/approve")
-    def approve(request_id: int, body: Decision, svc: SvcDep, admin: AdminRow):
+    def approve(request_id: int, body: Decision, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
+        svc.require_parent_code_for_request(request_id, parent_code, admin["username"])
         return svc.approve_request(request_id, admin["username"], body.model_dump(exclude_unset=True))
 
     @app.post("/v1/admin/requests/{request_id}/reject", status_code=204)
@@ -1019,16 +1035,21 @@ def _routes(app: FastAPI) -> None:
         return d
 
     @app.patch("/v1/admin/devices/{device_id}")
-    def patch_device(device_id: int, body: DevicePatch, svc: SvcDep, admin: AdminRow):
-        svc.update_device(device_id, body.model_dump(exclude_unset=True), admin["username"])
+    def patch_device(device_id: int, body: DevicePatch, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
+        changes = body.model_dump(exclude_unset=True)
+        if _GATED_DEVICE_KEYS & {k for k, v in changes.items() if v is not None}:
+            svc.require_parent_code(device_id, parent_code, admin["username"])
+        svc.update_device(device_id, changes, admin["username"])
         return svc.device_detail(device_id)
 
     @app.delete("/v1/admin/devices/{device_id}", status_code=204)
-    def delete_device(device_id: int, svc: SvcDep, admin: AdminRow):
+    def delete_device(device_id: int, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
+        svc.require_parent_code(device_id, parent_code, admin["username"])
         svc.delete_device(device_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/pause")
-    def pause_device(device_id: int, body: PauseIn, svc: SvcDep, admin: AdminRow):
+    def pause_device(device_id: int, body: PauseIn, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
+        svc.require_parent_code(device_id, parent_code, admin["username"])
         return svc.pause_device(device_id, body.minutes, body.reason, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/resume")
@@ -1036,7 +1057,8 @@ def _routes(app: FastAPI) -> None:
         return svc.resume_device(device_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/unmanage")
-    def unmanage_device(device_id: int, svc: SvcDep, admin: AdminRow):
+    def unmanage_device(device_id: int, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
+        svc.require_parent_code(device_id, parent_code, admin["username"])
         return svc.request_unmanage(device_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/transfer")
@@ -1044,7 +1066,9 @@ def _routes(app: FastAPI) -> None:
         return svc.create_transfer(device_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/apply-profile")
-    def apply_profile(device_id: int, body: ApplyProfileIn, svc: SvcDep, admin: AdminRow):
+    def apply_profile(device_id: int, body: ApplyProfileIn, svc: SvcDep, admin: AdminRow,
+                      parent_code: ParentCode = None):
+        svc.require_parent_code(device_id, parent_code, admin["username"])
         return svc.apply_profile(device_id, body.profile_id, admin["username"])
 
     # --- ניהול: פרופילים מוכנים ---
@@ -1125,8 +1149,9 @@ def _routes(app: FastAPI) -> None:
         return {"cleared": n}
 
     @app.post("/v1/admin/devices/{device_id}/temp-open")
-    def admin_temp_open(device_id: int, body: TempOpenIn, svc: SvcDep, admin: AdminRow):
+    def admin_temp_open(device_id: int, body: TempOpenIn, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
         """פתיחה זמנית (עד שעה) של משהו חסום — נחסם שוב לבד בסוף התוקף."""
+        svc.require_parent_code(device_id, parent_code, admin["username"])
         return svc.temp_open(device_id, body.item, body.minutes, admin["username"], body.reason)
 
     @app.delete("/v1/admin/devices/{device_id}/temp-open/{item}")
@@ -1134,8 +1159,9 @@ def _routes(app: FastAPI) -> None:
         return svc.temp_close(device_id, item, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/account-window")
-    def account_window(device_id: int, svc: SvcDep, admin: AdminRow):
+    def account_window(device_id: int, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
         """10 דקות שבהן מסך "הוספת חשבון Google" עובד במכשיר הזה (אחרי צריבה מוחקים את החשבונות)."""
+        svc.require_parent_code(device_id, parent_code, admin["username"])
         d = svc.device_row(device_id)
         if not d["vpn_ip"]:
             raise ApiError(409, "למכשיר אין עדיין כתובת VPN")
@@ -1152,6 +1178,15 @@ def _routes(app: FastAPI) -> None:
     @app.patch("/v1/admin/customers/{customer_id}")
     def patch_customer(customer_id: int, body: CustomerPatch, svc: SvcDep, admin: AdminRow):
         return svc.update_customer(customer_id, body.model_dump(exclude_unset=True), admin["username"])
+
+    @app.put("/v1/admin/customers/{customer_id}/parent-code")
+    def set_parent_code(customer_id: int, body: ParentCodeIn, svc: SvcDep, admin: AdminRow):
+        """קוד הורים: בלי הקוד אי אפשר לשנות את החסימות של הלקוח — לא בדשבורד ולא בבוט."""
+        return svc.set_parent_code(customer_id, body.code, body.old_code, admin["username"])
+
+    @app.delete("/v1/admin/customers/{customer_id}/parent-code")
+    def reset_parent_code(customer_id: int, svc: SvcDep, admin: AdminRow):
+        return svc.reset_parent_code(customer_id, admin["username"])
 
     # --- ניהול: קודים ---
 

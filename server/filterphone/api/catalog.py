@@ -360,6 +360,51 @@ assert all(o in CATALOG for o in BASELINE_OPTIONS), "unknown baseline option"
 def effective_options(options: list[str]) -> list[str]:
     """האפשרויות שבאמת נאכפות: מה שנבחר + הבסיס לכולם (בלי כפילויות, בסדר יציב)."""
     return list(dict.fromkeys([*options, *BASELINE_OPTIONS]))
+
+
+# ---------------------------------------------------------------- מסלולי סינון
+# מסלול = בסיס מוכן לכל מכשיר. הוא רק *מוסיף* חסימות (לא פותח שום דבר מעל מה שהמנהל בחר).
+#   allowlist: במסלול כזה רק האפליקציות האלה (ועוד הבסיס של הטלפון: חייגן, הודעות, אנשי קשר, מצלמה,
+#     גלריה, שעון, מחשבון, יומן, הגדרות, FilterPhone) נפתחות — כל השאר חסום בטלפון. None = כרגיל.
+#   store: אילו אפליקציות מופיעות בחנות של FilterPhone (None = כל הקטלוג). store_exclude — מוסתרות.
+NAV_APPS = ("com.waze", "com.tranzmate", "com.unicell.pangoandroid", "air.com.cellogroup.Cellopark")
+WHATSAPP_APPS = ("com.whatsapp", "com.whatsapp.w4b")
+TRACKS: dict[str, dict] = {
+    "": {"title": "סינון רגיל", "desc": "לפי הרמה והחסימות שנבחרו.", "options": (), "allowlist": None,
+         "store": None, "store_exclude": ()},
+    "no_internet": {
+        "title": "כשר — בלי אינטרנט בכלל",
+        "desc": "רק הבסיס של הטלפון: חייגן, הודעות, אנשי קשר, מצלמה, גלריה, שעון, מחשבון, יומן והגדרות. "
+                "בלי דפדפן, בלי חנות, בלי וואטסאפ ובלי שום אפליקציה אחרת.",
+        "options": ("play_store", "browsers_all", "whatsapp"), "allowlist": (), "store": (), "store_exclude": ()},
+    "navigation": {
+        "title": "ניווט ודרכים בלבד",
+        "desc": "הבסיס של הטלפון + וייז, מוביט, פנגו וסלופארק. בלי דפדפן, בלי וואטסאפ ובלי אפליקציות אחרות; "
+                "בחנות מופיעות רק אפליקציות הדרכים.",
+        "options": ("play_store", "browsers_all", "whatsapp"), "allowlist": NAV_APPS, "store": NAV_APPS,
+        "store_exclude": ()},
+    "no_whatsapp": {
+        "title": "בלי וואטסאפ",
+        "desc": "סינון רגיל, וואטסאפ חסום בטלפון וברשת — ולא מופיע בחנות.",
+        "options": ("whatsapp",), "allowlist": None, "store": None, "store_exclude": WHATSAPP_APPS},
+}
+
+
+def track_options(track: str) -> tuple[str, ...]:
+    return tuple(o for o in TRACKS.get(track, TRACKS[""])["options"] if o in CATALOG)
+
+
+def store_allowed(track: str, package: str) -> bool:
+    """האם האפליקציה מופיעה בחנות של מכשיר במסלול הזה."""
+    t = TRACKS.get(track, TRACKS[""])
+    if t["store"] is not None and package not in t["store"]:
+        return False
+    return package not in t["store_exclude"]
+
+
+def public_tracks() -> list[dict]:
+    return [{"id": k, "title": v["title"], "desc": v["desc"], "options": list(track_options(k)),
+             "allowlist": None if v["allowlist"] is None else list(v["allowlist"])} for k, v in TRACKS.items()]
 assert {o.category for o in OPTIONS} <= {c["id"] for c in CATEGORIES}
 
 # שרתים מוכרים לכל אפליקציה (מהקטלוג) — לחסימת אפליקציה "ברשת" גם כשהיא נבחרה בנפרד
@@ -517,7 +562,8 @@ def admin_catalog() -> dict:
     return {"levels": [{"level": k, **v} for k, v in LEVELS.items()],
             "categories": CATEGORIES,
             "options": [{**o.admin(), "baseline": o.id in BASELINE_OPTIONS} for o in OPTIONS],
-            "defaults": {"level": DEFAULT_LEVEL, "options": list(DEFAULT_OPTIONS)}}
+            "defaults": {"level": DEFAULT_LEVEL, "options": list(DEFAULT_OPTIONS)},
+            "tracks": public_tracks()}
 
 
 def clean_host(raw: str) -> str | None:
@@ -609,6 +655,12 @@ class DeviceSettings:
     keywords: dict = field(default_factory=dict)  # חסימת מילות חיפוש: {enabled, extra, removed} מעל ברירת המחדל
     vpn_bypass: dict = field(default_factory=dict)  # אפליקציות מחוץ ל-VPN: {enabled, extra, removed, pins}
     temp_open: dict = field(default_factory=dict)   # פתיחות זמניות: פריט → עד מתי (שניות מאז 1970)
+    track: str = ""                             # מסלול סינון (TRACKS): "" רגיל / no_internet / navigation / ...
+
+    @property
+    def active_options(self) -> list[str]:
+        """מה שנאכף: מה שנבחר + מה שהמסלול מוסיף + הבסיס לכולם."""
+        return effective_options([*self.options, *track_options(self.track)])
 
     @property
     def custom_apps(self) -> list[str]:
@@ -729,6 +781,7 @@ class DeviceSettings:
             keywords=cls._load_keywords(d.get("keywords")),
             vpn_bypass=cls._load_vpn_bypass(d.get("vpn_bypass")),
             temp_open=cls._load_temp_open(d.get("temp_open")),
+            track=d.get("track") if d.get("track") in TRACKS else "",
         )
 
     def dump(self) -> str:
@@ -739,6 +792,8 @@ class DeviceSettings:
              "keywords": self.keywords, "vpn_bypass": self.vpn_bypass}
         if self.temp_open:
             d["temp_open"] = self.temp_open
+        if self.track:
+            d["track"] = self.track
         return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
@@ -825,6 +880,11 @@ class DeviceSettings:
                 self.keywords = self._load_keywords(merged)
         if changes.get("vpn_bypass") is not None:
             errors += self._update_vpn_bypass(changes["vpn_bypass"])
+        if changes.get("track") is not None:
+            if changes["track"] not in TRACKS:
+                errors.append("מסלול סינון לא מוכר")
+            else:
+                self.track = changes["track"]
         return errors
 
     def _update_vpn_bypass(self, vb) -> list[str]:
@@ -889,6 +949,8 @@ class Compiled:
     accessibility_only: tuple[str, ...] = ()    # חסומות בנגישות בלבד — לא מוסתרות במנהל המכשיר
     wa_screens: tuple[str, ...] = ()            # מסכים בוואטסאפ שנחסמים לפי תוכן (updates/channels/status)
     temp_allow: tuple[dict, ...] = ()           # פתוח זמנית בטלפון: [{"package"|"dpc", "until"}]
+    track: str = ""                             # מסלול הסינון (TRACKS)
+    allowlist_apps: tuple[str, ...] | None = None   # רשימה לבנה של המסלול; None = הקטלוג + Chrome
 
     def proxy_json(self, level: int) -> str:
         """מה שהפרוקסי קורא (fp:policy ב-Redis)."""
@@ -939,7 +1001,8 @@ def _temp_allow(s: DeviceSettings, opts: list[Option]) -> tuple[dict, ...]:
 
 
 def compile_settings(level: int, s: DeviceSettings) -> Compiled:
-    opts = [CATALOG[o] for o in effective_options(s.options) if o in CATALOG]
+    opts = [CATALOG[o] for o in s.active_options if o in CATALOG]
+    track = TRACKS.get(s.track, TRACKS[""])
     # ברשת: מה שנפתח זמנית לא נחסם עד שהתוקף פג (השרת מסיר אותו בזמן — expire_temp_opens)
     net = [o for o in opts if o.id not in s.temp_open]
     hosts = {h for o in net for h in o.hosts} | set(s.custom_hosts)
@@ -973,7 +1036,9 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         app_images=app_images,
         app_rules=tuple({"package": p, "mode": r["mode"]} for p, r in s.app_rules.items()),
         protections=tuple(sorted({k for o in opts for k in o.protections})),
-        dpc={**DPC_DEFAULTS, **s.dpc},
+        # מסלול עם רשימה לבנה: "רק אפליקציות מאושרות" נאכף תמיד (ונקודה חמה חסומה)
+        dpc={**DPC_DEFAULTS, **s.dpc,
+             **({"approved_apps_only": True, "disallow_tethering": True} if track["allowlist"] is not None else {})},
         keywords=resolve_keywords(s.keywords),
         vpn_bypass=resolve_vpn_bypass(s.vpn_bypass),
         network_only_unknown=tuple(unknown),
@@ -982,6 +1047,8 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
                                         if p in device_apps and full not in s.options)),
         wa_screens=tuple(sorted({k for o in opts for k in o.wa_screens})),
         temp_allow=_temp_allow(s, opts),
+        track=s.track,
+        allowlist_apps=None if track["allowlist"] is None else tuple(track["allowlist"]),
     )
 
 
@@ -995,7 +1062,9 @@ def policy_checksum(level: int, comp: Compiled) -> str:
 def summary(s: DeviceSettings) -> list[dict]:
     """רשימת החסימות הפעילות — לתצוגה (בממשק הניהול ובאפליקציה)."""
     out = [{"id": o, "title": CATALOG[o].title, "category": CATALOG[o].category}
-           for o in effective_options(s.options) if o in CATALOG]
+           for o in s.active_options if o in CATALOG]
+    if s.track:
+        out.insert(0, {"id": f"track:{s.track}", "title": TRACKS[s.track]["title"], "category": "track"})
     if s.custom_hosts:
         out.append({"id": "custom_hosts", "title": f"אתרים נוספים ({len(s.custom_hosts)})", "category": "custom"})
     if s.app_rules:

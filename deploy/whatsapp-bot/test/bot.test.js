@@ -360,3 +360,62 @@ test('actions: confirmation lines tell the customer exactly what happened', () =
   assert.match(acts.confirmLine('BLOCK', { titles: [] }), /כבר חסום/);
   assert.equal(acts.confirmLine('CLOSE', { closed: false }), '');
 });
+
+// ------------------------------------------------------------------ קוד הורים
+
+const pcode = require('../lib/parentcode');
+const fp = require('../lib/fp');
+
+test('parent code: only 4-8 digits are taken as the code, never other text', () => {
+  assert.equal(pcode.extract('1234'), '1234');
+  assert.equal(pcode.extract(' 12 34 '), '1234');
+  assert.equal(pcode.extract('12-34-56'), '123456');
+  assert.equal(pcode.extract('‏4321‎'), '4321');
+  assert.equal(pcode.extract('123'), null);
+  assert.equal(pcode.extract('123456789'), null);
+  assert.equal(pcode.extract('הקוד הוא 1234'), null);
+  assert.equal(pcode.extract('תפתח לי את החנות'), null);
+});
+
+test('parent code: the reply depends on why the server refused', () => {
+  assert.equal(pcode.message([{ need: 'parent_code' }]), pcode.ASK);
+  assert.equal(pcode.message([{ need: 'parent_code', wrong: true }]), pcode.WRONG);
+  assert.equal(pcode.message([{ need: 'parent_code', wrong: true, locked: true }]), pcode.LOCKED);
+  assert.equal(pcode.isCodeError({ need: 'parent_code' }), true);
+  assert.equal(pcode.isCodeError(new Error('x')), false);
+});
+
+test('parent code: pending actions expire after 5 minutes', () => {
+  let now = 0;
+  const s = pcode.store(() => now);
+  s.set('chat', { deviceId: 7, tags: [{ kind: 'OPEN', arg: 'store' }] });
+  now = pcode.TTL_MS - 1;
+  assert.equal(s.get('chat').deviceId, 7);
+  assert.equal(s.take('chat').deviceId, 7);
+  assert.equal(s.get('chat'), null);
+  s.set('chat', { deviceId: 8 });
+  now += pcode.TTL_MS + 1;
+  assert.equal(s.get('chat'), null);
+});
+
+test('server client: the parent code goes in the body, and a refusal says why', async () => {
+  const calls = [];
+  const fake = async (url, init) => {
+    calls.push(JSON.parse(init.body));
+    return { ok: false, status: 403, text: async () => JSON.stringify({ error: 'קוד ההורים שגוי', need: 'parent_code', wrong: true }) };
+  };
+  const srv = fp.client('http://x', 't', fake);
+  await assert.rejects(srv.open(5, 'store', 10, '1234'), (e) => e.need === 'parent_code' && e.wrong === true && e.status === 403);
+  assert.deepEqual(calls[0], { device_id: 5, item: 'store', minutes: 10, parent_code: '1234' });
+  await assert.rejects(srv.block(5, ['a']));
+  assert.equal('parent_code' in calls[1], false);
+});
+
+test('the AI is told about the parent code but never asks for it itself', () => {
+  const crm = { selected: 3, customer: { parent_code: true }, devices: [{ device_id: 3, temp_open: [] }],
+    actions: { open: [], block: [], opened: [] } };
+  const p = acts.promptSection(crm);
+  assert.match(p, /קוד הורים/);
+  assert.match(p, /לעולם אל תבקש/);
+  assert.doesNotMatch(acts.promptSection({ ...crm, customer: { parent_code: false } }), /קוד הורים/);
+});

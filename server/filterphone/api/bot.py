@@ -83,7 +83,9 @@ class BotDesk:
         ids = [d["id"] for d in devices]
         selected = device if device in ids else (ids[0] if len(ids) == 1 else None)
         out = {
-            "customer": {"id": cust["id"], "name": cust["name"], "phone": cust["phone"]},
+            "customer": {"id": cust["id"], "name": cust["name"], "phone": cust["phone"],
+                         # קוד הורים: כל שינוי בחסימות דורש שהלקוח יקליד אותו בשיחה (הבוט לא עוקף)
+                         "parent_code": bool(cust["parent_code"])},
             "devices": [self._device_summary(d) for d in devices],
             "selected": selected,
         }

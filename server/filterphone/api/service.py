@@ -52,9 +52,9 @@ from .catalog import (
     clean_cert,
     clean_package,
     compile_settings,
-    effective_options,
     item_title,
     policy_checksum,
+    store_allowed,
     summary,
     temp_item,
 )
@@ -67,6 +67,9 @@ log = logging.getLogger("filterphone.api")
 ORG_NAME_DEFAULT = "פילטר פון"     # מוצג בטלפון: "המכשיר הזה שייך ל-פילטר פון"
 # רשתות כשרות: תעודות שורש שהמנהל מוסיף (נטפרי מובנית באפליקציה). הטלפון מזהה לפיהן את הרשת
 # (חתימה אמיתית — אי אפשר לזייף), מתקין אותן ומשהה בה את ה-VPN שלנו. אתרוג היא חטיבה של רימון.
+PARENT_CODE_RE = re.compile(r"^\d{4,8}$")
+PARENT_CODE_MAX_FAILS = 5          # ניסיונות שגויים ברצף — ואז נעילה
+PARENT_CODE_LOCK_S = 15 * 60
 KOSHER_PROVIDERS = {"netfree": "נטפרי", "rimon": "רימון / אתרוג", "netspark": "נטספארק", "other": "סינון כשר אחר"}
 MAX_KOSHER_CERTS = 20
 
@@ -265,10 +268,11 @@ def keepalive_s(value: int) -> int:
 
 
 class ApiError(Exception):
-    def __init__(self, status: int, message: str):
+    def __init__(self, status: int, message: str, extra: dict | None = None):
         super().__init__(message)
         self.status = status
         self.message = message
+        self.extra = extra or {}       # שדות נוספים בתשובה (למשל need=parent_code — הממשק מבקש את הקוד)
 
 
 def _json_list(raw: str | None) -> list:
@@ -487,7 +491,9 @@ class Services:
         return sorted(pkgs)
 
     def _allowlist(self, comp: Compiled) -> dict:
-        return {"enabled": bool(comp.dpc.get("approved_apps_only", False)), "apps": self._approved_packages()}
+        # מסלול (ניווט בלבד / בלי אינטרנט) — הרשימה שלו; אחרת הקטלוג + Chrome
+        apps = list(comp.allowlist_apps) if comp.allowlist_apps is not None else self._approved_packages()
+        return {"enabled": bool(comp.dpc.get("approved_apps_only", False)), "apps": apps}
 
     # ------------------------------------------------------------ יומן מכשיר
 
@@ -1067,7 +1073,7 @@ class Services:
                               "version": row["policy_version"], "updated_at": row["policy_updated_at"],
                               "checksum": row["policy_checksum"], "revision": row["policy_revision"]},
             "apps_report_needed": not row["apps_at"] or db.now() - row["apps_at"] > 86400,
-            "managed_apps": self.device_managed_apps(),
+            "managed_apps": self.device_managed_apps(settings.track),
             "store_categories": store_seed()["categories"],     # סדר הטאבים בחנות
             "heartbeat_interval_s": self.cfg.heartbeat_interval_s,
         })
@@ -1145,7 +1151,8 @@ class Services:
         if fresh["status"] == "active" and (release := self.app_release()):
             out["app_update"] = release     # הטלפון מחליט: עדכון שקט במנהל מכשיר, אחרת הודעה בלבד
         if fresh["status"] == "active":
-            out["managed_apps"] = self.device_managed_apps()   # קטלוג מאושר; required יותקנו אוטומטית במנהל מכשיר
+            # קטלוג מאושר (לפי מסלול הסינון); required יותקנו אוטומטית במנהל מכשיר
+            out["managed_apps"] = self.device_managed_apps(DeviceSettings.load(fresh["policy"]).track)
         return out
 
     def _log_data_checks(self, c: sqlite3.Connection, device_id: int, prev: dict, vpn: dict) -> None:
@@ -1372,7 +1379,95 @@ class Services:
             self._update_customer(c, customer_id, changes)
             self.audit(admin, "customer", f"customer:{customer_id}",
                        ", ".join(k for k, v in changes.items() if v is not None), c)
-            return dict(c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone())
+            return self.customer_out(c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone())
+
+    # ------------------------------------------------------------ קוד הורים
+
+    @staticmethod
+    def customer_out(cust) -> dict | None:
+        """לקוח לממשק: בלי ה-hash של קוד ההורים — רק אם יש קוד."""
+        if cust is None:
+            return None
+        d = {k: v for k, v in dict(cust).items() if not k.startswith("parent_code")}
+        d["parent_code"] = bool(dict(cust).get("parent_code"))
+        return d
+
+    def _parent_customer(self, c, device_id: int):
+        row = c.execute("SELECT customer_id FROM devices WHERE id = ?", (device_id,)).fetchone()
+        if row is None:
+            raise ApiError(404, "מכשיר לא נמצא")
+        if not row["customer_id"]:
+            return None
+        return c.execute("SELECT * FROM customers WHERE id = ?", (row["customer_id"],)).fetchone()
+
+    def require_parent_code(self, device_id: int, code: str | None, actor: str) -> None:
+        """שינוי בחסימות של מכשיר שללקוח שלו יש קוד הורים — רק עם הקוד. חל על כולם: הדשבורד, הבוט,
+        אישור בקשות. אין עקיפה (מנהל שצריך — מאפס את הקוד במפורש, וזה נרשם). ניסיונות שגויים נספרים
+        ונעולים אחרי PARENT_CODE_MAX_FAILS (נשמר גם כשהבקשה נדחית — טרנזקציה נפרדת)."""
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            cust = self._parent_customer(c, device_id)
+            if cust is None or not cust["parent_code"]:
+                return
+            if cust["parent_code_lock"] > t:
+                mins = max(1, (cust["parent_code_lock"] - t + 59) // 60)
+                failure = ApiError(429, f"יותר מדי ניסיונות שגויים לקוד ההורים — נסו שוב בעוד {mins} דקות",
+                                   {"need": "parent_code", "locked": True})
+            elif not (code or "").strip():
+                failure = ApiError(403, "נדרש קוד הורים כדי לשנות את החסימות", {"need": "parent_code"})
+            elif security.verify_password(cust["parent_code"], (code or "").strip()):
+                if cust["parent_code_fails"] or cust["parent_code_lock"]:
+                    c.execute("UPDATE customers SET parent_code_fails = 0, parent_code_lock = 0 WHERE id = ?",
+                              (cust["id"],))
+                return
+            else:
+                fails = cust["parent_code_fails"] + 1
+                locked = fails >= PARENT_CODE_MAX_FAILS
+                c.execute("UPDATE customers SET parent_code_fails = ?, parent_code_lock = ? WHERE id = ?",
+                          (0 if locked else fails, t + PARENT_CODE_LOCK_S if locked else 0, cust["id"]))
+                self.audit(actor, "parent_code_wrong", f"customer:{cust['id']}", f"device:{device_id}", c)
+                failure = ApiError(403, "קוד ההורים שגוי" + (" — נעול ל-15 דקות" if locked else ""),
+                                   {"need": "parent_code", "wrong": True, "locked": locked})
+        raise failure
+
+    def set_parent_code(self, customer_id: int, code: str, old_code: str | None, admin: str) -> dict:
+        """קביעה / החלפה. החלפה דורשת את הקוד הישן (שכחו — "איפוס", שנרשם ביומן)."""
+        code = (code or "").strip()
+        if not PARENT_CODE_RE.match(code):
+            raise ApiError(400, "קוד הורים: 4–8 ספרות")
+        with self.db() as c:
+            cust = c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+            dev = c.execute("SELECT id FROM devices WHERE customer_id = ? ORDER BY id LIMIT 1", (customer_id,)).fetchone()
+        if cust is None:
+            raise ApiError(404, "לקוח לא נמצא")
+        if cust["parent_code"]:
+            if dev is not None:
+                self.require_parent_code(dev["id"], old_code, admin)
+            elif not security.verify_password(cust["parent_code"], (old_code or "").strip()):
+                raise ApiError(403, "קוד ההורים הנוכחי שגוי", {"need": "parent_code", "wrong": True})
+        with self.db() as c, db.transaction(c):
+            c.execute("UPDATE customers SET parent_code = ?, parent_code_at = ?, parent_code_fails = 0,"
+                      " parent_code_lock = 0 WHERE id = ?", (security.hash_password(code), db.now(), customer_id))
+            self.audit(admin, "parent_code_set", f"customer:{customer_id}", "change" if cust["parent_code"] else "new", c)
+            return self.customer_out(c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone())
+
+    def reset_parent_code(self, customer_id: int, admin: str) -> dict:
+        """איפוס (ההורים שכחו את הקוד): מבטל את הקוד. פעולה רגישה — נרשמת ביומן הניהול."""
+        with self.db() as c, db.transaction(c):
+            cust = c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+            if cust is None:
+                raise ApiError(404, "לקוח לא נמצא")
+            c.execute("UPDATE customers SET parent_code = '', parent_code_at = NULL, parent_code_fails = 0,"
+                      " parent_code_lock = 0 WHERE id = ?", (customer_id,))
+            self.audit(admin, "parent_code_reset", f"customer:{customer_id}", "", c)
+            return self.customer_out(c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone())
+
+    def require_parent_code_for_request(self, request_id: int, code: str | None, actor: str) -> None:
+        """אישור בקשת שינוי (מהאפליקציה / מהבוט) = שינוי בחסימות — גם הוא דורש את הקוד. הצטרפות לא."""
+        with self.db() as c:
+            req = c.execute("SELECT kind, device_id FROM requests WHERE id = ?", (request_id,)).fetchone()
+        if req is not None and req["kind"] != "join" and req["device_id"]:
+            self.require_parent_code(req["device_id"], code, actor)
 
     def list_customers(self) -> list[dict]:
         with self.db() as c:
@@ -1380,7 +1475,7 @@ class Services:
                 "SELECT c.*, (SELECT count(*) FROM devices d WHERE d.customer_id = c.id) AS devices,"
                 " (SELECT count(*) FROM devices d WHERE d.customer_id = c.id AND d.status = 'active') AS active"
                 " FROM customers c ORDER BY c.id DESC").fetchall()
-        return [dict(r) for r in rows]
+        return [self.customer_out(r) for r in rows]
 
     # ------------------------------------------------------------ מכשירים (מנהל)
 
@@ -1430,8 +1525,8 @@ class Services:
         for r in rows:
             d = self._device_row_out(r, peers, stats, t)
             cust = customers.get(r["customer_id"])
-            d["customer"] = {k: cust[k] for k in ("id", "name", "phone", "email", "payment", "paid_until")} \
-                if cust else None
+            d["customer"] = {**{k: cust[k] for k in ("id", "name", "phone", "email", "payment", "paid_until")},
+                             "parent_code": bool(cust.get("parent_code"))} if cust else None
             out.append(d)
         return out
 
@@ -1470,7 +1565,7 @@ class Services:
                          or any(r["mode"] != "network" for r in settings.app_rules.values()),
                          "protections": list(comp.protections), "dpc": comp.dpc,
                          "split_apps": list(comp.split_apps), "vpn_bypass": comp.vpn_bypass},
-            "customer": dict(cust) if cust else None,
+            "customer": self.customer_out(cust),
             "requests": [{**dict(q), "options": _json_list(q["options"])} for q in reqs],
             "apps": [{**a, "blocked": a["package"] in blocked} for a in _json_list(r["apps"])],
             "apps_at": r["apps_at"],
@@ -1495,7 +1590,7 @@ class Services:
         if "status" in allowed and allowed["status"] not in ("active", "disabled"):
             raise ApiError(400, "סטטוס לא חוקי")
         policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc",
-                       "keywords", "vpn_bypass")
+                       "keywords", "vpn_bypass", "track")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
@@ -1555,7 +1650,7 @@ class Services:
         """האם הפריט (אפשרות מהקטלוג / dpc:<מפתח>) חסום עכשיו במכשיר — בלי להתחשב בפתיחה זמנית."""
         settings = DeviceSettings.load(row["policy"])
         if item in CATALOG:
-            return item in effective_options(settings.options)
+            return item in settings.active_options
         if item.startswith(DPC_ITEM_PREFIX):
             return bool({**DPC_DEFAULTS, **settings.dpc}.get(item[len(DPC_ITEM_PREFIX):]))
         return False
@@ -1936,10 +2031,13 @@ class Services:
             q += " ORDER BY sort, label, package"
             return [dict(r) for r in c.execute(q).fetchall()]
 
-    def device_managed_apps(self) -> list[dict]:
-        """מה שהטלפון מקבל: רק אפליקציות מאושרות, עם שדות ההתקנה (בלי נתוני ניהול פנימיים)."""
+    def device_managed_apps(self, track: str = "") -> list[dict]:
+        """מה שהטלפון מקבל: רק אפליקציות מאושרות, עם שדות ההתקנה (בלי נתוני ניהול פנימיים).
+        מסלול סינון מצמצם: "ניווט בלבד" — רק אפליקציות הדרכים; "בלי אינטרנט" — כלום; "בלי וואטסאפ"."""
         out = []
         for a in self.managed_apps(enabled_only=True):
+            if not store_allowed(track, a["package"]):
+                continue
             # התמונות דרך השרת — אחרי מסנן התמונות (store_media), לא ישירות מהמקור
             shots = _json_list(a["screenshots"])
             entry = {"package": a["package"], "label": a["label"], "category": a["category"],

@@ -91,17 +91,49 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
+/** קוד הורים שהוקלד — רק בזיכרון של הדף (לא נשמר בדפדפן), לכל מכשיר בנפרד, לכמה דקות. */
+const parentCodes = new Map();
+const PARENT_CODE_KEEP_MS = 5 * 60 * 1000;
+const parentKey = (path) => (path.match(/\/devices\/(\d+)/) || [])[1] || null;
+
 async function api(path, opts = {}) {
+  const key = parentKey(path);
+  const kept = key && parentCodes.get(key);
+  const code = opts.parentCode ?? (kept && kept.until > Date.now() ? kept.code : "");
   const res = await fetch(path, {
     method: opts.method || "GET",
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(code ? { "X-Parent-Code": code } : {}) },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
   if (res.status === 401 && !path.endsWith("/login")) { showLogin(); throw new Error("נדרשת התחברות"); }
-  if (res.status === 204) return null;
+  if (res.status === 204) {
+    if (key && code) parentCodes.set(key, { code, until: Date.now() + PARENT_CODE_KEEP_MS });
+    return null;
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `שגיאה ${res.status}`);
+  if (!res.ok) {
+    // קוד הורים: ללקוח יש קוד — בלי הקוד אי אפשר לשנות חסימות. מבקשים אותו ומנסים שוב.
+    if (data.need === "parent_code" && !data.locked && (opts.tries || 0) < 3) {
+      if (key) parentCodes.delete(key);
+      const typed = await askParentCode(data.wrong ? "הקוד שגוי — נסו שוב." : "");
+      if (!typed) throw new Error("השינוי לא בוצע — נדרש קוד הורים");
+      return api(path, { ...opts, parentCode: typed, tries: (opts.tries || 0) + 1 });
+    }
+    throw new Error(data.error || `שגיאה ${res.status}`);
+  }
+  if (key && code) parentCodes.set(key, { code, until: Date.now() + PARENT_CODE_KEEP_MS });
   return data;
+}
+
+async function askParentCode(note) {
+  const input = el("input", { type: "password", inputmode: "numeric", autocomplete: "off", maxlength: 8,
+    class: "ltr code-input", "aria-label": "קוד הורים" });
+  const ok = await dialog("נדרש קוד הורים", [
+    el("p", {}, "ללקוח הזה מוגדר קוד הורים — בלי הקוד אי אפשר לשנות את החסימות. בקשו מההורים להקליד אותו."),
+    note ? el("p", { class: "error" }, note) : null,
+    el("label", {}, "קוד הורים (4–8 ספרות)", input)], "אישור");
+  return ok ? input.value.replace(/\D/g, "") : "";
 }
 
 function toast(msg, err = false) {
@@ -585,7 +617,7 @@ function requestCard(r) {
 // ---------------------------------------------------------------- מכשירים
 
 async function viewDevices(arg, query) {
-  if (arg) return viewDevice(Number(arg));
+  if (arg) return viewDevice(Number(arg), query);
   const list = await api("/v1/admin/devices");
   const customerFilter = query.get("customer");
   const search = el("input", { type: "search", placeholder: "חיפוש לפי שם, טלפון, כתובת..." });
@@ -635,7 +667,7 @@ async function viewDevices(arg, query) {
   ];
 }
 
-async function viewDevice(id) {
+async function viewDevice(id, query = new URLSearchParams()) {
   const d = await api(`/v1/admin/devices/${id}`);
   $("#title").textContent = d.name;
   const patch = async (body, msg = "נשמר ✓") => {
@@ -684,10 +716,14 @@ async function viewDevice(id) {
   const customerCard = card("לקוח", null, c ? el("div", { class: "stack" }, kv([
     ["שם", c.name], ["טלפון", telLink(c.phone)], ["מייל", mailLink(c.email)],
     ["תשלום", el("span", { class: "row gap" }, paymentChip(c.payment), c.paid_until ? `עד ${date(c.paid_until)}` : null)],
+    ["קוד הורים", parentCodeControl(c)],
     c.notes ? ["הערות", c.notes] : null,
   ]), el("div", { class: "row" }, el("button", { class: "ghost small", onclick: () => editCustomer(c).then((ok) => ok && render()) }, "עריכת פרטי לקוח"),
     el("a", { href: `#/devices?customer=${c.id}` }, "כל המכשירים של הלקוח ›")))
     : el("p", { class: "muted" }, d.label ? `הופעל בקוד: ${d.label}` : "מכשיר שהופעל בקוד, בלי פרטי לקוח."));
+
+  // --- מסלול סינון
+  const trackCardEl = trackCard(d, patch);
 
   // --- רמה
   const levelCard = card("רמת סינון תמונות", "השינוי חל תוך כמה שניות. רק כאן אפשר לשנות — הלקוח לא יכול.",
@@ -773,13 +809,82 @@ async function viewDevice(id) {
       el("td", {}, chip({ pending: "ממתינה", approved: "אושרה", rejected: "נדחתה", cancelled: "בוטלה" }[r.status] || r.status)),
       el("td", {}, r.note || ""))))))) : null;
 
-  return [back, header,
-    complianceCardEl,
-    el("div", { class: "grid two" }, customerCard, logCard),
-    maintenanceCardEl, tempCardEl,
-    levelCard, policyCard, appsCard, appImagesCard, customCard, keywordCardEl, bypassCardEl, dpcCardEl,
-    el("div", { class: "grid two" }, statsCard, learnedCard),
-    eventsCard, historyCard];
+  // --- טאבים: כל נושא במקום אחד, במקום ערימה ארוכה של כרטיסים
+  const tabs = [
+    ["overview", "סקירה", [complianceCardEl, el("div", { class: "grid two" }, customerCard, logCard), maintenanceCardEl, tempCardEl]],
+    ["blocks", "חסימות", [trackCardEl, levelCard, policyCard, customCard, keywordCardEl]],
+    ["apps", "אפליקציות", [appsCard, appImagesCard, bypassCardEl, learnedCard]],
+    ["dpc", "מנהל מכשיר", [dpcCardEl]],
+    ["activity", "פעילות", [el("div", { class: "grid two" }, statsCard, historyCard || card("היסטוריית בקשות", null, empty("אין בקשות."))), eventsCard]],
+  ];
+  return [back, header, tabbed(tabs, query.get("tab"))];
+}
+
+/** טאבים בתוך עמוד. הטאב שנבחר נשמר בכתובת (?tab=) — כך רענון / שמירה חוזרים לאותו מקום. */
+function tabbed(tabs, current) {
+  const pick = tabs.some(([k]) => k === current) ? current : tabs[0][0];
+  const panels = new Map(tabs.map(([k, , cards]) => [k, el("div", { class: "tab-panel stack", role: "tabpanel", id: `tab-${k}`,
+    hidden: k !== pick }, cards.filter(Boolean))]));
+  const bar = el("div", { class: "tabs", role: "tablist" });
+  const show = (k) => {
+    bar.querySelectorAll(".tab").forEach((b) => {
+      const on = b.dataset.tab === k;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", String(on));
+    });
+    panels.forEach((p, pk) => { p.hidden = pk !== k; });
+    const [path, q] = location.hash.split("?");
+    const params = new URLSearchParams(q || "");
+    params.set("tab", k);
+    history.replaceState(null, "", `${path}?${params}`);     // בלי רינדור מחדש
+  };
+  for (const [k, title] of tabs) {
+    bar.append(el("button", { type: "button", class: `tab${k === pick ? " active" : ""}`, role: "tab", "data-tab": k,
+      "aria-selected": String(k === pick), "aria-controls": `tab-${k}`, onclick: () => show(k) }, title));
+  }
+  return el("div", { class: "stack" }, bar, ...panels.values());
+}
+
+/** קוד הורים ללקוח: בלי הקוד אי אפשר לשנות את החסימות — לא כאן ולא בבוט. */
+function parentCodeControl(c) {
+  const ask = async (title, needOld) => {
+    const code = el("input", { type: "password", inputmode: "numeric", maxlength: 8, autocomplete: "off", class: "ltr code-input" });
+    const old = needOld ? el("input", { type: "password", inputmode: "numeric", maxlength: 8, autocomplete: "off", class: "ltr code-input" }) : null;
+    const ok = await dialog(title, [
+      el("p", {}, "אחרי שמגדירים קוד — כל שינוי בחסימות של הלקוח (בדשבורד, בבוט בוואטסאפ ובאישור בקשות) דורש אותו. ההורים מקלידים אותו בעצמם."),
+      old ? el("label", {}, "הקוד הנוכחי", old) : null,
+      el("label", {}, "קוד חדש (4–8 ספרות)", code)], "שמירה");
+    if (!ok) return;
+    await attempt(() => api(`/v1/admin/customers/${c.id}/parent-code`, { method: "PUT",
+      body: { code: code.value.replace(/\D/g, ""), ...(old ? { old_code: old.value.replace(/\D/g, "") } : {}) } }), "קוד ההורים נשמר");
+    render();
+  };
+  return el("span", { class: "row gap wrap" },
+    c.parent_code ? chip("מוגדר — שינויים רק עם הקוד", "ok") : chip("לא מוגדר"),
+    el("button", { class: "ghost small", onclick: () => ask(c.parent_code ? "החלפת קוד הורים" : "הגדרת קוד הורים", c.parent_code) },
+      c.parent_code ? "החלפה" : "הגדרה"),
+    c.parent_code ? el("button", { class: "danger small", onclick: async () => {
+      if (!await confirmDialog("לאפס את קוד ההורים?", "רק אם ההורים שכחו את הקוד: הקוד יבוטל ושינויים יתאפשרו בלעדיו. הפעולה נרשמת ביומן הפעולות.", "איפוס", true)) return;
+      await attempt(() => api(`/v1/admin/customers/${c.id}/parent-code`, { method: "DELETE" }), "הקוד אופס");
+      render();
+    } }, "איפוס") : null);
+}
+
+/** מסלול סינון: בסיס מוכן (רגיל / בלי אינטרנט / ניווט בלבד / בלי וואטסאפ). מוסיף חסימות — לא פותח. */
+function trackCard(d, patch) {
+  const tracks = catalog.tracks || [];
+  if (!tracks.length) return null;
+  const cur = d.settings.track || "";
+  const box = el("div", { class: "levels" }, tracks.map((t) => el("button", {
+    type: "button", class: `level-card${t.id === cur ? " selected" : ""}`, role: "radio", "aria-checked": String(t.id === cur),
+    onclick: async () => {
+      if (t.id === cur) return;
+      if (t.allowlist && !await confirmDialog(`לעבור למסלול "${t.title}"?`, `${t.desc} כל אפליקציה אחרת בטלפון תיחסם.`, "מעבר")) return;
+      await patch({ track: t.id }, `המסלול: ${t.title}`);
+      render();
+    },
+  }, el("strong", {}, t.title), el("span", { class: "muted small" }, t.desc))));
+  return card("מסלול סינון", "בסיס מוכן למכשיר. המסלול רק מוסיף חסימות מעל מה שנבחר למטה — הוא לא פותח שום דבר.", box);
 }
 
 function yesNo(v, good = true, unknown = "לא דווח") {
