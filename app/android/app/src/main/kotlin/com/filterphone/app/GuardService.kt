@@ -34,6 +34,7 @@ class GuardService : AccessibilityService() {
     private var lastBlockPkg = ""
     private var lastToastAt = 0L
     private var lastServerCheckAt = 0L
+    private var waBrowserAt = 0L
     private var foreground: String? = null
     private var contentEvents = false
     private var scanKeywords = false
@@ -625,7 +626,11 @@ class GuardService : AccessibilityService() {
                 return
             }
             GuardPolicy.Block.SCREEN -> {
-                block(pkg, GLOBAL_ACTION_BACK, R.string.guard_screen_blocked)
+                if (pkg in WaScreens.PACKAGES && WaBrowser.isBrowserScreen(cls)) {
+                    openWaLinkInChrome(pkg)                    // הדפדפן הפנימי של וואטסאפ → Chrome
+                } else {
+                    block(pkg, GLOBAL_ACTION_BACK, R.string.guard_screen_blocked)
+                }
                 ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
                 return
             }
@@ -815,6 +820,74 @@ class GuardService : AccessibilityService() {
                     packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 }.onFailure { Log.w(TAG, "reopen after temp-open failed", it) }
             }
+        }
+    }
+
+    /**
+     * הדפדפן הפנימי של וואטסאפ נפתח (WaBrowser): לוחצים ⋮ ואז "פתיחה בדפדפן" — הקישור נפתח ב-Chrome, שם
+     * הוא מסונן. התפריט לא נמצא (גרסה אחרת של וואטסאפ) — אחורה, עם הסבר איך לפתוח ב-Chrome.
+     */
+    private fun openWaLinkInChrome(pkg: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - waBrowserAt < 2_000) return
+        waBrowserAt = now
+        val opened = withActiveRoot { clickFirst(it) { t, d -> WaBrowser.isMoreMenu(t, d) } }
+        if (!opened) {
+            waBrowserFallback(pkg)
+            return
+        }
+        pickExternalBrowser(pkg, attempt = 0)
+    }
+
+    private fun pickExternalBrowser(pkg: String, attempt: Int) {
+        main.postDelayed({
+            safely("wa-browser") {
+                if (withActiveRoot { clickFirst(it) { t, d -> WaBrowser.isOpenExternal(t, d) } }) {
+                    Toast.makeText(this, R.string.guard_wa_browser_chrome, Toast.LENGTH_SHORT).show()
+                } else if (attempt < 3) {
+                    pickExternalBrowser(pkg, attempt + 1)
+                } else {
+                    performGlobalAction(GLOBAL_ACTION_BACK)          // סוגר את התפריט שנפתח
+                    waBrowserFallback(pkg)
+                }
+            }
+        }, 300L)
+    }
+
+    private fun waBrowserFallback(pkg: String) {
+        lastBlockAt = 0
+        block(pkg, GLOBAL_ACTION_BACK, R.string.guard_wa_browser_blocked)
+    }
+
+    private fun withActiveRoot(action: (AccessibilityNodeInfo) -> Boolean): Boolean {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+        return try {
+            action(root)
+        } catch (e: Exception) {
+            false
+        } finally {
+            recycle(root)
+        }
+    }
+
+    /** לוחץ על הרכיב הראשון שמתאים (לפי טקסט / תיאור), או על ההורה הלחיץ שלו. */
+    private fun clickFirst(root: AccessibilityNodeInfo, match: (String?, String?) -> Boolean): Boolean {
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        try {
+            var visited = 0
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                if (n !== root) seen += n
+                visited++
+                if (match(n.text?.toString(), n.contentDescription?.toString())) return clickSelfOrParent(n)
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+            return false
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { if (it !== root) recycle(it) }
         }
     }
 

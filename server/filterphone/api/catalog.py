@@ -104,6 +104,9 @@ BROWSERS_OTHER = (
     "com.yandex.browser", "com.ecosia.android", "org.torproject.torbrowser", "com.cloudmosa.puffinFree",
     "com.chrome.beta", "com.chrome.dev", "com.chrome.canary", "com.huawei.browser", "com.heytap.browser",
 )
+# הדפדפן הפנימי של וואטסאפ (w.meta.me) — לא סומך על תעודת הסינון; המגן פותח את הקישור ב-Chrome
+WA_BROWSER_SCREENS = ("IABWebCoreActivity", "WatchAndBrowseActivity", "IABWebCoreBottomSheet")
+WA_BROWSER = tuple((p, WA_BROWSER_SCREENS) for p in WA)
 
 OPTIONS: tuple[Option, ...] = (
     # ------------------------------------------------------------ תמונות ווידאו
@@ -222,11 +225,11 @@ OPTIONS: tuple[Option, ...] = (
     # ------------------------------------------------------------ דפדפנים
     Option("browsers_other", "browsers", "דפדפנים חוץ מ-Chrome",
            "Firefox, Samsung Internet, Opera, DuckDuckGo ועוד לא נותנים לסנן תמונות. "
-           "חוסמים אותם ומשאירים את Chrome, שעובר סינון מלא.",
-           apps=BROWSERS_OTHER, popular=True, needs_guard=True),
+           "חוסמים אותם ומשאירים את Chrome, שעובר סינון מלא. גם הדפדפן שבתוך וואטסאפ — קישורים נפתחים ב-Chrome.",
+           apps=BROWSERS_OTHER, screens=WA_BROWSER, popular=True, needs_guard=True),
     Option("browsers_all", "browsers", "כל הדפדפנים (גם Chrome)",
            "אין גלישה בכלל. אפליקציות אחרות ממשיכות לעבוד.",
-           apps=("com.android.chrome", *BROWSERS_OTHER), needs_guard=True),
+           apps=("com.android.chrome", *BROWSERS_OTHER), screens=WA_BROWSER, needs_guard=True),
 
     # ------------------------------------------------------------ וידאו, מוזיקה ובידור
     Option("youtube", "video", "יוטיוב", "האפליקציה, האתר והסרטונים המוטמעים באתרים אחרים.",
