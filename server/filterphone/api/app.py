@@ -47,7 +47,7 @@ from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
 from .playinfo import PlayInfo
 from .security import RateLimiter
-from .service import LEVEL_NAMES, ApiError, Services, store_seed
+from .service import KOSHER_PROVIDERS, LEVEL_NAMES, ApiError, Services, store_seed
 from .support import SupportDesk
 from .wabot import WaBot
 from .wg import WireGuard, WireGuardError
@@ -263,7 +263,7 @@ def _state_matches(d: dict, state: str) -> bool:
     c = d["compliance"]
     return {
         "offline": d["status"] == "active" and not c["online"],
-        "vpn_inactive": d["status"] == "active" and c["vpn"] != "up",
+        "vpn_inactive": d["status"] == "active" and c["vpn"] not in ("up", "kosher"),
         "accessibility_off": c["accessibility"] == "off",
         "unmanaged": d["status"] == "active" and c["management"] != "device_owner",
     }.get(state, c["state"] == state)
@@ -491,6 +491,11 @@ class BrandingIn(BaseModel):
     org_name: str = Field(min_length=1, max_length=60)
 
 
+class KosherCertIn(BaseModel):
+    provider: str = Field(min_length=1, max_length=20)
+    cert: str = Field(min_length=100, max_length=20_000)
+
+
 class InstalledAppIn(BaseModel):
     package: str = Field(max_length=200)
     version_name: str = Field(default="", max_length=80)
@@ -710,6 +715,7 @@ def _routes(app: FastAPI) -> None:
             raise ApiError(413, "הדיווח גדול מדי")
         out = svc.heartbeat(row, raw, client_ip(request))
         out["org_name"] = svc.org_name()     # מנהל מכשיר: "המכשיר הזה שייך ל-…" (מסך נעילה / פס ההתראות)
+        out["kosher_certs"] = svc.kosher_certs_for_device()   # רימון / אתרוג וכו' (נטפרי מובנית באפליקציה)
         unread = request.app.state.support.device_unread(row["id"])
         if unread["unread"]:
             out["support"] = unread          # הטלפון מציג התראה "יש תשובה מהתמיכה"
@@ -829,6 +835,21 @@ def _routes(app: FastAPI) -> None:
     @app.put("/v1/admin/branding")
     def branding_save(body: BrandingIn, svc: SvcDep, admin: AdminRow):
         return {"org_name": svc.set_org_name(admin["username"], body.org_name)}
+
+    # --- רשתות כשרות: תעודות שורש של ספקי סינון (נטפרי מובנית; רימון / אתרוג — מוסיפים כאן) ---
+
+    @app.get("/v1/admin/kosher-certs")
+    def kosher_certs(svc: SvcDep, _: AdminRow):
+        return {"providers": KOSHER_PROVIDERS,
+                "certs": [{k: v for k, v in i.items() if k != "pem"} for i in svc.kosher_certs()]}
+
+    @app.post("/v1/admin/kosher-certs")
+    def kosher_cert_add(body: KosherCertIn, svc: SvcDep, admin: AdminRow):
+        return svc.add_kosher_cert(admin["username"], body.provider, body.cert)
+
+    @app.delete("/v1/admin/kosher-certs/{fingerprint}")
+    def kosher_cert_remove(fingerprint: str, svc: SvcDep, admin: AdminRow):
+        return {"ok": svc.remove_kosher_cert(admin["username"], fingerprint)}
 
     # --- שרת GPU (Modal) לניתוח תמונות ---
 

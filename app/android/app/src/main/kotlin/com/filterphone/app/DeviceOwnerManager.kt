@@ -45,6 +45,7 @@ object DeviceOwnerManager {
         "hide_blocked_apps" to true,
         "suspend_blocked_apps" to true,     // אפור + "חסום על ידי המנהל" — גובר על ההסתרה
         "disallow_tethering" to true,       // נקודה חמה / שיתוף אינטרנט (Wi-Fi, בלוטות', USB)
+        "kosher_network" to true,           // ברשת נטפרי וכו' — ה-VPN מושהה שם (KosherNet). בכל טלפון
     )
 
     /**
@@ -151,7 +152,9 @@ object DeviceOwnerManager {
         val paused = AdminState.isPaused(context)   // השהיה שהמנהל אישר — הטלפון פתוח (PAUSED)
         // פתוח זמנית (למשל נקודה חמה ל-10 דקות) — ההגבלה מורפית עד הזמן, ואז חוזרת (Recovery.JOB_TEMP)
         val want = if (paused) PAUSED else effective(policy.dpc) +
-            GuardPolicy.activeTempDpc(policy).filter { it in DEFAULTS }.associateWith { false }
+            GuardPolicy.activeTempDpc(policy).filter { it in DEFAULTS }.associateWith { false } +
+            // ברשת כשרה (נטפרי): "תמיד מופעל" + lockdown כבויים רק בזמן שבה — חוזרים ביציאה (KosherNet)
+            (if (KosherNet.isActive(context)) mapOf("always_on_vpn" to false) else emptyMap())
         val applied = mutableListOf<String>()
         val failed = mutableListOf<String>()
         val pending = mutableListOf<String>()

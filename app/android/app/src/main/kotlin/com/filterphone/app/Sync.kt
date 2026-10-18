@@ -45,6 +45,7 @@ object Sync {
             ProtectionState.string(context, ProtectionState.VPN_DATA_ERROR)?.let { vpn.put("data_error", it.take(40)) }
         }
         vpn.put("data_fails", ProtectionState.count(context, ProtectionState.VPN_DATA_FAILS))
+        runCatching { KosherNet.report(context, vpn) }       // ברשת נטפרי וכו' — ה-VPN מושהה בכוונה
 
         val policy = GuardPolicy.get(context)
         val needsAccessibility = Watchdog.guardRequired(context)
@@ -136,6 +137,8 @@ object Sync {
         first.optString("org_name").trim().takeIf { it.isNotEmpty() && it.length <= 60 }?.let {
             ProtectionState.setString(context, ProtectionState.ORG_NAME, it)
         }
+        // תעודות של רשתות כשרות שהמנהל הוסיף (רימון / אתרוג...) — לזיהוי ולהתקנה
+        runCatching { KosherNet.saveExtraCerts(context, first.optJSONArray("kosher_certs")) }
         // פקודת מנהל: השהיית הגנה (הטלפון פתוח עד סוף התוקף) או הסרת ניהול — מהערוץ המאומת בלבד
         runCatching {
             val wasPaused = AdminState.isPaused(context)

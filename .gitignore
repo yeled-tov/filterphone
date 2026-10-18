@@ -5,6 +5,9 @@
 *.key
 *.p12
 *.pem
+# תעודות ציבוריות בלבד (בלי מפתחות): תעודות השורש של נטפרי, ושרשרת מזויפת לבדיקה
+!app/android/app/src/main/res/raw/kosher_netfree.pem
+!app/android/app/src/test/resources/kosher/fake_netfree_chain.pem
 wg0.conf
 vpn-clients/
 .wwebjs_auth/

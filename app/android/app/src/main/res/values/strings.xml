@@ -21,6 +21,9 @@
     <string name="protection_reconnecting">מתחבר מחדש לסינון…</string>
     <string name="protection_needs_permission">נדרש אישור חיבור VPN — פתחו את FilterPhone</string>
     <string name="protection_paused">ההגנה מושהית באישור המנהל — הטלפון פתוח עד לסיום ההשהיה</string>
+    <string name="protection_kosher">ברשת %1$s — הסינון של %1$s פעיל (ה-VPN חוזר ביציאה מהרשת)</string>
+    <string name="kosher_lockdown_title">זוהתה רשת %1$s</string>
+    <string name="kosher_lockdown_text">%1$s חוסמת את ה-VPN של FilterPhone, ו\"חסימת חיבורים ללא VPN\" מונעת מעבר אוטומטי לסינון של %1$s — לכן אין כרגע אינטרנט ברשת הזו. פנו למנהל הסינון.</string>
     <!-- מוצג על ידי אנדרואיד כשלוחצים על אפליקציה "אפורה" או על הגדרה שנחסמה (מנהל מכשיר) -->
     <string name="alerts_channel">התראות חשובות</string>
     <string name="watchdog_title">FilterPhone צריך אישור כדי להמשיך להגן</string>

@@ -1,10 +1,13 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 
 import 'config.dart';
+import 'kosher_roots.dart';
 
 class ApiException implements Exception {
   ApiException(this.status, this.message);
@@ -526,8 +529,25 @@ class ApiClient {
   }
 
   ApiClient({http.Client? client, String? baseUrl})
-      : _http = client ?? http.Client(),
+      : _http = client ?? _defaultClient(),
         _base = baseUrl ?? apiBaseUrl;
+
+  /// תעודות המערכת + של נטפרי: ברשת נטפרי (ה-VPN מושהה שם) הספק פותח HTTPS עם התעודה שלו.
+  /// רק לבקשות של האפליקציה לשרת שלנו. תעודה שלא נטענת — מדלגים עליה, לא נכשלים.
+  static http.Client _defaultClient() {
+    try {
+      final ctx = SecurityContext(withTrustedRoots: true);
+      final blocks = RegExp(r'-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----').allMatches(kosherRootsPem);
+      for (final m in blocks) {
+        try {
+          ctx.setTrustedCertificatesBytes(utf8.encode(m.group(0)!));
+        } catch (_) {}
+      }
+      return IOClient(HttpClient(context: ctx));
+    } catch (_) {
+      return http.Client();
+    }
+  }
 
   final http.Client _http;
   final String _base;

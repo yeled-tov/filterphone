@@ -144,7 +144,8 @@ object TunnelManager {
         setWanted(true)
         backoff.succeeded()
         endUpdatePause()
-        if (AdminState.isPaused(appContext)) state else bringUp()   // בהשהיה מאושרת — ה-VPN כבוי
+        // בהשהיה מאושרת / ברשת כשרה (נטפרי) — ה-VPN כבוי (כבר בחוט של המנהרה: בלי kosherGate שממתין לו)
+        if (AdminState.isPaused(appContext) || KosherNet.isActive(appContext)) state else bringUp()
     }
 
     /**
@@ -158,6 +159,21 @@ object TunnelManager {
                 .onFailure { Log.w(TAG, "tunnel down for pause failed", it) }
             appliedBypass = emptySet()
             Log.i(TAG, "protection paused by the administrator — tunnel down until the pause ends")
+        }
+        return true
+    }
+
+    /**
+     * ברשת כשרה (נטפרי וכו' — KosherNet): הספק חוסם את ה-WireGuard ומסנן בעצמו, אז המנהרה יורדת רק
+     * ברשת הזו (הרצון לחיבור נשמר). ביציאה ממנה KosherNet מחבר מחדש. מחזיר true אם המצב בתוקף.
+     */
+    private fun kosherGate(): Boolean {
+        if (!KosherNet.isActive(appContext)) return false
+        if (state != Tunnel.State.DOWN) {
+            runCatching { worker.submit<Tunnel.State> { backend.setState(tunnel, Tunnel.State.DOWN, null) }.get(10, TimeUnit.SECONDS) }
+                .onFailure { Log.w(TAG, "tunnel down for the kosher network failed", it) }
+            appliedBypass = emptySet()
+            Log.i(TAG, "kosher network — tunnel down on this network only")
         }
         return true
     }
@@ -200,6 +216,8 @@ object TunnelManager {
     private fun prefs() = appContext.getSharedPreferences("fp", Context.MODE_PRIVATE)
 
     private fun bringUp(): Tunnel.State {
+        // רץ בחוט של המנהרה, כמו ההורדה ב-kosherGate — כך חיבור שהתחיל לפני הזיהוי לא "מנצח" אותו
+        if (KosherNet.isActive(appContext)) return state
         // האפליקציות שמחוץ למנהרה (FilterTube וכו') — רק מה שמותקן ועבר את בדיקת החתימה.
         // קודם רשימת ההיתר של lockdown (אחרת אנדרואיד חוסם להן את הרשת), ואז המנהרה עצמה.
         // כשל בהחרגה לעולם לא מונע את ה-VPN: במקרה הגרוע — בלי החרגה (הכול בסינון).
@@ -268,6 +286,7 @@ object TunnelManager {
         }
         if (!wantsConnection() || !hasConfig()) return false
         if (pausedGate()) return false
+        if (kosherGate()) return false                       // ברשת כשרה — הסינון של הספק פעיל
         if (updatePaused()) return false                     // מותקן עדכון (אנדרואיד 16) — מתחברים אחריו
         if (!isPermissionGranted()) {
             // בלי אישור VPN מהמשתמש אין מה לעשות ברקע — מוצג באפליקציה ובהתראה
@@ -300,6 +319,7 @@ object TunnelManager {
     fun healthCheck(): Boolean {
         if (!isInitialized || !wantsConnection() || !hasConfig()) return false
         if (pausedGate()) return true                        // מושהה בכוונה — "תקין"
+        if (kosherGate()) return true                        // ברשת כשרה — בכוונה
         if (updatePaused()) return true                      // מותקן עדכון — מתחברים אחריו
         if (state != Tunnel.State.UP) return ensureConnected("health")
         val age = handshakeAgeMs()
@@ -431,6 +451,7 @@ object TunnelManager {
             "dataFailMs" to ProtectionState.time(appContext, ProtectionState.VPN_DATA_FAIL),
             "dataError" to ProtectionState.string(appContext, ProtectionState.VPN_DATA_ERROR),
             "bypass" to appliedBypass.toList(),
+            "kosherNet" to KosherNet.provider(appContext),
         )
     }
 

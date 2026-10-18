@@ -36,10 +36,12 @@ const DPC_LABELS = {
   hide_blocked_apps: ["הסתרת אפליקציות חסומות", "אפליקציה חסומה נעלמת מהטלפון (במקום חסימה בנגישות)."],
   suspend_blocked_apps: ["אפליקציות חסומות באפור", "האייקון נשאר אפור; לחיצה מציגה 'חסום על ידי מנהל הסינון'. כשפעיל — במקום הסתרה. Google Play נחסם כך בלי לגעת בשירותי Google."],
   disallow_tethering: ["חסימת נקודה חמה", "שיתוף אינטרנט ב-Wi-Fi, בלוטות' ו-USB — אפור בהגדרות ובלוח המהיר."],
+  kosher_network: ["מעבר אוטומטי לרשת נטפרי", "ברשת של נטפרי הטלפון מתקין את התעודה שלהם ומשהה את ה-VPN שלנו (שם הסינון של נטפרי פעיל); ביציאה מהרשת ה-VPN חוזר לבד. הרשת מזוהה לפי חתימת התעודה של נטפרי — אי אפשר לזייף. חסימות האפליקציות נשארות. כבוי = ברשת נטפרי אין אינטרנט (ה-VPN שלנו חסום שם)."],
   approved_apps_only: ["רשימה לבנה — רק אפליקציות מאושרות", "נפתחות רק אפליקציות מהחנות, Chrome והבסיס של הטלפון (חייגן, הודעות, אנשי קשר, מצלמה, גלריה, שעון, מחשבון, יומן, הגדרות). כל השאר נחסמות. מומלץ לנסות קודם על מכשיר אחד."],
 };
 /** הגדרות בכרטיס שנאכפות בנגישות — בכל טלפון, גם בלי מנהל מכשיר. */
-const GUARD_DPC = new Set(["approved_apps_only"]);
+const KOSHER_NETS = { netfree: "נטפרי", etrog: "אתרוג", rimon: "רימון" };
+const GUARD_DPC = new Set(["approved_apps_only", "kosher_network"]);
 const ANDROID = { 26: "8.0", 27: "8.1", 28: "9", 29: "10", 30: "11", 31: "12", 32: "12L", 33: "13", 34: "14", 35: "15", 36: "16" };
 const LOG_KINDS = {
   vpn_up: ["ok", "VPN חזר"], vpn_down: ["bad", "VPN כבה"], accessibility_on: ["ok", "המגן הופעל"],
@@ -47,6 +49,7 @@ const LOG_KINDS = {
   management_removed: ["bad", "מנהל המכשיר הוסר"], battery_unrestricted: ["ok", "סוללה: ללא הגבלה"],
   battery_restricted: ["warn", "סוללה: מוגבלת"], outside_vpn: ["bad", "דיווח מחוץ למנהרה"], vpn_no_data: ["bad", "VPN בלי תעבורה"], vpn_data_ok: ["ok", "התעבורה ב-VPN חזרה"], policy_error: ["warn", "שגיאת מדיניות"],
   app_updated: ["ok", "האפליקציה עודכנה"], app_update_failed: ["warn", "עדכון האפליקציה נכשל"],
+  kosher_on: ["ok", "ברשת נטפרי — ה-VPN מושהה"], kosher_off: ["ok", "יצא מרשת נטפרי — ה-VPN חזר"],
   paused: ["warn", "ההגנה הושהתה"], resumed: ["ok", "ההגנה חזרה"], unmanage_requested: ["warn", "נשלחה הסרת ניהול"],
   management_cleared: ["warn", "הניהול הוסר"], uninstalled: ["bad", "הלקוח הסיר את ההגנה (בהשהיה)"],
   uninstall_blocked: ["bad", "ניסיון הסרה בלי השהיה — נחסם"], transferred: ["warn", "הוחלף למכשיר אחר"],
@@ -153,7 +156,7 @@ function matchesFilter(d, f) {
   switch (f) {
     case "": return true;
     case "offline": return d.status === "active" && !c.online;
-    case "vpn_inactive": return d.status === "active" && c.vpn !== "up";
+    case "vpn_inactive": return d.status === "active" && c.vpn !== "up" && c.vpn !== "kosher";
     case "accessibility_off": return c.accessibility === "off";
     case "unmanaged": return d.status === "active" && c.management !== "device_owner";
     case "sync": return c.policy_sync === "pending" || c.policy_sync === "syncing";
@@ -803,7 +806,10 @@ function complianceCard(d) {
     issues,
     el("div", { class: "grid two" },
       kv([
-        ["VPN (סינון)", c.vpn === "up" ? chip("פעיל", "ok") : c.vpn === "down" ? chip("כבוי", "bad") : chip("לא ידוע")],
+        ["VPN (סינון)", c.vpn === "up" ? chip("פעיל", "ok") : c.vpn === "kosher"
+          ? chip(`ברשת ${KOSHER_NETS[vpn.kosher_provider] || "כשרה"} — הסינון שלהם פעיל`, "ok")
+          : c.vpn === "down" ? chip("כבוי", "bad") : chip("לא ידוע")],
+        ...(vpn.kosher_unknown ? [["רשת עם סינון לא מוכר", chip(vpn.kosher_unknown, "warn")]] : []),
         ["VPN — נראה לאחרונה", ago(d.last_handshake)],
         ["סינון רשת (הדיווח עבר דרך המנהרה)", yesNo(hb.via_vpn)],
         ["VPN תמיד מופעל", yesNo(pick(vpn.always_on, g.always_on))],
@@ -1641,6 +1647,41 @@ function brandingCard(b) {
       } }, "שמירה")));
 }
 
+/** רשתות כשרות: נטפרי מובנית באפליקציה; תעודות של רימון / אתרוג וכו' מוסיפים כאן — והטלפונים מזהים
+ * את הרשת לפיהן, מתקינים אותן ומשהים בה את ה-VPN שלנו (רק כשהמעבר האוטומטי פעיל למכשיר). */
+function kosherCertsCard(k) {
+  if (!k) return null;
+  const provider = el("select", {}, Object.entries(k.providers).filter(([id]) => id !== "netfree")
+    .map(([id, t]) => el("option", { value: id }, t)));
+  const text = el("textarea", { class: "ltr mono small", rows: 4, placeholder: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----" });
+  const file = el("input", { type: "file", accept: ".crt,.cer,.pem,.der", onchange: async () => {
+    const f = file.files[0];
+    if (!f) return;
+    const buf = new Uint8Array(await f.arrayBuffer());
+    const asText = new TextDecoder().decode(buf);
+    // PEM כמו שהוא; DER (בינארי) — ל-base64
+    text.value = asText.includes("BEGIN CERTIFICATE") ? asText : btoa(String.fromCharCode(...buf));
+  } });
+  const rows = k.certs.map((c) => el("div", { class: "app-row" },
+    el("div", { class: "grow" }, el("b", {}, k.providers[c.provider] || c.provider),
+      el("small", { class: "ltr" }, c.subject), el("small", {}, `בתוקף עד ${dateTime(c.not_after)} · ${c.fingerprint.slice(0, 16)}…`)),
+    el("button", { class: "danger small", onclick: async () => {
+      if (!await confirmDialog("להסיר את התעודה?", "טלפונים לא יזהו יותר את הרשת הזו כרשת כשרה.", "הסרה", true)) return;
+      await attempt(() => api(`/v1/admin/kosher-certs/${c.fingerprint}`, { method: "DELETE" }), "הוסרה");
+      render();
+    } }, "הסרה")));
+  return card("רשתות כשרות (נטפרי / רימון / אתרוג)",
+    "ברשת של ספק סינון כשר הטלפון מזהה אותה לפי חתימת התעודה של הספק (אי אפשר לזייף), מתקין את התעודה ומשהה שם את ה-VPN שלנו — הסינון של הספק פעיל. נטפרי מובנית באפליקציה. לרימון / אתרוג: הורידו את \"רישיון ההגנה\" מהאתר הרשמי של הספק והוסיפו אותו כאן; הטלפונים מקבלים אותו בסנכרון הבא.",
+    rows.length ? el("div", { class: "dpc-list" }, rows) : el("p", { class: "muted small" }, "עוד לא נוספו תעודות (נטפרי מובנית ופועלת גם בלי זה)."),
+    el("div", { class: "row gap" }, el("label", {}, "ספק", provider), el("label", { class: "grow" }, "קובץ התעודה", file)),
+    el("label", {}, "או הדביקו את התעודה", text),
+    el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
+      if (!text.value.trim()) return toast("בחרו קובץ או הדביקו תעודה", true);
+      await attempt(() => api("/v1/admin/kosher-certs", { method: "POST", body: { provider: provider.value, cert: text.value } }), "נוספה");
+      render();
+    } }, "הוספת תעודה")));
+}
+
 function gpuCard(g) {
   if (!g) return null;
   const fromEnv = g.source === "env";
@@ -1986,6 +2027,7 @@ async function viewSystem() {
   const wa = await api("/v1/admin/whatsapp").catch(() => null);
   const gpu = await api("/v1/admin/gpu").catch(() => null);
   const branding = await api("/v1/admin/branding").catch(() => null);
+  const kosher = await api("/v1/admin/kosher-certs").catch(() => null);
   const ag = o.adguard;
   const CHECKS = { db: "מסד נתונים", redis: "Redis", engine: "מנוע תמונות", wireguard: "WireGuard", adguard: "AdGuard" };
   const m = (snap, key) => (snap && snap[key] !== undefined ? num(Math.round(snap[key])) : "—");
@@ -2025,6 +2067,7 @@ async function viewSystem() {
   return [
     healthCard,
     brandingCard(branding),
+    kosherCertsCard(kosher),
     gpuCard(gpu),
     whatsappCard(wa),
     el("div", { class: "grid two" }, agCard,

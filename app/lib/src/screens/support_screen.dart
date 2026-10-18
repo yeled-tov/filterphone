@@ -138,7 +138,7 @@ class _SupportScreenState extends State<SupportScreen> {
       if (d != null) 'מכשיר #${d.id}${d.name.isNotEmpty ? ' · ${d.name}' : ''}',
       if (phone.isNotEmpty) 'טלפון: $phone',
       if (c.androidId.isNotEmpty) 'מזהה: ${c.androidId}',
-      'VPN: ${c.vpn.isUp ? 'מחובר' : 'מנותק'}',
+      'VPN: ${c.vpn.isUp ? 'מחובר' : c.vpn.kosherLabel != null ? 'ברשת ${c.vpn.kosherLabel}' : 'מנותק'}',
     ].join('\n');
   }
 

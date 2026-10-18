@@ -65,6 +65,10 @@ from .wg import WireGuard, WireGuardError
 log = logging.getLogger("filterphone.api")
 
 ORG_NAME_DEFAULT = "פילטר פון"     # מוצג בטלפון: "המכשיר הזה שייך ל-פילטר פון"
+# רשתות כשרות: תעודות שורש שהמנהל מוסיף (נטפרי מובנית באפליקציה). הטלפון מזהה לפיהן את הרשת
+# (חתימה אמיתית — אי אפשר לזייף), מתקין אותן ומשהה בה את ה-VPN שלנו. אתרוג היא חטיבה של רימון.
+KOSHER_PROVIDERS = {"netfree": "נטפרי", "rimon": "רימון / אתרוג", "netspark": "נטספארק", "other": "סינון כשר אחר"}
+MAX_KOSHER_CERTS = 20
 
 # ---- החנות
 STORE_SEED_VERSION = 3
@@ -129,7 +133,9 @@ _HB_SECTIONS = {
     "vpn": {"state": str, "handshake_age_s": int, "always_on": bool, "lockdown": bool, "last_health_ok": int,
             "reconnects": int, "error": str,
             # בדיקת תעבורה אמיתית במנהרה (DataProbe): handshake טרי לא מוכיח שיש אינטרנט
-            "data_ok": bool, "data_error": str, "data_fail_age_s": int, "data_fails": int},
+            "data_ok": bool, "data_error": str, "data_fail_age_s": int, "data_fails": int,
+            # רשת כשרה (נטפרי): ה-VPN מושהה בכוונה כי הספק מסנן. unknown = סינון לא מוכר שזוהה (לאבחון)
+            "kosher": bool, "kosher_provider": str, "kosher_unknown": str},
     "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool,
                       "self_heal": bool, "restored": int, "errors": int, "error": str},
     "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
@@ -147,6 +153,7 @@ _LOG_TRANSITIONS = (
     (("accessibility", "enabled"), True, "accessibility_on", "accessibility_off"),
     (("device_owner",), True, "management_on", "management_removed"),
     (("battery_unrestricted",), True, "battery_unrestricted", "battery_restricted"),
+    (("vpn", "kosher"), True, "kosher_on", "kosher_off"),
 )
 
 
@@ -401,6 +408,69 @@ class Services:
                       " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (name,))
         self.audit(admin, "org_name", "branding", name)
         return name
+
+    # ------------------------------------------------------------ תעודות של רשתות כשרות
+
+    def kosher_certs(self) -> list[dict]:
+        with self.db() as c:
+            r = c.execute("SELECT value FROM meta WHERE key = 'kosher_certs'").fetchone()
+        try:
+            items = json.loads(r["value"]) if r and r["value"] else []
+        except ValueError:
+            items = []
+        return [i for i in items if isinstance(i, dict) and i.get("pem")]
+
+    def _save_kosher_certs(self, items: list[dict]) -> None:
+        with self.db() as c, db.transaction(c):
+            c.execute("INSERT INTO meta (key, value) VALUES ('kosher_certs', ?)"
+                      " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(items, ensure_ascii=False),))
+
+    def add_kosher_cert(self, admin: str, provider: str, text: str) -> dict:
+        """תעודת שורש (PEM, או DER ב-base64) של ספק סינון כשר. רק תעודת CA — לא תעודה של אתר."""
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+
+        if provider not in KOSHER_PROVIDERS:
+            raise ApiError(400, "ספק לא מוכר")
+        raw = (text or "").strip()
+        try:
+            if "BEGIN CERTIFICATE" in raw:
+                cert = x509.load_pem_x509_certificate(raw.encode())
+            else:
+                cert = x509.load_der_x509_certificate(base64.b64decode("".join(raw.split()), validate=True))
+        except Exception:
+            raise ApiError(400, "הקובץ אינו תעודה תקינה (crt / pem / cer)") from None
+        try:
+            is_ca = cert.extensions.get_extension_for_class(x509.BasicConstraints).value.ca
+        except x509.ExtensionNotFound:
+            is_ca = False
+        if not is_ca:
+            raise ApiError(400, "זו לא תעודת שורש (CA) — צריך את \"רישיון ההגנה\" / תעודת האבטחה של הספק")
+        if cert.not_valid_after_utc.timestamp() < time.time():
+            raise ApiError(400, "התעודה פגה")
+        fp = cert.fingerprint(hashes.SHA256()).hex()
+        items = [i for i in self.kosher_certs() if i.get("fingerprint") != fp]
+        if len(items) >= MAX_KOSHER_CERTS:
+            raise ApiError(400, f"אפשר עד {MAX_KOSHER_CERTS} תעודות")
+        item = {"provider": provider, "fingerprint": fp, "subject": cert.subject.rfc4514_string()[:200],
+                "not_after": int(cert.not_valid_after_utc.timestamp()), "added_by": admin, "added_at": db.now(),
+                "pem": cert.public_bytes(serialization.Encoding.PEM).decode()}
+        self._save_kosher_certs([*items, item])
+        self.audit(admin, "kosher_cert_add", provider, f"{item['subject']} {fp[:16]}")
+        return {k: v for k, v in item.items() if k != "pem"}
+
+    def remove_kosher_cert(self, admin: str, fingerprint: str) -> bool:
+        items = self.kosher_certs()
+        keep = [i for i in items if i.get("fingerprint") != fingerprint]
+        if len(keep) == len(items):
+            raise ApiError(404, "תעודה לא נמצאה")
+        self._save_kosher_certs(keep)
+        self.audit(admin, "kosher_cert_remove", "kosher", fingerprint[:16])
+        return True
+
+    def kosher_certs_for_device(self) -> list[dict]:
+        """בתשובת ה-heartbeat: הטלפון מוסיף אותן לזיהוי ולהתקנה (מעל נטפרי שמובנית)."""
+        return [{"provider": i["provider"], "pem": i["pem"]} for i in self.kosher_certs()]
 
     def device_policy(self, row: sqlite3.Row) -> dict:
         """המדיניות לטלפון, עם גרסה וטביעה (הטלפון מאשר את הגרסה שהחיל)."""
@@ -1319,6 +1389,7 @@ class Services:
         return compliance.evaluate(
             r, _json_dict(r["heartbeat"]), _json_dict(r["guard"]), handshake,
             needs_device_block=bool(comp.apps), needs_accessibility=comp.needs_accessibility,
+            kosher_allowed=bool(comp.dpc.get("kosher_network", DPC_DEFAULTS["kosher_network"])),
             now=t or db.now(), offline_after_s=self.cfg.offline_after_s, lost_after_s=self.cfg.lost_after_s,
             sync_grace_s=self.cfg.sync_grace_s)
 

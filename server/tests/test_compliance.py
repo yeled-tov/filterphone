@@ -869,3 +869,100 @@ def test_baseline_blocks_play_and_non_chrome_browsers_for_every_device():
     assert {b["id"] for b in summary(DeviceSettings())} >= set(BASELINE_OPTIONS)
     strict = compile_settings(1, DeviceSettings(options=["browsers_all"]))
     assert "com.android.chrome" in strict.apps
+
+
+# ------------------------------------------------------------------ רשת כשרה (נטפרי / רימון)
+
+
+def test_kosher_network_is_green_only_when_the_admin_allows_it():
+    now = 1_000_000
+    hb = {"via_vpn": False, "ca_installed": True, "battery_unrestricted": True, "accessibility": {"enabled": True},
+          "vpn": {"state": "DOWN", "always_on": False, "lockdown": False, "kosher": True, "kosher_provider": "netfree"}}
+    r = ev(fake_row(heartbeat_at=now - 60), hb)
+    # ה-VPN מושהה בכוונה ברשת נטפרי: לא "כבוי", ובלי "תמיד מופעל כבוי"
+    assert r.vpn == "kosher" and r.state == C.GREEN and r.issues == []
+    # המנהל כיבה את המעבר האוטומטי — זה "VPN כבוי" רגיל
+    r = C.evaluate(fake_row(heartbeat_at=now - 60), hb, {}, 0, False, False, now, 1800, 172800, 1500,
+                   kosher_allowed=False)
+    assert r.vpn == "down" and r.state == C.RED and "vpn_off" in [i["code"] for i in r.issues]
+    # handshake טרי גובר (ה-VPN שלנו עובד גם ברשת הזו)
+    assert ev(fake_row(heartbeat_at=now - 60), hb, hs=now - 10).vpn == "up"
+
+
+def test_kosher_heartbeat_fields_toggle_and_device_log(env, monkeypatch):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    monkeypatch.setattr("filterphone.api.app.client_ip", lambda request: "203.0.113.9")   # מחוץ למנהרה
+    base = {"policy_version": 1, "ca_installed": True, "battery_unrestricted": True}
+    client.post("/v1/device/heartbeat", headers=dh, json={**base, "vpn": {"state": "DOWN", "kosher": False}})
+    r = client.post("/v1/device/heartbeat", headers=dh, json={**base, "vpn": {
+        "state": "DOWN", "kosher": True, "kosher_provider": "netfree", "kosher_unknown": "x" * 200}})
+    assert r.json()["kosher_certs"] == []
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    assert d["compliance"]["vpn"] == "kosher" and d["compliance"]["state"] == "green"
+    assert d["heartbeat"]["vpn"]["kosher_provider"] == "netfree" and len(d["heartbeat"]["vpn"]["kosher_unknown"]) <= 80
+    assert "kosher_on" in [e["kind"] for e in d["device_log"]]
+    assert client.get("/v1/admin/devices?state=vpn_inactive", headers=h).json() == []
+    # ההגדרה לכל מכשיר: ברירת מחדל פעיל; כיבוי — אדום ("VPN כבוי")
+    assert d["settings"]["dpc_effective"]["kosher_network"] is True
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"dpc": {"kosher_network": False}})
+    pol = svc.device_policy(row(svc, did))
+    assert pol["dpc"]["kosher_network"] is False
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    assert d["compliance"]["vpn"] == "down" and d["compliance"]["state"] == "red"
+
+
+def _cert_pem(name: str) -> str:
+    from pathlib import Path
+    raw = Path(__file__).resolve().parents[2] / "app/android/app/src/main/res/raw/kosher_netfree.pem"
+    blocks = raw.read_text().split("-----END CERTIFICATE-----")
+    return {"first": blocks[0][blocks[0].index("-----BEGIN"):] + "-----END CERTIFICATE-----"}[name]
+
+
+def test_admin_adds_kosher_certificates_and_phones_get_them(env):
+    svc, client = env
+    h = admin_headers(client)
+    _, dh, _ = enroll(svc, client)
+    pem = _cert_pem("first")
+    r = client.post("/v1/admin/kosher-certs", headers=h, json={"provider": "rimon", "cert": pem})
+    assert r.status_code == 200, r.text
+    fp = r.json()["fingerprint"]
+    assert len(fp) == 64 and "pem" not in r.json() and "NetFree" in r.json()["subject"]
+    # כפילות — מתעדכנת, לא נוספת פעמיים; DER ב-base64 מתקבל גם הוא
+    der = base64.b64encode(base64.b64decode("".join(pem.splitlines()[1:-1]))).decode()
+    assert client.post("/v1/admin/kosher-certs", headers=h, json={"provider": "rimon", "cert": der}).status_code == 200
+    listed = client.get("/v1/admin/kosher-certs", headers=h).json()
+    assert [c["fingerprint"] for c in listed["certs"]] == [fp] and "rimon" in listed["providers"]
+    certs = client.post("/v1/device/heartbeat", headers=dh, json={"policy_version": 1}).json()["kosher_certs"]
+    assert certs == [{"provider": "rimon", "pem": certs[0]["pem"]}] and "BEGIN CERTIFICATE" in certs[0]["pem"]
+    # לא תעודה / ספק לא מוכר / בלי הרשאת מנהל
+    bad = client.post("/v1/admin/kosher-certs", headers=h, json={"provider": "rimon", "cert": "x" * 200})
+    assert bad.status_code == 400
+    assert client.post("/v1/admin/kosher-certs", headers=h, json={"provider": "evil", "cert": pem}).status_code == 400
+    assert client.post("/v1/admin/kosher-certs", json={"provider": "rimon", "cert": pem}).status_code == 401
+    assert client.delete(f"/v1/admin/kosher-certs/{fp}", headers=h).json() == {"ok": True}
+    assert client.delete(f"/v1/admin/kosher-certs/{fp}", headers=h).status_code == 404
+    assert client.post("/v1/device/heartbeat", headers=dh, json={"policy_version": 1}).json()["kosher_certs"] == []
+
+
+def test_a_site_certificate_is_not_accepted_as_a_kosher_root(env, tmp_path):
+    import datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import NameOID
+
+    _, client = env
+    h = admin_headers(client)
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "www.example.com")])
+    now = datetime.datetime.now(datetime.UTC)
+    leaf = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+            .serial_number(1).not_valid_before(now).not_valid_after(now + datetime.timedelta(days=30))
+            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+            .sign(key, hashes.SHA256()))
+    r = client.post("/v1/admin/kosher-certs", headers=h,
+                    json={"provider": "rimon", "cert": leaf.public_bytes(serialization.Encoding.PEM).decode()})
+    assert r.status_code == 400 and "CA" in r.json()["error"]

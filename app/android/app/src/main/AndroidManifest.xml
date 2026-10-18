@@ -88,6 +88,11 @@
             </intent-filter>
         </receiver>
 
+        <!-- רשת כשרה (נטפרי וכו'): אנדרואיד מעיר אותנו על רשת חדשה — לא חשוף: רק ה-PendingIntent שלנו -->
+        <receiver
+            android:name=".KosherNetReceiver"
+            android:exported="false" />
+
         <!-- תוצאת עדכון עצמי (רק במנהל מכשיר — SelfUpdate). לא חשוף: רק ה-PendingIntent שלנו -->
         <receiver
             android:name=".UpdateReceiver"

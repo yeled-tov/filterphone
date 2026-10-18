@@ -21,6 +21,7 @@ class VpnStatus {
     this.lastDataOk,
     this.lastDataFail,
     this.dataError,
+    this.kosherNet,
   });
 
   final String state; // UP / DOWN / TOGGLE
@@ -38,6 +39,8 @@ class VpnStatus {
   final DateTime? lastDataOk; // בדיקת תעבורה אמיתית במנהרה שעברה לאחרונה
   final DateTime? lastDataFail; // המנהרה הייתה למעלה בלי תעבורה (לאחרונה)
   final String? dataError; // באיזה שלב נכשלה: dns / connect / timeout / http:bad
+  /// ברשת כשרה (netfree / rimon...): ה-VPN מושהה בכוונה ברשת הזו — הסינון של הספק פעיל.
+  final String? kosherNet;
 
   /// null = עוד לא נבדק. false = בבדיקה האחרונה המנהרה הייתה למעלה אבל תעבורה לא עברה.
   bool? get dataOk {
@@ -48,6 +51,14 @@ class VpnStatus {
   }
 
   bool get isUp => state == 'UP';
+
+  /// מסונן: דרך ה-VPN שלנו, או ברשת כשרה (נטפרי וכו') שבה הסינון של הספק פעיל.
+  bool get protected => isUp || kosherNet != null;
+
+  static const kosherLabels = {'netfree': 'נטפרי', 'rimon': 'רימון', 'netspark': 'נטספארק'};
+
+  /// "נטפרי" / "רימון" — לתצוגה. null כשלא ברשת כשרה.
+  String? get kosherLabel => kosherNet == null ? null : (kosherLabels[kosherNet] ?? 'סינון כשר');
 
   factory VpnStatus.fromMap(Map<Object?, Object?> m) {
     final hs = (m['lastHandshakeMs'] as num?)?.toInt() ?? 0;
@@ -67,6 +78,7 @@ class VpnStatus {
       lastDataOk: _time(m['dataOkMs']),
       lastDataFail: _time(m['dataFailMs']),
       dataError: m['dataError'] as String?,
+      kosherNet: m['kosherNet'] as String?,
     );
   }
 

@@ -3,6 +3,7 @@ package com.filterphone.app
 import android.app.Application
 import android.os.Build
 import org.lsposed.hiddenapibypass.HiddenApiBypass
+import javax.net.ssl.HttpsURLConnection
 
 class FilterPhoneApp : Application() {
     override fun onCreate() {
@@ -11,6 +12,8 @@ class FilterPhoneApp : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             runCatching { HiddenApiBypass.addHiddenApiExemptions("") }
         }
+        // ברשת כשרה (נטפרי וכו') הספק פותח HTTPS עם התעודה שלו — הבקשות שלנו לשרת סומכות גם עליה
+        runCatching { HttpsURLConnection.setDefaultSSLSocketFactory(KosherNet.socketFactory(this)) }
         // חייב לרוץ מוקדם: במצב "VPN תמיד מופעל" המערכת מפעילה את השירות בלי פתיחת האפליקציה
         TunnelManager.init(this)
         ProtectionService.createChannel(this)

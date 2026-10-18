@@ -299,7 +299,7 @@ class OneTapCard extends StatelessWidget {
                 mark('מגן FilterPhone', c.guardEnabled),
                 mark('תעודה', c.caInstalled),
                 mark('סוללה', c.protection.backgroundOk),
-                mark('VPN', c.vpn.isUp),
+                mark('VPN', c.vpn.protected),
               ]),
               if (_result(r).isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -683,7 +683,9 @@ class StatusDetailsCard extends StatelessWidget {
           children: [
             Text('מצב ההגנה', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            row('VPN (סינון)', c.vpn.isUp ? 'פעיל' : 'לא פעיל', good: c.vpn.isUp),
+            row('VPN (סינון)',
+                c.vpn.isUp ? 'פעיל' : c.vpn.kosherLabel != null ? 'ברשת ${c.vpn.kosherLabel} — הסינון שלהם פעיל' : 'לא פעיל',
+                good: c.vpn.protected),
             row('מגן FilterPhone (נגישות)',
                 p.guardEnabled ? (p.guardRunning ? 'פעיל' : 'מופעל, ממתין') : (c.guardNeeded ? 'כבוי' : 'לא נדרש'),
                 good: p.guardEnabled || !c.guardNeeded),

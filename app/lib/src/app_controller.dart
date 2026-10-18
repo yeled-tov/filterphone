@@ -142,9 +142,9 @@ class AppController extends ChangeNotifier {
   }
 
   Map<Check, bool> get checks => {
-        Check.vpn: vpn.isUp,
+        Check.vpn: vpn.protected,
         Check.certificate: caInstalled,
-        Check.alwaysOn: vpn.alwaysOn == true,
+        Check.alwaysOn: vpn.alwaysOn == true || vpn.kosherNet != null,
         Check.privateDns: privateDns != 'hostname',
         Check.guard: guardEnabled || (deviceOwner && !_guardOnlyNeeded),
         Check.battery: protection.backgroundOk,
@@ -913,7 +913,7 @@ class AppController extends ChangeNotifier {
   /// המצב שהעוזר האוטומטי מסתכל עליו.
   BotContext get botContext => BotContext(
         active: device?.isActive ?? false,
-        vpnUp: vpn.isUp,
+        vpnUp: vpn.protected,
         guardNeeded: guardNeeded,
         guardOn: checks[Check.guard]!,
         deviceOwner: deviceOwner,
@@ -1062,7 +1062,7 @@ class AppController extends ChangeNotifier {
   Future<void> _continueSetup() async {
     await refresh();
     final next = <SetupStep, bool>{
-      SetupStep.vpn: !vpn.isUp,
+      SetupStep.vpn: !vpn.protected,
       SetupStep.certificate: !caInstalled && _caPem != null,
       SetupStep.battery: !protection.backgroundOk,
       SetupStep.guard: guardNeeded && !guardEnabled,

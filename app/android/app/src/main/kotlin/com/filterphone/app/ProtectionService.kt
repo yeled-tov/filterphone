@@ -45,6 +45,8 @@ class ProtectionService : Service() {
     }
 
     private fun checkHealth(why: String) {
+        // רשת כשרה (נטפרי): בדיקה נפרדת — לא מעכבת את בדיקת ה-VPN
+        KosherNet.evaluateAsync(applicationContext, why) { main.post { updateNotification() } }
         Recovery.runAsync(applicationContext) {
             TunnelManager.healthCheck()
             Watchdog.run(applicationContext, why)       // מגן / מנהל מכשיר / מה שחסר — מחזיר לבד או מתריע
@@ -115,6 +117,8 @@ class ProtectionService : Service() {
     private var lastNetworkKick = 0L
 
     private fun onNetworkChange(why: String) {
+        // רשת כשרה: יציאה ממנה (רשת אחרת) — מיד, לכל אירוע; הבדיקה עצמה אחת בכל רגע
+        KosherNet.evaluateAsync(applicationContext, "network $why") { main.post { updateNotification() } }
         val now = System.currentTimeMillis()
         if (now - lastNetworkKick < 3_000) return       // סדרת אירועים מאותו שינוי — פעם אחת
         lastNetworkKick = now
@@ -172,10 +176,11 @@ class ProtectionService : Service() {
 
         fun buildNotification(context: Context): Notification {
             val text = when {
-                AdminState.isPaused(context) -> R.string.protection_paused
-                !TunnelManager.isPermissionGranted() -> R.string.protection_needs_permission
-                TunnelManager.state == Tunnel.State.UP -> R.string.protection_on
-                else -> R.string.protection_reconnecting
+                AdminState.isPaused(context) -> context.getString(R.string.protection_paused)
+                KosherNet.isActive(context) -> context.getString(R.string.protection_kosher, KosherNet.label(context))
+                !TunnelManager.isPermissionGranted() -> context.getString(R.string.protection_needs_permission)
+                TunnelManager.state == Tunnel.State.UP -> context.getString(R.string.protection_on)
+                else -> context.getString(R.string.protection_reconnecting)
             }
             val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
             val pi = open?.let {
@@ -183,7 +188,7 @@ class ProtectionService : Service() {
             }
             return Notification.Builder(context, CHANNEL_ID).setSmallIcon(R.drawable.ic_stat_shield)
                 .setContentTitle(context.getString(R.string.protection_title))
-                .setContentText(context.getString(text))
+                .setContentText(text)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setShowWhen(false)

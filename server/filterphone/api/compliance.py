@@ -39,7 +39,7 @@ ISSUES: dict[str, tuple[str, str]] = {
 class Compliance:
     state: str
     online: bool
-    vpn: str                    # up / down / unknown
+    vpn: str                    # up / down / kosher (ברשת נטפרי — ה-VPN מושהה בכוונה) / unknown
     accessibility: str          # on / off / not_required / unknown
     management: str             # device_owner / device_admin / none / unknown
     policy_sync: str            # synced / syncing / pending / unknown
@@ -58,8 +58,10 @@ def _issue(code: str) -> dict:
 
 
 def evaluate(row, hb: dict, guard: dict, handshake: int, needs_device_block: bool, needs_accessibility: bool,
-             now: int, offline_after_s: int, lost_after_s: int, sync_grace_s: int) -> Compliance:
-    """row: שורת devices. hb: ה-heartbeat האחרון (JSON). guard: הדיווח הישן. handshake: epoch או 0."""
+             now: int, offline_after_s: int, lost_after_s: int, sync_grace_s: int,
+             kosher_allowed: bool = True) -> Compliance:
+    """row: שורת devices. hb: ה-heartbeat האחרון (JSON). guard: הדיווח הישן. handshake: epoch או 0.
+    kosher_allowed: המנהל מרשה מעבר אוטומטי לרשת כשרה (dpc.kosher_network)."""
     if row["status"] != "active":
         return Compliance(INACTIVE, False, "unknown", "unknown", "unknown", "unknown", row["last_seen_at"])
 
@@ -73,9 +75,15 @@ def evaluate(row, hb: dict, guard: dict, handshake: int, needs_device_block: boo
 
     # --- VPN: WireGuard הוא האמת. דיווח טרי שהגיע דרך המנהרה = פעיל (גם אם הטלפון נרדם מאז —
     # במצב שינה אין תעבורה ואין handshake). דיווח טרי שהגיע מבחוץ, או שהטלפון אומר שה-VPN למטה = כבוי.
-    hb_vpn_state = (hb.get("vpn") or {}).get("state") if isinstance(hb.get("vpn"), dict) else None
+    vpn_hb = hb.get("vpn") if isinstance(hb.get("vpn"), dict) else {}
+    hb_vpn_state = vpn_hb.get("state")
+    # ברשת כשרה (נטפרי — זוהתה לפי חתימת התעודה שלה) הטלפון משהה את ה-VPN בכוונה: הסינון של הספק פעיל.
+    # רק כשהמנהל מרשה — אחרת זה "VPN כבוי" רגיל.
+    kosher = kosher_allowed and vpn_hb.get("kosher") is True
     if hs_fresh:
         vpn = "up"
+    elif hb_fresh and kosher:
+        vpn = "kosher"
     elif hb_fresh and (hb.get("via_vpn") is False or hb_vpn_state not in (None, "UP")):
         vpn = "down"
         issues.append("vpn_off")
@@ -118,9 +126,10 @@ def evaluate(row, hb: dict, guard: dict, handshake: int, needs_device_block: boo
         issues.append("ca_missing")
     if hb.get("battery_unrestricted", guard.get("battery_unrestricted")) is False:
         issues.append("battery_restricted")
-    vpn_hb = hb.get("vpn") if isinstance(hb.get("vpn"), dict) else {}
     always_on = vpn_hb.get("always_on", guard.get("always_on"))
-    if always_on is False:
+    if vpn == "kosher":
+        pass                    # "תמיד מופעל" כבוי בכוונה בזמן שברשת הכשרה, וחוזר ביציאה ממנה
+    elif always_on is False:
         issues.append("always_on_off")
     elif always_on is True and vpn_hb.get("lockdown", guard.get("lockdown")) is False:
         issues.append("lockdown_off")
