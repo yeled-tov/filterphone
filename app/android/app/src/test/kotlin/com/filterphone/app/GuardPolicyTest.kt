@@ -108,4 +108,31 @@ class GuardPolicyTest {
         assertTrue(custom.getValue("disallow_debugging"))
         assertTrue(custom.getValue("block_uninstall"))
     }
+
+    @Test
+    fun allowlistParsesAndKeepsGuardActiveEvenWithoutBlockedApps() {
+        val p = GuardPolicy.parseStrict(
+            """{"allowlist":{"enabled":true,"apps":["com.whatsapp","com.android.chrome",""]}}"""
+        )
+        assertTrue(p.allowlistOnly)
+        assertEquals(setOf("com.whatsapp", "com.android.chrome"), p.allowed)
+        assertFalse(p.isEmpty)
+        // כבוי / שרת ישן — אין רשימה לבנה
+        assertFalse(GuardPolicy.parseStrict("""{"allowlist":{"enabled":false,"apps":["a.b"]}}""").allowlistOnly)
+        assertFalse(GuardPolicy.parseStrict("""{"blocked_apps":["a.b"]}""").allowlistOnly)
+    }
+
+    @Test
+    fun allowlistBlocksOnlyUnapprovedLauncherAppsAndSparesEssentials() {
+        val allowed = setOf("com.whatsapp", "com.android.chrome")
+        val launcher = setOf("com.whatsapp", "com.android.chrome", "com.google.android.youtube",
+            "com.android.vending", "com.android.messaging", "com.android.dialer")
+        val exempt = setOf("com.android.messaging", "com.android.dialer")
+        assertTrue(GuardPolicy.allowlistBlocks("com.google.android.youtube", allowed, launcher, exempt))
+        assertFalse(GuardPolicy.allowlistBlocks("com.whatsapp", allowed, launcher, exempt))          // מאושרת
+        assertFalse(GuardPolicy.allowlistBlocks("com.android.messaging", allowed, launcher, exempt))  // בסיס
+        assertFalse(GuardPolicy.allowlistBlocks("com.android.dialer", allowed, launcher, exempt))     // חיונית
+        assertFalse(GuardPolicy.allowlistBlocks("com.android.vending", allowed, launcher, exempt))    // חלון משלה
+        assertFalse(GuardPolicy.allowlistBlocks("com.google.android.gms", allowed, launcher, exempt)) // בלי אייקון
+    }
 }

@@ -36,7 +36,10 @@ const DPC_LABELS = {
   hide_blocked_apps: ["הסתרת אפליקציות חסומות", "אפליקציה חסומה נעלמת מהטלפון (במקום חסימה בנגישות)."],
   suspend_blocked_apps: ["אפליקציות חסומות באפור", "האייקון נשאר אפור; לחיצה מציגה 'חסום על ידי מנהל הסינון'. כשפעיל — במקום הסתרה. Google Play נחסם כך בלי לגעת בשירותי Google."],
   disallow_tethering: ["חסימת נקודה חמה", "שיתוף אינטרנט ב-Wi-Fi, בלוטות' ו-USB — אפור בהגדרות ובלוח המהיר."],
+  approved_apps_only: ["רשימה לבנה — רק אפליקציות מאושרות", "נפתחות רק אפליקציות מהחנות, Chrome והבסיס של הטלפון (חייגן, הודעות, אנשי קשר, מצלמה, גלריה, שעון, מחשבון, יומן, הגדרות). כל השאר נחסמות. מומלץ לנסות קודם על מכשיר אחד."],
 };
+/** הגדרות בכרטיס שנאכפות בנגישות — בכל טלפון, גם בלי מנהל מכשיר. */
+const GUARD_DPC = new Set(["approved_apps_only"]);
 const ANDROID = { 26: "8.0", 27: "8.1", 28: "9", 29: "10", 30: "11", 31: "12", 32: "12L", 33: "13", 34: "14", 35: "15", 36: "16" };
 const LOG_KINDS = {
   vpn_up: ["ok", "VPN חזר"], vpn_down: ["bad", "VPN כבה"], accessibility_on: ["ok", "המגן הופעל"],
@@ -873,7 +876,8 @@ function dpcCard(d, patch) {
     } });
     return el("div", { class: "app-row" }, el("label", { class: "switch" }, input, el("span")),
       el("div", { class: "grow" }, el("b", {}, t), el("small", {}, sub)),
-      isDo ? (failed.has(k) ? chip("נכשל בטלפון", "bad") : applied.has(k) ? chip("הוחל", "ok") : null) : null);
+      GUARD_DPC.has(k) ? chip("בכל טלפון (נגישות)", "accent")
+        : isDo ? (failed.has(k) ? chip("נכשל בטלפון", "bad") : applied.has(k) ? chip("הוחל", "ok") : null) : null);
   });
   const frp = el("textarea", { class: "ltr", rows: 2, placeholder: "118237465029384756123", value: (eff.frp_accounts || []).join("\n") });
   return card("מנהל מכשיר (Device Owner)", isDo

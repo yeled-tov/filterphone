@@ -283,6 +283,23 @@ def test_dpc_settings_validation_and_effective_policy(env):
     assert r.status_code == 400 and "מספר" in r.json()["error"]
 
 
+
+def test_allowlist_is_off_by_default_and_lists_store_apps_plus_chrome(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    pol = client.get("/v1/device", headers=dh).json()["device_policy"]
+    assert pol["dpc"]["approved_apps_only"] is False
+    assert pol["allowlist"]["enabled"] is False
+    assert "com.android.chrome" in pol["allowlist"]["apps"]
+    r = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"dpc": {"approved_apps_only": True}})
+    assert r.status_code == 200, r.text
+    pol = client.get("/v1/device", headers=dh).json()["device_policy"]
+    assert pol["allowlist"]["enabled"] is True
+    store = {a["package"] for a in svc.managed_apps(enabled_only=True)}
+    assert store <= set(pol["allowlist"]["apps"])
+    assert pol["allowlist"]["apps"] == sorted(pol["allowlist"]["apps"])
+
 def test_provisioning_qr(env, tmp_path):
     svc, client = env
     h = admin_headers(client)

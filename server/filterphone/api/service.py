@@ -394,9 +394,20 @@ class Services:
 
     def device_policy(self, row: sqlite3.Row) -> dict:
         """המדיניות לטלפון, עם גרסה וטביעה (הטלפון מאשר את הגרסה שהחיל)."""
-        return {**self.compiled(row).device_json(), "version": row["policy_version"],
+        comp = self.compiled(row)
+        return {**comp.device_json(), "allowlist": self._allowlist(comp), "version": row["policy_version"],
                 "updated_at": row["policy_updated_at"], "checksum": row["policy_checksum"],
                 "revision": row["policy_revision"]}
+
+    def _approved_packages(self) -> list[str]:
+        """האפליקציות המאושרות למצב "רשימה לבנה": הקטלוג + Chrome (דפדפן הסינון). החיוניות (מסך בית,
+        חייגן, הגדרות, מקלדת, FilterPhone) מוגנות בטלפון עצמו ולא נחסמות גם בלעדיהן."""
+        pkgs = {a["package"] for a in self.managed_apps(enabled_only=True)}
+        pkgs.add("com.android.chrome")
+        return sorted(pkgs)
+
+    def _allowlist(self, comp: Compiled) -> dict:
+        return {"enabled": bool(comp.dpc.get("approved_apps_only", False)), "apps": self._approved_packages()}
 
     # ------------------------------------------------------------ יומן מכשיר
 
@@ -972,9 +983,9 @@ class Services:
             "today": {"blocked": today.get("block", 0), "painted": today.get("replace", 0),
                       "sites": today.get("site", 0)},
             "blocks": summary(settings),
-            "device_policy": {**comp.device_json(), "version": row["policy_version"],
-                              "updated_at": row["policy_updated_at"], "checksum": row["policy_checksum"],
-                              "revision": row["policy_revision"]},
+            "device_policy": {**comp.device_json(), "allowlist": self._allowlist(comp),
+                              "version": row["policy_version"], "updated_at": row["policy_updated_at"],
+                              "checksum": row["policy_checksum"], "revision": row["policy_revision"]},
             "apps_report_needed": not row["apps_at"] or db.now() - row["apps_at"] > 86400,
             "managed_apps": self.device_managed_apps(),
             "store_categories": store_seed()["categories"],     # סדר הטאבים בחנות

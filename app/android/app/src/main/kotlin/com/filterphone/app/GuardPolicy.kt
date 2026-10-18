@@ -8,7 +8,10 @@ import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.os.Build
 import android.os.SystemClock
+import android.provider.AlarmClock
+import android.provider.MediaStore
 import android.provider.Settings
+import android.provider.Telephony
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONException
@@ -81,8 +84,13 @@ object GuardPolicy {
         val accessibilityOnly: Set<String> = emptySet(),
         /** מסכים בוואטסאפ שנחסמים לפי תוכן: updates (טאב העדכונים), channels, status. */
         val waScreens: Set<String> = emptySet(),
+        /** רשימה לבנה: רק אפליקציות מאושרות מותרות (כבוי כברירת מחדל). */
+        val allowlistOnly: Boolean = false,
+        /** האפליקציות המאושרות (הקטלוג + Chrome). החיוניות ואפליקציות הבסיס מותרות בנפרד בטלפון. */
+        val allowed: Set<String> = emptySet(),
     ) {
-        val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty()
+        val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty() &&
+            !allowlistOnly
         /** טאב "עדכונים" בוואטסאפ חסום (סטטוסים + ערוצים). */
         val blocksWaUpdates get() = "updates" in waScreens
     }
@@ -94,6 +102,15 @@ object GuardPolicy {
     @Volatile private var cached: Policy? = null
     @Volatile private var untouchable: Set<String> = emptySet()
     @Volatile private var untouchableAt = 0L
+    @Volatile private var launcherPkgs: Set<String> = emptySet()
+    @Volatile private var basicPkgs: Set<String> = emptySet()
+    @Volatile private var launcherPkgsAt = 0L
+
+    /** אפליקציות בסיס (של הטלפון עצמו) שמותרות גם ברשימה לבנה — לפי הקטגוריה שהן מצהירות עליה. */
+    private val BASIC_CATEGORIES = listOf(
+        Intent.CATEGORY_APP_MESSAGING, Intent.CATEGORY_APP_CONTACTS, Intent.CATEGORY_APP_GALLERY,
+        Intent.CATEGORY_APP_CALCULATOR, Intent.CATEGORY_APP_CALENDAR,
+    )
 
     private fun prefs(context: Context) = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -180,6 +197,10 @@ object GuardPolicy {
             waScreens = o.optJSONArray("wa_screens")
                 ?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }.toSet() }
                 ?: emptySet(),
+            allowlistOnly = o.optJSONObject("allowlist")?.optBoolean("enabled", false) ?: false,
+            allowed = o.optJSONObject("allowlist")?.optJSONArray("apps")
+                ?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }.toSet() }
+                ?: emptySet(),
         )
     }
 
@@ -228,9 +249,51 @@ object GuardPolicy {
         val app = pkg in policy.apps
         val screen = !app && cls != null &&
             policy.screens.any { s -> s.pkg == pkg && s.match.any { cls.contains(it, ignoreCase = true) } }
-        if (!app && !screen) return null
-        if (pkg in untouchable(context)) return null
-        return if (app) Block.APP else Block.SCREEN
+        if (app || screen) {
+            if (pkg in untouchable(context)) return null
+            return if (app) Block.APP else Block.SCREEN
+        }
+        if (policy.allowlistOnly) {
+            refreshLaunchers(context)
+            if (allowlistBlocks(pkg, policy.allowed, launcherPkgs, untouchable(context) + basicPkgs)) return Block.APP
+        }
+        return null
+    }
+
+    /**
+     * רשימה לבנה (טהור, נבדק ביחידה): נחסמת רק אפליקציה שהמשתמש יכול לפתוח (יש לה אייקון), שאינה
+     * מאושרת, אינה חיונית (מסך בית, חייגן, הגדרות, מקלדת, FilterPhone) ואינה אפליקציית בסיס של הטלפון
+     * (הודעות, אנשי קשר, מצלמה, גלריה, שעון, מחשבון, יומן). Google Play — לא כאן: יש לה חסימה וחלון
+     * התקנה משלה. רכיבי מערכת בלי אייקון (חשבון Google, הרשאות, מתקין) לעולם לא נחסמים.
+     */
+    fun allowlistBlocks(pkg: String, allowed: Set<String>, launcher: Set<String>, exempt: Set<String>): Boolean =
+        pkg !in allowed && pkg != PlayLock.PLAY && pkg in launcher && pkg !in exempt
+
+    /** האפליקציות עם אייקון + אפליקציות הבסיס של הטלפון. מתרענן פעם בדקה (אפליקציה חדשה נקלטת מהר). */
+    private fun refreshLaunchers(context: Context) {
+        val now = SystemClock.elapsedRealtime()
+        if (launcherPkgs.isNotEmpty() && now - launcherPkgsAt < 60_000) return
+        val pm = context.packageManager
+        val launcher = runCatching {
+            query(pm, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER))
+                .map { it.activityInfo.packageName }.toHashSet()
+        }.getOrDefault(HashSet())
+        // רק אפליקציות שהגיעו עם הטלפון — "מחשבון" שהותקן מבחוץ יכול להיות כספת או דפדפן מוסווה
+        fun systemPkgs(intent: Intent) = runCatching {
+            query(pm, intent).filter { it.activityInfo.applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM != 0 }
+                .map { it.activityInfo.packageName }
+        }.getOrDefault(emptyList())
+        val basics = HashSet<String>()
+        for (c in BASIC_CATEGORIES) basics += systemPkgs(Intent(Intent.ACTION_MAIN).addCategory(c))
+        basics += systemPkgs(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))
+        basics += systemPkgs(Intent(AlarmClock.ACTION_SHOW_ALARMS))
+        runCatching { Telephony.Sms.getDefaultSmsPackage(context) }.getOrNull()?.let { sms ->
+            val ai = runCatching { pm.getApplicationInfo(sms, 0) }.getOrNull()
+            if (ai != null && ai.flags and ApplicationInfo.FLAG_SYSTEM != 0) basics += sms
+        }
+        basicPkgs = basics
+        launcherPkgs = launcher
+        launcherPkgsAt = now
     }
 
     /** חבילות שאסור לגעת בהן: הרשימה הקבועה, האפליקציה הזו, מסך הבית והמקלדת שבשימוש. */

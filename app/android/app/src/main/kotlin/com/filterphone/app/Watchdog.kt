@@ -35,11 +35,14 @@ object Watchdog {
     const val GUARD = "guard"
     const val BATTERY = "battery"
 
-    /** המגן נדרש: מסכים / הגנות בוואטסאפ / מילות חיפוש — תמיד; חסימת אפליקציות — רק בלי מנהל מכשיר. */
+    /**
+     * המגן נדרש: מסכים / הגנות בוואטסאפ / מילות חיפוש / רשימה לבנה — תמיד; חסימת אפליקציות — רק בלי
+     * מנהל מכשיר (שם הן מוסתרות).
+     */
     fun guardRequired(context: Context): Boolean {
         val policy = GuardPolicy.get(context)
         return policy.screens.isNotEmpty() || policy.waProfile != null || policy.keywords != null ||
-            (policy.apps.isNotEmpty() && !DeviceOwnerManager.isDeviceOwner(context))
+            policy.allowlistOnly || (policy.apps.isNotEmpty() && !DeviceOwnerManager.isDeviceOwner(context))
     }
 
     /** טהור: מה חסר, לפי המצב. נבדק ביחידה. */
