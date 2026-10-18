@@ -1,9 +1,10 @@
 part of 'app_shell.dart';
 
-/// לשונית התמיכה: שתי דרכים לפנות למנהל —
+/// לשונית התמיכה: בחירה למעלה (קוביות זו לצד זו) —
 ///   • "תמיכה באפליקציה" — כותבים כאן, וההודעה מגיעה למנהל (ואם הוא לא זמין, הבוט עונה). התשובה
 ///     חוזרת לכאן עם התראה. מצב הסינון מצורף אוטומטית כדי שלא נצטרך לשאול.
-///   • "תמיכה בוואטסאפ" — פותח את הוואטסאפ של המנהל עם מזהה המכשיר ומספר הטלפון כבר מוכנים בהודעה.
+///   • "תמיכה בוואטסאפ" — כפתור שפותח את הוואטסאפ של המנהל עם מזהה המכשיר ומספר הטלפון כבר בהודעה.
+///   • "ניהול תמיכה" — רק במכשיר המנהל: כל הפניות של הלקוחות.
 class SupportScreen extends StatefulWidget {
   const SupportScreen({super.key, required this.controller, this.visible = true, this.onOpenTab});
   final AppController controller;
@@ -16,9 +17,14 @@ class SupportScreen extends StatefulWidget {
   State<SupportScreen> createState() => _SupportScreenState();
 }
 
+enum _SupportMode { app, whatsapp }
+
 class _SupportScreenState extends State<SupportScreen> {
   static const _poll = Duration(seconds: 8);
   static const _storeTab = 1;
+  static const _waGreen = Color(0xFF128C7E);
+
+  _SupportMode _mode = _SupportMode.app;
 
   final _text = TextEditingController();
   final _scroll = ScrollController();
@@ -29,9 +35,20 @@ class _SupportScreenState extends State<SupportScreen> {
   @override
   void initState() {
     super.initState();
+    // בלי שיחה באפליקציה (עוד לא רשום) — מתחילים בוואטסאפ
+    if (!c.canChatWithSupport && c.supportWhatsApp.trim().isNotEmpty) _mode = _SupportMode.whatsapp;
     c.addListener(_onChange);     // השיחה / הבדיקה המהירה מתעדכנות חי (תשובה מהמנהל, הרשאה שנפלה)
     if (widget.visible) _onShown();
   }
+
+  void _setMode(_SupportMode m) {
+    setState(() => _mode = m);
+    if (m == _SupportMode.app) unawaited(_toBottom());
+  }
+
+  void _openConsole() => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => SupportConsoleScreen(controller: c)),
+      );
 
   void _onChange() {
     if (mounted) setState(() {});
@@ -112,17 +129,22 @@ class _SupportScreenState extends State<SupportScreen> {
     }
   }
 
-  /// פותח את הוואטסאפ של המנהל עם מזהה המכשיר ומספר הטלפון כבר בהודעה — כדי שהמנהל ידע מיד במי מדובר.
-  Future<void> _openWhatsApp() async {
+  /// ההודעה שנפתחת בוואטסאפ: מזהה המכשיר ומספר הטלפון — כדי שהמנהל (והבוט) ידעו מיד במי מדובר.
+  String get _waMessage {
     final d = c.device;
     final phone = c.customerPhone;
-    final message = [
+    return [
       'שלום, אני צריך עזרה ב-FilterPhone.',
       if (d != null) 'מכשיר #${d.id}${d.name.isNotEmpty ? ' · ${d.name}' : ''}',
       if (phone.isNotEmpty) 'טלפון: $phone',
       if (c.androidId.isNotEmpty) 'מזהה: ${c.androidId}',
       'VPN: ${c.vpn.isUp ? 'מחובר' : 'מנותק'}',
     ].join('\n');
+  }
+
+  /// פותח את הוואטסאפ של המנהל עם ההודעה המוכנה.
+  Future<void> _openWhatsApp() async {
+    final message = _waMessage;
     try {
       await c.native.openSupportWhatsApp(c.supportWhatsApp, message);
     } on PlatformException catch (e) {
@@ -134,12 +156,59 @@ class _SupportScreenState extends State<SupportScreen> {
   @override
   Widget build(BuildContext context) {
     final hasWhatsApp = c.supportWhatsApp.trim().isNotEmpty;
+    final mode = hasWhatsApp ? _mode : _SupportMode.app;
+    final inApp = mode == _SupportMode.app;
     return _SectionScaffold(
       title: 'שירות ותמיכה',
       child: Column(
         children: [
-          Expanded(child: _chat(context, hasWhatsApp)),
-          if (c.canChatWithSupport)
+          // הבחירה למעלה: קוביות זו לצד זו (כמו "עוזר מיידי | נציג" פעם)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: _ModeTile(
+                      icon: Icons.support_agent_rounded,
+                      label: 'תמיכה באפליקציה',
+                      selected: inApp,
+                      badge: c.supportUnread,
+                      onTap: () => _setMode(_SupportMode.app),
+                    ),
+                  ),
+                  if (hasWhatsApp) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ModeTile(
+                        icon: Icons.chat_rounded,
+                        label: 'תמיכה בוואטסאפ',
+                        selected: mode == _SupportMode.whatsapp,
+                        color: _waGreen,
+                        onTap: () => _setMode(_SupportMode.whatsapp),
+                      ),
+                    ),
+                  ],
+                  if (c.isAdminDevice) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _ModeTile(
+                        icon: Icons.inbox_rounded,
+                        label: 'ניהול תמיכה',
+                        selected: false,
+                        badge: c.adminSupportUnread,
+                        color: Theme.of(context).colorScheme.tertiary,
+                        onTap: _openConsole,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Expanded(child: inApp ? _chat(context) : _whatsAppView(context)),
+          if (inApp && c.canChatWithSupport)
             _ChatComposer(
               controller: _text,
               busy: c.supportSending,
@@ -151,49 +220,62 @@ class _SupportScreenState extends State<SupportScreen> {
     );
   }
 
-  Widget _chat(BuildContext context, bool hasWhatsApp) {
+  /// תמיכה בוואטסאפ: מה יישלח, וכפתור אחד שפותח את השיחה.
+  Widget _whatsAppView(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: _waGreen.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: _waGreen.withValues(alpha: .25)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              const Icon(Icons.chat_rounded, color: _waGreen, size: 28),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('שיחה עם המנהל בוואטסאפ',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              ),
+            ]),
+            const SizedBox(height: 8),
+            Text('הפרטים של הטלפון כבר מוכנים בהודעה — רק לשלוח:',
+                style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(_waMessage, style: theme.textTheme.bodyMedium),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: _waGreen),
+              onPressed: _openWhatsApp,
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('לחצו לפתיחת השיחה בוואטסאפ'),
+            ),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  Widget _chat(BuildContext context) {
     final theme = Theme.of(context);
     final thread = c.supportThread;
     return ListView(
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       children: [
-        if (c.isAdminDevice) ...[
-          Card(
-            color: theme.colorScheme.tertiaryContainer.withValues(alpha: .5),
-            child: ListTile(
-              leading: Badge(
-                isLabelVisible: c.adminSupportUnread > 0,
-                label: Text('${c.adminSupportUnread}'),
-                child: const Icon(Icons.inbox_rounded),
-              ),
-              title: const Text('ניהול תמיכה'),
-              subtitle: Text(c.adminSupportUnread > 0
-                  ? '${c.adminSupportUnread} פניות ממתינות לך'
-                  : 'כל הפניות של הלקוחות — מענה מכאן'),
-              trailing: const Icon(Icons.chevron_left_rounded),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => SupportConsoleScreen(controller: c)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
         _QuickCheck(controller: c, onAction: _run),
         const SizedBox(height: 12),
-        if (hasWhatsApp) ...[
-          Card(
-            color: const Color(0xFF25D366).withValues(alpha: .12),
-            child: ListTile(
-              leading: const Icon(Icons.chat_rounded, color: Color(0xFF128C7E)),
-              title: const Text('תמיכה בוואטסאפ'),
-              subtitle: const Text('פתיחת שיחה עם המנהל — מזהה המכשיר והטלפון כבר מוכנים בהודעה.'),
-              trailing: const Icon(Icons.open_in_new_rounded, size: 18),
-              onTap: _openWhatsApp,
-            ),
-          ),
-          const SizedBox(height: 12),
-        ],
         if (!c.canChatWithSupport)
           Padding(
             padding: const EdgeInsets.all(24),
@@ -213,7 +295,7 @@ class _SupportScreenState extends State<SupportScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'תמיכה באפליקציה: כתבו כאן וההודעה מגיעה למנהל (ואם הוא לא זמין — נחזור אליכם). '
+                    'כתבו כאן וההודעה מגיעה למנהל (ואם הוא לא זמין — נחזור אליכם). '
                     'מצב הסינון מצורף אוטומטית, כדי שלא נצטרך לשאול.',
                     style: theme.textTheme.bodySmall,
                   ),
@@ -237,6 +319,59 @@ class _SupportScreenState extends State<SupportScreen> {
             ],
         ],
       ],
+    );
+  }
+}
+
+/// קובייה בבחירה שלמעלה: אייקון, שם, ומספר ממתינות (אם יש).
+class _ModeTile extends StatelessWidget {
+  const _ModeTile({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.badge = 0,
+    this.color,
+  });
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final int badge;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final accent = color ?? cs.primary;
+    return Material(
+      color: selected ? accent.withValues(alpha: .14) : cs.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: selected ? accent : cs.outlineVariant, width: selected ? 1.6 : 1),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Badge(
+              isLabelVisible: badge > 0,
+              label: Text('$badge'),
+              child: Icon(icon, color: accent, size: 26),
+            ),
+            const SizedBox(height: 6),
+            Text(label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                style: theme.textTheme.labelLarge?.copyWith(
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: selected ? accent : cs.onSurface)),
+          ]),
+        ),
+      ),
     );
   }
 }

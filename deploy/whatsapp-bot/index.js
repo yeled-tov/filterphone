@@ -371,11 +371,23 @@ async function catchUp() {
 
 // ------------------------------------------------------------------ שליחה
 
+/**
+ * שליחה. ללקוח (לא לצ'אט שלך): בלי "נקרא" — הלקוח לא מקבל וי כחול, ואצלך השיחה נשארת "לא נקראה"
+ * (אם הייתה כזו לפני התשובה) — כך כשתיכנס לוואטסאפ תראה מי כתב, והבוט רק עונה ברקע.
+ */
 async function send(to, text, { typing = false, guard = null, extra = null } = {}) {
   if (!client) return null;
-  if (typing) {
+  const toCustomer = to !== adminChat() && to !== me;
+  let chat = null;
+  let unread = false;
+  if (typing || toCustomer) {
     try {
-      const chat = await client.getChatById(to);
+      chat = await client.getChatById(to);
+      unread = toCustomer && chat.unreadCount !== 0;        // ‎-1 = סומן "לא נקרא" ידנית
+    } catch { /* לא קריטי */ }
+  }
+  if (typing && chat) {
+    try {
       await chat.sendStateTyping();
       await sleep(typingMs(text));
       await chat.clearState();
@@ -384,8 +396,10 @@ async function send(to, text, { typing = false, guard = null, extra = null } = {
   if (guard && !guard()) return null;                    // בינתיים הגיעה הודעה חדשה — התשובה הזו כבר לא רלוונטית
   const key = String(text).trim();
   outgoing.set(key, Date.now() + 60e3);
-  const m = await client.sendMessage(to, text, extra ? { extra } : {});
+  const opts = { ...(extra ? { extra } : {}), ...(toCustomer ? { sendSeen: false } : {}) };
+  const m = await client.sendMessage(to, text, opts);
   if (m?.id?._serialized) botMsgIds.add(m.id._serialized);
+  if (unread && chat) chat.markUnread().catch((e) => console.warn('markUnread:', e.message));
   return m;
 }
 

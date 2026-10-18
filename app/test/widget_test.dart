@@ -1291,15 +1291,21 @@ void main() {
     await tester.tap(find.text('תיקון').first);
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
     expect(native.batteryRequests, 1);
-    // תמיכה בוואטסאפ: מזהה המכשיר והטלפון של הלקוח בהודעה
+    // למעלה: קוביות זו לצד זו; ברירת המחדל — תמיכה באפליקציה (השיחה עם המנהל נטענת וההתראה נמחקת)
+    expect(find.text('תמיכה באפליקציה'), findsOneWidget);
+    expect(find.text('ניהול תמיכה'), findsNothing);                  // רק במכשיר המנהל
+    expect(find.text('שלום, איך אפשר לעזור?'), findsOneWidget);
+    expect(native.supportNotificationClears, 1);
+    // תמיכה בוואטסאפ: ההודעה המוכנה מוצגת, וכפתור אחד פותח את השיחה עם מזהה המכשיר והטלפון
     await tester.tap(find.text('תמיכה בוואטסאפ'));
+    await tester.pump();
+    expect(find.text('שלום, איך אפשר לעזור?'), findsNothing);
+    expect(find.textContaining('טלפון: 0521234567'), findsOneWidget);
+    await tester.tap(find.text('לחצו לפתיחת השיחה בוואטסאפ'));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
     expect(native.waNumber, '972527186881');
     expect(native.waMessage, contains('מכשיר #'));
     expect(native.waMessage, contains('0521234567'));
-    // השיחה עם המנהל נטענת מהשרת וההתראה נמחקת
-    expect(find.text('שלום, איך אפשר לעזור?'), findsOneWidget);
-    expect(native.supportNotificationClears, 1);
     await tester.pumpWidget(const SizedBox());                        // עוצר את הרענון התקופתי
     c.dispose();
   });
@@ -1560,8 +1566,9 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pump();
       expect(c.isAdminDevice, isTrue);
+      // קובייה שלישית למעלה, עם מספר הפניות שממתינות
       expect(find.text('ניהול תמיכה'), findsOneWidget);
-      expect(find.text('2 פניות ממתינות לך'), findsOneWidget);
+      expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
       // פתיחת הקונסולה — רשימת השיחות נטענת מהשרת
       await tester.tap(find.text('ניהול תמיכה'));
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
