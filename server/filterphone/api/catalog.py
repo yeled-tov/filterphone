@@ -658,6 +658,7 @@ class DeviceSettings:
     vpn_bypass: dict = field(default_factory=dict)  # אפליקציות מחוץ ל-VPN: {enabled, extra, removed, pins}
     temp_open: dict = field(default_factory=dict)   # פתיחות זמניות: פריט → עד מתי (שניות מאז 1970)
     track: str = ""                             # מסלול סינון (TRACKS): "" רגיל / no_internet / navigation / ...
+    allow_google_accounts: bool = False         # שרתי מסך "הוספת חשבון Google" פתוחים קבוע (בלי חלון 10 דק')
 
     @property
     def active_options(self) -> list[str]:
@@ -784,6 +785,7 @@ class DeviceSettings:
             vpn_bypass=cls._load_vpn_bypass(d.get("vpn_bypass")),
             temp_open=cls._load_temp_open(d.get("temp_open")),
             track=d.get("track") if d.get("track") in TRACKS else "",
+            allow_google_accounts=bool(d.get("allow_google_accounts", False)),
         )
 
     def dump(self) -> str:
@@ -796,6 +798,8 @@ class DeviceSettings:
             d["temp_open"] = self.temp_open
         if self.track:
             d["track"] = self.track
+        if self.allow_google_accounts:
+            d["allow_google_accounts"] = True
         return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
@@ -805,6 +809,7 @@ class DeviceSettings:
         d["keyword_defaults_count"] = len(resolve_keywords({})["terms"])
         d["vpn_bypass_effective"] = resolve_vpn_bypass(self.vpn_bypass)  # {enabled, apps}
         d["vpn_bypass_defaults"] = [{"package": p, "label": t} for p, t in VPN_BYPASS_APPS.items()]
+        d["allow_google_accounts"] = self.allow_google_accounts
         return d
 
     def update(self, changes: dict) -> list[str]:
@@ -887,6 +892,8 @@ class DeviceSettings:
                 errors.append("מסלול סינון לא מוכר")
             else:
                 self.track = changes["track"]
+        if changes.get("allow_google_accounts") is not None:
+            self.allow_google_accounts = bool(changes["allow_google_accounts"])
         return errors
 
     def _update_vpn_bypass(self, vb) -> list[str]:

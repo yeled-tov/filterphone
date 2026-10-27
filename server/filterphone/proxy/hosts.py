@@ -75,7 +75,9 @@ class HostPolicy:
         if not host:
             return True                     # בלי SNI אין לנו איך להנפיק תעודה מתאימה
         host = host.lower().rstrip(".")
-        if self.is_static(host):
+        # [inspect] גובר על [passthrough]: שרת תמונות שרשום במפורש ב-[inspect] נבדק תמיד, גם אם הוא
+        # נתפס ע"י glob רחב ב-[passthrough] (למשל streetviewpixels-pa.googleapis.com מול *.googleapis.com).
+        if self.is_static(host) and not self.is_inspect_only(host):
             return True
         exp = self._learned.get((client_ip, host))
         if exp is None:

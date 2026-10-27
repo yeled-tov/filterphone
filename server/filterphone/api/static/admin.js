@@ -790,18 +790,26 @@ async function viewDevice(id, query = new URLSearchParams()) {
   const eventsCard = card("חסימות אחרונות במכשיר", null, eventsTable(d.events, false),
     el("div", { class: "row end" }, el("a", { href: `#/events?device=${id}` }, "לכל החסימות ›")));
   const learned = d.learned || [];
+  const acctToggle = el("input", { type: "checkbox", checked: Boolean(d.settings.allow_google_accounts),
+    "aria-label": "הוספת חשבונות Google", onchange: async (e) => {
+      try { await patch({ allow_google_accounts: e.target.checked }, e.target.checked ? "מסך חשבון Google פתוח" : "נסגר"); }
+      catch (_) { e.target.checked = !e.target.checked; }
+    } });
   const learnedCard = card("אפליקציות שעוברות בלי בדיקה", "אפליקציות שלא סומכות על תעודת הסינון — המערכת למדה להעביר אותן כדי שיעבדו (DNS עדיין חל).",
     learned.length ? el("div", { class: "chips" }, learned.map((h) => chip(h.host))) : empty("אין."),
+    el("div", { class: "app-row" }, el("label", { class: "switch" }, acctToggle, el("span")),
+      el("div", { class: "grow" }, el("b", {}, "הוספת חשבונות Google"),
+        el("small", {}, "כשמופעל, מסך 'הוספת חשבון Google' עובד תמיד (בלי חלון של 10 דקות). שימו לב: שרתי התמונות של גוגל (lh3...) נפתחים במכשיר הזה כל עוד זה מופעל — כבו אחרי שסיימתם להוסיף חשבון."))),
     el("div", { class: "row end" }, el("button", { class: "ghost small", onclick: async () => {
       const r = await attempt(() => api(`/v1/admin/devices/${id}/reset-apps`, { method: "POST" }));
       toast(`אופסו ${r.cleared} כתובות`);
       render();
     } }, "איפוס"),
-    el("button", { class: "ghost small", title: "אחרי צריבה: 10 דקות שבהן מסך הוספת חשבון Google עובד", onclick: async () => {
+    el("button", { class: "ghost small", title: "פתיחה חד-פעמית ל-10 דקות (אם לא רוצים להשאיר קבוע)", onclick: async () => {
       await attempt(() => api(`/v1/admin/devices/${id}/account-window`, { method: "POST" }));
       toast("נפתח חלון של 10 דקות להוספת חשבון Google (תוך דקה)");
       render();
-    } }, "חלון לחשבון Google")));
+    } }, "חלון חד-פעמי (10 דק')")));
   const historyCard = d.requests.length ? card("היסטוריית בקשות", null, el("div", { class: "table-wrap" }, el("table", {},
     el("tbody", {}, d.requests.map((r) => el("tr", {},
       el("td", { class: "nowrap" }, dateTime(r.created_at)),

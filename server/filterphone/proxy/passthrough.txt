@@ -93,6 +93,10 @@ api.termius.com
 
 [inspect]
 
+# גוגל מפות: תצלומי רחוב (Street View). תמונות המקומות עוברות דרך *.ggpht.com / *.googleusercontent.com
+# שכבר כאן. נבדק תמיד (גובר על *.googleapis.com שב-passthrough).
+streetviewpixels-pa.googleapis.com
+
 *.cdninstagram.com
 *.fbcdn.net
 *.twimg.com

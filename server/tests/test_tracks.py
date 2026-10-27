@@ -63,3 +63,26 @@ def test_track_reaches_the_phone_policy_allowlist_and_store(env):
     # המסלולים בקטלוג של הדשבורד
     tracks = {t["id"] for t in client.get("/v1/admin/catalog", headers=h).json()["tracks"]}
     assert tracks == set(TRACKS)
+
+
+def test_allow_google_accounts_toggle_opens_passthrough_persistently(env):
+    from filterphone.api.service import PASSTHROUGH_KEY, Services
+    svc, client = env
+    h = admin_headers(client)
+    did, token = active_customer(svc, client)
+    ip = svc.device_row(did)["vpn_ip"]
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    assert d["settings"]["allow_google_accounts"] is False
+    assert not [k for k in svc.redis.hkeys(PASSTHROUGH_KEY) if k.startswith(f"{ip}|")]
+    # הדלקה — שרתי מסך החשבון נפתחים ב-passthrough למכשיר הזה
+    r = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"allow_google_accounts": True})
+    assert r.status_code == 200 and r.json()["settings"]["allow_google_accounts"] is True
+    hosts = {k.split("|", 1)[1] for k in svc.redis.hkeys(PASSTHROUGH_KEY) if k.startswith(f"{ip}|")}
+    assert set(Services.ACCOUNT_SETUP_HOSTS) <= hosts
+    # מתחדש גם בדיווח תקופתי (TTL ארוך)
+    client.post("/v1/device/heartbeat", headers={"Authorization": f"Bearer {token}"}, json={"policy_version": 1})
+    assert {k.split("|", 1)[1] for k in svc.redis.hkeys(PASSTHROUGH_KEY) if k.startswith(f"{ip}|")} >= set(Services.ACCOUNT_SETUP_HOSTS)
+    # נשמר בגיבוי/טעינה
+    from filterphone.api.catalog import DeviceSettings
+    assert DeviceSettings.load(DeviceSettings.load(svc.device_row(did)["policy"]).dump()).allow_google_accounts is True
+    assert client.patch(f"/v1/admin/devices/{did}", headers=h, json={"allow_google_accounts": False}).json()["settings"]["allow_google_accounts"] is False

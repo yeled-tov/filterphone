@@ -256,7 +256,7 @@ SvcDep = Annotated[Services, Depends(svc_dep)]
 ParentCode = Annotated[str | None, Header(alias="X-Parent-Code")]
 # שדות במכשיר שהם "חסימות" — שינוי שלהם דורש את קוד ההורים (שם / תווית — לא)
 _GATED_DEVICE_KEYS = {"level", "status", "options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules",
-                      "app_images", "dpc", "keywords", "vpn_bypass", "track"}
+                      "app_images", "dpc", "keywords", "vpn_bypass", "track", "allow_google_accounts"}
 DeskDep = Annotated[SupportDesk, Depends(support_dep)]
 BotDep = Annotated[BotDesk, Depends(bot_dep)]
 DeviceRow = Annotated[Any, Depends(device_dep)]
@@ -554,6 +554,7 @@ class DevicePatch(BaseModel):
     keywords: dict | None = None
     vpn_bypass: dict | None = None
     track: str | None = Field(default=None, max_length=20)     # מסלול סינון (catalog.TRACKS)
+    allow_google_accounts: bool | None = None                 # מסך "הוספת חשבון Google" פתוח קבוע
 
 
 class PauseIn(BaseModel):

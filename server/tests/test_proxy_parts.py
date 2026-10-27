@@ -27,6 +27,16 @@ def test_missing_sni_passes_through(policy):
     assert policy.should_passthrough("10.8.0.10", "")
 
 
+def test_inspect_overrides_a_broad_passthrough_glob(policy):
+    # *.googleapis.com ב-passthrough, אבל Street View רשום ב-[inspect] — ולכן נבדק (לא passthrough)
+    assert policy.should_passthrough("10.8.0.10", "foo.googleapis.com")
+    assert policy.is_inspect_only("streetviewpixels-pa.googleapis.com")
+    assert not policy.should_passthrough("10.8.0.10", "streetviewpixels-pa.googleapis.com")
+    # תמונות מקומות בגוגל מפות (ggpht / googleusercontent) — נבדקות כרגיל
+    assert not policy.should_passthrough("10.8.0.10", "lh3.ggpht.com")
+    assert not policy.should_passthrough("10.8.0.10", "lh5.googleusercontent.com")
+
+
 def test_learning_is_per_device_and_expires(policy):
     assert policy.learn("10.8.0.11", "api.someapp.com", strict_images=True)
     assert policy.should_passthrough("10.8.0.11", "api.someapp.com")

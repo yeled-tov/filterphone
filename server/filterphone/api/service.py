@@ -543,6 +543,7 @@ class Services:
             # הסנכרון התקופתי (sync_redis_if_needed) יתקן — מסמנים שצריך
             log.error("redis policy sync failed for %s: %s", ip, e)
             self.redis_stale = True
+        self.refresh_account_passthrough(row)       # 'הוספת חשבונות Google קבועה' — אם מופעל
         self.dirty.set()
 
     def _active_devices(self) -> list[sqlite3.Row]:
@@ -1153,6 +1154,7 @@ class Services:
         if fresh["status"] == "active":
             # קטלוג מאושר (לפי מסלול הסינון); required יותקנו אוטומטית במנהל מכשיר
             out["managed_apps"] = self.device_managed_apps(DeviceSettings.load(fresh["policy"]).track)
+            self.refresh_account_passthrough(fresh)   # מחדש את ה-passthrough של מסך חשבון Google (אם מופעל)
         return out
 
     def _log_data_checks(self, c: sqlite3.Connection, device_id: int, prev: dict, vpn: dict) -> None:
@@ -1590,7 +1592,7 @@ class Services:
         if "status" in allowed and allowed["status"] not in ("active", "disabled"):
             raise ApiError(400, "סטטוס לא חוקי")
         policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc",
-                       "keywords", "vpn_bypass", "track")
+                       "keywords", "vpn_bypass", "track", "allow_google_accounts")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
@@ -2209,6 +2211,20 @@ class Services:
         except redis.RedisError as e:
             raise ApiError(503, "לא ניתן לפתוח את החלון כרגע — נסו שוב") from e
         return len(self.ACCOUNT_SETUP_HOSTS)
+
+    def refresh_account_passthrough(self, row: sqlite3.Row) -> None:
+        """הגדרת 'הוספת חשבונות Google קבועה' למכשיר: שומר את שרתי מסך החשבון ב-passthrough לאורך זמן
+        (מתחדש בכל push / heartbeat). כבוי — מסיר אותם (מלבד חלון זמני שפג לבד). נקרא תמיד — זול."""
+        ip = row["vpn_ip"]
+        if not ip or row["status"] != "active":
+            return
+        try:
+            on = DeviceSettings.load(row["policy"]).allow_google_accounts
+            if on:
+                expires = time.time() + 3 * 86400          # 3 ימים — מתחדש בכל דיווח (לפחות יומי)
+                self.redis.hset(PASSTHROUGH_KEY, mapping={f"{ip}|{h}": expires for h in self.ACCOUNT_SETUP_HOSTS})
+        except redis.RedisError:
+            self.redis_stale = True
 
     def learned_passthrough(self, ip: str) -> list[dict]:
         try:
