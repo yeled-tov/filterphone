@@ -69,6 +69,9 @@ object KosherNet {
     private val PROBE_HOSTS = listOf("www.google.com", "www.wikipedia.org")
     private const val TIMEOUT_MS = 6_000
     private const val REVERIFY_MS = 30 * 60_000L       // בדיקה חוזרת של אותה רשת (גם בהדלקת מסך) — לכל היותר
+    // רשת ביטחון: אם אנחנו במצב כשר (ה-VPN מושהה) ולא הצלחנו לאמת מחדש שזו עדיין רשת כשרה במשך
+    // זמן ארוך (אין רשת / הבדיקה לא ענתה) — יוצאים בכל זאת ומחזירים את ה-VPN, כדי לא להישאר בלי סינון.
+    private const val HARD_VERIFY_MS = 25 * 60_000L
     private const val UNKNOWN_KEEP_MS = 7 * 24 * 3600_000L
     private const val MAX_EXTRA = 20
     private const val WATCH_REQUEST = 7410
@@ -95,9 +98,9 @@ object KosherNet {
 
     // ---------------------------------------------------------------- מצב
 
-    /** המנהל מרשה (dpc.kosher_network — ברירת מחדל: כן). */
+    /** המנהל הדליק מעבר אוטומטי לרשת כשרה (dpc.kosher_network — כבוי כברירת מחדל). */
     fun enabled(context: Context): Boolean =
-        GuardPolicy.get(context).dpc?.optBoolean(DPC_KEY, true) ?: true
+        GuardPolicy.get(context).dpc?.optBoolean(DPC_KEY, false) ?: false
 
     /** ברשת כשרה עכשיו: אותה רשת שזוהתה, ההגדרה פעילה, ואין השהיה (בהשהיה הכול פתוח ממילא). */
     fun isActive(context: Context): Boolean {
@@ -352,6 +355,11 @@ object KosherNet {
             p.edit().remove(K_UNKNOWN).remove(K_UNKNOWN_AT).apply()
         }
         val kosher = if (r.provider != null) true else if (r.reached) false else null
+        // רשת ביטחון: במצב כשר שלא הצלחנו לאמת מחדש מזמן (הבדיקה לא הגיעה לאינטרנט) — יוצאים
+        // ומחזירים את ה-VPN, כדי לא להישאר תקועים בלי סינון. אם באמת עדיין ברשת כשרה — ניכנס שוב.
+        if (active != null && kosher == null && now - p.getLong(K_VERIFIED, 0L) > HARD_VERIFY_MS) {
+            return exit(app, "kosher network could not be re-verified in time")
+        }
         if (kosher == false) {
             plainHandle = current
             plainAt = now

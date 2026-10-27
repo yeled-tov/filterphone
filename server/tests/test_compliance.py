@@ -895,6 +895,15 @@ def test_kosher_heartbeat_fields_toggle_and_device_log(env, monkeypatch):
     did, dh, _ = enroll(svc, client)
     monkeypatch.setattr("filterphone.api.app.client_ip", lambda request: "203.0.113.9")   # מחוץ למנהרה
     base = {"policy_version": 1, "ca_installed": True, "battery_unrestricted": True}
+    # כבוי כברירת מחדל — דיווח "ברשת כשרה" נחשב "VPN כבוי" עד שהמנהל מדליק את המעבר האוטומטי
+    assert client.get(f"/v1/admin/devices/{did}", headers=h).json()["settings"]["dpc_effective"]["kosher_network"] is False
+    client.post("/v1/device/heartbeat", headers=dh, json={**base, "vpn": {
+        "state": "DOWN", "kosher": True, "kosher_provider": "netfree"}})
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    assert d["compliance"]["vpn"] == "down" and d["compliance"]["state"] == "red"
+    # המנהל מדליק את המעבר האוטומטי למכשיר הזה
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"dpc": {"kosher_network": True}})
+    assert svc.device_policy(row(svc, did))["dpc"]["kosher_network"] is True
     client.post("/v1/device/heartbeat", headers=dh, json={**base, "vpn": {"state": "DOWN", "kosher": False}})
     r = client.post("/v1/device/heartbeat", headers=dh, json={**base, "vpn": {
         "state": "DOWN", "kosher": True, "kosher_provider": "netfree", "kosher_unknown": "x" * 200}})
@@ -904,13 +913,6 @@ def test_kosher_heartbeat_fields_toggle_and_device_log(env, monkeypatch):
     assert d["heartbeat"]["vpn"]["kosher_provider"] == "netfree" and len(d["heartbeat"]["vpn"]["kosher_unknown"]) <= 80
     assert "kosher_on" in [e["kind"] for e in d["device_log"]]
     assert client.get("/v1/admin/devices?state=vpn_inactive", headers=h).json() == []
-    # ההגדרה לכל מכשיר: ברירת מחדל פעיל; כיבוי — אדום ("VPN כבוי")
-    assert d["settings"]["dpc_effective"]["kosher_network"] is True
-    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"dpc": {"kosher_network": False}})
-    pol = svc.device_policy(row(svc, did))
-    assert pol["dpc"]["kosher_network"] is False
-    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
-    assert d["compliance"]["vpn"] == "down" and d["compliance"]["state"] == "red"
 
 
 def _cert_pem(name: str) -> str:

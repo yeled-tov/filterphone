@@ -45,7 +45,7 @@ object DeviceOwnerManager {
         "hide_blocked_apps" to true,
         "suspend_blocked_apps" to true,     // אפור + "חסום על ידי המנהל" — גובר על ההסתרה
         "disallow_tethering" to true,       // נקודה חמה / שיתוף אינטרנט (Wi-Fi, בלוטות', USB)
-        "kosher_network" to true,           // ברשת נטפרי וכו' — ה-VPN מושהה שם (KosherNet). בכל טלפון
+        "kosher_network" to false,          // מעבר אוטומטי לרשת נטפרי וכו' (KosherNet) — כבוי כברירת מחדל
     )
 
     /**

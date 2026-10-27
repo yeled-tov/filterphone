@@ -210,6 +210,9 @@ class SyncJob : JobService() {
                 }
                 TunnelManager.init(app)
                 if (params.jobId == Recovery.JOB_RESUME) Recovery.onPauseChanged(app)   // סוף ההשהיה
+                // רשת כשרה (נטפרי/אתרוג): בודקים לפני החיבור — אם "נתקענו" במצב כשר על רשת שכבר לא
+                // כשרה, זה מחזיר את ה-VPN לבד (גם כשהשירות הקדמי לא רץ והאירוע על שינוי הרשת אבד).
+                if (params.jobId != Recovery.JOB_RETRY) runCatching { KosherNet.evaluate(app, "job") }
                 TunnelManager.ensureConnected(if (params.jobId == Recovery.JOB_RETRY) "retry" else "job")
                 if (params.jobId != Recovery.JOB_RETRY) {
                     TunnelManager.healthCheck()
