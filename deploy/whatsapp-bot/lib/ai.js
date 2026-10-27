@@ -20,6 +20,7 @@ function systemPrompt({ botName, businessInfo, inHours, hoursText, crm, knowledg
 כתוב/כתבי בעברית טבעית, חמה ואנושית — כמו בן אדם אמיתי, לא רובוט. משפטים קצרים, אדיבים, ענייניים ומכבדים.
 ${inHours ? 'כעת שעות פעילות — נציג זמין בהמשך אם צריך.' : `כעת מחוץ לשעות הפעילות (${hoursText}). בפנייה ראשונה ציין/צייני בעדינות שנציג יחזור בשעות הפעילות.`}
 בהודעה הראשונה בשיחה — ברכה קצרה ושאלה "במה אפשר לעזור?".
+הודעת לקוח שמתחילה ב-🎤 היא תמלול אוטומטי של הודעה קולית — ייתכנו בה טעויות תמלול; הבן/י לפי ההקשר וענה/עני בכתב כרגיל. אם התמלול לא הצליח — בקש/י בנימוס לכתוב את הבקשה במילים.
 ענה/עני רק לפי המידע הבא. אל תמציא/י מחירים, מבצעים או הבטחות. ${unsure}
 
 === מידע העסק ===
@@ -84,9 +85,9 @@ function retryable(e) {
 }
 
 /** fetch עם timeout (AbortController). בכשל/פסק-זמן נזרקת שגיאה. */
-function tfetch(fetchImpl, url, opts = {}) {
+function tfetch(fetchImpl, url, opts = {}, ms = AI_TIMEOUT_MS) {
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), AI_TIMEOUT_MS);
+  const timer = setTimeout(() => ac.abort(), ms);
   return Promise.resolve(fetchImpl(url, { ...opts, signal: ac.signal }))
     .finally(() => clearTimeout(timer));
 }
@@ -137,21 +138,22 @@ function trimCut(text) {
   return cut > t.length * 0.4 ? t.slice(0, cut + 1).trim() : t;
 }
 
-function geminiBody({ system, contents }, model, withThinking = true) {
+function geminiBody({ system, contents, temperature = 0.6, maxTokens = MAX_OUTPUT_TOKENS }, model, withThinking = true) {
   const thinking = withThinking ? thinkingFor(model) : null;
   return JSON.stringify({
     systemInstruction: { parts: [{ text: system }] },
     contents,
-    generationConfig: { temperature: 0.6, maxOutputTokens: MAX_OUTPUT_TOKENS, ...(thinking ? { thinkingConfig: thinking } : {}) },
+    generationConfig: { temperature, maxOutputTokens: maxTokens, ...(thinking ? { thinkingConfig: thinking } : {}) },
   });
 }
 
 async function geminiGenerate(model, key, req, fetchImpl) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
-  let r = await tfetch(fetchImpl, url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: geminiBody(req, model) });
+  const ms = req.timeoutMs || AI_TIMEOUT_MS;
+  let r = await tfetch(fetchImpl, url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: geminiBody(req, model) }, ms);
   if (r.status === 400 && thinkingFor(model)) {
     // המודל לא מכיר את הגדרת החשיבה — שוב בלעדיה (ולא נופלים ל"נציג יחזור")
-    r = await tfetch(fetchImpl, url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: geminiBody(req, model, false) });
+    r = await tfetch(fetchImpl, url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: geminiBody(req, model, false) }, ms);
   }
   if (!r.ok) throw new AiHttpError('gemini', r.status);
   const j = await r.json();
@@ -170,7 +172,11 @@ async function askGemini({ key, model, system, history, text, fetchImpl = fetch 
   const contents = [...history, { role: 'user', content: text }].map((h) => ({
     role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.content }],
   }));
-  const req = { system, contents };
+  return geminiWithRetry({ key, model, req: { system, contents }, fetchImpl });
+}
+
+/** בקשה ל-Gemini (טקסט או אודיו) עם הניסיונות החוזרים ומודלי הגיבוי שלמעלה. */
+async function geminiWithRetry({ key, model, req, fetchImpl = fetch }) {
   const started = Date.now();
   const first = model || await geminiModel(key, fetchImpl);
   const plan = [first, first];
@@ -224,6 +230,72 @@ async function askGroq({ key, model, system, history, text, fetchImpl = fetch })
   throw lastErr;
 }
 
+// --- הודעות קוליות ------------------------------------------------------------------------------
+// הלקוח שלח הודעה קולית → מתמללים לטקסט, והבוט עונה בכתב כרגיל (לא מחזירים הודעה קולית).
+// אותו ספק ואותו מפתח שבדשבורד: Gemini מקבל את הקובץ עצמו (inlineData), ב-Groq — Whisper.
+const VOICE_MAX_BYTES = 15 * 1024 * 1024;     // הודעה קולית של דקה ≈ 100KB; מעל זה — לא מתמללים
+const TRANSCRIBE_TIMEOUT_MS = Number(process.env.FP_AI_TRANSCRIBE_MS) || 45000;
+const NO_SPEECH = '[אין דיבור]';
+const TRANSCRIBE_PROMPT = `תמלל/י את ההודעה הקולית מילה במילה, בשפה שבה דיברו (בדרך כלל עברית).
+החזר/י רק את מה שנאמר — בלי הקדמה, בלי הסבר, בלי תרגום ובלי מירכאות.
+אם אין בה דיבור ברור — החזר/י בדיוק: ${NO_SPEECH}`;
+const WHISPER_EXT = { 'audio/ogg': 'ogg', 'audio/opus': 'opus', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a',
+  'audio/aac': 'm4a', 'audio/x-m4a': 'm4a', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/webm': 'webm', 'audio/flac': 'flac' };
+
+/** סוג הקובץ בלי פרמטרים: 'audio/ogg; codecs=opus' → 'audio/ogg'. */
+function audioType(mimetype) {
+  return String(mimetype || '').split(';')[0].trim().toLowerCase() || 'audio/ogg';
+}
+
+/** התמלול בלי מירכאות / הקדמה; "אין דיבור" → ''. */
+function cleanTranscript(raw) {
+  const t = String(raw || '').trim().replace(/^(תמלול|transcript(ion)?)\s*:\s*/i, '')
+    .replace(/^["'״“”„]+|["'״“”„]+$/g, '').trim();
+  return !t || t.includes(NO_SPEECH) ? '' : t;
+}
+
+async function groqWhisper(key, data, type, fetchImpl) {
+  let lastErr = null;
+  for (let i = 0; i < 2; i++) {
+    if (i > 0) await sleep(RETRY_MS);
+    try {
+      const form = new FormData();
+      form.append('file', new Blob([Buffer.from(data, 'base64')], { type }), `voice.${WHISPER_EXT[type] || 'ogg'}`);
+      form.append('model', 'whisper-large-v3');
+      form.append('prompt', 'שיחת וואטסאפ עם שירות הלקוחות של FilterPhone.');   // מטה לעברית בלי לכפות שפה
+      form.append('response_format', 'json');
+      form.append('temperature', '0');
+      const r = await tfetch(fetchImpl, 'https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form,
+      }, TRANSCRIBE_TIMEOUT_MS);
+      if (!r.ok) throw new AiHttpError('groq whisper', r.status);
+      return String((await r.json()).text || '');
+    } catch (e) {
+      lastErr = e;
+      if (!retryable(e)) throw e;
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * תמלול הודעה קולית ({data: base64, mimetype} — כמו msg.downloadMedia()). '' כשאין מפתח / אין דיבור.
+ * תקלה (רשת / מכסה / קובץ גדול מדי) — נזרקת; הבוט מבקש מהלקוח לכתוב במילים.
+ */
+async function transcribe(cfg, media, fetchImpl = fetch) {
+  const data = String(media?.data || '');
+  if (!cfg?.ai_key || !data) return '';
+  if (data.length * 0.75 > VOICE_MAX_BYTES) throw new Error('voice: too long to transcribe');
+  const type = audioType(media.mimetype);
+  if (cfg.ai_provider === 'gemini') {
+    const req = { system: 'את/ה מתמלל/ת הודעות קוליות לטקסט.', temperature: 0, maxTokens: 8192, timeoutMs: TRANSCRIBE_TIMEOUT_MS,
+      contents: [{ role: 'user', parts: [{ inlineData: { mimeType: type, data } }, { text: TRANSCRIBE_PROMPT }] }] };
+    return cleanTranscript((await geminiWithRetry({ key: cfg.ai_key, model: cfg.ai_model, req, fetchImpl })).text);
+  }
+  if (cfg.ai_provider === 'groq') return cleanTranscript(await groqWhisper(cfg.ai_key, data, type, fetchImpl));
+  return '';
+}
+
 /**
  * תשובה לפי ההגדרות.
  *   • בלי מפתח — תשובה קבועה ומסירה לנציג (HUMAN), כמו קודם.
@@ -257,5 +329,5 @@ function fallback({ inHours, hoursText, history }, { outage = false } = {}) {
 }
 
 module.exports = { systemPrompt, parseTags, addressBlock, pickGemini, geminiFallbacks, askGemini, askGroq, answer, fallback,
-  thinkingFor, trimCut,
+  thinkingFor, trimCut, transcribe, audioType, cleanTranscript,
   _resetModelCache: () => { modelCache = { key: '', names: [], at: 0 }; } };

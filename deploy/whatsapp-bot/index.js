@@ -29,14 +29,14 @@ const { State } = require('./lib/state');
 const fp = require('./lib/fp');
 const ai = require('./lib/ai');
 const { israelNow, isOpen } = require('./lib/hours');
-const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber } = require('./lib/logic');
+const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice } = require('./lib/logic');
 const labels = require('./lib/labels');
 const know = require('./lib/knowledge');
 const aimark = require('./lib/aimark');
 const acts = require('./lib/actions');
 const pcode = require('./lib/parentcode');
 
-const VERSION = '2.5.0';
+const VERSION = '2.6.0';
 const API = (process.env.FP_API || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
@@ -99,7 +99,15 @@ const APP_CHECKING = 'קיבלנו את פנייתך 🙏 בודקים ונחז�
 const pending = new Map();    // תשובות שמחכות (5 שניות כשאתה פעיל — שתספיק לענות בעצמך)
 const bursts = new Map();     // הודעות של לקוח שעוד לא נענו (chatId → {parts, gen,...}) — הודעה חדשה בזמן
                               // שהבוט עוד כותב מבטלת את התשובה הקודמת, והתשובה החדשה עונה על הכול
-const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0 };
+const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0, voice: 0 };
+// הודעות קוליות: מתומללות ב-AI שבדשבורד, והבוט עונה בכתב. ההיסטוריה שומרת את התמלול עם 🎤.
+const VOICE_MARK = '🎤 ';
+const VOICE_UNHEARD = '🎤 (הודעה קולית — התמלול לא הצליח)';
+const VOICE_NOTE = '🎤 (הודעה קולית)';                         // שיחה שהבוט לא מטפל בה — לא מתמללים
+const unvoice = (t) => (t.startsWith(VOICE_MARK) ? t.slice(VOICE_MARK.length) : t);
+const heardVoice = (t) => t.startsWith(VOICE_MARK) && t !== VOICE_UNHEARD && t !== VOICE_NOTE;
+const transcripts = new Map();  // מזהה הודעה → התמלול (שלא נתמלל פעמיים: הודעה + השלמה אחרי הפעלה מחדש)
+const inbox = new Map();        // שיחה → התור שלה: הודעות הלקוח מטופלות לפי הסדר (תמלול לוקח כמה שניות)
 let knowledge = [];           // מה שהבוט למד ממך (מהשרת)
 let knowledgeAt = 0;
 const drafts = new Map();     // שיחה → תשובה שלך שעוד נכתבת (ללמידה)
@@ -353,8 +361,8 @@ async function catchUp() {
         if (!chatId || chat.isGroup || pending.has(chatId) || chatId === adminChat()) continue;
         const last = chat.lastMessage;
         const c = state.chat(chatId);
-        if (!labels.needsCatchUp(last, { answered: c.answered || '' })) continue;
-        const text = last.body.trim();
+        if (inbox.has(chatId) || !labels.needsCatchUp(last, { answered: c.answered || '' })) continue;
+        const text = isVoice(last) ? await voiceText(last, true) : last.body.trim();
         if (c.lastIn !== last.id._serialized) {
           state.remember(chatId, 'user', text);
           c.lastIn = last.id._serialized;
@@ -653,23 +661,70 @@ async function onMessage(msg) {
   if (msg.from?.endsWith('@g.us') || msg.to?.endsWith('@g.us')) return;   // קבוצות
   if (msg.from === 'status@broadcast' || msg.isStatus) return;
   const body = (msg.body || '').trim();
-  if (!body) return;
+  const voice = isVoice(msg);
+  if (!body && !voice) return;
   if (msg.fromMe) {
-    if (sentByBot(msg.id?._serialized, body)) return;                     // הבוט עצמו — לא "אתה כתבת"
     const selfChat = msg.to === me || msg.to === msg.from;
+    if (voice) return selfChat ? undefined : onAdminVoice(msg);           // הודעה קולית לעצמך — לא פקודה
+    if (sentByBot(msg.id?._serialized, body)) return;                     // הבוט עצמו — לא "אתה כתבת"
     return onAdmin(msg, body, selfChat);
   }
   if (adminChat() !== me && (msg.from === adminChat() || (await realPhone(msg)) === adminChat().replace(/@.+/, ''))) {
-    return onAdmin(msg, body, true);                                     // אתה, ממספר המנהל
+    return voice ? undefined : onAdmin(msg, body, true);                 // אתה, ממספר המנהל
   }
-  return onCustomer(msg, body);
+  return inOrder(msg.from, () => onCustomer(msg, body, voice));
+}
+
+/** הודעות של אותה שיחה — אחת אחרי השנייה (טקסט שנשלח אחרי הודעה קולית לא "עוקף" את התמלול שלה). */
+function inOrder(chatId, fn) {
+  const run = (inbox.get(chatId) || Promise.resolve()).then(fn);
+  const tail = run.catch(() => {});
+  inbox.set(chatId, tail);
+  tail.then(() => { if (inbox.get(chatId) === tail) inbox.delete(chatId); });
+  return run;
+}
+
+/** תמלול הודעה קולית (פעם אחת לכל הודעה). '' — אין AI / אין דיבור / תקלה. */
+async function transcript(msg) {
+  const id = msg.id?._serialized || '';
+  if (id && transcripts.has(id)) return transcripts.get(id);
+  let text = '';
+  try {
+    const media = await withTimeout(msg.downloadMedia(), CALL_TIMEOUT_MS, 'downloadMedia');
+    text = await ai.transcribe(cfg, media);
+    if (text) stats.voice += 1;
+  } catch (e) {
+    console.warn('voice:', e.message);
+  }
+  if (id) {
+    transcripts.set(id, text);
+    if (transcripts.size > 200) transcripts.delete(transcripts.keys().next().value);
+  }
+  return text;
+}
+
+/** הטקסט של הודעה קולית: התמלול (רק כשהבוט מטפל בשיחה — לא שולחים ל-AI הקלטות פרטיות), או סימון. */
+async function voiceText(msg, handled) {
+  if (!handled) return VOICE_NOTE;
+  if (!cfg?.ai_key) return VOICE_UNHEARD;
+  const t = await transcript(msg);
+  return t ? VOICE_MARK + t : VOICE_UNHEARD;
+}
+
+/** שלחת ללקוח הודעה קולית — הבוט זז הצידה מיד, ובהיסטוריה (וללמידה) נשמר התמלול. */
+async function onAdminVoice(msg) {
+  const chatId = msg.to;
+  cancelPending(chatId);                                   // לפני התמלול — שהבוט לא יענה בינתיים
+  const c = state.chat(chatId);
+  const text = await voiceText(msg, Boolean(cfg?.enabled && c.customer));
+  return onAdmin(msg, text, false, heardVoice(text));
 }
 
 /**
  * אתה כתבת. בצ'אט עם עצמך — תפריט / תשובה ללקוח באפליקציה. בשיחה עם לקוח — הבוט זז הצידה:
  * מוציא את השיחה מהרשימה "בוט" (או, בלי רשימה, שותק בה לזמן שנקבע).
  */
-async function onAdmin(msg, body, selfChat) {
+async function onAdmin(msg, body, selfChat, learnable = true) {
   adminLastSeen = Date.now();
   if (!selfChat) {
     const chatId = msg.to;
@@ -678,7 +733,7 @@ async function onAdmin(msg, body, selfChat) {
     c.known = true;
     state.remember(chatId, 'assistant', body);
     state.closeAsks(chatId);                                         // ענית לו בעצמך
-    noteOwnerReply(chatId, c, body);                                 // מצב לימוד
+    if (learnable) noteOwnerReply(chatId, c, unvoice(body));         // מצב לימוד
     if (botLabel) await setBotList(chatId, false);
     else state.pause(chatId, (cfg?.handoff_minutes || 60) * 60e3);
     return;
@@ -731,9 +786,10 @@ async function loadKnowledge(force = false) {
 }
 
 /** הלקוח כתב — זו "השאלה" שהתשובה הבאה שלך תיצמד אליה (כמה הודעות רצופות = שאלה אחת). */
-function noteCustomerQuestion(chatId, c, text) {
+function noteCustomerQuestion(chatId, c, text, learnable = true) {
   if (drafts.has(chatId)) flushDraft(chatId).catch((e) => console.warn('learn:', e.message));   // הלקוח כבר ענה לך
   const now = Date.now();
+  if (!learnable) { c.q = { text, at: now, taken: true }; return; }     // הודעה קולית בלי תמלול — לא לומדים עליה
   const join = c.q && !c.q.taken && now - c.q.at < QUESTION_JOIN_MS;
   c.q = { text: (join ? `${c.q.text}\n${text}` : text).slice(-800), at: now };
 }
@@ -926,19 +982,11 @@ async function adminReadSoon(notice) {
   } catch { return false; }
 }
 
-async function onCustomer(msg, text) {
-  const chatId = msg.from;
-  const c = state.chat(chatId);
-  if (!c.phone) c.phone = await realPhone(msg);
-  const phone = c.phone;
-  // קוד הורים שהבוט ביקש — מבוצע כאן, לא נשמר בהיסטוריה ולא נשלח ל-AI
-  if (cfg?.enabled && await tryParentCode(chatId, null, text, (out) => sendAi(chatId, out, { typing: true }))) return;
-  state.remember(chatId, 'user', text);
-  c.lastIn = msg.id?._serialized || '';
-  c.deviceHint = acts.deviceHint(text, c.deviceHint || {});          // "מכשיר #16" + מזהה — מההודעה של האפליקציה
-  noteCustomerQuestion(chatId, c, text);
-
-  if (!cfg?.enabled) return;
+/**
+ * מי מטפל בהודעת הלקוח: 'bot' — הבוט עונה; 'notify' — רק הודעה אליך (בלי רשימה: הבוט עצור / ממתין
+ * לנציג); 'quiet' — שיחה שלך / הבוט עצור / אתה באמצע שיחה. לקוח חדש מצטרף כאן לרשימה "בוט".
+ */
+async function customerRoute(msg, chatId, c) {
   if (botLabel) {
     // מנוהל לפי הרשימה "בוט": עונים רק שם; לקוח חדש — מצטרף אליה אוטומטית
     let inList = await inBotList(chatId);
@@ -953,16 +1001,38 @@ async function onCustomer(msg, text) {
     c.known = true;
     if (inList) c.customer = true;                                    // לקוח — לומדים מהתשובות שלך אליו
     state.save();
-    if (!state.data.botActive || !inList) return;                     // עצרת לכולם / שיחה שלך
-  } else {
-    c.customer = true;                                                // בלי רשימה — הבוט עונה לכולם
-    if (!state.data.botActive || c.handedOff) {
-      await toAdmin(`💬 *הודעה מ-${phone}*${c.handedOff ? ' (ממתין לנציג)' : ' (הבוט עצור)'}\n💭 ${text}\n🔗 https://wa.me/${phone}`);
-      return;
-    }
-    if (state.paused(chatId)) return;                                 // אתה בשיחה
+    return state.data.botActive && inList ? 'bot' : 'quiet';          // עצרת לכולם / שיחה שלך
   }
+  c.customer = true;                                                  // בלי רשימה — הבוט עונה לכולם
+  if (!state.data.botActive || c.handedOff) return 'notify';
+  return state.paused(chatId) ? 'quiet' : 'bot';                      // אתה בשיחה
+}
 
+async function onCustomer(msg, text, voice = false) {
+  const chatId = msg.from;
+  const c = state.chat(chatId);
+  if (!c.phone) c.phone = await realPhone(msg);
+  const phone = c.phone;
+  const route = cfg?.enabled ? await customerRoute(msg, chatId, c) : 'off';
+  if (voice) text = await voiceText(msg, route === 'bot');
+  const learnable = !voice || heardVoice(text);
+  // קוד הורים שהבוט ביקש — מבוצע כאן, לא נשמר בהיסטוריה ולא נשלח ל-AI
+  if (cfg?.enabled && learnable && await tryParentCode(chatId, null, unvoice(text), (out) => sendAi(chatId, out, { typing: true }))) return;
+  state.remember(chatId, 'user', text);
+  c.lastIn = msg.id?._serialized || '';
+  c.deviceHint = acts.deviceHint(unvoice(text), c.deviceHint || {});  // "מכשיר #16" + מזהה — מההודעה של האפליקציה
+  noteCustomerQuestion(chatId, c, unvoice(text), learnable);
+
+  if (route === 'notify') {
+    await toAdmin(`💬 *הודעה מ-${phone}*${c.handedOff ? ' (ממתין לנציג)' : ' (הבוט עצור)'}\n💭 ${text}\n🔗 https://wa.me/${phone}`);
+    return;
+  }
+  if (route !== 'bot') return;
+  // ההמשך (התראה אליך, "קראת?", תזמון התשובה) — לא מעכב את ההודעה הבאה של הלקוח בתור
+  notifyAndSchedule(msg, chatId, phone, text).catch((e) => console.error('message:', e.message));
+}
+
+async function notifyAndSchedule(msg, chatId, phone, text) {
   const open = inHours();
   let adminRead = false;
   const adminActive = Date.now() - adminLastSeen < ADMIN_ACTIVE_MS;

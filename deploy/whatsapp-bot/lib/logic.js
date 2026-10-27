@@ -10,6 +10,11 @@ function replyDelayMs({ inHours, adminActive, adminRead }) {
   return adminActive || adminRead ? 5000 : 0;
 }
 
+/** הודעה קולית (או קובץ שמע) בלי כיתוב — מתמללים אותה, והבוט עונה בכתב. */
+function isVoice(msg) {
+  return Boolean(msg) && (msg.type === 'ptt' || msg.type === 'audio') && !String(msg.body || '').trim();
+}
+
 /** כמה הודעות רצופות של הלקוח = שאלה אחת: מחברים לפסקאות, בלי כפילויות עוקבות ובלי ריקות. */
 function combineBurst(parts) {
   const out = [];
@@ -38,4 +43,4 @@ function waNumber(raw) {
   return d;
 }
 
-module.exports = { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber };
+module.exports = { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice };

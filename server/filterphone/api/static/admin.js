@@ -1898,6 +1898,7 @@ function wabotStatus(v) {
       ["תשובות של הבוט", num(stats.replies)], ["הועברו אליך", num(stats.handoffs)],
       ["למד מהתשובות שלך", num(stats.learned)], ["שאל אותך (לא ידע לענות)", num(stats.asked)],
       ["פניות מהאפליקציה שהגיעו אליך", num(stats.app_forwarded)], ["ענית ללקוחות באפליקציה", num(stats.app_replies)],
+      stats.voice ? ["הודעות קוליות שתומללו", num(stats.voice)] : null,
       stats.ai_errors ? ["שגיאות AI", num(stats.ai_errors)] : null,
       ["הודעות הבוט אליך", v.notify_to ? `למספר ${v.notify_to}` : "לצ'אט עם עצמך"],
     ]));

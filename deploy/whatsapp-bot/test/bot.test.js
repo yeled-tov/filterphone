@@ -7,7 +7,7 @@ const path = require('path');
 const { isOpen, parseRanges } = require('../lib/hours');
 const ai = require('../lib/ai');
 const { State } = require('../lib/state');
-const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber } = require('../lib/logic');
+const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice } = require('../lib/logic');
 const labels = require('../lib/labels');
 const aimark = require('../lib/aimark');
 const acts = require('../lib/actions');
@@ -215,6 +215,7 @@ test('bot put back in a chat: answers only a recent, unanswered customer message
   assert.equal(labels.needsCatchUp(msg({}), { now, answered: 'm1' }), false);              // כבר ענינו
   assert.equal(labels.needsCatchUp(msg({ fromMe: true }), { now }), false);                // אתה ענית
   assert.equal(labels.needsCatchUp(msg({ body: '' }), { now }), false);                    // לא טקסט
+  assert.equal(labels.needsCatchUp(msg({ body: '', type: 'ptt' }), { now }), true);        // הודעה קולית — כן
   assert.equal(labels.needsCatchUp(msg({ timestamp: now / 1000 - 3600 }), { now }), false); // ישן
   assert.equal(labels.needsCatchUp(null, { now }), false);
 });
@@ -418,4 +419,50 @@ test('the AI is told about the parent code but never asks for it itself', () => 
   assert.match(p, /קוד הורים/);
   assert.match(p, /לעולם אל תבקש/);
   assert.doesNotMatch(acts.promptSection({ ...crm, customer: { parent_code: false } }), /קוד הורים/);
+});
+
+test('voice notes: recognised by type, without a caption', () => {
+  assert.equal(isVoice({ type: 'ptt', body: '' }), true);
+  assert.equal(isVoice({ type: 'audio', body: '' }), true);
+  assert.equal(isVoice({ type: 'ptt', body: 'כיתוב' }), false);
+  assert.equal(isVoice({ type: 'chat', body: '' }), false);
+  assert.equal(isVoice(null), false);
+  assert.match(ai.systemPrompt({ businessInfo: 'x', inHours: true }), /🎤/);
+});
+
+test('voice notes: Gemini gets the audio inline and the transcript comes back clean', async () => {
+  ai._resetModelCache();
+  const calls = [];
+  let answerText = '"שלום, אני רוצה לחסום את טיקטוק"';
+  const fakeFetch = async (url, opts = {}) => {
+    calls.push({ url, body: JSON.parse(opts.body) });
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: answerText }] } }] }) };
+  };
+  const cfg = { ai_provider: 'gemini', ai_key: 'K', ai_model: 'gemini-2.5-flash' };
+  const t = await ai.transcribe(cfg, { data: Buffer.from('OggS-voice').toString('base64'), mimetype: 'audio/ogg; codecs=opus' }, fakeFetch);
+  assert.equal(t, 'שלום, אני רוצה לחסום את טיקטוק');
+  const [part] = calls[0].body.contents[0].parts;
+  assert.deepEqual(part.inlineData, { mimeType: 'audio/ogg', data: Buffer.from('OggS-voice').toString('base64') });
+  assert.equal(calls[0].body.generationConfig.temperature, 0);
+  assert.match(calls[0].url, /gemini-2\.5-flash:generateContent/);
+  answerText = '[אין דיבור]';
+  assert.equal(await ai.transcribe(cfg, { data: 'AAAA', mimetype: 'audio/ogg' }, fakeFetch), '');
+  assert.equal(await ai.transcribe({ ai_provider: 'gemini', ai_key: '' }, { data: 'AAAA' }, fakeFetch), '');   // אין מפתח
+  await assert.rejects(ai.transcribe(cfg, { data: 'A'.repeat(21 * 1024 * 1024), mimetype: 'audio/ogg' }, fakeFetch), /too long/);
+});
+
+test('voice notes: Groq uses Whisper with the audio file', async () => {
+  let seen = null;
+  const fakeFetch = async (url, opts = {}) => {
+    seen = { url, auth: opts.headers.Authorization, form: opts.body };
+    return { ok: true, json: async () => ({ text: ' מתי אתם פתוחים? ' }) };
+  };
+  const t = await ai.transcribe({ ai_provider: 'groq', ai_key: 'G' }, { data: Buffer.from('voice').toString('base64'), mimetype: 'audio/ogg; codecs=opus' }, fakeFetch);
+  assert.equal(t, 'מתי אתם פתוחים?');
+  assert.match(seen.url, /\/openai\/v1\/audio\/transcriptions$/);
+  assert.equal(seen.auth, 'Bearer G');
+  assert.equal(seen.form.get('model'), 'whisper-large-v3');
+  const file = seen.form.get('file');
+  assert.equal(file.name, 'voice.ogg');
+  assert.equal(Buffer.from(await file.arrayBuffer()).toString(), 'voice');
 });

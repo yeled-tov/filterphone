@@ -8,6 +8,8 @@
  * כאן רק ההחלטות (טהור, נבדק ביחידה); הפעולות מול וואטסאפ ב-index.js.
  */
 
+const { isVoice } = require('./logic');
+
 const DEFAULT_NAME = 'בוט';
 
 const norm = (s) => String(s || '').replace(/[‎‏‪-‮]/g, '').trim().toLowerCase();
@@ -36,11 +38,11 @@ function isNewChat(messages, { isContact = false, includeContacts = false } = {}
 }
 
 /**
- * החזרת את הבוט לשיחה (סימנת "בוט") והלקוח מחכה לתשובה? — ההודעה האחרונה ממנו, טקסט, מהזמן האחרון,
+ * החזרת את הבוט לשיחה (סימנת "בוט") והלקוח מחכה לתשובה? — ההודעה האחרונה ממנו, טקסט או הודעה קולית, מהזמן האחרון,
  * ועוד לא ענינו עליה.
  */
 function needsCatchUp(last, { now = Date.now(), answered = '', windowMs = 15 * 60e3 } = {}) {
-  if (!last || last.fromMe || !String(last.body || '').trim()) return false;
+  if (!last || last.fromMe || (!String(last.body || '').trim() && !isVoice(last))) return false;
   const id = last.id?._serialized || last.id;
   return now - (last.timestamp || 0) * 1000 < windowMs && id !== answered;
 }
