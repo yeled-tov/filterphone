@@ -105,3 +105,41 @@ def test_approving_a_change_request_needs_the_code(env):
     assert client.post(f"/v1/admin/requests/{req['id']}/approve", headers=h, json={}).status_code == 403
     assert client.post(f"/v1/admin/requests/{req['id']}/approve", headers={**h, "X-Parent-Code": "2468"},
                        json={}).status_code == 200
+
+
+def test_a_sealed_code_cannot_be_reset_only_changed_or_unsealed_with_the_code(env):
+    svc, client, h, did, cid, _ = setup(env)
+    # נעילה — רק עם הקוד
+    assert client.post(f"/v1/admin/customers/{cid}/parent-code/seal", headers=h,
+                       json={"code": "0000", "sealed": True}).status_code == 403
+    r = client.post(f"/v1/admin/customers/{cid}/parent-code/seal", headers=h, json={"code": "2468", "sealed": True})
+    assert r.status_code == 200 and r.json()["code_sealed"] is True
+    # איפוס מהדשבורד — לא אפשרי; הקוד ממשיך לחסום
+    r = client.delete(f"/v1/admin/customers/{cid}/parent-code", headers=h)
+    assert r.status_code == 403 and r.json()["sealed"] is True
+    assert client.patch(f"/v1/admin/devices/{did}", headers=h, json={"level": 3}).status_code == 403
+    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    assert d["customer"]["code_sealed"] is True and all(not k.startswith("parent_code_") for k in d["customer"])
+    assert next(x for x in client.get("/v1/admin/devices", headers=h).json() if x["id"] == did)["customer"]["code_sealed"]
+    # החלפה — רק עם הקוד הישן, והנעילה נשארת
+    assert client.put(f"/v1/admin/customers/{cid}/parent-code", headers=h, json={"code": "1357"}).status_code == 403
+    r = client.put(f"/v1/admin/customers/{cid}/parent-code", headers=h, json={"code": "1357", "old_code": "2468"})
+    assert r.status_code == 200 and r.json()["code_sealed"] is True
+    # ביטול הנעילה עם הקוד — ואז אפשר שוב לאפס
+    r = client.post(f"/v1/admin/customers/{cid}/parent-code/seal", headers=h, json={"code": "1357", "sealed": False})
+    assert r.status_code == 200 and r.json()["code_sealed"] is False
+    assert client.delete(f"/v1/admin/customers/{cid}/parent-code", headers=h).json()["parent_code"] is False
+    actions = [a["action"] for a in client.get("/v1/admin/audit", headers=h).json()]
+    assert "parent_code_seal" in actions and "parent_code_unseal" in actions
+
+
+def test_a_code_can_be_sealed_when_it_is_set(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, _ = active_customer(svc, client)
+    cid = client.get(f"/v1/admin/devices/{did}", headers=h).json()["customer"]["id"]
+    r = client.put(f"/v1/admin/customers/{cid}/parent-code", headers=h, json={"code": "9753", "seal": True})
+    assert r.status_code == 200 and r.json()["code_sealed"] is True
+    assert client.delete(f"/v1/admin/customers/{cid}/parent-code", headers=h).status_code == 403
+    assert client.patch(f"/v1/admin/devices/{did}", headers={**h, "X-Parent-Code": "9753"},
+                        json={"level": 3}).status_code == 200

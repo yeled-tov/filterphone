@@ -302,7 +302,12 @@ CREATE TABLE device_avatars (
 );
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13]
+_V14 = """
+-- קוד הורים נעול: אי אפשר לאפס אותו מהדשבורד — רק מי שיודע את הקוד יכול להחליף אותו או לבטל את הנעילה
+ALTER TABLE customers ADD COLUMN parent_code_sealed INTEGER NOT NULL DEFAULT 0;
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14]
 VERSION = len(MIGRATIONS)
 
 

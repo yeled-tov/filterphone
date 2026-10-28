@@ -432,6 +432,12 @@ class BotTempIn(BaseModel):
 class ParentCodeIn(BaseModel):
     code: str = Field(min_length=4, max_length=8)
     old_code: str | None = Field(default=None, max_length=12)
+    seal: bool | None = None            # נעילה: אי אפשר לאפס את הקוד מהדשבורד (רק עם הקוד)
+
+
+class ParentSealIn(BaseModel):
+    code: str = Field(min_length=1, max_length=12)
+    sealed: bool
 
 
 class BotEscalateIn(BaseModel):
@@ -1258,7 +1264,12 @@ def _routes(app: FastAPI) -> None:
     @app.put("/v1/admin/customers/{customer_id}/parent-code")
     def set_parent_code(customer_id: int, body: ParentCodeIn, svc: SvcDep, admin: AdminRow):
         """קוד הורים: בלי הקוד אי אפשר לשנות את החסימות של הלקוח — לא בדשבורד ולא בבוט."""
-        return svc.set_parent_code(customer_id, body.code, body.old_code, admin["username"])
+        return svc.set_parent_code(customer_id, body.code, body.old_code, admin["username"], body.seal)
+
+    @app.post("/v1/admin/customers/{customer_id}/parent-code/seal")
+    def seal_parent_code(customer_id: int, body: ParentSealIn, svc: SvcDep, admin: AdminRow):
+        """נעילת הקוד (או ביטולה) — רק עם הקוד עצמו. קוד נעול לא מתאפס מהדשבורד."""
+        return svc.seal_parent_code(customer_id, body.code, body.sealed, admin["username"])
 
     @app.delete("/v1/admin/customers/{customer_id}/parent-code")
     def reset_parent_code(customer_id: int, svc: SvcDep, admin: AdminRow):

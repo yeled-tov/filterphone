@@ -1419,6 +1419,7 @@ class Services:
             return None
         d = {k: v for k, v in dict(cust).items() if not k.startswith("parent_code")}
         d["parent_code"] = bool(dict(cust).get("parent_code"))
+        d["code_sealed"] = bool(d["parent_code"] and dict(cust).get("parent_code_sealed"))
         return d
 
     def _parent_customer(self, c, device_id: int):
@@ -1431,11 +1432,17 @@ class Services:
 
     def require_parent_code(self, device_id: int, code: str | None, actor: str) -> None:
         """שינוי בחסימות של מכשיר שללקוח שלו יש קוד הורים — רק עם הקוד. חל על כולם: הדשבורד, הבוט,
-        אישור בקשות. אין עקיפה (מנהל שצריך — מאפס את הקוד במפורש, וזה נרשם). ניסיונות שגויים נספרים
-        ונעולים אחרי PARENT_CODE_MAX_FAILS (נשמר גם כשהבקשה נדחית — טרנזקציה נפרדת)."""
+        אישור בקשות. אין עקיפה (מנהל שצריך — מאפס את הקוד במפורש, וזה נרשם; קוד נעול — אי אפשר לאפס).
+        ניסיונות שגויים נספרים ונעולים אחרי PARENT_CODE_MAX_FAILS (נשמר גם כשהבקשה נדחית)."""
+        with self.db() as c:
+            cust = self._parent_customer(c, device_id)
+        if cust is not None:
+            self._require_customer_code(cust["id"], code, actor, f"device:{device_id}")
+
+    def _require_customer_code(self, customer_id: int, code: str | None, actor: str, detail: str) -> None:
         t = db.now()
         with self.db() as c, db.transaction(c):
-            cust = self._parent_customer(c, device_id)
+            cust = c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
             if cust is None or not cust["parent_code"]:
                 return
             if cust["parent_code_lock"] > t:
@@ -1454,40 +1461,59 @@ class Services:
                 locked = fails >= PARENT_CODE_MAX_FAILS
                 c.execute("UPDATE customers SET parent_code_fails = ?, parent_code_lock = ? WHERE id = ?",
                           (0 if locked else fails, t + PARENT_CODE_LOCK_S if locked else 0, cust["id"]))
-                self.audit(actor, "parent_code_wrong", f"customer:{cust['id']}", f"device:{device_id}", c)
+                self.audit(actor, "parent_code_wrong", f"customer:{cust['id']}", detail, c)
                 failure = ApiError(403, "קוד ההורים שגוי" + (" — נעול ל-15 דקות" if locked else ""),
                                    {"need": "parent_code", "wrong": True, "locked": locked})
         raise failure
 
-    def set_parent_code(self, customer_id: int, code: str, old_code: str | None, admin: str) -> dict:
-        """קביעה / החלפה. החלפה דורשת את הקוד הישן (שכחו — "איפוס", שנרשם ביומן)."""
+    def set_parent_code(self, customer_id: int, code: str, old_code: str | None, admin: str,
+                        seal: bool | None = None) -> dict:
+        """קביעה / החלפה. החלפה דורשת את הקוד הישן (שכחו — "איפוס", שנרשם ביומן; קוד נעול — אין איפוס).
+        seal: True — נעילה (אי אפשר לאפס מהדשבורד), False — ביטול הנעילה, None — בלי שינוי."""
         code = (code or "").strip()
         if not PARENT_CODE_RE.match(code):
             raise ApiError(400, "קוד הורים: 4–8 ספרות")
         with self.db() as c:
             cust = c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
-            dev = c.execute("SELECT id FROM devices WHERE customer_id = ? ORDER BY id LIMIT 1", (customer_id,)).fetchone()
         if cust is None:
             raise ApiError(404, "לקוח לא נמצא")
         if cust["parent_code"]:
-            if dev is not None:
-                self.require_parent_code(dev["id"], old_code, admin)
-            elif not security.verify_password(cust["parent_code"], (old_code or "").strip()):
-                raise ApiError(403, "קוד ההורים הנוכחי שגוי", {"need": "parent_code", "wrong": True})
+            self._require_customer_code(customer_id, old_code, admin, "parent_code_change")
+        sealed = bool(cust["parent_code_sealed"]) if seal is None else seal
         with self.db() as c, db.transaction(c):
             c.execute("UPDATE customers SET parent_code = ?, parent_code_at = ?, parent_code_fails = 0,"
-                      " parent_code_lock = 0 WHERE id = ?", (security.hash_password(code), db.now(), customer_id))
-            self.audit(admin, "parent_code_set", f"customer:{customer_id}", "change" if cust["parent_code"] else "new", c)
+                      " parent_code_lock = 0, parent_code_sealed = ? WHERE id = ?",
+                      (security.hash_password(code), db.now(), int(sealed), customer_id))
+            self.audit(admin, "parent_code_set", f"customer:{customer_id}",
+                       ("change" if cust["parent_code"] else "new") + (" sealed" if sealed else ""), c)
+            return self.customer_out(c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone())
+
+    def seal_parent_code(self, customer_id: int, code: str | None, sealed: bool, admin: str) -> dict:
+        """נעילה / ביטול נעילה של הקוד הקיים — רק עם הקוד (מי שקבע אותו מסכים)."""
+        with self.db() as c:
+            cust = c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+        if cust is None:
+            raise ApiError(404, "לקוח לא נמצא")
+        if not cust["parent_code"]:
+            raise ApiError(400, "אין קוד הורים לנעול")
+        self._require_customer_code(customer_id, code, admin, "parent_code_seal")
+        with self.db() as c, db.transaction(c):
+            c.execute("UPDATE customers SET parent_code_sealed = ? WHERE id = ?", (int(sealed), customer_id))
+            self.audit(admin, "parent_code_seal" if sealed else "parent_code_unseal", f"customer:{customer_id}", "", c)
             return self.customer_out(c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone())
 
     def reset_parent_code(self, customer_id: int, admin: str) -> dict:
-        """איפוס (ההורים שכחו את הקוד): מבטל את הקוד. פעולה רגישה — נרשמת ביומן הניהול."""
+        """איפוס (ההורים שכחו את הקוד): מבטל את הקוד. פעולה רגישה — נרשמת ביומן הניהול.
+        קוד נעול לא מתאפס: רק מי שיודע אותו יכול להחליף אותו או לבטל את הנעילה."""
         with self.db() as c, db.transaction(c):
             cust = c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
             if cust is None:
                 raise ApiError(404, "לקוח לא נמצא")
+            if cust["parent_code"] and cust["parent_code_sealed"]:
+                raise ApiError(403, "הקוד נעול — אי אפשר לאפס אותו. רק מי שיודע את הקוד יכול להחליף אותו או לבטל "
+                                    "את הנעילה.", {"need": "parent_code", "sealed": True})
             c.execute("UPDATE customers SET parent_code = '', parent_code_at = NULL, parent_code_fails = 0,"
-                      " parent_code_lock = 0 WHERE id = ?", (customer_id,))
+                      " parent_code_lock = 0, parent_code_sealed = 0 WHERE id = ?", (customer_id,))
             self.audit(admin, "parent_code_reset", f"customer:{customer_id}", "", c)
             return self.customer_out(c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone())
 
@@ -1558,7 +1584,8 @@ class Services:
             d = self._device_row_out(r, peers, stats, t, avatars)
             cust = customers.get(r["customer_id"])
             d["customer"] = {**{k: cust[k] for k in ("id", "name", "phone", "email", "payment", "paid_until")},
-                             "parent_code": bool(cust.get("parent_code"))} if cust else None
+                             "parent_code": bool(cust.get("parent_code")),
+                             "code_sealed": bool(cust.get("parent_code") and cust.get("parent_code_sealed"))} if cust else None
             out.append(d)
         return out
 

@@ -870,23 +870,44 @@ function tabbed(tabs, current) {
 
 /** קוד הורים ללקוח: בלי הקוד אי אפשר לשנות את החסימות — לא כאן ולא בבוט. */
 function parentCodeControl(c) {
+  const codeInput = () => el("input", { type: "password", inputmode: "numeric", maxlength: 8, autocomplete: "off", class: "ltr code-input" });
+  const digits = (input) => input.value.replace(/\D/g, "");
   const ask = async (title, needOld) => {
-    const code = el("input", { type: "password", inputmode: "numeric", maxlength: 8, autocomplete: "off", class: "ltr code-input" });
-    const old = needOld ? el("input", { type: "password", inputmode: "numeric", maxlength: 8, autocomplete: "off", class: "ltr code-input" }) : null;
+    const code = codeInput();
+    const old = needOld ? codeInput() : null;
+    const seal = el("input", { type: "checkbox", checked: Boolean(c.code_sealed) });
     const ok = await dialog(title, [
       el("p", {}, "אחרי שמגדירים קוד — כל שינוי בחסימות של הלקוח (בדשבורד, בבוט בוואטסאפ ובאישור בקשות) דורש אותו. ההורים מקלידים אותו בעצמם."),
       old ? el("label", {}, "הקוד הנוכחי", old) : null,
-      el("label", {}, "קוד חדש (4–8 ספרות)", code)], "שמירה");
+      el("label", {}, "קוד חדש (4–8 ספרות)", code),
+      el("label", { class: "row gap" }, seal, el("span", {}, el("b", {}, "נעילת הקוד"),
+        el("div", { class: "muted small" }, "אי אפשר יהיה לאפס את הקוד מהדשבורד — גם לא מנהל המערכת. רק מי שיודע את הקוד " +
+          "יוכל להחליף אותו או לבטל את הנעילה. אם הקוד נשכח — אין דרך לאפס אותו.")))], "שמירה");
     if (!ok) return;
     await attempt(() => api(`/v1/admin/customers/${c.id}/parent-code`, { method: "PUT",
-      body: { code: code.value.replace(/\D/g, ""), ...(old ? { old_code: old.value.replace(/\D/g, "") } : {}) } }), "קוד ההורים נשמר");
+      body: { code: digits(code), seal: seal.checked, ...(old ? { old_code: digits(old) } : {}) } }), "קוד ההורים נשמר");
+    render();
+  };
+  const toggleSeal = async (sealed) => {
+    const code = codeInput();
+    const ok = await dialog(sealed ? "נעילת קוד ההורים" : "ביטול הנעילה", [
+      el("p", {}, sealed
+        ? "אחרי הנעילה אי אפשר לאפס את הקוד מהדשבורד — רק מי שיודע אותו יוכל להחליף אותו או לבטל את הנעילה."
+        : "אחרי ביטול הנעילה אפשר יהיה שוב לאפס את הקוד מהדשבורד (אם נשכח)."),
+      el("label", {}, "קוד ההורים", code)], sealed ? "נעילה" : "ביטול הנעילה");
+    if (!ok) return;
+    await attempt(() => api(`/v1/admin/customers/${c.id}/parent-code/seal`, { method: "POST",
+      body: { code: digits(code), sealed } }), sealed ? "הקוד ננעל" : "הנעילה בוטלה");
     render();
   };
   return el("span", { class: "row gap wrap" },
-    c.parent_code ? chip("מוגדר — שינויים רק עם הקוד", "ok") : chip("לא מוגדר"),
+    c.code_sealed ? chip("נעול — רק מי שיודע את הקוד יכול לשנות", "ok")
+      : c.parent_code ? chip("מוגדר — שינויים רק עם הקוד", "ok") : chip("לא מוגדר"),
     el("button", { class: "ghost small", onclick: () => ask(c.parent_code ? "החלפת קוד הורים" : "הגדרת קוד הורים", c.parent_code) },
       c.parent_code ? "החלפה" : "הגדרה"),
-    c.parent_code ? el("button", { class: "danger small", onclick: async () => {
+    c.parent_code ? el("button", { class: "ghost small", onclick: () => toggleSeal(!c.code_sealed) },
+      c.code_sealed ? "ביטול הנעילה" : "נעילת הקוד") : null,
+    c.parent_code && !c.code_sealed ? el("button", { class: "danger small", onclick: async () => {
       if (!await confirmDialog("לאפס את קוד ההורים?", "רק אם ההורים שכחו את הקוד: הקוד יבוטל ושינויים יתאפשרו בלעדיו. הפעולה נרשמת ביומן הפעולות.", "איפוס", true)) return;
       await attempt(() => api(`/v1/admin/customers/${c.id}/parent-code`, { method: "DELETE" }), "הקוד אופס");
       render();
