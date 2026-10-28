@@ -23,6 +23,11 @@ class _SupportConsoleScreenState extends State<SupportConsoleScreen> {
 
   AppController get c => widget.controller;
 
+  ImageProvider? _avatar(SupportThreadInfo t) {
+    final a = c.customerAvatar(t.deviceId, t.avatarAt);
+    return a == null ? null : NetworkImage(a.url, headers: a.headers);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -84,10 +89,16 @@ class _SupportConsoleScreenState extends State<SupportConsoleScreen> {
                       final t = threads[i];
                       final title = t.customer.isNotEmpty ? t.customer : (t.deviceName.isNotEmpty ? t.deviceName : 'מכשיר #${t.deviceId}');
                       return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: t.unread > 0 ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
-                          child: Text('${t.unread > 0 ? t.unread : ''}',
-                              style: TextStyle(color: t.unread > 0 ? Colors.white : theme.colorScheme.onSurfaceVariant)),
+                        leading: Badge(
+                          isLabelVisible: t.unread > 0,
+                          label: Text('${t.unread}'),
+                          child: CircleAvatar(
+                            backgroundColor: t.unread > 0 ? theme.colorScheme.primary : theme.colorScheme.surfaceContainerHighest,
+                            // תמונת הפרופיל של הלקוח (אחרי הסינון בשרת), ואם אין — האות הראשונה
+                            foregroundImage: _avatar(t),
+                            child: Text(title.characters.first,
+                                style: TextStyle(color: t.unread > 0 ? Colors.white : theme.colorScheme.onSurfaceVariant)),
+                          ),
                         ),
                         title: Row(children: [
                           Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,

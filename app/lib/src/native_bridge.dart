@@ -293,6 +293,9 @@ abstract class NativeBridge {
 
   /// חלון המערכת לקביעת הסייר כדפדפן ברירת המחדל (בגרסאות ישנות — מסך ההגדרות).
   Future<bool> requestDefaultBrowser();
+
+  /// תמונת פרופיל: בוחר התמונות של אנדרואיד → JPEG ריבועי מוקטן (base64). null — בוטל.
+  Future<String?> pickAvatar();
 }
 
 /// אתר חיוני בטאב "סייר מוגן" (הרשימה עצמה בצד של אנדרואיד — SafeSites, שם גם נאכף מה מותר).
@@ -510,6 +513,9 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<bool> requestDefaultBrowser() async =>
       await _channel.invokeMethod<bool>('requestDefaultBrowser') ?? false;
+
+  @override
+  Future<String?> pickAvatar() => _channel.invokeMethod<String>('pickAvatar');
 
   @override
   Future<void> clearSupportNotification() => _call<bool>('clearSupportNotification');

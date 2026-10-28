@@ -264,6 +264,10 @@ class FakeNative implements NativeBridge {
     return true;
   }
 
+  String? pickedAvatar;
+  @override
+  Future<String?> pickAvatar() async => pickedAvatar;
+
   final installs = <String>[];
   @override
   Future<String> installStoreApp(Map<String, Object?> item) async {
@@ -1526,6 +1530,59 @@ void main() {
       await tester.pumpWidget(rtl(BrowserScreen(key: UniqueKey(), controller: c)));
       await tester.pump();
       expect(find.text('הסייר המוגן לא פעיל בטלפון הזה'), findsOneWidget);
+      c.dispose();
+    });
+
+    testWidgets('profile picture: picked, filtered by the server, kept locally; a rejection is explained',
+        (tester) async {
+      await tallScreen(tester);
+      // התמונה כפי שהשרת שמר אותה (תמונה תקינה קטנה — 1×1)
+      const stored = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+      var accept = true;
+      int? serverAt;
+      final uploads = <String>[];
+      final server = MockClient((req) async {
+        const json = {'content-type': 'application/json; charset=utf-8'};
+        switch ('${req.method} ${req.url.path}') {
+          case 'GET /v1/device':
+            return http.Response(jsonEncode({'name': 'Pixel', 'status': 'active', 'level': 1, 'level_name': 'מחמיר',
+                'via_vpn': true, 'avatar_at': serverAt}), 200, headers: json);
+          case 'GET /v1/device/vpn':
+            return http.Response(jsonEncode(_vpn), 200, headers: json);
+          case 'PUT /v1/device/avatar':
+            uploads.add((jsonDecode(req.body) as Map)['image'] as String);
+            if (accept) serverAt = 1700000000;
+            return accept
+                ? http.Response(jsonEncode({'ok': true, 'avatar_at': 1700000000}), 200, headers: json)
+                : http.Response(jsonEncode({'error': 'התמונה לא אושרה בסינון. בחרו תמונה אחרת.'}), 422, headers: json);
+          case 'GET /v1/device/avatar':
+            return http.Response.bytes(base64Decode(stored), 200, headers: {'content-type': 'image/jpeg'});
+        }
+        return http.Response('not found', 404);
+      });
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP'
+        ..pickedAvatar = base64Encode([9, 9, 9]);
+      final store = activeStore();
+      final c = makeController(native, server, store);
+      await c.start();
+      expect(await c.changeAvatar(), isNull);
+      expect(uploads, [base64Encode([9, 9, 9])]);
+      expect(c.avatar, base64Decode(stored));                          // מה שהשרת שמר — לא המקור
+      expect(store.data['profile_avatar'], '1700000000:$stored');
+      // התמונה לא עברה את הסינון — ההסבר מהשרת, והתמונה הקודמת נשארת
+      accept = false;
+      expect(await c.changeAvatar(), 'התמונה לא אושרה בסינון. בחרו תמונה אחרת.');
+      expect(c.avatar, base64Decode(stored));
+      // ביטול בבוחר — לא שולחים כלום
+      native.pickedAvatar = null;
+      expect(await c.changeAvatar(), isNull);
+      expect(uploads, hasLength(2));
+      await tester.pumpWidget(rtl(ListenableBuilder(listenable: c, builder: (_, _) => ProfileScreen(controller: c))));
+      await tester.pump();
+      expect(find.byIcon(Icons.photo_camera_rounded), findsOneWidget);
+      expect(tester.widget<CircleAvatar>(find.byType(CircleAvatar).first).foregroundImage, isA<MemoryImage>());
       c.dispose();
     });
 

@@ -34,6 +34,7 @@ class MainActivity : FlutterActivity() {
     private var pendingVpn: MethodChannel.Result? = null
     private var launchingChild = false     // פתחנו מסך של אנדרואיד — יציאה כזו לא מסירה מהאחרונים
     private var pendingCert: MethodChannel.Result? = null
+    private var pendingAvatar: MethodChannel.Result? = null
     private var vpnListener: ((Tunnel.State) -> Unit)? = null
     private var installProgress: InstalledApps.Progress? = null
     /** פתיחה מהתראה ("יש תשובה מהתמיכה") — ה-Flutter שואל פעם אחת ועובר ללשונית. */
@@ -317,6 +318,16 @@ class MainActivity : FlutterActivity() {
                     true
                 }.getOrDefault(false))
             }
+            // תמונת פרופיל: בוחר התמונות → JPEG ריבועי מוקטן (base64), או null אם בוטל
+            "pickAvatar" -> {
+                pendingAvatar?.success(null)
+                pendingAvatar = result
+                launchingChild = true
+                if (!AvatarPicker.launch(this, REQ_AVATAR)) {
+                    pendingAvatar = null
+                    result.success(null)
+                }
+            }
             "requestDefaultBrowser" -> {
                 launchingChild = true
                 result.success(BrowserActivity.requestDefault(this, REQ_BROWSER))
@@ -447,6 +458,13 @@ class MainActivity : FlutterActivity() {
         when (requestCode) {
             REQ_VPN -> { pendingVpn?.success(resultCode == RESULT_OK); pendingVpn = null }
             REQ_CERT -> { pendingCert?.success(if (resultCode == RESULT_OK) "installed" else "dialog"); pendingCert = null }
+            REQ_AVATAR -> {
+                val pending = pendingAvatar ?: return
+                pendingAvatar = null
+                val uri = data?.data
+                if (resultCode != RESULT_OK || uri == null) pending.success(null)
+                else background(pending) { AvatarPicker.toJpegBase64(this, uri) }
+            }
         }
     }
 
@@ -455,6 +473,7 @@ class MainActivity : FlutterActivity() {
         const val REQ_CERT = 4102
         const val REQ_NOTIFY = 4103
         const val REQ_BROWSER = 4104
+        const val REQ_AVATAR = 4105
 
         /** חוט רקע אחד לכל האפליקציה — לא חדש בכל יצירה של המסך (היה דולף). */
         val io = Executors.newSingleThreadExecutor { r -> Thread(r, "fp-bridge").apply { isDaemon = true } }

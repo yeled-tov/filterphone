@@ -10,7 +10,7 @@
   - ההרשאות שההגנה צריכה — ושאין הרשאות פרטיות (הודעות, אנשי קשר, מיקום, מיקרופון...);
   - הרכיבים: VPN, השירות הקדמי (specialUse), המגן (נגישות), מנהל המכשיר, הקמת Device Owner,
     המשימה התקופתית ותוצאת העדכון — כל אחד עם ההרשאה שמגינה עליו;
-  - שכל רכיב שחשוף לאפליקציות אחרות (exported) מוגן בהרשאה, חוץ מהמסך הראשי ומקבל האתחול.
+  - שכל רכיב שחשוף לאפליקציות אחרות (exported) מוגן בהרשאה, חוץ מהמסך הראשי, מקבל האתחול והסייר המוגן (דפדפן).
 נכשל (exit 1) אם משהו לא תקין — בנייה כזו לא מתפרסמת.
 
 FilterPhone.json: לכל קובץ — השם בדף ההורדה, versionCode, המעבדים, הגודל ו-SHA-256. השרת מציע
@@ -63,6 +63,7 @@ REQUIRED_COMPONENTS: dict[tuple[str, str], dict[str, str]] = {
     ("receiver", f"{PACKAGE}.DeviceAdmin"): {"permission": "android.permission.BIND_DEVICE_ADMIN"},
     ("receiver", f"{PACKAGE}.BootReceiver"): {},
     ("receiver", f"{PACKAGE}.UpdateReceiver"): {"exported": "false"},
+    ("activity", f"{PACKAGE}.LinkRelayActivity"): {"exported": "false"},
     ("service", f"{PACKAGE}.ProtectionService"): {"foregroundServiceType": "0x40000000", "exported": "false"},
     ("service", f"{PACKAGE}.GuardService"): {"permission": "android.permission.BIND_ACCESSIBILITY_SERVICE"},
     ("service", f"{PACKAGE}.SyncJob"): {"permission": "android.permission.BIND_JOB_SERVICE"},
@@ -70,7 +71,9 @@ REQUIRED_COMPONENTS: dict[tuple[str, str], dict[str, str]] = {
         {"permission": "android.permission.BIND_VPN_SERVICE"},
 }
 # רכיבים שמותר להם להיות חשופים בלי הרשאה (מסנן פעולות בקוד)
-EXPORTED_WITHOUT_PERMISSION = {f"{PACKAGE}.MainActivity", f"{PACKAGE}.BootReceiver"}
+# BrowserActivity — הסייר המוגן: דפדפן מקבל קישורי http/https מכל אפליקציה (כמו Chrome). הוא עצמו
+# אוכף את מצב הסייר (מלא / אתרים חיוניים / כבוי) וכל התעבורה שלו עוברת בסינון.
+EXPORTED_WITHOUT_PERMISSION = {f"{PACKAGE}.MainActivity", f"{PACKAGE}.BootReceiver", f"{PACKAGE}.BrowserActivity"}
 
 # "A: http://schemas.android.com/apk/res/android:name(0x01010003)="..." (Raw: "...")"
 _ATTR = re.compile(r'^\s*A: (?:\S*:)?([A-Za-z]+)\(0x[0-9a-f]+\)=(.*)$')

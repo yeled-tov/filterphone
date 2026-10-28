@@ -727,6 +727,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
   // --- לקוח
   const c = d.customer;
   const customerCard = card("לקוח", null, c ? el("div", { class: "stack" }, kv([
+    d.avatar_at ? ["תמונת פרופיל", avatarEl(id, d.avatar_at, c.name, "avatar lg")] : null,
     ["שם", c.name], ["טלפון", telLink(c.phone)], ["מייל", mailLink(c.email)],
     ["תשלום", el("span", { class: "row gap" }, paymentChip(c.payment), c.paid_until ? `עד ${date(c.paid_until)}` : null)],
     ["קוד הורים", parentCodeControl(c)],
@@ -1210,13 +1211,29 @@ function bubble(m) {
     m.wa_error ? el("small", { class: "error" }, `לא נשלח לוואטסאפ: ${m.wa_error}`) : null);
 }
 
+const avatarUrls = new Map();   // "מכשיר:גרסה" → כתובת מקומית (התמונה נטענת פעם אחת, עם ההרשאה)
+
+/** תמונת הפרופיל של הלקוח (מהאפליקציה, אחרי הסינון), או האות הראשונה כשאין. */
+function avatarEl(deviceId, at, name, cls = "avatar") {
+  const box = el("span", { class: cls }, (name || "?").slice(0, 1));
+  if (!at) return box;
+  const key = `${deviceId}:${at}`;
+  const show = (url) => box.replaceChildren(el("img", { src: url, alt: `תמונת הפרופיל של ${name || "הלקוח"}` }));
+  if (avatarUrls.has(key)) { show(avatarUrls.get(key)); return box; }
+  fetch(`/v1/admin/devices/${deviceId}/avatar?v=${at}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    .then((r) => (r.ok ? r.blob() : null))
+    .then((b) => { if (!b) return; const url = URL.createObjectURL(b); avatarUrls.set(key, url); show(url); })
+    .catch(() => {});
+  return box;
+}
+
 async function viewSupport(arg) {
   if (arg) return viewSupportThread(Number(arg));
   const s = await api("/v1/admin/support");
   autoRefresh(render, 15000);
   topAction("רענון", render);
   const rows = s.threads.map((t) => el("a", { class: `thread-row${t.unread ? " unread" : ""}`, href: `#/support/${t.device_id}` },
-    el("span", { class: "avatar" }, (t.customer || t.device_name || "?").slice(0, 1)),
+    avatarEl(t.device_id, t.avatar_at, t.customer || t.device_name),
     el("div", { class: "grow" },
       el("div", { class: "row between" }, el("b", {}, t.customer || t.device_name || `מכשיר #${t.device_id}`), el("small", { class: "muted" }, ago(t.last_ts))),
       el("small", { class: "muted" }, `${t.device_name || ""} · #${t.device_id}`),
@@ -1263,6 +1280,9 @@ async function viewSupportThread(id) {
   paint();
   setTimeout(() => { box.scrollTop = box.scrollHeight; }, 0);
   return card(`${t.device.customer || t.device.name} · מכשיר #${id}`, "התשובה מגיעה לאפליקציה של הלקוח (והתראה בטלפון בדיווח הבא).",
+    el("div", { class: "row gap" }, avatarEl(id, t.device.avatar_at, t.device.customer || t.device.name, "avatar lg"),
+      el("div", {}, el("b", {}, t.device.customer || t.device.name || `מכשיר #${id}`),
+        el("div", { class: "muted small" }, t.device.name ? `${t.device.name} · #${id}` : `#${id}`))),
     box, el("div", { class: "composer" }, text, send));
 }
 

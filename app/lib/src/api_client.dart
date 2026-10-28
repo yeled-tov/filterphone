@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
@@ -281,6 +282,7 @@ class DeviceStatus {
     this.supportWhatsApp = '',
     this.isAdmin = false,
     this.adminUnread = 0,
+    this.avatarAt,
   });
 
   final int id;
@@ -313,6 +315,9 @@ class DeviceStatus {
   /// מכשיר המנהל: רואה את כל פניות הלקוחות ועונה מתוך האפליקציה. adminUnread = כמה שיחות ממתינות.
   final bool isAdmin;
   final int adminUnread;
+
+  /// מתי נשמרה תמונת הפרופיל בשרת (null — אין). שינוי = לטעון אותה מחדש.
+  final int? avatarAt;
 
   bool get isActive => status == 'active';
   bool get isPending => status == 'pending';
@@ -360,6 +365,7 @@ class DeviceStatus {
       supportWhatsApp: support['whatsapp'] as String? ?? '',
       isAdmin: j['admin'] is Map,
       adminUnread: ((j['admin'] as Map?)?['support_unread'] as num?)?.toInt() ?? 0,
+      avatarAt: (j['avatar_at'] as num?)?.toInt(),
     );
   }
 }
@@ -392,6 +398,7 @@ class SupportThreadInfo {
     required this.lastTime,
     required this.unread,
     required this.status,
+    this.avatarAt,
   });
 
   final int deviceId;
@@ -403,6 +410,9 @@ class SupportThreadInfo {
   final int unread;
   final String status;
 
+  /// תמונת הפרופיל של הלקוח (מתי נשמרה), null — אין.
+  final int? avatarAt;
+
   factory SupportThreadInfo.fromJson(Map<String, Object?> j) => SupportThreadInfo(
         deviceId: (j['device_id'] as num?)?.toInt() ?? 0,
         deviceName: j['device_name'] as String? ?? '',
@@ -412,6 +422,7 @@ class SupportThreadInfo {
         lastTime: DateTime.fromMillisecondsSinceEpoch(((j['last_ts'] as num?)?.toInt() ?? 0) * 1000),
         unread: (j['unread'] as num?)?.toInt() ?? 0,
         status: j['status'] as String? ?? '',
+        avatarAt: (j['avatar_at'] as num?)?.toInt(),
       );
 }
 
@@ -739,6 +750,34 @@ class ApiClient {
   Future<void> adminSupportReply(String token, int deviceId, String text) =>
       _send('POST', '/v1/device/admin/support/$deviceId', token: token, body: {'text': text});
 
+  // --- תמונת פרופיל (השרת מקטין, מנקה מטא-דאטה ובודק בסינון לפני שהוא שומר) ---
+
+  /// מעלה JPEG (base64). מחזיר מתי נשמר — או זורק עם ההסבר (למשל "התמונה לא אושרה בסינון").
+  Future<int> uploadAvatar(String token, String base64Jpeg) async {
+    final j = await _send('PUT', '/v1/device/avatar', token: token, body: {'image': base64Jpeg});
+    return (j['avatar_at'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> deleteAvatar(String token) => _send('DELETE', '/v1/device/avatar', token: token);
+
+  /// התמונה ששמורה בשרת (כפי שהיא מוצגת לתמיכה).
+  Future<Uint8List> avatar(String token) => _bytes('/v1/device/avatar', token);
+
+  /// מכשיר המנהל ("ניהול תמיכה"): כתובת התמונה של לקוח + הכותרות לטעינתה.
+  String adminAvatarUrl(int deviceId, int at) => '$_base/v1/device/admin/avatar/$deviceId?v=$at';
+  Map<String, String> authHeaders(String token) => {'Authorization': 'Bearer $token'};
+
+  Future<Uint8List> _bytes(String path, String token) async {
+    final http.Response res;
+    try {
+      res = await _http.get(Uri.parse('$_base$path'), headers: authHeaders(token)).timeout(_timeout);
+    } on Exception catch (e) {
+      throw ApiException(0, describeNetworkError(e));
+    }
+    if (res.statusCode != 200) throw ApiException(res.statusCode, 'שגיאה בשרת (${res.statusCode})');
+    return res.bodyBytes;
+  }
+
   Future<Map<String, Object?>> _send(
     String method,
     String path, {
@@ -756,6 +795,7 @@ class ApiClient {
     try {
       res = await switch (method) {
         'POST' => _http.post(uri, headers: headers, body: jsonEncode(body)),
+        'PUT' => _http.put(uri, headers: headers, body: jsonEncode(body)),
         'DELETE' => _http.delete(uri, headers: headers),
         _ => _http.get(uri, headers: headers),
       }.timeout(_timeout);

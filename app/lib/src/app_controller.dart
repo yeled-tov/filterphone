@@ -116,6 +116,12 @@ class AppController extends ChangeNotifier {
 
   /// טאב העדכונים בחנות: אפליקציות שבחרו לא לעדכן (⊘) — לא נספרות ולא נכללות ב"עדכון הכול".
   Set<String> updateExcluded = {};
+
+  // --- תמונת פרופיל (מוצגת בפרופיל ולתמיכה). עותק מקומי — כדי שתוצג מיד, גם בלי רשת.
+  static const _kAvatar = 'profile_avatar';         // "<מתי נשמרה בשרת>:<JPEG ב-base64>"
+  Uint8List? avatar;
+  int? _avatarAt;
+  bool avatarBusy = false;
   static const _kUpdateExcluded = 'store_update_excluded';
 
   /// מצב ההרשאות נקרא מהטלפון לפחות פעם אחת (לפני זה לא "דורשים" כלום — עוד לא ידוע מה חסר).
@@ -211,6 +217,7 @@ class AppController extends ChangeNotifier {
   }
 
   Future<void> _enterHome() async {
+    await _loadAvatar();
     phase = Phase.home;
     notifyListeners();
     _listenVpn();
@@ -706,12 +713,95 @@ class AppController extends ChangeNotifier {
         deviceRemoved = false;
         await _applyGuardPolicy(device!.guardPolicy);
         unawaited(_maybeReport(token));
+        unawaited(_syncAvatar(token, device!.avatarAt));
       } on ApiException catch (e) {
         serverReachable = e.status != 0;
         deviceRemoved = e.isUnauthorized;
       }
     }
     notifyListeners();
+  }
+
+  // ------------------------------------------------------------------ תמונת פרופיל
+
+  /// "ניהול תמיכה" (מכשיר המנהל): איפה תמונת הפרופיל של לקוח, או null כשאין.
+  ({String url, Map<String, String> headers})? customerAvatar(int deviceId, int? at) {
+    final token = _token;
+    if (token == null || at == null) return null;
+    return (url: api.adminAvatarUrl(deviceId, at), headers: api.authHeaders(token));
+  }
+
+  Future<void> _loadAvatar() async {
+    final raw = await store.read(_kAvatar);
+    final i = raw?.indexOf(':') ?? -1;
+    if (raw == null || i <= 0) return;
+    try {
+      avatar = base64Decode(raw.substring(i + 1));
+      _avatarAt = int.tryParse(raw.substring(0, i));
+    } on FormatException {
+      avatar = null;
+      _avatarAt = null;
+    }
+  }
+
+  Future<void> _saveAvatar(Uint8List? bytes, int? at) async {
+    avatar = bytes;
+    _avatarAt = bytes == null ? null : at;
+    await store.write(_kAvatar, bytes == null || at == null ? null : '$at:${base64Encode(bytes)}');
+  }
+
+  /// התמונה בשרת השתנתה (שחזור למכשיר חדש / הוסרה) — מעדכנים את העותק המקומי.
+  Future<void> _syncAvatar(String token, int? serverAt) async {
+    if (avatarBusy || serverAt == _avatarAt) return;
+    try {
+      await _saveAvatar(serverAt == null ? null : await api.avatar(token), serverAt);
+      notifyListeners();
+    } on ApiException catch (e) {
+      debugPrint('avatar sync: ${e.message}');
+    }
+  }
+
+  /// בחירת תמונת פרופיל: בוחר התמונות → השרת (מקטין ובודק בסינון). מחזיר הודעת שגיאה, או null.
+  Future<String?> changeAvatar() async {
+    final token = _token;
+    if (token == null || avatarBusy) return null;
+    final String? picked;
+    try {
+      picked = await native.pickAvatar();
+    } on PlatformException catch (e) {
+      debugPrint('pick avatar: $e');
+      return 'לא הצלחנו לקרוא את התמונה. נסו תמונה אחרת.';
+    }
+    if (picked == null) return null;                                    // בוטל
+    avatarBusy = true;
+    notifyListeners();
+    try {
+      final at = await api.uploadAvatar(token, picked);
+      await _saveAvatar(await api.avatar(token), at);                   // מה שנשמר בשרת (כפי שהתמיכה רואה)
+      return null;
+    } on ApiException catch (e) {
+      return e.status == 0 ? 'אין חיבור לשרת — התמונה לא נשמרה. נסו שוב.' : e.message;
+    } finally {
+      avatarBusy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<String?> removeAvatar() async {
+    final token = _token;
+    if (token == null || avatarBusy) return null;
+    avatarBusy = true;
+    notifyListeners();
+    try {
+      await api.deleteAvatar(token);
+      await _saveAvatar(null, null);
+      return null;
+    } on ApiException catch (e) {
+      return e.status == 0 ? 'אין חיבור לשרת. נסו שוב.' : e.message;
+    } finally {
+      avatarBusy = false;
+      notifyListeners();
+    }
   }
 
   /// "החזרת ההגנה" בזמן השהיה: VPN, מגן ומנהל מכשיר חוזרים מיד — וגם בשרת ההשהיה נגמרת.

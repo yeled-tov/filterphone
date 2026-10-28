@@ -293,7 +293,16 @@ ALTER TABLE customers ADD COLUMN parent_code_fails INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE customers ADD COLUMN parent_code_lock INTEGER NOT NULL DEFAULT 0;   -- נעול אחרי ניסיונות שגויים עד
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12]
+_V13 = """
+-- תמונת פרופיל של הלקוח (מהאפליקציה): JPEG קטן ונקי ממטא-דאטה, שעבר את מנוע הסינון ברמה המחמירה
+CREATE TABLE device_avatars (
+    device_id  INTEGER PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+    data       BLOB NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13]
 VERSION = len(MIGRATIONS)
 
 

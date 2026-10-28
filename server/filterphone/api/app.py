@@ -392,6 +392,10 @@ class HeartbeatIn(BaseModel):
     want_policy: bool = False
 
 
+class AvatarIn(BaseModel):
+    image: str = Field(min_length=16, max_length=8_200_000)   # base64 של JPEG / PNG (עד ~6MB)
+
+
 class SupportIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     diag: dict[str, bool | int | float | str] | None = None
@@ -750,6 +754,25 @@ def _routes(app: FastAPI) -> None:
         body, ct = svc.store_media(app_id, slot)
         return Response(content=body, media_type=ct, headers={"Cache-Control": "public, max-age=604800"})
 
+    # --- תמונת פרופיל (מוצגת בפרופיל ובתמיכה בדשבורד) — רק אחרי מנוע הסינון
+    @app.put("/v1/device/avatar")
+    def device_avatar_set(body: AvatarIn, svc: SvcDep, row: DeviceRow):
+        _limit(device_limiter, f"av:{row['id']}")
+        try:
+            raw = base64.b64decode(body.image, validate=True)
+        except (ValueError, binascii.Error) as e:
+            raise ApiError(400, "קובץ התמונה לא תקין") from e
+        return svc.set_avatar(row, raw)
+
+    @app.delete("/v1/device/avatar", status_code=204)
+    def device_avatar_delete(svc: SvcDep, row: DeviceRow):
+        svc.delete_avatar(row)
+
+    @app.get("/v1/device/avatar")
+    def device_avatar(svc: SvcDep, row: DeviceRow):
+        return Response(content=svc.avatar(row["id"]), media_type="image/jpeg",
+                        headers={"Cache-Control": "private, max-age=86400"})
+
     @app.post("/v1/device/support", status_code=201)
     def device_support(body: SupportIn, tasks: BackgroundTasks, desk: DeskDep, row: DeviceRow):
         """הודעה מהלקוח לתמיכה (צ'אט באפליקציה). נשמרת, ונשלחת לוואטסאפ של המנהל ברקע."""
@@ -769,9 +792,19 @@ def _routes(app: FastAPI) -> None:
             raise ApiError(403, "אין הרשאת ניהול למכשיר הזה")
 
     @app.get("/v1/device/admin/support")
-    def device_admin_support(desk: DeskDep, row: DeviceRow):
+    def device_admin_support(desk: DeskDep, svc: SvcDep, row: DeviceRow):
         _require_admin_device(desk, row)
-        return {"threads": desk.threads(), "unread": desk.admin_unread()}
+        threads = desk.threads()
+        avatars = svc.avatar_times([t["device_id"] for t in threads])
+        for t in threads:
+            t["avatar_at"] = avatars.get(t["device_id"])
+        return {"threads": threads, "unread": desk.admin_unread()}
+
+    @app.get("/v1/device/admin/avatar/{device_id}")
+    def device_admin_avatar(device_id: int, desk: DeskDep, svc: SvcDep, row: DeviceRow):
+        _require_admin_device(desk, row)
+        return Response(content=svc.avatar(device_id), media_type="image/jpeg",
+                        headers={"Cache-Control": "private, max-age=86400"})
 
     @app.get("/v1/device/admin/support/{device_id}")
     def device_admin_thread(device_id: int, desk: DeskDep, row: DeviceRow):
@@ -819,12 +852,23 @@ def _routes(app: FastAPI) -> None:
     # --- תמיכה ---
 
     @app.get("/v1/admin/support")
-    def support_threads(desk: DeskDep, _: AdminRow):
-        return {"threads": desk.threads(), "unread": desk.admin_unread(), "whatsapp": desk.wa_status()["can_send"]}
+    def support_threads(desk: DeskDep, svc: SvcDep, _: AdminRow):
+        threads = desk.threads()
+        avatars = svc.avatar_times([t["device_id"] for t in threads])
+        for t in threads:
+            t["avatar_at"] = avatars.get(t["device_id"])
+        return {"threads": threads, "unread": desk.admin_unread(), "whatsapp": desk.wa_status()["can_send"]}
 
     @app.get("/v1/admin/support/{device_id}")
-    def support_thread(device_id: int, desk: DeskDep, _: AdminRow):
-        return desk.thread(device_id)
+    def support_thread(device_id: int, desk: DeskDep, svc: SvcDep, _: AdminRow):
+        out = desk.thread(device_id)
+        out["device"]["avatar_at"] = svc.avatar_times([device_id]).get(device_id)
+        return out
+
+    @app.get("/v1/admin/devices/{device_id}/avatar")
+    def admin_device_avatar(device_id: int, svc: SvcDep, _: AdminRow):
+        return Response(content=svc.avatar(device_id), media_type="image/jpeg",
+                        headers={"Cache-Control": "private, max-age=86400"})
 
     @app.post("/v1/admin/support/{device_id}", status_code=201)
     def support_reply(device_id: int, body: SupportReplyIn, desk: DeskDep, admin: AdminRow):

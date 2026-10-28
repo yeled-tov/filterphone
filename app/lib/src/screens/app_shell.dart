@@ -241,6 +241,43 @@ class ProfileScreen extends StatelessWidget {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$label הועתק')));
   }
 
+  /// תמונת הפרופיל: בחירה / הסרה. היא עוברת את הסינון לפני שהיא נשמרת, ומוצגת לתמיכה בלבד.
+  Future<void> _editAvatar(BuildContext context) async {
+    final c = controller;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: Text(c.avatar == null ? 'בחירת תמונת פרופיל' : 'החלפת התמונה'),
+              onTap: () => Navigator.of(sheet).pop('pick'),
+            ),
+            if (c.avatar != null)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded),
+                title: const Text('הסרת התמונה'),
+                onTap: () => Navigator.of(sheet).pop('remove'),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+              child: Text('התמונה עוברת את הסינון לפני שהיא נשמרת, ומוצגת רק לתמיכה של FilterPhone.',
+                  style: Theme.of(sheet).textTheme.bodySmall),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (action == null) return;
+    final error = action == 'pick' ? await c.changeAvatar() : await c.removeAvatar();
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -265,12 +302,37 @@ class ProfileScreen extends StatelessWidget {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 28,
-                  backgroundColor: theme.colorScheme.primary,
-                  child: Text(
-                    _initials(displayName),
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                Semantics(
+                  button: true,
+                  label: 'תמונת פרופיל',
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: c.device == null ? null : () => _editAvatar(context),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: theme.colorScheme.primary,
+                          foregroundImage: c.avatar == null ? null : MemoryImage(c.avatar!),
+                          child: Text(
+                            _initials(displayName),
+                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        if (c.avatarBusy)
+                          const SizedBox(width: 60, height: 60, child: CircularProgressIndicator(strokeWidth: 3)),
+                        PositionedDirectional(
+                          bottom: 0,
+                          end: 0,
+                          child: CircleAvatar(
+                            radius: 11,
+                            backgroundColor: theme.colorScheme.surface,
+                            child: Icon(Icons.photo_camera_rounded, size: 14, color: theme.colorScheme.primary),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),

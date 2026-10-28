@@ -77,6 +77,9 @@ MAX_KOSHER_CERTS = 20
 STORE_SEED_VERSION = 3
 STORE_MEDIA_TTL_S = 30 * 86400          # תמונות חנות מסוננות נשמרות חודש (כתובת חדשה = קובץ חדש)
 STORE_MEDIA_MAX_BYTES = 3_000_000
+AVATAR_MAX_BYTES = 6_000_000            # התמונה שהלקוח בחר (לפני הקטנה)
+AVATAR_SIZE = 256                       # נשמרת ריבועית, 256×256 JPEG, בלי מטא-דאטה (מיקום, מכשיר)
+AVATAR_MAX_PIXELS = 40_000_000
 FT_STORE, FT_FULL = "com.filtertube.filtertube", "com.filtertube.app"
 FT_DESC = (
     "FilterTube — יוטיוב עם סינון תוכן מובנה. עובד מחוץ ל-VPN (יוטיוב חוסם כתובות של שרתים), "
@@ -283,6 +286,27 @@ def _json_list(raw: str | None) -> list:
         return v if isinstance(v, list) else []
     except ValueError:
         return []
+
+
+def _avatar_jpeg(raw: bytes) -> bytes:
+    """התמונה שהלקוח בחר → ריבוע 256×256 JPEG (מסובב לפי ה-EXIF, בלי שום מטא-דאטה)."""
+    import io
+
+    from PIL import Image, ImageOps, UnidentifiedImageError
+
+    if not raw or len(raw) > AVATAR_MAX_BYTES:
+        raise ApiError(413, "התמונה גדולה מדי")
+    try:
+        with Image.open(io.BytesIO(raw)) as im:
+            if im.format not in ("JPEG", "PNG", "WEBP", "HEIF", "GIF") or im.width * im.height > AVATAR_MAX_PIXELS:
+                raise ApiError(400, "קובץ התמונה לא נתמך")
+            im = ImageOps.exif_transpose(im).convert("RGB")
+            im = ImageOps.fit(im, (AVATAR_SIZE, AVATAR_SIZE), Image.Resampling.LANCZOS)
+            out = io.BytesIO()
+            im.save(out, "JPEG", quality=85, optimize=True)
+            return out.getvalue()
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as e:
+        raise ApiError(400, "קובץ התמונה לא תקין") from e
 
 
 def _json_dict(raw: str | None) -> dict:
@@ -1055,6 +1079,7 @@ class Services:
             out["customer"] = dict(customer)
         else:
             out["customer"] = None
+        out["avatar_at"] = self.avatar_times([row["id"]]).get(row["id"])
         if req is not None:
             out["request"] = {"id": req["id"], "kind": req["kind"], "status": req["status"],
                               "created_at": req["created_at"], "resolved_at": req["resolved_at"]}
@@ -1492,7 +1517,8 @@ class Services:
             now=t or db.now(), offline_after_s=self.cfg.offline_after_s, lost_after_s=self.cfg.lost_after_s,
             sync_grace_s=self.cfg.sync_grace_s)
 
-    def _device_row_out(self, r: sqlite3.Row, peers: dict, stats: dict, t: int) -> dict:
+    def _device_row_out(self, r: sqlite3.Row, peers: dict, stats: dict, t: int,
+                        avatars: dict[int, int] | None = None) -> dict:
         p = peers.get(r["public_key"])
         hs = p.latest_handshake if p else 0
         settings = DeviceSettings.load(r["policy"])
@@ -1513,6 +1539,7 @@ class Services:
             "today": stats.get(r["vpn_ip"], {}) if r["vpn_ip"] else {},
             "blocks": summary(settings), "app_images": settings.app_images,
             "guard": guard, "guard_at": r["guard_at"],
+            "avatar_at": avatars.get(r["id"]) if avatars is not None else self.avatar_times([r["id"]]).get(r["id"]),
         }
 
     def list_devices(self) -> list[dict]:
@@ -1525,9 +1552,10 @@ class Services:
         with self.db() as c:
             rows = c.execute("SELECT * FROM devices ORDER BY id DESC").fetchall()
             customers = {r["id"]: dict(r) for r in c.execute("SELECT * FROM customers")}
+        avatars = self.avatar_times()
         out = []
         for r in rows:
-            d = self._device_row_out(r, peers, stats, t)
+            d = self._device_row_out(r, peers, stats, t, avatars)
             cust = customers.get(r["customer_id"])
             d["customer"] = {**{k: cust[k] for k in ("id", "name", "phone", "email", "payment", "paid_until")},
                              "parent_code": bool(cust.get("parent_code"))} if cust else None
@@ -1907,6 +1935,50 @@ class Services:
             " AND label = 'FilterTube — הגרסה המלאה'", (FT_STORE,))
 
     # ------------------------------------------------------------ תמונות החנות — דרך מסנן התמונות
+
+    # ------------------------------------------------------------ תמונת פרופיל
+
+    def set_avatar(self, row: sqlite3.Row, raw: bytes) -> dict:
+        """תמונת פרופיל מהאפליקציה: מוקטנת ל-JPEG נקי, ונבדקת במנוע הסינון ברמה המחמירה — רק תמונה
+        שהייתה עוברת בלי חסימה נשמרת (אחרת היא לא מוצגת לאף אחד, גם לא בדשבורד)."""
+        img = _avatar_jpeg(raw)
+        try:
+            header, _ = protocol.call_sync(self.cfg.engine_socket, {"op": "classify", "level": 1,
+                                                                    "budget_ms": 15000}, img, timeout=20)
+        except (OSError, protocol.ProtocolError) as e:
+            raise ApiError(503, "מנוע הסינון לא זמין כרגע — נסו שוב בעוד כמה דקות") from e
+        if header.get("action") != "pass":
+            raise ApiError(422, "התמונה לא אושרה בסינון. בחרו תמונה אחרת.")
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            c.execute("INSERT INTO device_avatars (device_id, data, updated_at) VALUES (?, ?, ?)"
+                      " ON CONFLICT(device_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+                      (row["id"], img, t))
+            self.log_device(c, row["id"], "avatar", "תמונת פרופיל עודכנה")
+        return {"ok": True, "avatar_at": t}
+
+    def delete_avatar(self, row: sqlite3.Row) -> None:
+        with self.db() as c, db.transaction(c):
+            if c.execute("DELETE FROM device_avatars WHERE device_id = ?", (row["id"],)).rowcount:
+                self.log_device(c, row["id"], "avatar", "תמונת פרופיל הוסרה")
+
+    def avatar(self, device_id: int) -> bytes:
+        with self.db() as c:
+            r = c.execute("SELECT data FROM device_avatars WHERE device_id = ?", (device_id,)).fetchone()
+        if r is None:
+            raise ApiError(404, "אין תמונת פרופיל")
+        return bytes(r["data"])
+
+    def avatar_times(self, device_ids: list[int] | None = None) -> dict[int, int]:
+        """מכשיר → מתי התמונה עודכנה (לגרסה בכתובת — הדפדפן שומר במטמון עד שהיא משתנה)."""
+        with self.db() as c:
+            if device_ids is None:
+                rows = c.execute("SELECT device_id, updated_at FROM device_avatars").fetchall()
+            else:
+                ids = list(dict.fromkeys(device_ids))[:500]
+                rows = c.execute(f"SELECT device_id, updated_at FROM device_avatars WHERE device_id IN"
+                                 f" ({','.join('?' * len(ids))})", ids).fetchall() if ids else []
+        return {r["device_id"]: r["updated_at"] for r in rows}
 
     def store_media(self, app_id: int, slot: str) -> tuple[bytes, str]:
         """אייקון / צילום מסך של אפליקציה בחנות, אחרי מנוע הסינון ברמה המחמירה (1) — בלי קשר לרמת
