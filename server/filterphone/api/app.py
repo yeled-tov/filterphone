@@ -1240,17 +1240,6 @@ def _routes(app: FastAPI) -> None:
     def admin_temp_close(device_id: int, item: str, svc: SvcDep, admin: AdminRow):
         return svc.temp_close(device_id, item, admin["username"])
 
-    @app.post("/v1/admin/devices/{device_id}/account-window")
-    def account_window(device_id: int, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
-        """10 דקות שבהן מסך "הוספת חשבון Google" עובד במכשיר הזה (אחרי צריבה מוחקים את החשבונות)."""
-        svc.require_parent_code(device_id, parent_code, admin["username"])
-        d = svc.device_row(device_id)
-        if not d["vpn_ip"]:
-            raise ApiError(409, "למכשיר אין עדיין כתובת VPN")
-        n = svc.open_account_window(d["vpn_ip"])
-        svc.audit(admin["username"], "account_window", f"device:{device_id}", str(n))
-        return {"hosts": n, "minutes": 10}
-
     # --- ניהול: לקוחות ---
 
     @app.get("/v1/admin/customers")

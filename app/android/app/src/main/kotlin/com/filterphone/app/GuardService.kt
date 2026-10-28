@@ -164,6 +164,7 @@ class GuardService : AccessibilityService() {
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             markAlive()
             trackSettings(pkg)
+            if (AccountScreens.isAddAccount(pkg, event.className?.toString())) syncForAccountSetup()
             if (pkg != PlayLock.PLAY && pkg != packageName && pkg != SYSTEM_UI) hideCurtain()
             if (guardSelf(pkg, event.className?.toString())) return
             if (guardCritical(pkg)) return
@@ -352,6 +353,16 @@ class GuardService : AccessibilityService() {
      * נבדק רק כשהאפשרות "כלי Root" פעילה. את עצם האפליקציה (המסך הראשי של המנהל) חוסמים כאפליקציה
      * רגילה — כאן רק את חלון האישור. אם לא זוהה חלון כזה — מחזיר false, וההמשך חוסם כרגיל.
      */
+    private var accountSyncAt = 0L
+
+    /** מסך הוספת חשבון Google נפתח — המדיניות מהשרת מיד (לכל היותר פעם בשתי דקות). */
+    private fun syncForAccountSetup() {
+        val now = SystemClock.elapsedRealtime()
+        if (accountSyncAt != 0L && now - accountSyncAt < 2 * 60_000L) return
+        accountSyncAt = now
+        Recovery.syncSoon(this)
+    }
+
     private fun guardRootPrompt(pkg: String, cls: String?): Boolean {
         if (pkg == packageName) return false
         if (pkg !in RootGuard.MANAGERS && !RootGuard.looksLikeSuWindow(cls)) return false     // סינון זול

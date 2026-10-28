@@ -185,10 +185,10 @@ if r is not None:
     for _, e in ev:
         first = e.get("ts", first)
         reason = re.sub(r"[0-9.]+", "#", e.get("reason", ""))
-        by_reason[(e.get("kind"), e.get("action"), reason)] += 1
+        by_reason[(e.get("kind") or "-", e.get("action") or "-", reason)] += 1
         if e.get("kind") in ("image", "inline"):
             host = e.get("host", "")
-            by_host[(".".join(host.split(".")[-3:]), e.get("action"))] += 1
+            by_host[(".".join(host.split(".")[-3:]), e.get("action") or "-")] += 1
     since = f" (מאז {time.strftime('%d/%m %H:%M', time.localtime(int(first)))})" if first else ""
     print(f"== {len(ev)} אירועים אחרונים{since} — לפי סיבה:")
     for (k, a, rs), n in by_reason.most_common(30):

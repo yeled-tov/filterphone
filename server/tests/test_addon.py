@@ -124,6 +124,36 @@ async def test_blocked_or_image_hosts_are_not_learned(fp):
     assert list(await fp.redis.hkeys(A.PASSTHROUGH_KEY)) == [f"{IP}|api.bank.example"]
 
 
+CHROME_HELLO = dict(cipher_suites=[0x3A3A, 0x1301, 0x1302], extensions=[(0x4A4A, b""), (0, b""), (16, b"")])
+OKHTTP_HELLO = dict(cipher_suites=[0x1301, 0x1302, 0xC02B], extensions=[(0, b""), (16, b"")])
+
+
+async def test_hosts_learned_from_an_app_stay_filtered_in_chrome(fp):
+    """אפליקציה שלא סומכת על התעודה "לימדה" שרת תמונות / חיפוש / חנות — האפליקציה ממשיכה לעבור, אבל
+    כרום (מזוהה לפי GREASE ב-ClientHello) עדיין נבדק. כך אליאקספרס / אפליקציית גוגל לא פותחות חור בדפדפן."""
+    fp.policies.set(IP, DevicePolicy(level=1, app_images="allow"))
+    ctx = SimpleNamespace(client=SimpleNamespace(peername=(IP, 1)))
+    err = "The client does not trust the proxy's certificate"
+    for sni in ("ae-pic-a1.aliexpress-media.com", "encrypted-tbn0.gstatic.com", "www.google.com", "api.bank.example"):
+        fp.tls_failed_client(SimpleNamespace(conn=SimpleNamespace(sni=sni, error=err), context=ctx))
+
+    def hello(sni, kind):
+        return SimpleNamespace(context=ctx, client_hello=SimpleNamespace(sni=sni, **kind), ignore_connection=False)
+
+    for sni in ("ae-pic-a1.aliexpress-media.com", "encrypted-tbn0.gstatic.com", "www.google.com"):
+        chrome, app = hello(sni, CHROME_HELLO), hello(sni, OKHTTP_HELLO)
+        fp.tls_clienthello(chrome)
+        fp.tls_clienthello(app)
+        assert chrome.ignore_connection is False, sni          # כרום — נבדק
+        assert app.ignore_connection is True, sni              # האפליקציה — ממשיכה לעבוד
+    api = hello("api.bank.example", CHROME_HELLO)               # שרת API שנלמד — לא תוכן, עובר כרגיל
+    fp.tls_clienthello(api)
+    assert api.ignore_connection is True
+    static = hello("g.whatsapp.net", CHROME_HELLO)               # הרשימה הקבועה — לא משתנה
+    fp.tls_clienthello(static)
+    assert static.ignore_connection is True
+
+
 async def test_path_rules_block_google_images_tab_only(fp):
     pol = DevicePolicy.from_json(
         '{"level":2,"paths":[{"host":"google.*","re":"[?&](?:tbm=isch|udm=2)(?:&|$)"}]}', 1)

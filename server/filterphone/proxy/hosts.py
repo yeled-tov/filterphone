@@ -10,6 +10,12 @@
      במכשיר במצב "תמונות באפליקציות: חסום" (ברירת המחדל ברמות 1–2) לא לומדים עליהם —
      עדיף שהאפליקציה לא תציג תמונות מאשר שתציג בלי סינון. באותו מצב גם שרת ששמו
      מעיד על תמונות (img., images-, ‎-pic-, media, thumbs...) לא נלמד.
+
+כרום לא נהנה ממה שנלמד: הלמידה היא לכל המכשיר (הפרוקסי רואה רק כתובת ושם שרת, לא איזו אפליקציה),
+ולכן אפליקציה שלא סומכת על התעודה (אפליקציית גוגל, אליאקספרס...) הייתה "פותחת" שרת תמונות או אתר
+חיפוש/קניות גם לכרום — ותמונות שם עברו בלי סינון. כרום (וכל דפדפן מבוסס Chromium) מזוהה לפי חתימת
+ה-TLS שלו (ערכי GREASE ב-ClientHello — אפליקציות רגילות, OkHttp/Conscrypt, לא שולחות אותם), ובשרת
+תוכן (is_content_host) שנלמד — הוא נבדק תמיד. האפליקציה שלא סומכת ממשיכה לעבור כרגיל.
 """
 from __future__ import annotations
 
@@ -21,7 +27,27 @@ _DISTRUST_MARKERS = ("does not trust", "certificate unknown", "unknown ca", "bad
                      "certificate_unknown", "unknown_ca", "bad_certificate")
 # שם שרת שמעיד שהוא מגיש תמונות: img.kwcdn.com, ae-pic-a1.aliexpress-media.com, images-na...
 _IMAGE_HOST = re.compile(r"(?:^|[.-])(?:img|imgs|image|images|pic|pics|photo|photos|thumb|thumbs|"
-                         r"thumbnail|thumbnails|avatar|avatars|media)\d*(?:[.-]|$)")
+                         r"thumbnail|thumbnails|avatar|avatars|media|tbn|vtbn)\d*(?:[.-]|$)")
+# אתרים שהדפדפן חייב לראות מסוננים (חיפוש עם תמונות מוטמעות, חנויות) — גם כשאפליקציה "לימדה" אותם
+_CONTENT_SITE = re.compile(r"(?:^|\.)(?:google\.[a-z.]{2,6}|bing\.com|yahoo\.com|duckduckgo\.com|yandex\.[a-z.]{2,6}|"
+                           r"aliexpress\.[a-z.]{2,6}|aliexpress\.us|shein\.[a-z.]{2,6}|temu\.com|"
+                           r"amazon\.[a-z.]{2,6}|ebay\.[a-z.]{2,6})$")
+
+
+def is_grease(v: int) -> bool:
+    """ערך GREASE (RFC 8701): 0x0A0A, 0x1A1A ... 0xFAFA."""
+    return (v & 0x0F0F) == 0x0A0A and (v >> 8) == (v & 0xFF)
+
+
+def is_chromium_hello(hello) -> bool:
+    """ClientHello של Chromium (כרום, WebView, Cronet): שולח ערכי GREASE ברשימת ההצפנות / ההרחבות.
+    אפליקציות רגילות באנדרואיד (OkHttp על Conscrypt) לא שולחות. בלי מידע — False (ההתנהגות הקודמת)."""
+    try:
+        ciphers = getattr(hello, "cipher_suites", None) or ()
+        exts = [e[0] for e in (getattr(hello, "extensions", None) or ())]
+        return any(is_grease(v) for v in ciphers) or any(is_grease(v) for v in exts)
+    except Exception:
+        return False
 
 
 def _glob(p: str) -> str:
@@ -70,6 +96,18 @@ class HostPolicy:
     @staticmethod
     def looks_like_image_host(host: str) -> bool:
         return bool(_IMAGE_HOST.search(host))
+
+    def is_content_host(self, host: str) -> bool:
+        """שרת שהתוכן שלו חייב סינון בדפדפן: תמונות ([inspect] / שם של שרת תמונות), חיפוש וחנויות."""
+        host = host.lower().rstrip(".")
+        return self.is_inspect_only(host) or self.looks_like_image_host(host) or bool(_CONTENT_SITE.search(host))
+
+    def is_learned(self, client_ip: str, host: str | None) -> bool:
+        """ה-passthrough למכשיר הזה בא מלמידה (לא מהרשימה הקבועה)."""
+        if not host:
+            return False
+        host = host.lower().rstrip(".")
+        return not (self.is_static(host) and not self.is_inspect_only(host)) and (client_ip, host) in self._learned
 
     def should_passthrough(self, client_ip: str, host: str | None) -> bool:
         if not host:

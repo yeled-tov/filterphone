@@ -82,3 +82,22 @@ async def test_protocol_rejects_oversized():
     reader.feed_data((10**9).to_bytes(4, "big") + (0).to_bytes(4, "big"))
     with pytest.raises(protocol.ProtocolError):
         await protocol.read_message(reader)
+
+
+def test_grease_marks_chromium_client_hellos():
+    from types import SimpleNamespace
+
+    from filterphone.proxy.hosts import is_chromium_hello, is_grease
+    assert all(is_grease(v) for v in (0x0A0A, 0x1A1A, 0xFAFA)) and not any(is_grease(v) for v in (0x1301, 0x0A1A, 0))
+    assert is_chromium_hello(SimpleNamespace(cipher_suites=[0x2A2A, 0x1301], extensions=[]))
+    assert is_chromium_hello(SimpleNamespace(cipher_suites=[0x1301], extensions=[(0x5A5A, b"")]))
+    assert not is_chromium_hello(SimpleNamespace(cipher_suites=[0x1301, 0xC02B], extensions=[(0, b"")]))
+    assert not is_chromium_hello(SimpleNamespace(sni="x"))                       # בלי מידע — כמו קודם
+
+
+def test_content_hosts_and_thumbnail_servers(policy):
+    for host in ("encrypted-tbn0.gstatic.com", "encrypted-vtbn3.gstatic.com", "www.google.co.il",
+                 "m.aliexpress.com", "ae-pic-a1.aliexpress-media.com", "il.shein.com"):
+        assert policy.is_content_host(host), host
+    assert not policy.is_content_host("api.bank.example")
+    assert not policy.learn("10.8.0.14", "encrypted-vtbn0.gstatic.com", strict_images=True)

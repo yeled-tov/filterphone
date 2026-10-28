@@ -29,7 +29,7 @@ from . import inline, rewrite
 from .blockpage import block_page
 from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
-from .hosts import HostPolicy, load_lists
+from .hosts import HostPolicy, is_chromium_hello, load_lists
 from .policy import DevicePolicy, PolicyTable
 
 log = logging.getLogger("filterphone.proxy")
@@ -119,6 +119,8 @@ class FilterPhone:
         self.m_video = m.counter("blocked_video_total", "בקשות וידאו שנחסמו")
         self.m_circuit = m.gauge("engine_circuit_open", "1 = המפסק למנוע פתוח")
         self.m_devices = m.gauge("policy_devices", "מכשירים בטבלת המדיניות")
+        self.m_learned_inspected = m.counter("learned_chrome_inspected_total",
+                                             "חיבורי כרום לשרת תוכן שנלמד (בגלל אפליקציה אחרת) — נבדקו בכל זאת")
 
     # ------------------------------------------------------------ מחזור חיים
 
@@ -197,7 +199,16 @@ class FilterPhone:
         sni = data.client_hello.sni
         if pol.blocks(sni):
             return          # אתר חסום: לא עוקפים — יירוט, ואז דף חסימה / כשל TLS באפליקציה
-        if not pol.filtering or self.hosts.should_passthrough(ip, sni):
+        if not pol.filtering:
+            data.ignore_connection = True
+            return
+        if self.hosts.should_passthrough(ip, sni):
+            # נלמד בגלל אפליקציה שלא סומכת על התעודה — אבל זה כרום, והשרת מגיש תוכן (תמונות / חיפוש /
+            # חנות): כרום סומך עלינו, ולכן נבדק כרגיל. כך הלמידה לא פותחת "חור" בדפדפן.
+            if self.hosts.is_learned(ip, sni) and self.hosts.is_content_host(sni) \
+                    and is_chromium_hello(data.client_hello):
+                self.m_learned_inspected.inc()
+                return
             data.ignore_connection = True
 
     def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:

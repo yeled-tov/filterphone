@@ -368,15 +368,3 @@ def test_admin_device_by_android_id_and_phone(env):
     # אותו מזהה עם טלפון אחר — לא מנהל
     _, other = _register(client, "0501112222", uid, 51)
     assert client.get("/v1/device/admin/support", headers=auth(other)).status_code == 403
-
-
-def test_account_window_opens_google_hosts_for_one_device(env):
-    """אחרי צריבה: חלון של 10 דקות שבו מסך הוספת חשבון Google עובד — רק במכשיר הזה."""
-    svc, client = env
-    did, _ = device(svc, client, n=52)
-    r = client.post(f"/v1/admin/devices/{did}/account-window", headers=admin_headers(client))
-    assert r.status_code == 200 and r.json()["minutes"] == 10
-    ip = svc.device_row(did)["vpn_ip"]
-    hosts = {h["host"] for h in svc.learned_passthrough(ip)}
-    assert "lh3.googleusercontent.com" in hosts and "ssl.gstatic.com" in hosts
-    assert client.post(f"/v1/admin/devices/{did}/account-window").status_code in (401, 403)

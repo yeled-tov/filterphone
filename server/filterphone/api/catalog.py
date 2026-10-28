@@ -635,6 +635,11 @@ VPN_BYPASS_APPS: dict[str, str] = {
     "com.filtertube.filtertube": "FilterTube — גרסת החנות",
 }
 VPN_BYPASS_DEFAULTS: dict = {"enabled": True}
+# "הוספת חשבונות Google" (allow_google_accounts): מסך הכניסה לחשבון הוא חלק משירותי Google Play — אפליקציית
+# מערכת שלא סומכת על תעודת הסינון, ולכן בלי זה החיבור שלה לשרתי גוגל נכשל ("משהו השתבש"). כשהמתג דלוק
+# רק היא יוצאת מה-VPN (בטלפון, לפי שם חבילה) — כרום, אפליקציית Google וכל השאר נשארים בסינון המלא.
+# (פעם פתחנו במקום זה את שרתי התמונות של גוגל לכל המכשיר — כולל כרום. זה הוסר.)
+GOOGLE_ACCOUNT_APP = "com.google.android.gms"
 MAX_VPN_BYPASS = 20
 MAX_BYPASS_PINS = 3
 NEVER_BYPASS = frozenset({
@@ -666,6 +671,16 @@ def resolve_vpn_bypass(cfg: dict | None) -> dict:
         for p in pkgs]}
 
 
+def with_google_accounts(vb: dict, on: bool) -> dict:
+    """מוסיף את שירותי Google Play לרשימת היוצאות מה-VPN כשהמתג "הוספת חשבונות Google" דלוק — גם כשהמנהל
+    כיבה את רשימת ההחרגות (רק המתג הזה מכניס אותם; ידנית הם ב-NEVER_BYPASS)."""
+    if not on:
+        return vb
+    apps = [a for a in vb.get("apps", []) if a["package"] != GOOGLE_ACCOUNT_APP][:MAX_VPN_BYPASS - 1]
+    return {"enabled": True,
+            "apps": [*apps, {"package": GOOGLE_ACCOUNT_APP, "label": "שירותי Google (הוספת חשבון)", "certs": []}]}
+
+
 # ---------------------------------------------------------------- מדיניות מכשיר
 
 @dataclass(slots=True)
@@ -681,7 +696,7 @@ class DeviceSettings:
     vpn_bypass: dict = field(default_factory=dict)  # אפליקציות מחוץ ל-VPN: {enabled, extra, removed, pins}
     temp_open: dict = field(default_factory=dict)   # פתיחות זמניות: פריט → עד מתי (שניות מאז 1970)
     track: str = ""                             # מסלול סינון (TRACKS): "" רגיל / no_internet / navigation / ...
-    allow_google_accounts: bool = False         # שרתי מסך "הוספת חשבון Google" פתוחים קבוע (בלי חלון 10 דק')
+    allow_google_accounts: bool = False         # מסך "הוספת חשבון Google" עובד: שירותי Google מחוץ ל-VPN (רק הם)
     safe_browser: str = ""                      # הסייר המוגן באפליקציה: "" אוטומטי / essential / off (SAFE_BROWSER)
 
     @property
@@ -1085,7 +1100,7 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         dpc={**DPC_DEFAULTS, **s.dpc,
              **({"approved_apps_only": True, "disallow_tethering": True} if track["allowlist"] is not None else {})},
         keywords=resolve_keywords(s.keywords),
-        vpn_bypass=resolve_vpn_bypass(s.vpn_bypass),
+        vpn_bypass=with_google_accounts(resolve_vpn_bypass(s.vpn_bypass), s.allow_google_accounts),
         network_only_unknown=tuple(unknown),
         split_apps=tuple(split),
         accessibility_only=tuple(sorted(p for p, full in ACCESSIBILITY_ONLY_APPS.items()

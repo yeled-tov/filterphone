@@ -569,7 +569,7 @@ class Services:
             # הסנכרון התקופתי (sync_redis_if_needed) יתקן — מסמנים שצריך
             log.error("redis policy sync failed for %s: %s", ip, e)
             self.redis_stale = True
-        self.refresh_account_passthrough(row)       # 'הוספת חשבונות Google קבועה' — אם מופעל
+        self.clear_account_passthrough(ip)          # שאריות של הפתיחה הישנה לפי שרת (ראו שם)
         self.dirty.set()
 
     def _active_devices(self) -> list[sqlite3.Row]:
@@ -589,6 +589,8 @@ class Services:
         if active:
             pipe.hset(LEVELS_KEY, mapping={r["vpn_ip"]: r["level"] for r in active})
             pipe.hset(POLICY_KEY, mapping={r["vpn_ip"]: self.compiled(r).proxy_json(r["level"]) for r in active})
+            # שאריות של "הוספת חשבון Google" הישנה (שרתי תמונות פתוחים לכל המכשיר) — נמחקות
+            pipe.hdel(PASSTHROUGH_KEY, *(f"{r['vpn_ip']}|{h}" for r in active for h in self.LEGACY_ACCOUNT_HOSTS))
         pipe.incr(POLICY_REV_KEY)
         pipe.set(SYNC_MARK_KEY, db.now())
         pipe.execute()
@@ -1181,7 +1183,7 @@ class Services:
         if fresh["status"] == "active":
             # קטלוג מאושר (לפי מסלול הסינון); required יותקנו אוטומטית במנהל מכשיר
             out["managed_apps"] = self.device_managed_apps(DeviceSettings.load(fresh["policy"]).track)
-            self.refresh_account_passthrough(fresh)   # מחדש את ה-passthrough של מסך חשבון Google (אם מופעל)
+            self.clear_account_passthrough(fresh["vpn_ip"])
         return out
 
     def _log_data_checks(self, c: sqlite3.Connection, device_id: int, prev: dict, vpn: dict) -> None:
@@ -2309,35 +2311,20 @@ class Services:
         except redis.RedisError:
             return 0
 
-    # שרתי גוגל שמסך "הוספת חשבון Google" טוען (תמונות/עיצוב). מסך הכניסה של גוגל לא סומך על תעודת
-    # הסינון, ובמצב "תמונות חסומות" השרתים האלה לא נלמדים לבד — ולכן הכניסה נכשלת ("הייתה בעיה
-    # בהתחברות אל lh3.googleusercontent.com"). חלון קצר למכשיר אחד בלבד פותר את זה.
-    ACCOUNT_SETUP_HOSTS: tuple[str, ...] = (
+    # שרתי גוגל שהגרסה הקודמת של "הוספת חשבון Google" פתחה בלי בדיקה לכל המכשיר — כולל כרום, כך שתמונות
+    # מהשרתים האלה (lh3... — Google Photos, מפות, תמונות פרופיל) עברו בלי סינון כל עוד המתג היה דלוק.
+    # היום רק שירותי Google יוצאים מה-VPN (catalog.with_google_accounts); כאן רק מנקים שאריות מ-Redis.
+    LEGACY_ACCOUNT_HOSTS: tuple[str, ...] = (
         "lh3.googleusercontent.com", "lh4.googleusercontent.com", "lh5.googleusercontent.com",
         "lh6.googleusercontent.com", "lh3.google.com", "ssl.gstatic.com", "www.gstatic.com", "fonts.gstatic.com",
     )
 
-    def open_account_window(self, ip: str, minutes: int = 10) -> int:
-        """פותח למכשיר אחד, לזמן קצר, את שרתי גוגל של מסך הוספת החשבון (בלי בדיקת HTTPS).
-        הפרוקסי טוען את הרשימה תוך דקה; אחרי התפוגה הכול חוזר לסינון הרגיל."""
-        expires = time.time() + max(1, min(minutes, 30)) * 60
-        try:
-            self.redis.hset(PASSTHROUGH_KEY, mapping={f"{ip}|{h}": expires for h in self.ACCOUNT_SETUP_HOSTS})
-        except redis.RedisError as e:
-            raise ApiError(503, "לא ניתן לפתוח את החלון כרגע — נסו שוב") from e
-        return len(self.ACCOUNT_SETUP_HOSTS)
-
-    def refresh_account_passthrough(self, row: sqlite3.Row) -> None:
-        """הגדרת 'הוספת חשבונות Google קבועה' למכשיר: שומר את שרתי מסך החשבון ב-passthrough לאורך זמן
-        (מתחדש בכל push / heartbeat). כבוי — מסיר אותם (מלבד חלון זמני שפג לבד). נקרא תמיד — זול."""
-        ip = row["vpn_ip"]
-        if not ip or row["status"] != "active":
+    def clear_account_passthrough(self, ip: str | None) -> None:
+        """מסיר את שרתי מסך החשבון מה-passthrough של המכשיר (אם נשארו מהגרסה הקודמת). זול; נקרא בכל push."""
+        if not ip:
             return
         try:
-            on = DeviceSettings.load(row["policy"]).allow_google_accounts
-            if on:
-                expires = time.time() + 3 * 86400          # 3 ימים — מתחדש בכל דיווח (לפחות יומי)
-                self.redis.hset(PASSTHROUGH_KEY, mapping={f"{ip}|{h}": expires for h in self.ACCOUNT_SETUP_HOSTS})
+            self.redis.hdel(PASSTHROUGH_KEY, *(f"{ip}|{h}" for h in self.LEGACY_ACCOUNT_HOSTS))
         except redis.RedisError:
             self.redis_stale = True
 

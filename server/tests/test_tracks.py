@@ -65,27 +65,40 @@ def test_track_reaches_the_phone_policy_allowlist_and_store(env):
     assert tracks == set(TRACKS)
 
 
-def test_allow_google_accounts_toggle_opens_passthrough_persistently(env):
+def test_allow_google_accounts_takes_only_google_services_out_of_the_vpn(env):
+    """הוספת חשבון Google: רק שירותי Google (אפליקציית החשבון) יוצאים מה-VPN בטלפון — בלי לפתוח את שרתי
+    התמונות של גוגל לכל המכשיר (כך כרום ממשיך לסנן גם את lh3...)."""
+    from filterphone.api.catalog import GOOGLE_ACCOUNT_APP, DeviceSettings
     from filterphone.api.service import PASSTHROUGH_KEY, Services
     svc, client = env
     h = admin_headers(client)
     did, token = active_customer(svc, client)
     ip = svc.device_row(did)["vpn_ip"]
-    d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
-    assert d["settings"]["allow_google_accounts"] is False
-    assert not [k for k in svc.redis.hkeys(PASSTHROUGH_KEY) if k.startswith(f"{ip}|")]
-    # הדלקה — שרתי מסך החשבון נפתחים ב-passthrough למכשיר הזה
+
+    def bypass_apps():
+        pol = client.get("/v1/device", headers=auth(token)).json()["device_policy"]
+        return [a["package"] for a in pol["vpn_bypass"]["apps"]]
+
+    def passthrough():
+        return {k.split("|", 1)[1] for k in svc.redis.hkeys(PASSTHROUGH_KEY) if k.startswith(f"{ip}|")}
+
+    assert client.get(f"/v1/admin/devices/{did}", headers=h).json()["settings"]["allow_google_accounts"] is False
+    assert GOOGLE_ACCOUNT_APP not in bypass_apps()
+    # שארית מהגרסה הקודמת (שרתי תמונות פתוחים לכל המכשיר) — נמחקת
+    svc.redis.hset(PASSTHROUGH_KEY, f"{ip}|lh3.googleusercontent.com", 9e12)
     r = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"allow_google_accounts": True})
     assert r.status_code == 200 and r.json()["settings"]["allow_google_accounts"] is True
-    hosts = {k.split("|", 1)[1] for k in svc.redis.hkeys(PASSTHROUGH_KEY) if k.startswith(f"{ip}|")}
-    assert set(Services.ACCOUNT_SETUP_HOSTS) <= hosts
-    # מתחדש גם בדיווח תקופתי (TTL ארוך)
-    client.post("/v1/device/heartbeat", headers={"Authorization": f"Bearer {token}"}, json={"policy_version": 1})
-    assert {k.split("|", 1)[1] for k in svc.redis.hkeys(PASSTHROUGH_KEY) if k.startswith(f"{ip}|")} >= set(Services.ACCOUNT_SETUP_HOSTS)
-    # נשמר בגיבוי/טעינה
-    from filterphone.api.catalog import DeviceSettings
+    assert GOOGLE_ACCOUNT_APP in bypass_apps() and "com.filtertube.app" in bypass_apps()
+    assert not passthrough() & set(Services.LEGACY_ACCOUNT_HOSTS)          # שום שרת לא נפתח בפרוקסי
+    # גם כשהמנהל כיבה את רשימת ההחרגות — המתג עדיין מוציא רק את שירותי Google
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"vpn_bypass": {"enabled": False}})
+    assert bypass_apps() == [GOOGLE_ACCOUNT_APP]
     assert DeviceSettings.load(DeviceSettings.load(svc.device_row(did)["policy"]).dump()).allow_google_accounts is True
-    assert client.patch(f"/v1/admin/devices/{did}", headers=h, json={"allow_google_accounts": False}).json()["settings"]["allow_google_accounts"] is False
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"allow_google_accounts": False})
+    assert GOOGLE_ACCOUNT_APP not in bypass_apps()
+    # ידנית (בלי המתג) — אי אפשר להוציא את שירותי Google
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"vpn_bypass": {"enabled": True, "extra": [GOOGLE_ACCOUNT_APP]}})
+    assert GOOGLE_ACCOUNT_APP not in bypass_apps()
 
 
 def test_safe_browser_mode_follows_chrome_and_tracks():
