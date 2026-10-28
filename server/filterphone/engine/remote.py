@@ -105,6 +105,8 @@ class RemoteEngine:
         self.cooldown_s = cooldown_s
         self.mode = "always"
         self._cooldown_until = 0.0
+        self.ewma_s: float | None = None        # זמן תשובה ממוצע (ממוצע נע) של בקשות שהצליחו
+        self.probe_at = 0.0                     # מתי נשלחה הבקשה האחרונה (למדידה מחדש כש-Modal איטי)
         u = urllib.parse.urlsplit(url)
         self._host, self._port = u.hostname or "", u.port or 443
         self._path = (u.path or "/") + (f"?{u.query}" if u.query else "")
@@ -130,6 +132,14 @@ class RemoteEngine:
     def enabled(self) -> bool:
         return time.monotonic() >= self._cooldown_until
 
+    def slower_than(self, limit_s: float) -> bool:
+        """נמדד ש-Modal עונה לאט מ-limit_s (למשל: רחוק — מעבר לים). בלי מדידה עדיין — False."""
+        return self.ewma_s is not None and self.ewma_s > limit_s
+
+    def probe_due(self, every_s: float) -> bool:
+        """הגיע הזמן למדוד שוב (בקשה אחת), גם כש-Modal נמדד איטי."""
+        return time.monotonic() - self.probe_at >= every_s
+
     def _trip(self, reason: str) -> None:
         self._cooldown_until = time.monotonic() + self.cooldown_s
         log.warning("Modal unavailable (%s) — using local engine for %.0fs", reason, self.cooldown_s)
@@ -137,11 +147,14 @@ class RemoteEngine:
     async def analyze(self, data: bytes, level: int) -> tuple[Entry, bytes | None] | None:
         """מחזיר (Entry, PNG-של-סגמנטציה-או-None) מ-Modal, או None בכל כשל (אז נופלים למקומי)."""
         loop = asyncio.get_running_loop()
+        t0 = self.probe_at = time.monotonic()
         try:
             payload = await loop.run_in_executor(None, self._post, data, level)
         except Exception as e:
             self._trip(_describe(e))
             return None
+        dt = time.monotonic() - t0
+        self.ewma_s = dt if self.ewma_s is None else 0.7 * self.ewma_s + 0.3 * dt
         try:
             return self._parse(payload)
         except Exception as e:

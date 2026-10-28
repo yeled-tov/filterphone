@@ -169,10 +169,25 @@ async def test_slow_modal_does_not_hold_images_back():
     await e.classify(b"clean", 1)
     assert modal.started == 1               # הבקשה האיטית עוד תלויה — לא שולחים אחריה עוד
     assert e.runs["analyze"] == 2
-    await asyncio.sleep(0.5)                # Modal "התעורר"
+    await asyncio.sleep(0.5)                # Modal "התעורר" — אבל נמדד איטי (0.4 שניות) מהמקומי
     modal.delay = 0
     await e.classify(b"borderline", 1)
-    assert modal.started == 2 and e.runs["analyze"] == 2
+    assert modal.started == 1 and e.runs["analyze"] == 3        # בשרת פנוי — מקומית, בלי לחכות לו
+    modal.probe_at = 0.0                    # עברו שתי דקות — תמונה אחת נשלחת למדידה מחדש
+    await e.classify(b"nsfw", 1)
+    assert modal.started == 2 and e.runs["analyze"] == 3
+    assert not modal.slower_than(0.05) or modal.ewma_s < 0.4    # המדידה החדשה (מהירה) מורידה את הממוצע
+    e.active = e.cfg.engine_max_inflight                        # בעומס — Modal גם כשהוא איטי
+    await e.classify(b"immodest", 1)
+    assert modal.started == 3
+
+
+async def test_fast_modal_is_used_for_every_image_in_always_mode():
+    modal = FakeModal(ModelEngine())
+    e = ModelEngine(modal)
+    for img in (b"female", b"clean", b"borderline"):
+        await e.classify(img, 1)
+    assert modal.calls == 3 and e.runs["analyze"] == 0
 
 
 class _KeepAliveHandler(http.server.BaseHTTPRequestHandler):

@@ -62,6 +62,7 @@ FEMALE = SCORE_NAMES.index("female")
 MIN_USEFUL_S = 0.25                 # פחות זמן מזה עד שהפרוקסי מוותר — לא מתחילים לעבוד (עבודה שתיזרק)
 STUCK_AFTER_S = 60.0                # יש עבודה, ושום תמונה לא הסתיימה בהצלחה דקה שלמה — המנוע תקוע
 REMOTE_RECHECK_S = 15.0             # כל כמה זמן בודקים אם הגדרות Modal השתנו בדשבורד
+REMOTE_PROBE_S = 120.0              # Modal נמדד איטי מהמקומי — פעם בזמן הזה שולחים אליו תמונה אחת למדידה מחדש
 
 
 @dataclass(slots=True)
@@ -262,9 +263,14 @@ class Engine:
         self._reload_remote()
         if self.remote is None or not self.remote.enabled:
             return None
-        # "רק בעומס": כל עוד השרת המקומי פנוי — מנתחים מקומית (חוסך את הקרדיט של Modal)
-        if self.remote.mode == "overflow" and self.waiting == 0 \
-                and self.active < max(2, self.cfg.engine_max_inflight // 2):
+        # "רק בעומס": כל עוד השרת המקומי פנוי — מנתחים מקומית (חוסך את הקרדיט של Modal).
+        # "תמיד", אבל Modal נמדד איטי מהמקומי (נמדד בשרת: ~1.2 שניות מול ~0.25 מקומית — רחוק מעבר לים):
+        # בשרת פנוי — מקומית; Modal רק בעומס, ופעם בשתי דקות תמונה אחת אליו כדי למדוד מחדש.
+        busy = self.waiting > 0 or self.active >= max(2, self.cfg.engine_max_inflight // 2)
+        if not busy and (self.remote.mode == "overflow" or (
+                self.remote.slower_than(self.cfg.modal_hedge_s) and not self.remote.probe_due(REMOTE_PROBE_S))):
+            if self.remote.mode == "always":
+                self.m_remote.inc(result="local_faster")
             return None
         if self._remote_probe is not None and not self._remote_probe.done():
             # בקשה קודמת עדיין מחכה ל-Modal (הפעלה קרה / רשת איטית) — לא מצטופפים מאחוריה
