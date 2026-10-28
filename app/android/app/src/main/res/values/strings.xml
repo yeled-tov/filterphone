@@ -4,6 +4,7 @@
     <string name="guard_description">חוסם את האפליקציות והמסכים שמנהל הסינון חסם בטלפון הזה (למשל חנות האפליקציות או צפייה בסטטוסים). המגן רואה איזו אפליקציה ואיזה מסך נפתחו. רק בוואטסאפ, ורק אם המנהל חסם תמונות פרופיל, הוא בודק גם היכן מוצגות תמונות במסך — כדי לסגור צפייה בתמונת פרופיל. הוא לא קורא הודעות, טקסט או הקלדות, ולא שומר שום דבר.</string>
     <string name="guard_app_blocked">האפליקציה חסומה בטלפון הזה (FilterPhone)</string>
     <string name="guard_screen_blocked">המסך הזה חסום בטלפון הזה (FilterPhone)</string>
+    <string name="guard_root_blocked">בקשת הרשאת-על נחסמה. כלי Root חסומים במכשיר הזה.</string>
     <string name="guard_wa_browser_chrome">הקישור נפתח ב-Chrome (מסונן)</string>
     <string name="guard_wa_browser_blocked">הדפדפן שבתוך וואטסאפ לא מסונן, ולא הצלחנו להעביר את הקישור ל-Chrome. אפשר להעתיק את הקישור (לחיצה ארוכה על ההודעה ← העתקה) ולהדביק ב-Chrome</string>
     <string name="guard_wa_browser_no_chrome">הדפדפן שבתוך וואטסאפ חסום — גלישה באינטרנט לא פתוחה בטלפון הזה</string>

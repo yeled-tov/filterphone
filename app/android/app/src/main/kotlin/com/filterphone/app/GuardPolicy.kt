@@ -94,9 +94,11 @@ object GuardPolicy {
         val tempDpc: Map<String, Long> = emptyMap(),
         /** הסייר המוגן: full / essential / off (SafeSites). השרת לא שולח — full (ואז Chrome חסום → כבוי). */
         val safeBrowser: String = SafeSites.FULL,
+        /** כלי Root: חוסם גם את חלון בקשת הרשאת-העל (su) — לא רק את האפליקציה (RootGuard). */
+        val blockRootPrompt: Boolean = false,
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty() &&
-            !allowlistOnly
+            !allowlistOnly && !blockRootPrompt
         /** טאב "עדכונים" בוואטסאפ חסום (סטטוסים + ערוצים). */
         val blocksWaUpdates get() = "updates" in waScreens
     }
@@ -213,6 +215,7 @@ object GuardPolicy {
             tempDpc = parseTemp(o.optJSONArray("temp_allow"), "dpc"),
             safeBrowser = o.optString("safe_browser", SafeSites.FULL)
                 .takeIf { it in setOf(SafeSites.FULL, SafeSites.ESSENTIAL, SafeSites.OFF) } ?: SafeSites.OFF,
+            blockRootPrompt = o.optBoolean("block_root_prompt", false),
         )
     }
 

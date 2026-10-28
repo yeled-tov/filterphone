@@ -347,6 +347,27 @@ class GuardService : AccessibilityService() {
         }
     }
 
+    /**
+     * חלון בקשת הרשאת-על (su) של כלי Root (מג'יסק וכו') — דוחים בלחיצת "אחורה" (כלומר: לא מאשרים).
+     * נבדק רק כשהאפשרות "כלי Root" פעילה. את עצם האפליקציה (המסך הראשי של המנהל) חוסמים כאפליקציה
+     * רגילה — כאן רק את חלון האישור. אם לא זוהה חלון כזה — מחזיר false, וההמשך חוסם כרגיל.
+     */
+    private fun guardRootPrompt(pkg: String, cls: String?): Boolean {
+        if (pkg == packageName) return false
+        if (pkg !in RootGuard.MANAGERS && !RootGuard.looksLikeSuWindow(cls)) return false     // סינון זול
+        val root = runCatching { rootInActiveWindow }.getOrNull()
+        val texts = if (root != null) {
+            try { collectTexts(root) } catch (e: Exception) { emptyList() } finally { recycle(root) }
+        } else {
+            emptyList()
+        }
+        if (!RootGuard.isSuPrompt(pkg, cls, texts)) return false
+        if (block(pkg, GLOBAL_ACTION_BACK, R.string.guard_root_blocked, minGapMs = 700)) {
+            ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+        }
+        return true
+    }
+
     /** כל הטקסטים הגלויים בחלון (text + contentDescription), עד MAX_NODES — ל-SelfProtect. */
     private fun collectTexts(root: AccessibilityNodeInfo): List<String> {
         val out = ArrayList<String>(64)
@@ -624,6 +645,7 @@ class GuardService : AccessibilityService() {
     private fun onWindow(pkg: String, cls: String?, policy: GuardPolicy.Policy) {
         if (waBrowserReturnUntil != 0L && pkg in WaScreens.PACKAGES && cls?.startsWith("com.whatsapp") == true &&
             !WaBrowser.isBrowserScreen(cls)) waBrowserReturnUntil = 0L     // חזרו לשיחה — הקישור הבא מועבר כרגיל
+        if (policy.blockRootPrompt && guardRootPrompt(pkg, cls)) return    // חלון בקשת הרשאת-על — דחייה
         when (GuardPolicy.check(this, policy, pkg, cls)) {
             GuardPolicy.Block.APP -> {
                 block(pkg, GLOBAL_ACTION_HOME, R.string.guard_app_blocked)

@@ -243,3 +243,32 @@ def test_wireguard_keepalive_is_server_tunable_within_a_safe_range(env):
     code = svc.create_code("x", 2, 1, 1)["code"]
     j = client.post("/v1/enroll", json={"code": code, "public_key": wg_key(30), "name": "x"}).json()
     assert j["vpn"]["persistent_keepalive"] == 40
+
+
+# ------------------------------------------------------------------ כלי Root (מג'יסק)
+
+
+def test_root_tools_block_the_managers_and_flag_the_su_prompt():
+    off = compile_settings(1, DeviceSettings())
+    assert "com.topjohnwu.magisk" not in off.device_json()["blocked_apps"]
+    assert "block_root_prompt" not in off.device_json()                    # בלי האפשרות — בלי הדגל
+    s = DeviceSettings()
+    assert s.update({"options": ["root_tools"]}) == []
+    comp = compile_settings(1, s)
+    dj = comp.device_json()
+    assert {"com.topjohnwu.magisk", "me.weishu.kernelsu", "bin.mt.plus"} <= set(dj["blocked_apps"])
+    assert dj["block_root_prompt"] is True
+    assert comp.needs_accessibility                                        # צריך את המגן
+    assert policy_checksum(1, off) != policy_checksum(1, comp)
+
+
+def test_root_tools_reach_the_phone_policy(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh = enroll(svc, client)
+    assert "block_root_prompt" not in client.get("/v1/device", headers=dh).json()["device_policy"]
+    r = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"options": ["root_tools"]})
+    assert r.status_code == 200, r.text
+    pol = client.get("/v1/device", headers=dh).json()["device_policy"]
+    assert pol["block_root_prompt"] is True
+    assert "com.topjohnwu.magisk" in pol["blocked_apps"]

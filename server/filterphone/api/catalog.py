@@ -332,6 +332,15 @@ OPTIONS: tuple[Option, ...] = (
            "חנות האפליקציות של סמסונג — כדי שלא יתקינו ממנה אפליקציות בעקיפת החנות שלכם.",
            apps=("com.sec.android.app.samsungapps", "com.samsung.android.app.galaxyfinder"),
            popular=True, needs_guard=True),
+    Option("root_tools", "protection", "כלי Root (מג'יסק וכו')",
+           "אפליקציות שמנהלות הרשאת-על (Magisk, KernelSU, APatch) או משנות אפליקציות (MT Manager, "
+           "Lucky Patcher) — איתן אפשר לנקות נתונים או לעקוף את הסינון. חוסם אותן, וגם חוסם את חלון "
+           "אישור ההרשאה שקופץ (מאשר לאפליקציה גישת-על) — כך שלא ניתן לאשר אותו.",
+           apps=("com.topjohnwu.magisk", "io.github.huskydg.magisk", "me.weishu.kernelsu", "me.bmax.apatch",
+                 "me.weishu.exp", "eu.chainfire.supersu", "com.koushikdutta.superuser",
+                 "com.speedsoftware.rootexplorer", "com.mixplorer.silver", "bin.mt.plus", "bin.mt.plus.canary",
+                 "com.chelpus.lackypatch", "com.dimonvideo.luckypatcher", "com.forpda.lp", "com.android.vending.billing.InAppBillingService.LUCK"),
+           popular=True, needs_guard=True, protections=("block_root_prompt",)),
 )
 
 CATALOG: dict[str, Option] = {o.id: o for o in OPTIONS}
@@ -1012,6 +1021,7 @@ class Compiled:
             "vpn_bypass": self.vpn_bypass,
             "accessibility_only": list(self.accessibility_only),
             "wa_screens": list(self.wa_screens),
+            **({"block_root_prompt": True} if "block_root_prompt" in self.protections else {}),
             # רק כשיש — כדי שמדיניות בלי פתיחה זמנית תישאר זהה (בלי גרסה חדשה לכל המכשירים)
             **({"temp_allow": list(self.temp_allow)} if self.temp_allow else {}),
             **({"safe_browser": self.safe_browser} if self.safe_browser != "full" else {}),
