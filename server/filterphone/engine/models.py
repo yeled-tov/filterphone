@@ -38,6 +38,10 @@ def _session(path: str, threads: int) -> ort.InferenceSession:
     so.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
     so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
     so.log_severity_level = 3
+    if os.environ.get("FP_ORT_SPIN", "") != "1":
+        # בלי "המתנה פעילה" של חוטי ההסקה בין הרצות: הליבות שמתפנות הולכות לפרוקסי ולפענוח
+        # (נמדד: p90 נמוך ב-10%–15% בעומס, אותה תפוקה). FP_ORT_SPIN=1 — ההתנהגות הקודמת
+        so.add_session_config_entry("session.intra_op.allow_spinning", "0")
     return ort.InferenceSession(path, so, providers=_PROVIDERS)
 
 

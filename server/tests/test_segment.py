@@ -128,12 +128,27 @@ def test_extra_boxes_painted_only_inside_person():
     assert m[115, 5] == 0                       # על הרקע — לא
 
 
-def test_paint_regions_outputs_jpeg_with_black_skin():
+def _grey(px) -> bool:
+    return all(abs(c - v) <= 12 for c, v in zip(px, S.PAINT_COLOR, strict=True))
+
+
+def test_paint_regions_outputs_jpeg_with_grey_skin():
     im = Image.new("RGB", (200, 200), (230, 190, 160))
     out = Image.open(io.BytesIO(S.paint_regions(im, _labels_person(), "skin")))
     assert out.format == "JPEG" and out.size == (200, 200)
-    assert max(out.getpixel((45, 90))) < 30
-    assert min(out.getpixel((100, 120))) > 150
+    assert _grey(out.getpixel((45, 90)))                    # הזרוע — באפור
+    assert not _grey(out.getpixel((100, 120)))              # הבגד — כמו שהוא
+
+
+def test_fill_boxes_paint_a_small_woman_whole_and_ignore_her_face_box():
+    lab = _labels_person()
+    m = np.asarray(S.region_mask(lab, "skin", (200, 200), keep_boxes=((80, 20, 40, 40),),
+                                 fill_boxes=((20, 10, 140, 180),)))
+    assert m[40, 100] == 255 and m[120, 100] == 255 and m[90, 45] == 255     # פנים, בגד, זרוע — הכול
+    assert m[195, 195] == 0                                                   # הרקע לא
+    lab2 = S.keep_women(_two_people(), S.find_people(_two_people(), 240, 120)[0], {1})
+    m2 = np.asarray(S.region_mask(lab2, "skin", (240, 120), fill_boxes=((0, 0, 240, 120),)))
+    assert m2[80, 180] == 0                                                   # גבר — גם לא בצללית
 
 
 # ---------------------------------------------------------------- רק נשים נצבעות

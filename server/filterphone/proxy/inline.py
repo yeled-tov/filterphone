@@ -22,7 +22,7 @@ from dataclasses import dataclass
 _SLASH = rb"(?:/|\\/|\\x2[fF]|\\u002[fF])"
 _SEMI = rb"(?:;|\\x3[bB]|\\u003[bB])"
 _B64 = rb"(?:[A-Za-z0-9+/=]|\\/|\\x(?:3[dD]|2[bB]|2[fF])|\\u00(?:3[dD]|2[bB]|2[fF]))"
-MIN_B64_CHARS = 1000            # ~750 בייט: מתחת לזה אייקונים ו"תמונות טעינה" מטושטשות
+MIN_B64_CHARS = 400             # ~300 בייט: מתחת לזה פיקסלים ואייקונים זעירים (כמו min_image_bytes)
 
 DATA_URI = re.compile(
     rb"data:image(?P<slash>" + _SLASH + rb")(?P<fmt>jpeg|jpg|png|webp|gif|avif|bmp)"
@@ -35,9 +35,11 @@ TEXT_TYPES = ("text/html", "application/xhtml+xml", "application/json", "text/ja
               "application/javascript", "application/x-javascript", "text/plain", "text/css",
               "application/json+protobuf")
 
-# אתרים ששולחים תמונות מוטמעות גם בתשובות JSON / JS (לא רק ב-HTML)
+# אתרים ששולחים תמונות מוטמעות גם בתשובות JSON / JS (לא רק ב-HTML): מנועי חיפוש, וחנויות
+# שמחזירות לפעמים תמונות ממוזערות בתוך ה-API שלהן
 _INLINE_HOSTS = re.compile(r"(?:^|\.)(?:google\.[a-z.]{2,6}|bing\.com|yahoo\.com|duckduckgo\.com|"
-                           r"yandex\.[a-z.]{2,6}|ecosia\.org|startpage\.com)$")
+                           r"yandex\.[a-z.]{2,6}|ecosia\.org|startpage\.com|aliexpress\.[a-z.]{2,6}|"
+                           r"shein\.[a-z.]{2,6}|temu\.com)$")
 
 
 def should_scan(content_type: str, host: str) -> bool:

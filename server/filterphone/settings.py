@@ -29,13 +29,15 @@ class Settings:
     nudenet_model: str = "nudenet-320n.onnx"
     segment_model: str = "selfie-multiclass-256.onnx"   # רמה 2: מסכת עור/בגד/פנים
     ort_threads: int = 3                # ליבה אחת נשארת פנויה לפרוקסי
+    infer_threads: int = 1              # כמה הרצות מודל במקביל (כל אחת עם ort_threads חוטים)
     ort_providers: str = ""             # ריק = מעבד (CPU). ל-GPU (Modal): "CUDAExecutionProvider,CPUExecutionProvider"
     batch_max: int = 8
     batch_wait_ms: float = 6.0
     decode_threads: int = 2
     cache_ttl_days: int = 30
-    min_image_bytes: int = 1200         # מתחת לזה: אייקונים ופיקסלים
-    min_side_px: int = 64               # תמונה שהצלע הקצרה שלה קטנה מזה לא נבדקת
+    min_image_bytes: int = 300          # מתחת לזה: פיקסלי מעקב ואייקונים זעירים (תמונה ממוזערת של 32px כבר ~600B)
+    min_side_px: int = 64               # רמה 3 בלבד: תמונה שהצלע הקצרה שלה קטנה מזה לא נבדקת לעירום
+                                        # (ברמות 1–2 נבדקת כל תמונה מ-24px — engine/service.py MIN_SIDE)
     max_image_bytes: int = 12_000_000
     max_decode_side: int = 1024
     engine_max_inflight: int = 16       # תמונות בעיבוד בו-זמנית (מעבר לזה — ממתינות בתור)
@@ -81,6 +83,8 @@ class Settings:
     modal_timeout_s: float = 8.0        # תקרת זמן לבקשה ל-Modal; אחריה — נפילה למקומי
     modal_cooldown_s: float = 30.0      # אחרי כשל/מכסה — לא פונים ל-Modal למשך הזמן הזה (ואז מנסים שוב)
     modal_mode: str = "always"          # always = כל תמונה חדשה / overflow = רק כשהשרת המקומי עמוס / off
+    modal_hedge_s: float = 0.4          # Modal לא ענה תוך זה (הפעלה קרה / רשת איטית) — מנתחים מקומית בלי לחכות;
+                                        # עד שהבקשה האיטית חוזרת, שאר התמונות לא נשלחות ל-Modal (0 = תמיד מחכים)
 
     # --- AdGuard (שכבת ה-DNS של החסימות לפי מכשיר). בלי משתמש/סיסמה — רק הפרוקסי אוכף ---
     adguard_url: str = "http://127.0.0.1:3002"

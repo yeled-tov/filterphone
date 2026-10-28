@@ -161,6 +161,28 @@ async def test_image_is_classified_and_replaced(fp):
     assert ev["kind"] == "image" and ev["path"] == "/p.webp" and ev["reason"] == "female 0.9"
 
 
+async def test_image_without_content_type_is_still_checked(fp):
+    # שרת תמונות שלא מסר סוג תוכן, בכתובת בלי סיומת — הדפדפן ביקש תמונה, אז היא נבדקת
+    f = mkflow("https://ae01.alicdn.com/kf/S1a2b3c4d", {"sec-fetch-dest": "image"}, "application/octet-stream", jpeg())
+    fp.responseheaders(f)
+    assert f.metadata.get("fp_kind") == "image"
+    other = mkflow("https://x.com/download", {}, "application/octet-stream", b"\x00" * 2000)
+    fp.responseheaders(other)
+    assert other.response.stream is True                     # הורדה רגילה — לא נוגעים
+
+
+async def test_oversize_image_is_not_passed_unchecked_on_strict_levels(fp):
+    big = mkflow("https://x.com/huge.jpg", {"sec-fetch-dest": "image"}, "image/jpeg", b"")
+    big.response.headers["content-length"] = str(fp.cfg.max_image_bytes + 1)
+    fp.responseheaders(big)
+    assert big.error is not None                             # רמה 2 — לא עוברת בלי בדיקה
+    fp.policies.set(IP, DevicePolicy(level=3))
+    big3 = mkflow("https://x.com/huge.jpg", {"sec-fetch-dest": "image"}, "image/jpeg", b"")
+    big3.response.headers["content-length"] = str(fp.cfg.max_image_bytes + 1)
+    fp.responseheaders(big3)
+    assert big3.error is None and big3.response.stream is True
+
+
 async def test_all_images_off_mode_skips_engine(fp):
     fp.policies.set(IP, DevicePolicy(level=0, images="block"))
     req = mkflow("https://x.com/a.jpg", {"sec-fetch-dest": "image"})

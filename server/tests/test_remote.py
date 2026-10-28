@@ -1,7 +1,11 @@
 """Modal (GPU חיצוני): אותה החלטת סינון כמו מקומית, ונפילה למקומי בכל כשל."""
 import asyncio
+import http.client
+import http.server
 import json
 import os
+import threading
+import time
 import urllib.error
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -85,7 +89,7 @@ class ModelEngine(Engine):
         await self.cache.put(work.key, entry)
         return entry
 
-    async def _add_segmentation(self, work, entry):
+    async def _add_segmentation(self, work, entry, detail=True):
         self.runs["segment"] += 1
         st = SEG.get(work.data, SegStats(0.0, 0.0))
         entry = entry.with_(seg=st.dump())
@@ -140,6 +144,76 @@ async def test_modal_failure_falls_back_to_local_and_cools_down():
     await e.classify(b"clean", 1)
     assert modal.calls == 1                     # ב-cooldown לא פונים שוב ל-Modal
     assert e.runs["analyze"] == 2
+
+
+class SlowModal(FakeModal):
+    """Modal שעונה רק אחרי [delay] שניות — כמו בהפעלה קרה."""
+
+    def __init__(self, server: ModelEngine, delay: float):
+        super().__init__(server)
+        self.delay, self.started = delay, 0
+
+    def _post(self, data, level):
+        self.started += 1
+        time.sleep(self.delay)
+        return super()._post(data, level)
+
+
+async def test_slow_modal_does_not_hold_images_back():
+    modal = SlowModal(ModelEngine(), delay=0.4)
+    e = ModelEngine(modal, Settings(modal_hedge_s=0.05))
+    t0 = time.monotonic()
+    v = await e.classify(b"female", 1)
+    assert v.action == "block" and e.runs["analyze"] == 1         # מקומי — בלי לחכות ל-Modal
+    assert time.monotonic() - t0 < 0.3
+    await e.classify(b"clean", 1)
+    assert modal.started == 1               # הבקשה האיטית עוד תלויה — לא שולחים אחריה עוד
+    assert e.runs["analyze"] == 2
+    await asyncio.sleep(0.5)                # Modal "התעורר"
+    modal.delay = 0
+    await e.classify(b"borderline", 1)
+    assert modal.started == 2 and e.runs["analyze"] == 2
+
+
+class _KeepAliveHandler(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    peers: list = []
+    close_next = False
+
+    def do_POST(self):
+        self.rfile.read(int(self.headers["Content-Length"]))
+        type(self).peers.append(self.client_address)
+        body = json.dumps(make_payload(Entry([0.1, 0.0, 0.0, 0.0], wh=[9, 9]), None, HEADS)).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        if type(self).close_next:               # השרת סוגר חיבור פתוח (כמו keep-alive שפג)
+            type(self).close_next = False
+            self.close_connection = True
+
+    def log_message(self, *a):
+        pass
+
+
+def test_modal_connection_is_reused_and_reopened_when_closed(monkeypatch):
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _KeepAliveHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    monkeypatch.setattr(remote_cfg.http.client, "HTTPSConnection",
+                        lambda host, port, timeout, context: http.client.HTTPConnection(host, port, timeout=timeout))
+    try:
+        r = RemoteEngine(f"https://127.0.0.1:{port}/analyze", "k", "s", HEADS)
+        for _ in range(3):
+            assert r._parse(r._post(b"img", 1))[0].scores == [0.1, 0.0, 0.0, 0.0]
+        assert len(set(_KeepAliveHandler.peers)) == 1        # שלוש תמונות — חיבור אחד
+        _KeepAliveHandler.close_next = True
+        r._post(b"img", 1)
+        assert r._parse(r._post(b"img", 1))[0].wh == [9, 9]   # חיבור חדש, בלי שגיאה
+        assert len(set(_KeepAliveHandler.peers)) == 2
+    finally:
+        srv.shutdown()
 
 
 def test_parse_validates_remote_answers():
@@ -239,3 +313,40 @@ def test_admin_gpu_settings_save_and_test(env, monkeypatch):
 
     assert client.put("/v1/admin/gpu", headers=h, json={"clear": True}).json()["configured"] is False
     assert client.get("/v1/admin/gpu").status_code == 401
+
+
+# ---------------------------------------------------------------- תמונות קטנות (בלי Modal)
+
+async def test_old_cached_tiny_entry_is_checked_again():
+    """רשומה שנשמרה כ"קטנה מדי" כשהסף היה גבוה יותר — נבדקת עכשיו במקום לעבור."""
+    from filterphone.engine.cache import image_key
+    e = ModelEngine()
+    await e.cache.put(image_key(b"female"), Entry(None, note="tiny", wh=[30, 30]))
+    v = await e.classify(b"female", 1)
+    assert e.runs["analyze"] == 1 and v.action == "block"
+
+
+async def test_tiny_image_skips_segmentation_and_counts_as_no_person():
+    from filterphone.engine.service import Engine, _Work
+    e = ModelEngine()
+    entry = Entry([0.9, 0.3, 0.1, 0.0], wh=[48, 40])
+    called = []
+
+    async def fake_segment(*a, **k):
+        called.append(1)
+    e._segment = fake_segment
+    out = await Engine._add_segmentation(e, _Work("k", b""), entry)
+    assert called == [] and SegStats.load(out.seg) == SegStats(0.0, 0.0)
+
+
+async def test_level1_coarse_segmentation_is_redone_in_full_for_level2():
+    """רמה 1 מסתפקת במעבר ראשון; כשאותה תמונה מגיעה לרמה 2 — הסגמנטציה מחושבת שוב במלואה."""
+    from filterphone.engine.cache import image_key
+    from filterphone.engine.segment import COARSE
+    e = ModelEngine()
+    coarse = SegStats(0.3, 0.2, COARSE, 0.0, (Person((0, 0, 50, 80), 0.9, True),))
+    await e.cache.put(image_key(b"immodest"), Entry(SCORES[b"immodest"], dets=[], seg=coarse.dump(), wh=[100, 80]))
+    v1 = await e.classify(b"immodest", 1)
+    assert v1.action == "block" and e.runs["segment"] == 0       # לרמה 1 — מספיק
+    await e.classify(b"immodest", 2)
+    assert e.runs["segment"] == 1                                # לרמה 2 — מחושב מחדש

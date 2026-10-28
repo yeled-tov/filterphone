@@ -8,6 +8,9 @@
 ``None``, וה-Engine נופל מיד לניתוח המקומי. אחרי כשל נכנסים ל-cooldown קצר כדי לא לשלם את
 ה-timeout על כל תמונה כש-Modal לא זמין/מכסה נגמרה.
 
+מהירות: החיבור ל-Modal נשאר פתוח (keep-alive, חיבור לכל חוט) — בלי לחיצת יד TCP+TLS חדשה לכל
+תמונה, שעולה כמה סבבי רשת (מאות מילישניות כש-Modal רחוק).
+
 מכוון: ה-HTTP עצמו ב-[_post] (urllib, חוסם) מופרד מהפענוח/האימות ב-[_parse] (טהור) — כדי
 שאפשר לבדוק את שניהם בלי רשת.
 """
@@ -15,13 +18,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import http.client
 import json
 import logging
 import os
 import re
+import ssl
+import threading
 import time
 import urllib.error
-import urllib.request
+import urllib.parse
 
 from ..settings import Settings
 from .cache import Entry
@@ -99,6 +105,11 @@ class RemoteEngine:
         self.cooldown_s = cooldown_s
         self.mode = "always"
         self._cooldown_until = 0.0
+        u = urllib.parse.urlsplit(url)
+        self._host, self._port = u.hostname or "", u.port or 443
+        self._path = (u.path or "/") + (f"?{u.query}" if u.query else "")
+        self._ssl = ssl.create_default_context()
+        self._local = threading.local()         # חיבור פתוח לכל חוט ב-executor
 
     @classmethod
     def from_settings(cls, cfg: Settings, heads_version: str,
@@ -138,16 +149,44 @@ class RemoteEngine:
             return None
 
     def _post(self, data: bytes, level: int) -> dict:
-        """POST חוסם ל-Modal (רץ ב-executor). זורק על שגיאת HTTP/רשת/timeout."""
-        req = urllib.request.Request(self.url, data=data, method="POST")
-        req.add_header("Content-Type", "application/octet-stream")
-        req.add_header("Accept", "application/json")
-        req.add_header("X-FP-Level", str(level))
-        req.add_header("Modal-Key", self.key)
-        req.add_header("Modal-Secret", self.secret)
-        with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
-            raw = resp.read()
-        return json.loads(raw)
+        """POST חוסם ל-Modal (רץ ב-executor). זורק על שגיאת HTTP/רשת/timeout.
+
+        על חיבור שכבר פתוח מהפעם הקודמת; חיבור ש-Modal סגר בינתיים (keep-alive שפג) — נפתח
+        מחדש ומנסים פעם אחת נוספת (בטוח: ניתוח תמונה לא משנה כלום בצד השני)."""
+        headers = {"Content-Type": "application/octet-stream", "Accept": "application/json",
+                   "X-FP-Level": str(level), "Modal-Key": self.key, "Modal-Secret": self.secret}
+        for attempt in (0, 1):
+            conn = getattr(self._local, "conn", None)
+            fresh = conn is None
+            if fresh:
+                conn = http.client.HTTPSConnection(self._host, self._port, timeout=self.timeout_s,
+                                                   context=self._ssl)
+                self._local.conn = conn
+            try:
+                conn.request("POST", self._path, body=data, headers=headers)
+                resp = conn.getresponse()
+                raw = resp.read()
+            except (http.client.RemoteDisconnected, http.client.CannotSendRequest, http.client.BadStatusLine,
+                    ConnectionResetError, BrokenPipeError):
+                self._drop()
+                if fresh or attempt:
+                    raise
+                continue
+            except BaseException:
+                self._drop()
+                raise
+            if resp.status >= 400:
+                raise urllib.error.HTTPError(self.url, resp.status, resp.reason, resp.headers, None)
+            if resp.getheader("connection", "").lower() == "close":
+                self._drop()
+            return json.loads(raw)
+        raise ConnectionError("unreachable")       # לא מגיעים לכאן
+
+    def _drop(self) -> None:
+        conn = getattr(self._local, "conn", None)
+        self._local.conn = None
+        if conn is not None:
+            conn.close()
 
     def _parse(self, payload: dict) -> tuple[Entry, bytes | None]:
         """מאמת את התשובה והופך אותה ל-Entry. זורק אם היא לא תקינה (→ נפילה מקומית)."""

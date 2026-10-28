@@ -65,7 +65,10 @@ def _is_image(flow: http.HTTPFlow) -> bool:
     if ct.startswith("image/"):
         return ct not in NOT_FILTERED_TYPES
     if ct in GENERIC_TYPES:
-        return flow.request.path.split("?", 1)[0].lower().endswith(IMAGE_EXTENSIONS)
+        # שרת שלא מסר סוג תוכן (או "בינארי"): לפי הסיומת, או לפי מה שהדפדפן ביקש (<img>) —
+        # כך תמונה בכתובת בלי סיומת (‎/kf/S1a2b3) עדיין נבדקת
+        return flow.request.path.split("?", 1)[0].lower().endswith(IMAGE_EXTENSIONS) \
+            or _is_image_request(flow.request)
     return False
 
 
@@ -264,9 +267,16 @@ class FilterPhone:
         length = resp.headers.get("content-length", "")
         size = int(length) if length.isdigit() else None
         if _is_image(flow):
-            if (pol.level <= 0 and pol.images != "block") or \
-                    (size is not None and size > self.cfg.max_image_bytes):
+            if pol.level <= 0 and pol.images != "block":
                 resp.stream = True
+                return
+            if size is not None and size > self.cfg.max_image_bytes:
+                # גדולה מכדי לבדוק: ברמות 1–2 לא עוברת בלי בדיקה (כמו כל תמונה שאי אפשר לבדוק)
+                if on_failure(pol.level).action is Action.BLOCK or pol.images == "block":
+                    self.m_oversize.inc(kind="image_large")
+                    flow.kill()
+                else:
+                    resp.stream = True
                 return
             flow.metadata["fp_kind"] = "image"
             return

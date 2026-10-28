@@ -48,13 +48,15 @@ from .imaging import (
     siglip_views,
 )
 from .models import Embedder, NudeDetector, Segmenter
-from .policy import Action, Decision, PaintMode, Thresholds, decide, on_failure, women_among
+from .policy import SMALL_IMAGE_PX, Action, Decision, PaintMode, Thresholds, decide, on_failure, women_among
 from .remote import RemoteEngine
 from .segment import Person, SegStats
 
 log = logging.getLogger("filterphone.engine")
 
-MIN_SIDE_BY_LEVEL = {1: 40}         # ברמה 1 בודקים גם תמונות ממוזערות קטנות יותר
+MIN_SIDE = 24                       # ברמות 1–2 נבדקת כל תמונה שהצלע הקצרה שלה לפחות כזו (מתחת — אייקונים)
+SEG_MIN_SIDE = 64                   # מתחת לזה הסגמנטציה כמעט לא מוצאת אנשים (נמדד: 4% ב-48px) — לא מריצים אותה,
+                                    # וההחלטה לפי הציונים (policy: תמונה ממוזערת שלא נמצא בה אדם)
 NO_PERSON = SegStats(0.0, 0.0)      # סגמנטציה שלא רצה/נכשלה — המדיניות חוזרת לגלאי
 FEMALE = SCORE_NAMES.index("female")
 MIN_USEFUL_S = 0.25                 # פחות זמן מזה עד שהפרוקסי מוותר — לא מתחילים לעבוד (עבודה שתיזרק)
@@ -96,7 +98,7 @@ class Engine:
         if self.segmenter is None:
             log.warning("segmentation model missing (%s) — level 2 falls back to detector boxes", seg_path)
         # ריצת מודלים — חוט אחד (כל מודל כבר מקביל בפנים); פענוח — חוטים נפרדים
-        self.infer_pool = ThreadPoolExecutor(1, thread_name_prefix="infer")
+        self.infer_pool = ThreadPoolExecutor(max(1, cfg.infer_threads), thread_name_prefix="infer")
         self.decode_pool = ThreadPoolExecutor(cfg.decode_threads, thread_name_prefix="decode")
         self.batcher = Batcher(self.embedder, self.infer_pool, cfg.batch_max, cfg.batch_wait_ms)
         self.cache = ResultCache(cfg.redis_url, self.heads.version, cfg.cache_ttl_days)
@@ -114,6 +116,7 @@ class Engine:
         self._remote_check_at = float("inf")    # בלי מודלים (בדיקות) — לא קוראים הגדרות מהדיסק
         self._remote_mtime: float | None = None
         self._remote_loaded = False
+        self._remote_probe: asyncio.Future | None = None    # בקשה ל-Modal שמתעכבת (ראו _remote)
         self._slots = asyncio.Semaphore(cfg.engine_max_inflight)
         self._explain_slot = asyncio.Semaphore(1)
         self.active = 0
@@ -216,6 +219,9 @@ class Engine:
         work = _Work(image_key(data), data)
 
         entry = await self.cache.get(work.key)
+        if entry is not None and entry.scores is None and entry.note == "tiny" and entry.wh \
+                and min(entry.wh) >= MIN_SIDE:
+            entry = None        # נשמר כשסף התמונות הקטנות היה גבוה יותר — עכשיו היא נבדקת
         cached = entry is not None
         if entry is None:
             entry = await self._remote(work, level)
@@ -260,12 +266,28 @@ class Engine:
         if self.remote.mode == "overflow" and self.waiting == 0 \
                 and self.active < max(2, self.cfg.engine_max_inflight // 2):
             return None
-        result = await self.remote.analyze(work.data, level)
+        if self._remote_probe is not None and not self._remote_probe.done():
+            # בקשה קודמת עדיין מחכה ל-Modal (הפעלה קרה / רשת איטית) — לא מצטופפים מאחוריה
+            self.m_remote.inc(result="skipped_slow")
+            return None
+        task = asyncio.ensure_future(self.remote.analyze(work.data, level))
+        hedge = self.cfg.modal_hedge_s
+        try:
+            result = await asyncio.wait_for(asyncio.shield(task), hedge) if hedge > 0 else await task
+        except TimeoutError:
+            # Modal איטי עכשיו: מנתחים מקומית בלי לחכות. הבקשה ממשיכה ברקע — כשהיא חוזרת
+            # (Modal "התעורר") פונים אליו שוב; אם נכשלה — cooldown כרגיל (remote.analyze)
+            self._remote_probe = task
+            self.stats["remote_slow"] += 1
+            self.m_remote.inc(result="slow")
+            return None
         if result is None:
             self.stats["remote_fallbacks"] += 1
             self.m_remote.inc(result="fallback")
             return None
         entry, labels = result
+        if entry.scores is None and entry.note == "tiny" and entry.wh and min(entry.wh) >= MIN_SIDE:
+            return None         # גרסה ישנה ב-Modal דילגה על תמונה קטנה שכאן כן נבדקת — מנתחים מקומית
         await self.cache.put(work.key, entry)
         if labels is not None:
             await self.cache.put_labels(work.key, labels)
@@ -290,7 +312,10 @@ class Engine:
             if decision.action is Action.NEED_DETECTOR:
                 entry = await self._add_detections(work, entry)
             elif decision.action is Action.NEED_SEGMENT:
-                entry = await self._add_segmentation(work, entry)
+                # רמה 1 צריכה רק "מי בתמונה" — קודם מעבר ראשון בלבד; רמה 2 צובעת — מסכה מלאה.
+                # מעבר ראשון שכבר לא הספיק (ראו _decide) — עכשיו המלא
+                coarse = entry.seg is not None and entry.seg.get("crops") == segment.COARSE
+                entry = await self._add_segmentation(work, entry, detail=level == 2 or coarse)
             else:
                 break
             decision = self._decide(level, entry, work)
@@ -304,20 +329,28 @@ class Engine:
             if entry.note == "tiny":
                 return Decision(Action.PASS, "tiny")
             return on_failure(level)
-        if entry.note == "tiny" and level not in MIN_SIDE_BY_LEVEL:
+        if entry.note == "tiny" and level >= 3:
             return Decision(Action.PASS, "tiny")
         scores = dict(zip(SCORE_NAMES, entry.scores, strict=True))
+        wh = entry.wh or ([work.decoded.width, work.decoded.height] if work.decoded else None)
+        small = bool(wh) and min(wh) < SMALL_IMAGE_PX
         seg = SegStats.load(entry.seg) if entry.seg else None
+        if seg is not None and seg.crops == segment.COARSE and (
+                level == 2 or (seg.person < self.thresholds.seg_min_person
+                               and seg.others >= self.thresholds.seg_min_person)):
+            # חושב במעבר ראשון בלבד: לצביעה (רמה 2) צריך את המסכה המלאה; וברמה 1 — כשנמצאו אנשים
+            # אבל אף אחד לא זוהה כאישה, ההגדלה של כל אדם (ראש ברור יותר) יכולה לגלות אישה קטנה
+            seg = None
         if seg is None and (work.seg_failed or self.segmenter is None):
             seg = NO_PERSON
         dets = [tuple(d) for d in entry.dets] if entry.dets is not None else None
         if dets is None and entry.note == "detector_failed":
             # NudeNet נכשל — לא מנסים שוב לנצח, ומחמירים (ברמות שבהן כשל = חסימה)
-            decision = decide(level, scores, self.thresholds, [], seg)
+            decision = decide(level, scores, self.thresholds, [], seg, small)
             if decision.action is Action.PASS and on_failure(level).action is Action.BLOCK:
                 return on_failure(level)
             return decision
-        return decide(level, scores, self.thresholds, dets, seg)
+        return decide(level, scores, self.thresholds, dets, seg, small)
 
     async def _decode(self, work: _Work) -> Decoded | None:
         if work.decoded is None:
@@ -355,7 +388,7 @@ class Engine:
             return Entry(None, note="undecodable"), None
         short = min(decoded.width, decoded.height)
         wh = [decoded.width, decoded.height]
-        if short < min(MIN_SIDE_BY_LEVEL.values(), default=self.cfg.min_side_px):
+        if short < MIN_SIDE:
             return Entry(None, note="tiny", wh=wh), decoded
         note = "tiny" if short < self.cfg.min_side_px else ""
 
@@ -389,9 +422,10 @@ class Engine:
         await self.cache.put(work.key, entry)
         return entry
 
-    async def _segment(self, work: _Work, entry: Entry) -> SegStats | None:
+    async def _segment(self, work: _Work, entry: Entry, detail: bool = True) -> SegStats | None:
         """מריץ את הסגמנטציה, מסווג כל אדם (אישה / גבר) ושומר את מפת התוויות — שבה גברים
-        מסומנים MAN ולא ייצבעו (בבקשה ובקאש). None = נכשל / אין מודל."""
+        מסומנים MAN ולא ייצבעו (בבקשה ובקאש). None = נכשל / אין מודל.
+        detail=False: מעבר ראשון בלבד (ראו segment.analyze) — לרמה 1."""
         if self.segmenter is None:
             work.seg_failed = True
             return None
@@ -401,7 +435,7 @@ class Engine:
             if decoded is None:
                 raise ValueError("undecodable")
             im = decoded.primary
-            labels, st = await loop.run_in_executor(self.infer_pool, segment.analyze, self.segmenter, im)
+            labels, st = await loop.run_in_executor(self.infer_pool, segment.analyze, self.segmenter, im, detail)
             ids, boxes, headed = segment.find_people(labels, im.width, im.height)
             people = await self._classify_people(im, boxes, headed, entry)
             labels = segment.keep_women(labels, ids, {i for i, p in enumerate(people, 1) if p.woman})
@@ -437,8 +471,12 @@ class Engine:
         woman = women_among(female, headed, image_female, self.thresholds)
         return tuple(Person(b, f, w) for b, f, w in zip(boxes, female, woman, strict=True))
 
-    async def _add_segmentation(self, work: _Work, entry: Entry) -> Entry:
-        st = await self._segment(work, entry)
+    async def _add_segmentation(self, work: _Work, entry: Entry, detail: bool = True) -> Entry:
+        if entry.wh and min(entry.wh) < SEG_MIN_SIDE:
+            entry = entry.with_(seg=NO_PERSON.dump())       # זעירה: "לא נמצא אדם" — בלי להריץ את המודל
+            await self.cache.put(work.key, entry)
+            return entry
+        st = await self._segment(work, entry, detail)
         if st is None:
             return entry
         entry = entry.with_(seg=st.dump())
@@ -468,7 +506,8 @@ class Engine:
                 if labels is not None:
                     body = await loop.run_in_executor(
                         self.decode_pool, lambda: segment.paint_regions(
-                            decoded.primary, labels, decision.mode.value, decision.boxes, decision.keep))
+                            decoded.primary, labels, decision.mode.value, decision.boxes, decision.keep,
+                            fill_boxes=decision.fill))
                     return Verdict("replace", decision.reason, body, "image/jpeg")
                 if decision.boxes:
                     body = await loop.run_in_executor(self.decode_pool, paint_boxes,

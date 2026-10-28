@@ -2,17 +2,21 @@
 
 רמות:
     0 — כבוי (בלי סינון תמונות)
-    1 — מחמיר: כל תמונה של אישה/ילדה נחסמת, גם בלבוש צנוע
-    2 — בינוני: נשים בלבוש צנוע עוברות; עור חשוף נצבע בשחור לפי צורת הגוף; עירום נחסם
+    1 — מחמיר: כל תמונה של אישה/ילדה נחסמת, גם בלבוש צנוע, בכל גודל
+    2 — בינוני: נשים בלבוש צנוע עוברות; כל עור חשוף שלהן (חוץ מהפנים) נצבע באפור לפי צורת הגוף —
+        גם חשיפה קטנה (רק בטן, רק מעל החזה); אישה קטנה בתמונה נצבעת כולה ("צללית"); עירום נחסם
     3 — בסיסי: רק עירום מפורש נחסם
 
 החישוב בשלבים, כל שלב רק כשצריך:
   1. ציוני SigLIP2 (זול, לכל תמונה).
   2. גלאי NudeNet (NEED_DETECTOR) — כשהציונים באזור הספק: עירום? פנים של אישה?
-  3. ברמה 2 בלבד — סגמנטציה (NEED_SEGMENT): מסכה מדויקת של העור החשוף, וממנה גם
-     ההחלטה אם יש בכלל מה לצבוע (כמה עור גלוי מתוך שטח האישה).
-     כל אדם בתמונה מסווג בנפרד (person_is_woman): צובעים רק נשים — גבר לא נצבע אף פעם,
-     גם כשהוא באותה תמונה עם אישה.
+  3. סגמנטציה (NEED_SEGMENT): מסכה מדויקת של העור החשוף, וכל אדם בתמונה בנפרד — אישה או גבר
+     (women_among). ברמה 2: צובעים רק נשים — גבר לא נצבע אף פעם, גם באותה תמונה עם אישה.
+     ברמה 1: כשהציון של התמונה כולה לא חד-משמעי, אישה אחת שנמצאה — והתמונה נחסמת (אישה קטנה
+     בתמונה גדולה "נבלעת" בציון הכללי, ולכן נבדקת לבד).
+
+תמונה קטנה (small — הצלע הקצרה עד SMALL_IMAGE_PX): הסגמנטציה מתקשה למצוא בה אנשים. כשהיא לא
+מצאה אף אחד אבל הציונים מצביעים על אישה — חוסמים (מלבן אפור), במקום להעביר בלי בדיקה.
 """
 from __future__ import annotations
 
@@ -41,6 +45,8 @@ PAINT_COVERED = frozenset({"FEMALE_BREAST_COVERED", "FEMALE_GENITALIA_COVERED", 
 DETECTOR_MIN_SCORE = 0.35
 EXPLICIT_MIN_SCORE = 0.45
 FACE_MIN_SCORE = 0.3
+SMALL_IMAGE_PX = 200            # תמונה ממוזערת (תוצאות חיפוש, רשת מוצרים, וריאציות צבע)
+SILHOUETTE_PX = 128             # אישה שהצלע הארוכה שלה בתמונה קצרה מזה — נצבעת כולה (צללית)
 
 
 class Action(StrEnum):
@@ -69,9 +75,11 @@ class Thresholds:
     immodest_body: float = 0.9      # רמה 2: ציון כזה + "אזור מכוסה" מהגלאי = בגד ים → כל הגוף
     nsfw_check: float = 0.15        # מעל זה — מאמתים עירום עם NudeNet
     nsfw_block: float = 0.9         # מעל זה — חסימה בלי אימות
-    seg_skin: float = 0.08          # עור גלוי (בלי פנים) מתוך שטח האדם — מעל זה צובעים עור (ידיים+צוואר: 3%–6%)
+    seg_skin: float = 0.005         # עור גלוי (בלי פנים) מתוך שטח האישה — מעל זה צובעים עור. כמעט כל עור: גם
+                                    # חשיפה קטנה (בטן, מעל החזה) נצבעת. מתחת לזה — רעש של המודל (כמה פיקסלים)
     seg_body: float = 0.4           # מעל זה — חשוף מאוד: צובעים את כל הגוף (כויל על COCO: 50% מ"בגד ים", 1% מ"לבוש מלא")
     seg_min_person: float = 0.004   # מתחת לזה הסגמנטציה "לא מצאה אדם"
+    female_small: float = 0.25      # תמונה ממוזערת שהסגמנטציה לא מצאה בה אף אדם: מעל זה — חוסמים
     # רמה 2 — מי מהאנשים אישה (צובעים רק נשים). כויל על COCO val2017 (תמונות של אדם אחד + "גבר ואישה"):
     # נשים שנשארות לצביעה: 98.5% כמו קודם; גברים שנצבעו: 13.7% במקום 43% (docs/REVIEW.md)
     person_female: float = 0.4      # אדם עם ראש גלוי, לפי החלק העליון שלו בלבד: מעל זה — אישה
@@ -94,6 +102,7 @@ class Decision:
     boxes: tuple[Box, ...] = field(default=())      # אזורים נוספים לצביעה (מהגלאי)
     mode: PaintMode = PaintMode.SKIN
     keep: tuple[Box, ...] = field(default=())       # פנים — לא נצבעות
+    fill: tuple[Box, ...] = field(default=())       # נשים קטנות — כל הדמות נצבעת (צללית)
 
 
 def _parts(dets: list[Detection], labels: frozenset[str], min_score: float) -> list[Detection]:
@@ -134,9 +143,9 @@ def _boxes(dets: list[Detection]) -> tuple[Box, ...]:
 
 
 def decide(level: int, s: dict[str, float], t: Thresholds,
-           dets: list[Detection] | None = None, seg: SegStats | None = None) -> Decision:
+           dets: list[Detection] | None = None, seg: SegStats | None = None, small: bool = False) -> Decision:
     """s: ציונים לפי שם (person/female/immodest/nsfw). dets: תוצאות NudeNet, אם כבר חושבו.
-    seg: סטטיסטיקות הסגמנטציה, אם כבר חושבה (רמה 2)."""
+    seg: סטטיסטיקות הסגמנטציה, אם כבר חושבה. small: תמונה ממוזערת (ראו SMALL_IMAGE_PX)."""
     if level <= 0:
         return Decision(Action.PASS, "level 0")
 
@@ -155,26 +164,36 @@ def decide(level: int, s: dict[str, float], t: Thresholds,
         return Decision(Action.PASS, "clean")
 
     if level == 2:
-        return _level2(s, t, dets, seg)
+        return _level2(s, t, dets, seg, small)
 
     # --- רמה 1 ---
     if s["female"] >= t.female_strict:
         return Decision(Action.BLOCK, f"female {s['female']:.2f}")
     # גבר עובר תמיד (גם בלי חולצה) — הבדיקות כאן תלויות בציון "אישה"
-    if s["female"] >= t.female_check and s["immodest"] >= t.immodest_high:
+    if s["female"] < t.female_check:
+        return Decision(Action.PASS, "clean")
+    if s["immodest"] >= t.immodest_high:
         return Decision(Action.BLOCK, f"immodest {s['immodest']:.2f}")
-    if s["female"] >= t.female_check and s["person"] >= t.person:
-        if dets is None:
-            return Decision(Action.NEED_DETECTOR, "female check")
-        if _parts(dets, FEMALE_MARKERS, DETECTOR_MIN_SCORE):
-            return Decision(Action.BLOCK, "female (detector)")
+    # ציון לא חד-משמעי: קודם הגלאי (זול) — פנים / גוף של אישה; ואז כל אדם בתמונה בנפרד
+    if dets is None:
+        return Decision(Action.NEED_DETECTOR, "female check")
+    if _parts(dets, FEMALE_MARKERS, DETECTOR_MIN_SCORE):
+        return Decision(Action.BLOCK, "female (detector)")
+    if seg is None:
+        return Decision(Action.NEED_SEGMENT, "female check (people)")
+    if seg.person >= t.seg_min_person:
+        return Decision(Action.BLOCK, f"female (person {max((p.female for p in seg.people if p.woman), default=-1):.2f})")
+    if seg.others < t.seg_min_person and (s["female"] >= t.female or (small and s["female"] >= t.female_small)):
+        # אף אדם לא נמצא (איור, תקריב, תמונה קטנה) — לפי הציון של התמונה
+        return Decision(Action.BLOCK, f"female {s['female']:.2f} (no person found)")
     return Decision(Action.PASS, "clean")
 
 
 def _level2(s: dict[str, float], t: Thresholds, dets: list[Detection] | None,
-            seg: SegStats | None) -> Decision:
-    # שער רחב בכוונה (כיסוי ~97% לאישה): את ההחלטה האמיתית — כמה עור גלוי — עושה הסגמנטציה
-    if s["female"] < t.female_check or s["immodest"] < t.immodest_check:
+            seg: SegStats | None, small: bool = False) -> Decision:
+    # שער רחב בכוונה (כיסוי ~97% לאישה): את ההחלטה האמיתית — יש עור גלוי? — עושה הסגמנטציה.
+    # בלי שער של "לבוש לא צנוע": חשיפה קטנה (רק בטן, רק מעל החזה) לא מזיזה את הציון של התמונה כולה
+    if s["female"] < t.female_check:
         return Decision(Action.PASS, "clean")
     if dets is None:
         return Decision(Action.NEED_DETECTOR, "immodest check")    # קודם: אין עירום מפורש?
@@ -191,21 +210,28 @@ def _level2(s: dict[str, float], t: Thresholds, dets: list[Detection] | None,
     faces = _boxes(_parts(dets, FACES, FACE_MIN_SCORE))
 
     if seg.person >= t.seg_min_person:          # יש נשים בתמונה (שטח הנשים בלבד)
+        # אישה קטנה בתמונה — כל הדמות נצבעת (בגודל כזה העור והבגד לא נבדלים במדויק)
+        tiny = tuple(p.box for p in seg.people if p.woman and max(p.box[2], p.box[3]) < SILHOUETTE_PX)
         # "חשוף מאוד" לפי הציון של כל התמונה — רק אם גם לאישה עצמה יש עור גלוי
         # (אחרת הציון בא ממישהו אחר בתמונה, ואין סיבה לצבוע אישה בלבוש מלא)
         if (very and seg.skin >= t.seg_skin) or seg.skin >= t.seg_body:
             return Decision(Action.PAINT, f"body skin={seg.skin:.2f} immodest={s['immodest']:.2f}",
-                            _boxes(exposed + covered), PaintMode.BODY, faces)
-        if seg.skin >= t.seg_skin or (exposed and s["immodest"] >= t.immodest):
-            return Decision(Action.PAINT, f"skin={seg.skin:.2f} immodest={s['immodest']:.2f}",
-                            _boxes(exposed), PaintMode.SKIN, faces)
+                            _boxes(exposed + covered), PaintMode.BODY, faces, tiny)
+        if seg.skin >= t.seg_skin or exposed or tiny:
+            return Decision(Action.PAINT, f"skin={seg.skin:.2f} immodest={s['immodest']:.2f}"
+                            + (f" silhouettes={len(tiny)}" if tiny else ""),
+                            _boxes(exposed), PaintMode.SKIN, faces, tiny)
         return Decision(Action.PASS, f"modest skin={seg.skin:.2f}")
     if seg.others >= t.seg_min_person:          # אנשים — אבל אף אחד מהם לא אישה
         return Decision(Action.PASS, "men only")
 
-    # הסגמנטציה לא מצאה אדם (איור, תקריב, או שהמודל לא זמין) — חוזרים לגלאי,
-    # ורק כשיש סימן ברור לאישה (ציון גבוה, או פנים/גוף של אישה מהגלאי)
-    if s["female"] < t.female and not _parts(dets, FEMALE_MARKERS, DETECTOR_MIN_SCORE):
+    # הסגמנטציה לא מצאה אדם (איור, תקריב, תמונה קטנה, או שהמודל לא זמין) — חוזרים לגלאי,
+    # ורק כשיש סימן לאישה (ציון, או פנים/גוף של אישה מהגלאי)
+    markers = bool(_parts(dets, FEMALE_MARKERS, DETECTOR_MIN_SCORE))
+    if small and (markers or s["female"] >= t.female_small):
+        # בתמונה קטנה הסגמנטציה לא מוצאת אנשים — אי אפשר לצבוע במדויק, ולכן לא מעבירים
+        return Decision(Action.BLOCK, f"female {s['female']:.2f} (small image)")
+    if s["female"] < t.female and not markers:
         return Decision(Action.PASS, "no woman found")
     if very:
         return Decision(Action.BLOCK, f"immodest {s['immodest']:.2f}")

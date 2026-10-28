@@ -195,16 +195,20 @@ def _nms(x1, y1, x2, y2, scores, iou_thr: float) -> list[int]:
 
 # ---------------------------------------------------------------- פלט
 
+# צבע הצביעה (עור חשוף / צללית / מלבן מהגלאי): אפור ניטרלי — נראה כמו "צללית", לא כמו כתם שחור
+PAINT_COLOR = (150, 150, 150)
+
+
 def paint_boxes(im: Image.Image, boxes: list[tuple[int, int, int, int]],
                 pad: float = 0.12, quality: int = 85) -> bytes:
-    """צובע בשחור את האזורים (x, y, w, h), עם שוליים, ומחזיר JPEG."""
+    """צובע באפור את האזורים (x, y, w, h), עם שוליים, ומחזיר JPEG."""
     out = im.copy()
     draw = ImageDraw.Draw(out)
     W, H = out.size
     for x, y, w, h in boxes:
         dx, dy = w * pad, h * pad
         draw.rectangle((max(0, x - dx), max(0, y - dy), min(W, x + w + dx), min(H, y + h + dy)),
-                       fill=(0, 0, 0))
+                       fill=PAINT_COLOR)
     buf = io.BytesIO()
     out.save(buf, format="JPEG", quality=quality, optimize=True)
     return buf.getvalue()

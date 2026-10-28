@@ -45,24 +45,37 @@ def test_level1_men_pass_even_shirtless():
     assert decide(1, s(person=0.9, female=0.05, immodest=0.95), T).action is Action.PASS
 
 
-def test_level1_uncertain_female_uses_detector():
-    d = decide(1, s(person=0.9, female=0.35), T)
-    assert d.action is Action.NEED_DETECTOR
+def test_level1_uncertain_female_checks_detector_then_each_person():
+    sc = s(person=0.9, female=0.35)
+    assert decide(1, sc, T).action is Action.NEED_DETECTOR
     face = [("FACE_FEMALE", 0.7, 1, 1, 5, 5)]
-    assert decide(1, s(person=0.9, female=0.35), T, face).action is Action.BLOCK
+    assert decide(1, sc, T, face).action is Action.BLOCK
     male = [("FACE_MALE", 0.8, 1, 1, 5, 5)]
-    assert decide(1, s(person=0.9, female=0.35), T, male).action is Action.PASS
+    assert decide(1, sc, T, male).action is Action.NEED_SEGMENT        # הגלאי לא הכריע — כל אדם לבד
+    woman = SegStats(0.0, 0.05, people=(Person((0, 0, 30, 60), 0.9, True),))
+    assert decide(1, sc, T, male, woman).action is Action.BLOCK         # אישה קטנה בתמונה גדולה
+    man = SegStats(0.0, 0.0, others=0.2, people=(Person((0, 0, 30, 60), 0.05, False),))
+    assert decide(1, sc, T, male, man).action is Action.PASS
+    nobody = SegStats(0.0, 0.0)
+    assert decide(1, sc, T, male, nobody).action is Action.PASS         # ציון בינוני ואף אדם לא נמצא
+    assert decide(1, s(person=0.9, female=0.55), T, male, nobody).action is Action.BLOCK
+    assert decide(1, sc, T, male, nobody, small=True).action is Action.BLOCK   # ממוזערת — לא מסתכנים
+
+
+def test_level1_does_not_need_a_high_person_score():
+    # אישה קטנה / חלקית (ציון "אדם" נמוך) — עדיין נבדקת, לא עוברת אוטומטית
+    assert decide(1, s(person=0.2, female=0.35), T).action is Action.NEED_DETECTOR
 
 
 def test_level2_modest_woman_passes():
-    assert decide(2, s(person=0.9, female=0.9, immodest=0.1), T).action is Action.PASS
+    sc = s(person=0.9, female=0.9, immodest=0.1)
+    assert decide(2, sc, T).action is Action.NEED_DETECTOR          # לבוש "צנוע" לפי הציון — עדיין נבדק
+    covered = SegStats(skin=0.002, person=0.3, people=(Person((0, 0, 200, 400), 0.9, True),))
+    assert decide(2, sc, T, [FACE], covered).action is Action.PASS
 
 
 def test_level2_men_pass_without_any_model_run():
     assert decide(2, s(person=0.9, female=0.05, immodest=0.95), T).action is Action.PASS
-
-
-FACE = ("FACE_FEMALE", 0.9, 0, 0, 5, 5)
 
 
 def test_level2_flow_detector_then_segmentation_then_paint_skin():
@@ -76,10 +89,25 @@ def test_level2_flow_detector_then_segmentation_then_paint_skin():
     assert d.keep == ((0, 0, 5, 5),)               # הפנים לא נצבעות
 
 
-def test_level2_little_exposed_skin_passes():
-    sc = s(person=0.9, female=0.9, immodest=0.45)
-    d = decide(2, sc, T, [FACE], SegStats(skin=0.05, person=0.3))     # ידיים וצוואר בלבד
-    assert d.action is Action.PASS
+FACE = ("FACE_FEMALE", 0.9, 0, 0, 5, 5)
+
+
+def test_level2_even_a_small_exposed_part_is_painted():
+    # רק בטן / רק מעל החזה: חלק קטן מהגוף, והציון של התמונה כולה נמוך — עדיין נצבע
+    sc = s(person=0.9, female=0.9, immodest=0.05)
+    d = decide(2, sc, T, [FACE], SegStats(skin=0.03, person=0.3))
+    assert d.action is Action.PAINT and d.mode is PaintMode.SKIN
+    belly = [("BELLY_EXPOSED", 0.5, 10, 50, 20, 10), FACE]
+    d = decide(2, sc, T, belly, SegStats(skin=0.001, person=0.3))      # המסכה פספסה — הגלאי השלים
+    assert d.action is Action.PAINT and d.boxes == ((10, 50, 20, 10),)
+
+
+def test_level2_small_women_are_painted_whole():
+    sc = s(person=0.9, female=0.9, immodest=0.05)
+    small = Person((10, 10, 40, 90), 0.9, True)
+    big = Person((100, 0, 200, 400), 0.9, True)
+    d = decide(2, sc, T, [], SegStats(skin=0.0, person=0.2, people=(small, big)))
+    assert d.action is Action.PAINT and d.fill == ((10, 10, 40, 90),)   # רק הקטנה — צללית
 
 
 def test_level2_low_immodest_score_still_checked_when_skin_is_visible():
@@ -119,6 +147,9 @@ def test_level2_without_person_mask_falls_back_to_detector():
     d = decide(2, s(person=0.9, female=0.9, immodest=0.7), T, dets, none)
     assert d.action is Action.PAINT and d.mode is PaintMode.BOXES and d.boxes == ((10, 20, 30, 40),)
     assert decide(2, s(person=0.9, female=0.9, immodest=0.7), T, [], none).action is Action.PASS
+    # תמונה ממוזערת שבה הסגמנטציה לא מצאה אף אחד — לא עוברת כמו שהיא
+    assert decide(2, s(person=0.9, female=0.9, immodest=0.1), T, [], none, small=True).action is Action.BLOCK
+    assert decide(2, s(person=0.9, female=0.2, immodest=0.1), T, [], none, small=True).action is Action.PASS
 
 
 def test_level2_explicit_blocks_before_segmentation():
@@ -190,16 +221,16 @@ def test_level2_exposed_skin_of_a_man_does_not_paint_a_modest_woman():
     sc = s(person=0.9, female=0.9, immodest=0.7)
     people = (Person(WOMAN, 0.9, True), Person(MAN, 0.05, False))
     belly_on_man = [("BELLY_EXPOSED", 0.8, 230, 80, 40, 40)]
-    d = decide(2, sc, T, belly_on_man, SegStats(0.03, 0.2, 0, 0.2, people))
-    assert d.action is Action.PASS                              # היא בלבוש צנוע; הוא לא נספר
+    d = decide(2, sc, T, belly_on_man, SegStats(0.0, 0.2, 0, 0.2, people))
+    assert d.action is Action.PASS                              # היא מכוסה; הוא לא נספר
     belly_on_woman = [("BELLY_EXPOSED", 0.8, 30, 80, 40, 40)]
-    d = decide(2, sc, T, belly_on_woman, SegStats(0.03, 0.2, 0, 0.2, people))
+    d = decide(2, sc, T, belly_on_woman, SegStats(0.0, 0.2, 0, 0.2, people))
     assert d.action is Action.PAINT and d.mode is PaintMode.SKIN and d.boxes == ((30, 80, 40, 40),)
 
 
 def test_level2_very_exposed_score_from_someone_else_does_not_paint_a_covered_woman():
     people = (Person(WOMAN, 0.9, True), Person(MAN, 0.05, False))
-    d = decide(2, s(person=0.9, female=0.9, immodest=0.99), T, [], SegStats(0.02, 0.2, 0, 0.2, people))
+    d = decide(2, s(person=0.9, female=0.9, immodest=0.99), T, [], SegStats(0.0, 0.2, 0, 0.2, people))
     assert d.action is Action.PASS
     d = decide(2, s(person=0.9, female=0.9, immodest=0.99), T, [], SegStats(0.2, 0.2, 0, 0.2, people))
     assert d.action is Action.PAINT and d.mode is PaintMode.BODY

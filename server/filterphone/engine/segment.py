@@ -26,10 +26,13 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image, ImageFilter
 
+from .imaging import PAINT_COLOR
+
 BG, HAIR, SKIN, FACE, CLOTHES, OTHER = range(6)
 N_CLASSES = 6
 MAN = 6                     # במפת התוויות: אדם שזוהה כגבר — לא נצבע ולא נספר
 FORMAT = 2                  # גרסת SegStats/מפת התוויות בקאש (2 = הפרדה לנשים/גברים)
+COARSE = -1                 # SegStats.crops: מעבר ראשון בלבד (רמה 1 — רק "מי בתמונה"); רמה 2 מחשבת מחדש במלואה
 
 WORK_SIDE = 512             # רזולוציית מפת התוויות (הצלע הארוכה)
 SKIN_MIN_P = 0.35           # עור "כמעט בטוח" כבר נחשב עור — עדיף לצבוע מעט יותר מאשר לפספס
@@ -204,13 +207,18 @@ def keep_women(labels: np.ndarray, ids: np.ndarray, women: set[int]) -> np.ndarr
     return out
 
 
-def analyze(model: Callable[[np.ndarray], np.ndarray], im: Image.Image) -> tuple[np.ndarray, SegStats]:
-    """שני המעברים על תמונה אחת. model: (S, S, 3) → הסתברויות (S, S, 6)."""
+def analyze(model: Callable[[np.ndarray], np.ndarray], im: Image.Image,
+            detail: bool = True) -> tuple[np.ndarray, SegStats]:
+    """שני המעברים על תמונה אחת. model: (S, S, 3) → הסתברויות (S, S, 6).
+
+    detail=False — המעבר הראשון בלבד (בלי הגדלה של כל אדם): מספיק כדי לדעת מי בתמונה ואיפה
+    (רמה 1), ולא בשביל מסכת עור מדויקת. מסומן crops=COARSE."""
     size = int(getattr(model, "size", 256))
     full = model(seg_input(im, size))
-    crops = [(box, model(seg_input(im, size, box))) for box in person_boxes(full, *im.size)]
+    boxes = person_boxes(full, *im.size) if detail else []
+    crops = [(box, model(seg_input(im, size, box))) for box in boxes]
     labels = merge(full, crops, *im.size)
-    return labels, stats(labels, len(crops))
+    return labels, stats(labels, len(crops) if detail else COARSE)
 
 
 # ---------------------------------------------------------------- איחוד והחלטה
@@ -282,9 +290,10 @@ def stats(labels: np.ndarray, crops: int = 0, people: tuple[Person, ...] = ()) -
 # ---------------------------------------------------------------- שמירה בקאש
 
 def encode_labels(labels: np.ndarray) -> bytes:
-    """מפת תוויות → PNG קטן (בדרך כלל כמה KB) לשמירה בקאש."""
+    """מפת תוויות → PNG קטן (בדרך כלל כמה KB) לשמירה בקאש. דחיסה מהירה (לא optimize — פי 5 יותר
+    זמן מעבד בשביל כמה מאות בייטים)."""
     buf = io.BytesIO()
-    Image.fromarray(np.ascontiguousarray(labels, dtype=np.uint8)).save(buf, format="PNG", optimize=True)
+    Image.fromarray(np.ascontiguousarray(labels, dtype=np.uint8)).save(buf, format="PNG", compress_level=1)
     return buf.getvalue()
 
 
@@ -301,7 +310,8 @@ def decode_labels(data: bytes) -> np.ndarray | None:
 
 
 def region_mask(labels: np.ndarray, mode: str, size: tuple[int, int],
-                extra_boxes: tuple[Box, ...] = (), keep_boxes: tuple[Box, ...] = ()) -> Image.Image:
+                extra_boxes: tuple[Box, ...] = (), keep_boxes: tuple[Box, ...] = (),
+                fill_boxes: tuple[Box, ...] = ()) -> Image.Image:
     """המסכה לצביעה (L, 0/255) בגודל התמונה.
 
     mode="skin": עור חשוף (בלי פנים).  mode="body": כל הגוף חוץ מהפנים והשיער —
@@ -311,12 +321,24 @@ def region_mask(labels: np.ndarray, mode: str, size: tuple[int, int],
     גברים (MAN) לא נצבעים בשום מצב.
     keep_boxes: פנים שהגלאי זיהה — לא נצבעות גם אם הסגמנטציה סימנה אותן כעור
     (קורה באנשים קטנים, שבהם המודל מתקשה להבדיל בין פנים לשאר העור).
+    fill_boxes: נשים קטנות (x, y, w, h) — כל הדמות נצבעת, כולל פנים ושיער ("צללית"): בגודל כזה
+    אי אפשר להבחין במדויק בין עור לבגד, וחלק חשוף קטן היה נשאר גלוי.
     """
     W, H = size
     if mode == "body":
         m = np.isin(labels, (SKIN, CLOTHES, OTHER))
     else:
         m = labels == SKIN
+    if fill_boxes:
+        lh, lw = labels.shape
+        woman = (labels != BG) & (labels != MAN)
+        fill = np.zeros_like(woman)
+        sx, sy = lw / W, lh / H
+        for x, y, w, h in fill_boxes:
+            x0, y0 = max(0, int(x * sx)), max(0, int(y * sy))
+            x1, y1 = min(lw, int(np.ceil((x + w) * sx))), min(lh, int(np.ceil((y + h) * sy)))
+            fill[y0:y1, x0:x1] = woman[y0:y1, x0:x1]
+        m = m | fill
     mask = Image.fromarray((m * 255).astype(np.uint8))
     if extra_boxes:
         lh, lw = labels.shape
@@ -334,17 +356,21 @@ def region_mask(labels: np.ndarray, mode: str, size: tuple[int, int],
     mask = mask.resize((W, H), Image.Resampling.BILINEAR)
     mask = mask.point(lambda v: 255 if v >= 80 else 0)
     for x, y, w, h in keep_boxes:
+        cx, cy = x + w / 2, y + h / 2
+        if any(fx <= cx <= fx + fw and fy <= cy <= fy + fh for fx, fy, fw, fh in fill_boxes):
+            continue                            # פנים של אישה קטנה — חלק מהצללית
         # מכווצים מעט מהצדדים ומלמטה: הצוואר והכתפיים לא "מוגנים" בטעות
         mask.paste(0, (int(x + w * 0.08), int(y), int(x + w * 0.92), int(y + h * 0.9)))
     return mask
 
 
 def paint_regions(im: Image.Image, labels: np.ndarray, mode: str, extra_boxes: tuple[Box, ...] = (),
-                  keep_boxes: tuple[Box, ...] = (), quality: int = 85) -> bytes:
-    """צובע בשחור את האזורים לפי המסכה ומחזיר JPEG."""
-    mask = region_mask(labels, mode, im.size, extra_boxes, keep_boxes)
+                  keep_boxes: tuple[Box, ...] = (), quality: int = 85,
+                  fill_boxes: tuple[Box, ...] = ()) -> bytes:
+    """צובע באפור את האזורים לפי המסכה ומחזיר JPEG."""
+    mask = region_mask(labels, mode, im.size, extra_boxes, keep_boxes, fill_boxes)
     out = im.copy()
-    out.paste((0, 0, 0), (0, 0, im.size[0], im.size[1]), mask)
+    out.paste(PAINT_COLOR, (0, 0, im.size[0], im.size[1]), mask)
     buf = io.BytesIO()
     out.save(buf, format="JPEG", quality=quality, optimize=True)
     return buf.getvalue()

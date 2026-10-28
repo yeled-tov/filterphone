@@ -79,10 +79,10 @@ def test_nudenet_roundtrip_box_scaling():
     assert (x, y, w, h) == (140, 60, 40, 40)
 
 
-def test_paint_boxes_blacks_out_region():
+def test_paint_boxes_greys_out_region():
     im = Image.new("RGB", (100, 100), (255, 255, 255))
     out = Image.open(io.BytesIO(paint_boxes(im, [(40, 40, 20, 20)])))
-    assert max(out.getpixel((50, 50))) < 30
+    assert all(abs(c - 150) <= 12 for c in out.getpixel((50, 50)))
     assert min(out.getpixel((5, 5))) > 225
 
 
