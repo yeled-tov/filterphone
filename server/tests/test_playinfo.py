@@ -84,3 +84,70 @@ def test_device_endpoint(env, monkeypatch):
     assert r.status_code == 200, r.text
     assert r.json()["apps"]["com.whatsapp"] == {"status": "update", "play_version": "3.0", "play_updated": 1}
     assert client.post("/v1/device/app-updates", json={"apps": []}).status_code == 401
+
+
+# ------------------------------------------------------------ חיפוש והוספה לחנות מהדשבורד
+
+def details_page(title="Waze: ניווט", shots=3) -> str:
+    """עמוד אפליקציה מינימלי עם כל השדות שהחנות צריכה (אותם מיקומים כמו ב-Play)."""
+    d2 = [None] * 146
+    d2[0] = [title]
+    d2[13] = ["+500,000,000"]
+    d2[51] = [[None, 3.9147]]
+    d2[68] = ["Waze"]
+    d2[72] = [[None, "שורה ראשונה<br>שורה &amp; שנייה<b>!</b>"]]
+    d2[73] = [[None, "ניווט עם עדכונים בזמן אמת"]]
+    d2[78] = [[[None, None, None, [None, None, f"https://play-lh.googleusercontent.com/s{i}"]] for i in range(shots)]]
+    d2[79] = [[["מפות וניווט"]]]
+    d2[95] = [[None, None, None, [None, None, "https://play-lh.googleusercontent.com/icon"]]]
+    data = [None, [None, None, d2]]
+    return ("<html><script>AF_initDataCallback({key: 'ds:5', hash: '7', data:"
+            + json.dumps(data) + ", sideChannel: {}});</script></html>")
+
+
+def test_parse_details_and_search_results():
+    d = P.parse_details(details_page(shots=12))
+    assert d["title"] == "Waze: ניווט" and d["developer"] == "Waze" and d["genre"] == "מפות וניווט"
+    assert d["description"] == "שורה ראשונה\nשורה & שנייה!"          # בלי HTML
+    assert d["summary"] == "ניווט עם עדכונים בזמן אמת" and d["score"] == 3.9 and d["installs"] == "+500,000,000"
+    assert d["icon"] == "https://play-lh.googleusercontent.com/icon"
+    assert len(d["screenshots"]) == P.MAX_SCREENSHOTS
+    assert P.parse_details("<html>not an app</html>") is None
+    page = ('<a href="/store/apps/details?id=com.waze">W</a><a href="/store/apps/details?id=com.waze&x=1">W</a>'
+            '<a href="/store/apps/details?id=il.co.yahav.mobbanking">Y</a><a href="/store/apps/details?id=bad">?</a>')
+    assert P.parse_search(page) == ["com.waze", "il.co.yahav.mobbanking"]
+
+
+def test_catalog_search_uses_cache_and_reports_play_errors():
+    r = fakeredis.FakeRedis(decode_responses=True)
+    searches, details = [], []
+
+    def search(q):
+        searches.append(q)
+        return ["com.waze", "com.gone", "not-a-package"]
+
+    def fetch(pkg):
+        details.append(pkg)
+        return None if pkg == "com.gone" else P.parse_details(details_page())
+
+    cat = P.PlayCatalog(r, details=fetch, search=search)
+    res = cat.search("  ניווט   ")
+    assert [x["package"] for x in res] == ["com.waze"] and res[0]["title"] == "Waze: ניווט"
+    assert cat.search("ניווט") == res and searches == ["ניווט"]        # מהמטמון (אותו חיפוש)
+    assert cat.app("com.waze")["developer"] == "Waze" and details.count("com.waze") == 1
+    assert cat.app("com.gone") is None
+    assert cat.app("not a package") is None
+
+    def down(_):
+        raise OSError("network")
+    broken = P.PlayCatalog(fakeredis.FakeRedis(decode_responses=True), details=down, search=down)
+    try:
+        broken.search("x y")
+        raise AssertionError("expected PlayError")
+    except P.PlayError:
+        pass
+    try:
+        broken.app("com.waze")
+        raise AssertionError("expected PlayError")
+    except P.PlayError:
+        pass

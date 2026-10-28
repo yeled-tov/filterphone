@@ -307,6 +307,10 @@ details.more[open] > summary { margin-bottom: 10px; }
 .ok-text { color: var(--ok); }
 button.selected { outline: 2px solid var(--accent); }
 .app-row select { width: auto; flex: none; min-width: 130px; }
+.app-icon { width: 44px; height: 44px; border-radius: 12px; flex: none; object-fit: cover; background: var(--line-2); }
+.app-icon.lg { width: 64px; height: 64px; border-radius: 16px; }
+.shots { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.shots .shot { height: 150px; border-radius: 8px; flex: none; background: var(--line-2); min-width: 70px; }
 img.qr { width: 280px; max-width: 100%; align-self: center; background: #fff; padding: 8px; border-radius: 8px; }
 .dpc-list { margin-bottom: 12px; }
 input.narrow { width: 6rem; }

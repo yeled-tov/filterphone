@@ -45,7 +45,7 @@ from . import db, gpu, observe, security
 from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
-from .playinfo import PlayInfo
+from .playinfo import PlayCatalog, PlayError, PlayInfo
 from .security import RateLimiter
 from .service import KOSHER_PROVIDERS, LEVEL_NAMES, ApiError, Services, store_seed
 from .support import SupportDesk
@@ -164,6 +164,7 @@ def create_app(svc: Services | None = None) -> FastAPI:
     app.state.svc = svc or build_services()
     app.state.support = SupportDesk(app.state.svc)
     app.state.playinfo = PlayInfo(app.state.svc.redis)
+    app.state.playcatalog = PlayCatalog(app.state.svc.redis)
     cfg = app.state.svc.cfg
 
     @app.exception_handler(ApiError)
@@ -1141,6 +1142,34 @@ def _routes(app: FastAPI) -> None:
     @app.get("/v1/admin/apps")
     def list_apps(svc: SvcDep, _: AdminRow):
         return {"apps": svc.managed_apps(), "categories": store_seed()["categories"]}
+
+    # --- חיפוש ב-Google Play להוספה לחנות (שם, תיאור, אייקון וצילומי מסך — אוטומטית)
+    @app.get("/v1/admin/play/search")
+    def play_search(q: str, request: Request, svc: SvcDep, _: AdminRow):
+        if len(q.strip()) < 2:
+            raise ApiError(400, "הקלידו לפחות 2 אותיות")
+        try:
+            results = request.app.state.playcatalog.search(q)
+        except PlayError as e:
+            raise ApiError(502, "Google Play לא ענה כרגע — נסו שוב") from e
+        in_store = {a["package"] for a in svc.managed_apps()}
+        return {"results": [{**r, "in_store": r["package"] in in_store} for r in results]}
+
+    @app.get("/v1/admin/play/app/{package}")
+    def play_app(package: str, request: Request, _: AdminRow):
+        try:
+            info = request.app.state.playcatalog.app(package)
+        except PlayError as e:
+            raise ApiError(502, "Google Play לא ענה כרגע — נסו שוב") from e
+        if info is None:
+            raise ApiError(404, "האפליקציה לא נמצאה ב-Google Play")
+        return {"package": package, **info, "play_url": f"https://play.google.com/store/apps/details?id={package}"}
+
+    @app.get("/v1/admin/play/image")
+    def play_image(u: str, svc: SvcDep, _: AdminRow):
+        """אייקון / צילום מסך מ-Play לדשבורד — אחרי מסנן התמונות ברמה המחמירה (כמו בחנות בטלפון)."""
+        body, ct = svc.play_image(u)
+        return Response(content=body, media_type=ct, headers={"Cache-Control": "private, max-age=604800"})
 
     @app.post("/v1/admin/apps", status_code=201)
     def create_app(body: ManagedAppIn, svc: SvcDep, admin: AdminRow):

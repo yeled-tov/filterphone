@@ -1102,6 +1102,56 @@ async function viewApps() {
       progress.textContent = "";
     }
   } }, "העלאה");
+  // --- חיפוש ב-Google Play: תוצאות עם אייקון, ו"הוספה לחנות" עם כל הפרטים (תיאור, צילומי מסך) אוטומטית
+  const playResults = el("div", { class: "apps" });
+  const playQ = el("input", { type: "search", placeholder: "חיפוש ב-Google Play — שם אפליקציה או נושא (בנק, תחבורה, קופת חולים…)",
+    onkeydown: (e) => { if (e.key === "Enter") playSearch(); } });
+  const playBtn = el("button", { class: "primary", onclick: () => playSearch() }, "חיפוש");
+  const addFromPlay = async (r) => {
+    let info = r;
+    if (!info.description && !info.screenshots?.length) {
+      info = await attempt(() => api(`/v1/admin/play/app/${encodeURIComponent(r.package)}`)).catch(() => null);
+      if (!info) return;
+    }
+    const l = el("input", { value: (info.title || "").slice(0, 60) });
+    const c = el("input", { value: guessCategory(info.genre), list: "store-cats", placeholder: "קטגוריה (טאב בחנות)" });
+    const n = el("textarea", { rows: 2, value: (info.summary || "").slice(0, 200) });
+    const desc = el("textarea", { rows: 6, value: (info.description || "").slice(0, 2000) });
+    const shots = info.screenshots || [];
+    if (!await dialog(`הוספה לחנות: ${info.title}`, el("div", { class: "stack" },
+      el("div", { class: "row gap" }, playImg(info.icon, "app-icon lg", info.title),
+        el("div", {}, el("b", {}, info.title), el("div", { class: "muted small" },
+          [info.developer, info.genre, info.score ? `★ ${info.score}` : null].filter(Boolean).join(" · ")))),
+      shots.length ? el("div", { class: "shots" }, shots.map((u, i) => playImg(u, "shot", `צילום מסך ${i + 1}`))) : null,
+      el("p", { class: "muted small" }, "התמונות מוצגות אחרי מסנן התמונות — וכך גם בחנות בטלפון. ההתקנה והעדכונים דרך Google Play."),
+      el("label", {}, "שם בחנות", l), el("label", {}, "קטגוריה", c), el("label", {}, "תיאור קצר (רשימה)", n),
+      el("label", {}, "תיאור מלא (עמוד האפליקציה)", desc)), "הוספה לחנות")) return;
+    await attempt(() => api("/v1/admin/apps", { method: "POST", body: {
+      package: info.package, label: l.value, category: c.value, note: n.value, description: desc.value,
+      icon_url: info.icon || "", screenshots: shots, play_url: `https://play.google.com/store/apps/details?id=${info.package}` } }),
+    `${info.title} נוספה לחנות`).then(render, () => {});
+  };
+  const playRow = (r) => el("div", { class: "app-row" },
+    playImg(r.icon, "app-icon", r.title),
+    el("div", { class: "grow" }, el("b", {}, r.title), el("small", { class: "ltr" }, r.package),
+      el("small", {}, [r.developer, r.genre, r.score ? `★ ${r.score}` : null, r.installs ? `${r.installs} הורדות` : null]
+        .filter(Boolean).join(" · "))),
+    r.in_store ? chip("כבר בחנות", "ok") : el("button", { class: "primary small", onclick: () => addFromPlay(r) }, "הוספה לחנות"));
+  const playSearch = async () => {
+    const text = playQ.value.trim();
+    if (text.length < 2) { toast("הקלידו לפחות 2 אותיות", true); return; }
+    playBtn.disabled = true;
+    playResults.replaceChildren(el("p", { class: "muted" }, "מחפש ב-Google Play…"));
+    try {
+      const r = await api(`/v1/admin/play/search?q=${encodeURIComponent(text)}`);
+      playResults.replaceChildren(...(r.results.length ? r.results.map(playRow) : [empty("לא נמצאו אפליקציות.")]));
+    } catch (e) {
+      playResults.replaceChildren(el("p", { class: "error" }, e.message));
+    } finally {
+      playBtn.disabled = false;
+    }
+  };
+
   const pkg = el("input", { class: "ltr", placeholder: "com.example.app" });
   const label = el("input", { placeholder: "שם בחנות" });
   const category = el("input", { placeholder: "קטגוריה (טאב בחנות)", list: "store-cats" });
@@ -1155,7 +1205,26 @@ async function viewApps() {
         const shots = el("textarea", { rows: 4, class: "ltr",
           value: (() => { try { return JSON.parse(a.screenshots || "[]").join("\n"); } catch { return ""; } })(),
           placeholder: "כתובת צילום מסך בכל שורה (https)" });
-        if (!await dialog("עריכת אפליקציה", el("div", { class: "stack" },
+        // משיכה מ-Google Play: אייקון, צילומי מסך ותיאור עדכניים (השם והקטגוריה נשארים, אם כבר מולאו)
+        const pull = el("button", { type: "button", class: "ghost small", onclick: async () => {
+          pull.disabled = true;
+          try {
+            const p = await api(`/v1/admin/play/app/${encodeURIComponent(a.package)}`);
+            if (!l.value.trim()) l.value = (p.title || "").slice(0, 60);
+            if (!c.value.trim()) c.value = guessCategory(p.genre);
+            if (!n.value.trim()) n.value = (p.summary || "").slice(0, 200);
+            desc.value = (p.description || desc.value).slice(0, 2000);
+            icon.value = p.icon || icon.value;
+            play.value = play.value || p.play_url;
+            if (p.screenshots?.length) shots.value = p.screenshots.join("\n");
+            toast("הפרטים נמשכו מ-Google Play — בדקו ושמרו");
+          } catch (e) {
+            toast(e.message, true);
+          } finally {
+            pull.disabled = false;
+          }
+        } }, "משיכת פרטים מ-Google Play");
+        if (!await dialog("עריכת אפליקציה", el("div", { class: "stack" }, pull,
           el("label", {}, "שם", l), el("label", {}, "קטגוריה", c), el("label", {}, "תיאור קצר (רשימה)", n),
           el("label", {}, "תיאור מלא (עמוד האפליקציה)", desc), el("label", {}, "אייקון (URL)", icon),
           el("label", {}, "קישור Google Play", play),
@@ -1171,6 +1240,8 @@ async function viewApps() {
       } }, "הסרה"));
   });
   return [
+    card("חיפוש ב-Google Play", "מחפשים כמו ב-Play ומוסיפים לחנות בלחיצה — השם, התיאור, האייקון וצילומי המסך נמשכים אוטומטית.",
+      el("div", { class: "row gap" }, playQ, playBtn), playResults),
     card("העלאת אפליקציה", "מעלים קובץ APK — השרת קורא ממנו את שם החבילה והגרסה ובודק אותו. טלפון מנוהל (מנהל מכשיר) " +
       "מתקין ומעדכן ממנו ישירות, גם כשהתקנת אפליקציות חסומה בו. גרסה חדשה של אותה אפליקציה = עדכון אצל כולם.",
       el("div", { class: "row gap wrap" }, file, upload, progress)),
@@ -1211,20 +1282,45 @@ function bubble(m) {
     m.wa_error ? el("small", { class: "error" }, `לא נשלח לוואטסאפ: ${m.wa_error}`) : null);
 }
 
-const avatarUrls = new Map();   // "מכשיר:גרסה" → כתובת מקומית (התמונה נטענת פעם אחת, עם ההרשאה)
+const blobUrls = new Map();     // כתובת בשרת → כתובת מקומית (תמונה שנטענת עם ההרשאה — פעם אחת)
+
+/** תמונה מהשרת שדורשת הרשאה (תמונות פרופיל, תמונות מ-Play אחרי הסינון). null — לא נטענה. */
+function authBlobUrl(path) {
+  if (!blobUrls.has(path)) {
+    blobUrls.set(path, fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((b) => (b ? URL.createObjectURL(b) : null))
+      .catch(() => null)
+      .then((u) => { if (!u) blobUrls.delete(path); return u; }));
+  }
+  return blobUrls.get(path);
+}
 
 /** תמונת הפרופיל של הלקוח (מהאפליקציה, אחרי הסינון), או האות הראשונה כשאין. */
 function avatarEl(deviceId, at, name, cls = "avatar") {
   const box = el("span", { class: cls }, (name || "?").slice(0, 1));
   if (!at) return box;
-  const key = `${deviceId}:${at}`;
-  const show = (url) => box.replaceChildren(el("img", { src: url, alt: `תמונת הפרופיל של ${name || "הלקוח"}` }));
-  if (avatarUrls.has(key)) { show(avatarUrls.get(key)); return box; }
-  fetch(`/v1/admin/devices/${deviceId}/avatar?v=${at}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-    .then((r) => (r.ok ? r.blob() : null))
-    .then((b) => { if (!b) return; const url = URL.createObjectURL(b); avatarUrls.set(key, url); show(url); })
-    .catch(() => {});
+  authBlobUrl(`/v1/admin/devices/${deviceId}/avatar?v=${at}`).then((url) => {
+    if (url) box.replaceChildren(el("img", { src: url, alt: `תמונת הפרופיל של ${name || "הלקוח"}` }));
+  });
   return box;
+}
+
+/** אייקון / צילום מסך מ-Google Play — דרך השרת, אחרי מסנן התמונות (כמו בחנות בטלפון). */
+function playImg(url, cls, alt = "") {
+  const img = el("img", { class: cls, alt, loading: "lazy" });
+  if (url) authBlobUrl(`/v1/admin/play/image?u=${encodeURIComponent(url)}`).then((u) => { if (u) img.src = u; });
+  return img;
+}
+
+/** הקטגוריה בחנות לפי הקטגוריה של האפליקציה ב-Play (ניחוש — אפשר לשנות לפני ההוספה). */
+function guessCategory(genre) {
+  const g = genre || "";
+  const map = [[/מפות|ניווט|תחבורה|רכב|נסיעות/, "תחבורה"], [/פיננס|כספים/, "בנקים ותשלומים"],
+    [/בריאות|רפואה|כושר/, "בריאות"], [/תקשורת|חברתי/, "תקשורת"], [/קניות|אוכל|שתייה/, "קניות ומשלוחים"],
+    [/חדשות|מגזינים/, "חדשות ופורומים"], [/חינוך|עסקים|פרודוקטיב/, "עבודה ולימודים"],
+    [/כלים|התאמה אישית/, "כלים"], [/מוזיקה|וידאו|צילום|אודיו/, "מדיה"]];
+  return (map.find(([re]) => re.test(g)) || [null, ""])[1];
 }
 
 async function viewSupport(arg) {

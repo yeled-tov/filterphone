@@ -1993,6 +1993,19 @@ class Services:
         url = row["icon_url"] if slot == "icon" else urls[int(m.group(1))] if m and int(m.group(1)) < len(urls) else ""
         if not url:
             raise ApiError(404, "לא נמצא")
+        return self.filtered_image(url)
+
+    PLAY_IMAGE_HOSTS = ("play-lh.googleusercontent.com",)
+
+    def play_image(self, url: str) -> tuple[bytes, str]:
+        """תמונה מ-Google Play לדשבורד (אייקון / צילום מסך בחיפוש) — אחרי מסנן התמונות, כמו בחנות."""
+        m = re.match(r"^https://([^/?#:@]+)/", url or "")
+        if not m or m.group(1).lower() not in self.PLAY_IMAGE_HOSTS:
+            raise ApiError(400, "כתובת תמונה לא מוכרת")
+        return self.filtered_image(url)
+
+    def filtered_image(self, url: str) -> tuple[bytes, str]:
+        """הורדה + מנוע הסינון ברמה המחמירה, עם מטמון לפי הכתובת. המנוע לא זמין — לא מוצג בלי סינון."""
         folder = Path(self.cfg.data_dir) / "store_media"
         key = hashlib.sha256(url.encode()).hexdigest()
         body_f, ct_f = folder / key, folder / f"{key}.ct"
