@@ -245,6 +245,25 @@ class FakeNative implements NativeBridge {
   @override
   Future<void> clearSupportNotification() async => supportNotificationClears++;
 
+  SafeBrowserInfo browser = const SafeBrowserInfo(mode: 'full', isDefault: false, sites: [
+    SafeSite(group: 'ממשלה ושירותים', title: 'ביטוח לאומי', url: 'https://www.btl.gov.il'),
+    SafeSite(group: 'בנקים', title: 'בנק לאומי', url: 'https://www.leumi.co.il'),
+  ]);
+  final browserOpens = <String>[];
+  int defaultBrowserRequests = 0;
+  @override
+  Future<SafeBrowserInfo> safeBrowser() async => browser;
+  @override
+  Future<bool> openSafeBrowser({String? url, String? query}) async {
+    browserOpens.add(url ?? 'q:$query');
+    return true;
+  }
+  @override
+  Future<bool> requestDefaultBrowser() async {
+    defaultBrowserRequests++;
+    return true;
+  }
+
   final installs = <String>[];
   @override
   Future<String> installStoreApp(Map<String, Object?> item) async {
@@ -1351,7 +1370,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Directionality(
         textDirection: TextDirection.rtl,
-        child: ListenableBuilder(listenable: c, builder: (_, _) => HomeScreen(controller: c)),
+        child: ListenableBuilder(listenable: c, builder: (_, _) => ProfileScreen(controller: c)),
       ),
     ));
     await tester.pump();
@@ -1367,7 +1386,7 @@ void main() {
     c.dispose();
   });
 
-  group('filter tab, permission window and settings', () {
+  group('profile (protection status), safe browser, permission window and settings', () {
     MemoryStore activeStore() => MemoryStore()
       ..data['device_token'] = 'device-token'
       ..data['ca_pem'] = 'PEM'
@@ -1387,7 +1406,7 @@ void main() {
         ..state = 'UP';
       final c = makeController(native, quietServer(), activeStore());
       await c.start();
-      await tester.pumpWidget(rtl(ListenableBuilder(listenable: c, builder: (_, _) => HomeScreen(controller: c))));
+      await tester.pumpWidget(rtl(ListenableBuilder(listenable: c, builder: (_, _) => ProfileScreen(controller: c))));
       await tester.pump();
       expect(c.isProtected, isTrue);
       expect(c.attentionNeeded, isEmpty);
@@ -1399,7 +1418,7 @@ void main() {
       c.dispose();
     });
 
-    testWidgets('a dropped permission: the filter tab asks only for what is missing', (tester) async {
+    testWidgets('a dropped permission: the profile asks only for what is missing', (tester) async {
       await tallScreen(tester);
       final native = FakeNative()
         ..caInstalled = true
@@ -1407,7 +1426,7 @@ void main() {
         ..batteryUnrestricted = false;
       final c = makeController(native, quietServer(), activeStore());
       await c.start();
-      await tester.pumpWidget(rtl(ListenableBuilder(listenable: c, builder: (_, _) => HomeScreen(controller: c))));
+      await tester.pumpWidget(rtl(ListenableBuilder(listenable: c, builder: (_, _) => ProfileScreen(controller: c))));
       await tester.pump();
       expect(c.attentionNeeded, [Check.battery]);
       expect(find.text('עוד דבר אחד וסיימנו'), findsOneWidget);
@@ -1453,6 +1472,60 @@ void main() {
       await c.refresh();
       await tester.pumpAndSettle();
       expect(find.text('FilterPhone צריך אישור כדי להמשיך להגן'), findsNothing);
+      c.dispose();
+    });
+
+    testWidgets('safe browser tab: sites, web search and the default-browser button', (tester) async {
+      await tallScreen(tester);
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP';
+      final c = makeController(native, quietServer(), activeStore());
+      await c.start();
+      await tester.pumpWidget(rtl(BrowserScreen(controller: c)));
+      await tester.pump();
+      expect(find.text('ממשלה ושירותים'), findsOneWidget);
+      expect(find.text('בנקים'), findsOneWidget);
+      await tester.tap(find.text('ביטוח לאומי'));
+      await tester.pump();
+      expect(native.browserOpens, ['https://www.btl.gov.il']);
+      // חיפוש ברשת (גלישה מלאה) — מה שהוקלד עובר לסייר
+      await tester.enterText(find.byType(TextField), 'זמני תפילה');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump();
+      expect(native.browserOpens.last, 'q:זמני תפילה');
+      await tester.tap(find.text('קביעה כדפדפן ברירת מחדל'));
+      await tester.pump();
+      expect(native.defaultBrowserRequests, 1);
+      c.dispose();
+    });
+
+    testWidgets('safe browser tab: essential sites only filters the list, and off explains', (tester) async {
+      await tallScreen(tester);
+      final native = FakeNative()
+        ..caInstalled = true
+        ..state = 'UP'
+        ..browser = const SafeBrowserInfo(mode: 'essential', isDefault: true, sites: [
+          SafeSite(group: 'ממשלה ושירותים', title: 'ביטוח לאומי', url: 'https://www.btl.gov.il'),
+          SafeSite(group: 'בנקים', title: 'בנק לאומי', url: 'https://www.leumi.co.il'),
+        ]);
+      final c = makeController(native, quietServer(), activeStore());
+      await c.start();
+      await tester.pumpWidget(rtl(BrowserScreen(controller: c)));
+      await tester.pump();
+      expect(find.textContaining('רק האתרים החיוניים'), findsOneWidget);
+      expect(find.text('קביעה כדפדפן ברירת מחדל'), findsNothing);       // כבר דפדפן ברירת המחדל
+      await tester.enterText(find.byType(TextField), 'בנק');
+      await tester.pump();
+      expect(find.text('בנק לאומי'), findsOneWidget);
+      expect(find.text('ביטוח לאומי'), findsNothing);
+      await tester.testTextInput.receiveAction(TextInputAction.go);
+      await tester.pump();
+      expect(native.browserOpens, isEmpty);                              // בלי חיפוש באינטרנט
+      native.browser = SafeBrowserInfo.off;
+      await tester.pumpWidget(rtl(BrowserScreen(key: UniqueKey(), controller: c)));
+      await tester.pump();
+      expect(find.text('הסייר המוגן לא פעיל בטלפון הזה'), findsOneWidget);
       c.dispose();
     });
 

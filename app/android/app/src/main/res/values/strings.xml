@@ -7,6 +7,16 @@
     <string name="guard_wa_browser_chrome">הקישור נפתח ב-Chrome (מסונן)</string>
     <string name="guard_wa_browser_blocked">הדפדפן שבתוך וואטסאפ לא מסונן, ולא הצלחנו להעביר את הקישור ל-Chrome. אפשר להעתיק את הקישור (לחיצה ארוכה על ההודעה ← העתקה) ולהדביק ב-Chrome</string>
     <string name="guard_wa_browser_no_chrome">הדפדפן שבתוך וואטסאפ חסום — גלישה באינטרנט לא פתוחה בטלפון הזה</string>
+    <string name="browser_label">סייר מוגן</string>
+    <string name="browser_hint_full">חיפוש או כתובת אתר</string>
+    <string name="browser_hint_essential">כתובת של אתר חיוני (gov.il, בנק, קופת חולים)</string>
+    <string name="browser_home">האתרים החיוניים</string>
+    <string name="browser_reload">רענון</string>
+    <string name="browser_off">הסייר המוגן לא פעיל בטלפון הזה</string>
+    <string name="browser_not_allowed">האתר הזה לא ברשימת האתרים המותרים בטלפון הזה. אפשר לבקש מהמנהל להוסיף אותו.</string>
+    <string name="browser_search_off">בטלפון הזה פתוחים רק האתרים החיוניים — בחרו אתר מהרשימה או הקלידו את הכתובת שלו.</string>
+    <string name="browser_ssl_error">החיבור לאתר לא מאובטח, ולכן הוא לא נפתח.</string>
+    <string name="browser_downloading">מוריד: %1$s</string>
     <string name="relay_no_link">לא נמצא קישור להעברה ל-Chrome</string>
     <string name="guard_wa_updates_blocked">טאב העדכונים (סטטוסים וערוצים) חסום בטלפון הזה</string>
     <string name="guard_profile_photo_blocked">תמונות פרופיל חסומות בטלפון הזה (FilterPhone)</string>

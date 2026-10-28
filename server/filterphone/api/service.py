@@ -1568,7 +1568,8 @@ class Services:
                          "needs_guard": any(CATALOG[o].needs_guard for o in settings.options)
                          or any(r["mode"] != "network" for r in settings.app_rules.values()),
                          "protections": list(comp.protections), "dpc": comp.dpc,
-                         "split_apps": list(comp.split_apps), "vpn_bypass": comp.vpn_bypass},
+                         "split_apps": list(comp.split_apps), "vpn_bypass": comp.vpn_bypass,
+                         "safe_browser": comp.safe_browser},
             "customer": self.customer_out(cust),
             "requests": [{**dict(q), "options": _json_list(q["options"])} for q in reqs],
             "apps": [{**a, "blocked": a["package"] in blocked} for a in _json_list(r["apps"])],
@@ -1594,7 +1595,7 @@ class Services:
         if "status" in allowed and allowed["status"] not in ("active", "disabled"):
             raise ApiError(400, "סטטוס לא חוקי")
         policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc",
-                       "keywords", "vpn_bypass", "track", "allow_google_accounts")
+                       "keywords", "vpn_bypass", "track", "allow_google_accounts", "safe_browser")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()

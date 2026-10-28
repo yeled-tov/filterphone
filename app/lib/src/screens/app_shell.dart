@@ -14,6 +14,7 @@ import 'home_screen.dart';
 import 'settings_screen.dart';
 import 'support_console_screen.dart';
 
+part 'browser_screen.dart';
 part 'support_screen.dart';
 part 'store_screen.dart';
 
@@ -26,8 +27,11 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
+  // הלשוניות: סייר מוגן · אפליקציות · תמיכה · פרופיל (מצב ההגנה — בתוך הפרופיל)
+  static const _browserTab = 0;
   static const _supportTab = 2;
-  int _index = 0;
+  static const _profileTab = 3;
+  int _index = _browserTab;
   AppController get c => widget.controller;
 
   // חלון "חסרה הרשאה": מה הוצג לאחרונה, באיזו חזרה לאפליקציה, והאם הוא פתוח עכשיו
@@ -40,9 +44,17 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     c.addListener(_onController);
-    if (c.takeRequestedTab() == 'support') _index = _supportTab;
+    // משהו בהגנה חסר / ההקמה עוד לא הסתיימה — פותחים ישר במצב ההגנה
+    if (c.missingRequired.isNotEmpty || !(c.device?.isActive ?? false)) _index = _profileTab;
+    _index = _tabFor(c.takeRequestedTab()) ?? _index;
     _onController();
   }
+
+  static int? _tabFor(String? name) => switch (name) {
+        'support' => _supportTab,
+        'browser' => _browserTab,
+        _ => null,
+      };
 
   @override
   void dispose() {
@@ -53,7 +65,8 @@ class _AppShellState extends State<AppShell> {
 
   /// נפתחנו מהתראה "יש תשובה מהתמיכה" — ישר לצ'אט. ואם הרשאה נדרשת חסרה — דורשים אותה.
   void _onController() {
-    if (c.takeRequestedTab() == 'support' && mounted) setState(() => _index = _supportTab);
+    final requested = _tabFor(c.takeRequestedTab());
+    if (requested != null && mounted) setState(() => _index = requested);
     final missing = c.attentionNeeded;
     if (missing.isEmpty) {
       _demandTimer?.cancel();
@@ -73,7 +86,7 @@ class _AppShellState extends State<AppShell> {
     _demandedFor = missing.toSet();
     _demandedAtResume = c.resumeTick;
     _sheetOpen = true;
-    setState(() => _index = 0);
+    setState(() => _index = _profileTab);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -93,7 +106,7 @@ class _AppShellState extends State<AppShell> {
       body: IndexedStack(
         index: _index,
         children: [
-          HomeScreen(controller: c),
+          BrowserScreen(controller: c, visible: _index == _browserTab, onOpenTab: _openTab),
           AppStoreScreen(controller: c),
           SupportScreen(controller: c, visible: _index == _supportTab, onOpenTab: _openTab),
           ProfileScreen(controller: c),
@@ -104,9 +117,9 @@ class _AppShellState extends State<AppShell> {
         onDestinationSelected: (value) => setState(() => _index = value),
         destinations: [
           const NavigationDestination(
-            icon: Icon(Icons.shield_outlined),
-            selectedIcon: Icon(Icons.shield),
-            label: 'סינון',
+            icon: Icon(Icons.travel_explore_outlined),
+            selectedIcon: Icon(Icons.travel_explore),
+            label: 'סייר מוגן',
           ),
           const NavigationDestination(
             icon: Icon(Icons.apps_outlined),
@@ -122,9 +135,10 @@ class _AppShellState extends State<AppShell> {
             selectedIcon: const Icon(Icons.support_agent),
             label: 'תמיכה',
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
+          NavigationDestination(
+            // חסר משהו בהגנה — נקודה על הפרופיל (שם מצב ההגנה)
+            icon: Badge(isLabelVisible: c.missingRequired.isNotEmpty, child: const Icon(Icons.person_outline)),
+            selectedIcon: const Icon(Icons.person),
             label: 'פרופיל',
           ),
         ],
@@ -209,6 +223,7 @@ class _BrandTitle extends StatelessWidget {
   }
 }
 
+/// הפרופיל: מי אני, מצב ההגנה (מה שהיה בטאב "סינון"), פרטי החשבון והמכשיר, והגדרות.
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key, required this.controller});
   final AppController controller;
@@ -216,8 +231,8 @@ class ProfileScreen extends StatelessWidget {
   String _initials(String value) {
     final parts = value.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return 'פ';
-    if (parts.length == 1) return parts.first.substring(0, 1);
-    return '${parts.first.substring(0, 1)}${parts.last.substring(0, 1)}';
+    if (parts.length == 1) return parts.first.characters.first;
+    return '${parts.first.characters.first}${parts.last.characters.first}';
   }
 
   Future<void> _copy(BuildContext context, String label, String value) async {
@@ -229,90 +244,53 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final d = controller.device;
+    final c = controller;
+    final d = c.device;
     final customer = d?.customer;
     final displayName = customer?.name.isNotEmpty == true ? customer!.name : (d?.name ?? 'לקוח FilterPhone');
-    final statusGood = controller.isProtected;
 
     return _SectionScaffold(
-      title: 'פרופיל וחשבון',
+      title: 'פרופיל והגנה',
       actions: [
         IconButton(
           tooltip: 'רענון',
-          onPressed: controller.refresh,
+          onPressed: c.busy ? null : () => c.refresh(forceSync: true),
           icon: const Icon(Icons.refresh_rounded),
         ),
       ],
       child: RefreshIndicator(
-        onRefresh: controller.refresh,
+        onRefresh: () => c.refresh(forceSync: true),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primaryContainer,
-                    theme.colorScheme.surface,
-                  ],
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: theme.colorScheme.primary,
+                  child: Text(
+                    _initials(displayName),
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
                 ),
-                border: Border.all(color: theme.colorScheme.outlineVariant),
-              ),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 37,
-                    backgroundColor: theme.colorScheme.primary,
-                    child: Text(
-                      _initials(displayName),
-                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800),
-                    ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(displayName, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+                      Text(
+                        customer?.phone.isNotEmpty == true ? customer!.phone : 'חשבון FilterPhone',
+                        style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    displayName,
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    customer?.phone.isNotEmpty == true ? customer!.phone : 'חשבון FilterPhone',
-                    style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: (statusGood ? StatusColors.ok(context) : StatusColors.warn(context)).withValues(alpha: .10),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          statusGood ? Icons.verified_rounded : Icons.warning_amber_rounded,
-                          size: 17,
-                          color: statusGood ? StatusColors.ok(context) : StatusColors.warn(context),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          statusGood ? 'ההגנה פעילה' : 'נדרשת בדיקה',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: statusGood ? StatusColors.ok(context) : StatusColors.warn(context),
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
+            ProtectionPanel(controller: c),
+            const SizedBox(height: 16),
             _ProfileCard(
               title: 'פרטי החשבון',
               icon: Icons.person_rounded,
@@ -330,18 +308,16 @@ class ProfileScreen extends StatelessWidget {
                 _InfoRow(label: 'שם המכשיר', value: d?.name ?? '—'),
                 _InfoRow(
                   label: 'מזהה מכשיר',
-                  value: controller.androidId.isNotEmpty ? controller.androidId : (d?.id.toString() ?? '—'),
-                  action: controller.androidId.isEmpty
-                      ? null
-                      : () => _copy(context, 'מזהה המכשיר', controller.androidId),
+                  value: c.androidId.isNotEmpty ? c.androidId : (d?.id.toString() ?? '—'),
+                  action: c.androidId.isEmpty ? null : () => _copy(context, 'מזהה המכשיר', c.androidId),
                 ),
-                _InfoRow(label: 'ניהול מכשיר', value: d?.status == 'active' && controller.deviceOwner ? 'Device Owner פעיל' : 'לא פעיל'),
+                _InfoRow(label: 'ניהול מכשיר', value: d?.status == 'active' && c.deviceOwner ? 'Device Owner פעיל' : 'לא פעיל'),
               ],
             ),
             const SizedBox(height: 16),
             FilledButton.tonalIcon(
               onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => SettingsScreen(controller: controller)),
+                MaterialPageRoute(builder: (_) => SettingsScreen(controller: c)),
               ),
               icon: const Icon(Icons.settings_rounded),
               label: const Text('הגדרות'),

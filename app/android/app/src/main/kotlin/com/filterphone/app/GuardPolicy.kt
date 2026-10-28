@@ -92,6 +92,8 @@ object GuardPolicy {
         val tempAllow: Map<String, Long> = emptyMap(),
         /** הגבלת מנהל מכשיר שהוסרה זמנית (למשל disallow_tethering) → עד מתי. */
         val tempDpc: Map<String, Long> = emptyMap(),
+        /** הסייר המוגן: full / essential / off (SafeSites). השרת לא שולח — full (ואז Chrome חסום → כבוי). */
+        val safeBrowser: String = SafeSites.FULL,
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty() &&
             !allowlistOnly
@@ -209,6 +211,8 @@ object GuardPolicy {
                 ?: emptySet(),
             tempAllow = parseTemp(o.optJSONArray("temp_allow"), "package"),
             tempDpc = parseTemp(o.optJSONArray("temp_allow"), "dpc"),
+            safeBrowser = o.optString("safe_browser", SafeSites.FULL)
+                .takeIf { it in setOf(SafeSites.FULL, SafeSites.ESSENTIAL, SafeSites.OFF) } ?: SafeSites.OFF,
         )
     }
 

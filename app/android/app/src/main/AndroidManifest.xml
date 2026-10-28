@@ -56,6 +56,26 @@
             </intent-filter>
         </activity>
 
+        <!-- הסייר המוגן: דפדפן שעובר את כל הסינון. אפשר לקבוע אותו כדפדפן ברירת המחדל (קישורי http/https) -->
+        <activity
+            android:name=".BrowserActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.filterphone.app.browser"
+            android:label="@string/browser_label"
+            android:theme="@style/BrowserTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|density|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+        </activity>
+
         <!-- הדפדפן הפנימי של וואטסאפ: "העתקת הקישור" → נפתח ב-Chrome (מסך שקוף לרגע; רק המגן מפעיל) -->
         <activity
             android:name=".LinkRelayActivity"

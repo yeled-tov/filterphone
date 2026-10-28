@@ -86,3 +86,33 @@ def test_allow_google_accounts_toggle_opens_passthrough_persistently(env):
     from filterphone.api.catalog import DeviceSettings
     assert DeviceSettings.load(DeviceSettings.load(svc.device_row(did)["policy"]).dump()).allow_google_accounts is True
     assert client.patch(f"/v1/admin/devices/{did}", headers=h, json={"allow_google_accounts": False}).json()["settings"]["allow_google_accounts"] is False
+
+
+def test_safe_browser_mode_follows_chrome_and_tracks():
+    full = compile_settings(2, DeviceSettings.load("{}"))
+    assert full.safe_browser == "full" and "safe_browser" not in full.device_json()   # בלי גרסה חדשה לכולם
+    no_browsers = compile_settings(2, DeviceSettings.load('{"options": ["browsers_all"]}'))
+    assert no_browsers.safe_browser == "off" and no_browsers.device_json()["safe_browser"] == "off"
+    for track in ("no_internet", "navigation"):
+        assert compile_settings(2, DeviceSettings.load(f'{{"track": "{track}"}}')).safe_browser == "off", track
+    assert compile_settings(2, DeviceSettings.load('{"track": "no_whatsapp"}')).safe_browser == "full"
+    essential = DeviceSettings.load('{"track": "no_internet", "safe_browser": "essential"}')
+    assert compile_settings(2, essential).device_json()["safe_browser"] == "essential"   # בחירה מפורשת של המנהל
+    assert DeviceSettings.load(essential.dump()).safe_browser == "essential"
+    assert compile_settings(2, DeviceSettings.load('{"safe_browser": "off"}')).safe_browser == "off"
+    assert DeviceSettings.load('{"safe_browser": "bogus"}').safe_browser == ""
+    assert DeviceSettings.load("{}").update({"safe_browser": "bogus"}) == ["מצב הסייר המוגן לא מוכר"]
+
+
+def test_safe_browser_reaches_the_phone_policy(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, token = active_customer(svc, client)
+    assert "safe_browser" not in client.get("/v1/device", headers=auth(token)).json()["device_policy"]
+    r = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"safe_browser": "essential"})
+    assert r.status_code == 200 and r.json()["settings"]["safe_browser"] == "essential"
+    assert r.json()["compiled"]["safe_browser"] == "essential"
+    assert client.get("/v1/device", headers=auth(token)).json()["device_policy"]["safe_browser"] == "essential"
+    assert client.patch(f"/v1/admin/devices/{did}", headers=h, json={"safe_browser": "x"}).status_code == 400
+    r = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"safe_browser": ""})
+    assert r.json()["settings"]["safe_browser"] == "" and r.json()["compiled"]["safe_browser"] == "full"

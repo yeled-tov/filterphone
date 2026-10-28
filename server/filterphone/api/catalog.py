@@ -390,6 +390,20 @@ TRACKS: dict[str, dict] = {
 }
 
 
+# הסייר המוגן באפליקציה (דפדפן שעובר את כל הסינון, עם אתרים חיוניים ותיבת חיפוש):
+#   "" אוטומטי — גלישה מלאה כש-Chrome מותר; כבוי כשאין גלישה (כל הדפדפנים חסומים / מסלול בלי דפדפן).
+#   essential — רק אתרים חיוניים (ממשלה, בנקים, קופות חולים) — גם בטלפון בלי גלישה. off — כבוי תמיד.
+SAFE_BROWSER = ("", "essential", "off")
+
+
+def safe_browser_mode(s: DeviceSettings, device_apps: set[str], allowlist: tuple[str, ...] | None) -> str:
+    """full / essential / off — מה שהטלפון אוכף בסייר המוגן."""
+    if s.safe_browser:
+        return s.safe_browser
+    no_chrome = "com.android.chrome" in device_apps or (allowlist is not None and "com.android.chrome" not in allowlist)
+    return "off" if no_chrome else "full"
+
+
 def track_options(track: str) -> tuple[str, ...]:
     return tuple(o for o in TRACKS.get(track, TRACKS[""])["options"] if o in CATALOG)
 
@@ -659,6 +673,7 @@ class DeviceSettings:
     temp_open: dict = field(default_factory=dict)   # פתיחות זמניות: פריט → עד מתי (שניות מאז 1970)
     track: str = ""                             # מסלול סינון (TRACKS): "" רגיל / no_internet / navigation / ...
     allow_google_accounts: bool = False         # שרתי מסך "הוספת חשבון Google" פתוחים קבוע (בלי חלון 10 דק')
+    safe_browser: str = ""                      # הסייר המוגן באפליקציה: "" אוטומטי / essential / off (SAFE_BROWSER)
 
     @property
     def active_options(self) -> list[str]:
@@ -786,6 +801,7 @@ class DeviceSettings:
             temp_open=cls._load_temp_open(d.get("temp_open")),
             track=d.get("track") if d.get("track") in TRACKS else "",
             allow_google_accounts=bool(d.get("allow_google_accounts", False)),
+            safe_browser=d.get("safe_browser") if d.get("safe_browser") in SAFE_BROWSER else "",
         )
 
     def dump(self) -> str:
@@ -800,6 +816,8 @@ class DeviceSettings:
             d["track"] = self.track
         if self.allow_google_accounts:
             d["allow_google_accounts"] = True
+        if self.safe_browser:
+            d["safe_browser"] = self.safe_browser
         return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
@@ -810,6 +828,7 @@ class DeviceSettings:
         d["vpn_bypass_effective"] = resolve_vpn_bypass(self.vpn_bypass)  # {enabled, apps}
         d["vpn_bypass_defaults"] = [{"package": p, "label": t} for p, t in VPN_BYPASS_APPS.items()]
         d["allow_google_accounts"] = self.allow_google_accounts
+        d["safe_browser"] = self.safe_browser
         return d
 
     def update(self, changes: dict) -> list[str]:
@@ -894,6 +913,11 @@ class DeviceSettings:
                 self.track = changes["track"]
         if changes.get("allow_google_accounts") is not None:
             self.allow_google_accounts = bool(changes["allow_google_accounts"])
+        if changes.get("safe_browser") is not None:
+            if changes["safe_browser"] not in SAFE_BROWSER:
+                errors.append("מצב הסייר המוגן לא מוכר")
+            else:
+                self.safe_browser = changes["safe_browser"]
         return errors
 
     def _update_vpn_bypass(self, vb) -> list[str]:
@@ -960,6 +984,7 @@ class Compiled:
     temp_allow: tuple[dict, ...] = ()           # פתוח זמנית בטלפון: [{"package"|"dpc", "until"}]
     track: str = ""                             # מסלול הסינון (TRACKS)
     allowlist_apps: tuple[str, ...] | None = None   # רשימה לבנה של המסלול; None = הקטלוג + Chrome
+    safe_browser: str = "full"                  # הסייר המוגן: full / essential / off (safe_browser_mode)
 
     def proxy_json(self, level: int) -> str:
         """מה שהפרוקסי קורא (fp:policy ב-Redis)."""
@@ -989,6 +1014,7 @@ class Compiled:
             "wa_screens": list(self.wa_screens),
             # רק כשיש — כדי שמדיניות בלי פתיחה זמנית תישאר זהה (בלי גרסה חדשה לכל המכשירים)
             **({"temp_allow": list(self.temp_allow)} if self.temp_allow else {}),
+            **({"safe_browser": self.safe_browser} if self.safe_browser != "full" else {}),
         }
 
 
@@ -1058,6 +1084,7 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         temp_allow=_temp_allow(s, opts),
         track=s.track,
         allowlist_apps=None if track["allowlist"] is None else tuple(track["allowlist"]),
+        safe_browser=safe_browser_mode(s, device_apps, None if track["allowlist"] is None else tuple(track["allowlist"])),
     )
 
 

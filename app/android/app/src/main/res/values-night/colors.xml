@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="browser_accent">#FF66B8F0</color>
+    <color name="browser_field">#FF26313A</color>
+    <color name="browser_notice_bg">#FF4A3D12</color>
+</resources>

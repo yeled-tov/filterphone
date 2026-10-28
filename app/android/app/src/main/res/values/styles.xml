@@ -15,4 +15,11 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+    <!-- הסייר המוגן (BrowserActivity) -->
+    <style name="BrowserTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">@color/browser_accent</item>
+        <item name="android:colorPrimary">@color/browser_accent</item>
+        <item name="android:statusBarColor">?android:colorBackground</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
 </resources>

@@ -737,6 +737,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
 
   // --- מסלול סינון
   const trackCardEl = trackCard(d, patch);
+  const safeBrowserCardEl = safeBrowserCard(d, patch);
 
   // --- רמה
   const levelCard = card("רמת סינון תמונות", "השינוי חל תוך כמה שניות. רק כאן אפשר לשנות — הלקוח לא יכול.",
@@ -833,7 +834,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
   // --- טאבים: כל נושא במקום אחד, במקום ערימה ארוכה של כרטיסים
   const tabs = [
     ["overview", "סקירה", [complianceCardEl, el("div", { class: "grid two" }, customerCard, logCard), maintenanceCardEl, tempCardEl]],
-    ["blocks", "חסימות", [trackCardEl, levelCard, policyCard, customCard, keywordCardEl]],
+    ["blocks", "חסימות", [trackCardEl, levelCard, policyCard, customCard, keywordCardEl, safeBrowserCardEl]],
     ["apps", "אפליקציות", [appsCard, appImagesCard, bypassCardEl, learnedCard]],
     ["dpc", "מנהל מכשיר", [dpcCardEl]],
     ["activity", "פעילות", [el("div", { class: "grid two" }, statsCard, historyCard || card("היסטוריית בקשות", null, empty("אין בקשות."))), eventsCard]],
@@ -906,6 +907,28 @@ function trackCard(d, patch) {
     },
   }, el("strong", {}, t.title), el("span", { class: "muted small" }, t.desc))));
   return card("מסלול סינון", "בסיס מוכן למכשיר. המסלול רק מוסיף חסימות מעל מה שנבחר למטה — הוא לא פותח שום דבר.", box);
+}
+
+/** הסייר המוגן באפליקציה: אוטומטי (לפי Chrome) / אתרים חיוניים בלבד / כבוי. */
+function safeBrowserCard(d, patch) {
+  const cur = d.settings.safe_browser || "";
+  const eff = d.compiled.safe_browser || "full";
+  const effText = { full: "גלישה מלאה (מסוננת)", essential: "רק אתרים חיוניים", off: "כבוי" }[eff] || eff;
+  const modes = [
+    ["", "אוטומטי", "גלישה מלאה כש-Chrome מותר; כבוי כשכל הדפדפנים חסומים או במסלול בלי דפדפן."],
+    ["essential", "אתרים חיוניים בלבד", "רק אתרי ממשלה, בנקים, קופות חולים וחברות אשראי — גם בטלפון בלי גלישה."],
+    ["off", "כבוי", "אין סייר מוגן בטלפון הזה."],
+  ];
+  const box = el("div", { class: "levels" }, modes.map(([id, title, desc]) => el("button", {
+    type: "button", class: `level-card${id === cur ? " selected" : ""}`, role: "radio", "aria-checked": String(id === cur),
+    onclick: async () => {
+      if (id === cur) return;
+      await patch({ safe_browser: id }, `הסייר המוגן: ${title}`);
+      render();
+    },
+  }, el("strong", {}, title), el("span", { class: "muted small" }, desc))));
+  return card("הסייר המוגן באפליקציה", "דפדפן בתוך FilterPhone עם כל הסינון, אתרים חיוניים ותיבת חיפוש.",
+    el("p", { class: "muted small" }, `עכשיו בטלפון: ${effText}`), box);
 }
 
 function yesNo(v, good = true, unknown = "לא דווח") {

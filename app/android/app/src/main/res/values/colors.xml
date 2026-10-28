@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- הסייר המוגן (BrowserActivity) — באותם צבעים של האפליקציה -->
+    <color name="browser_accent">#FF0B78BD</color>
+    <color name="browser_field">#FFEEF3F7</color>
+    <color name="browser_notice_bg">#FFFFF4D6</color>
+</resources>

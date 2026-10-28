@@ -304,6 +304,23 @@ class MainActivity : FlutterActivity() {
                 }
             }
             "launchTarget" -> { result.success(launchTarget); launchTarget = null }
+            // הסייר המוגן: המצב (full / essential / off), האתרים החיוניים, והאם הוא דפדפן ברירת המחדל
+            "safeBrowser" -> result.success(mapOf(
+                "mode" to BrowserActivity.currentMode(this),
+                "isDefault" to BrowserActivity.isDefault(this),
+                "sites" to SafeSites.SITES.map { mapOf("group" to it.group, "title" to it.title, "url" to it.url) },
+            ))
+            "openSafeBrowser" -> {
+                launchingChild = true          // הסייר נפתח מעל — חזרה ממנו מגיעה לכאן
+                result.success(runCatching {
+                    BrowserActivity.open(this, call.argument<String>("url"), call.argument<String>("query"))
+                    true
+                }.getOrDefault(false))
+            }
+            "requestDefaultBrowser" -> {
+                launchingChild = true
+                result.success(BrowserActivity.requestDefault(this, REQ_BROWSER))
+            }
             "clearSupportNotification" -> { SupportNotify.clear(this); result.success(true) }
             // תמיכה — פתיחת שיחת WhatsApp עם פרטי מכשיר/מצב שנמסרו מה-Flutter
             "openSupportWhatsApp" -> {
@@ -437,6 +454,7 @@ class MainActivity : FlutterActivity() {
         const val REQ_VPN = 4101
         const val REQ_CERT = 4102
         const val REQ_NOTIFY = 4103
+        const val REQ_BROWSER = 4104
 
         /** חוט רקע אחד לכל האפליקציה — לא חדש בכל יצירה של המסך (היה דולף). */
         val io = Executors.newSingleThreadExecutor { r -> Thread(r, "fp-bridge").apply { isDaemon = true } }

@@ -4,82 +4,34 @@ import '../app_controller.dart';
 import '../theme.dart';
 import 'change_request_screen.dart';
 
-/// המסך הראשי: האם הטלפון מוגן, ומה עוד צריך לעשות.
-class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key, required this.controller});
+/// מצב ההגנה (מה שהיה בטאב "סינון", עכשיו בתוך טאב הפרופיל): האם הטלפון מוגן, ומה עוד צריך לעשות.
+/// רק מה שחסר — כשהכול תקין אין כאן רשימת הרשאות בכלל (המצב הטכני המלא: הגדרות).
+class ProtectionPanel extends StatelessWidget {
+  const ProtectionPanel({super.key, required this.controller});
   final AppController controller;
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
     final running = c.setupStep != null && c.setupStep != SetupStep.done;
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: const Icon(Icons.shield_rounded, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 9),
-            const Text('פילטרפון'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'רענון',
-            onPressed: c.busy ? null : () => c.refresh(forceSync: true),
-            icon: const Icon(Icons.refresh_rounded),
-          ),
+    const gap = SizedBox(height: 16);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (c.deviceRemoved) _RemovedBanner(controller: c),                 // הבאנרים — עם רווח משלהם
+        if (c.device != null && !c.device!.isActive)
+          const _Banner(icon: Icons.block, text: 'המכשיר הושבת על ידי המנהל. פנו ל-FilterPhone.'),
+        if (c.adminPauseActive) ...[_PauseCard(controller: c), gap],
+        _StatusHero(controller: c),
+        if (c.protection.updateAvailable != null) ...[gap, _UpdateCard(controller: c)],
+        if (c.notice != null || c.error != null) ...[gap, _Message(controller: c)],
+        if (!c.adminPauseActive && (c.missingRequired.isNotEmpty || running)) ...[
+          gap,
+          _FixCard(controller: c),
+          if (!c.deviceOwner || running) ...[gap, OneTapCard(controller: c)],
         ],
-      ),
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () => c.refresh(forceSync: true),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (c.deviceRemoved) _RemovedBanner(controller: c),
-              if (c.device != null && !c.device!.isActive) const _Banner(
-                icon: Icons.block,
-                text: 'המכשיר הושבת על ידי המנהל. פנו ל-FilterPhone.',
-              ),
-              if (c.adminPauseActive) ...[
-                _PauseCard(controller: c),
-                const SizedBox(height: 16),
-              ],
-              _StatusHero(controller: c),
-              if (c.protection.updateAvailable != null) ...[
-                const SizedBox(height: 16),
-                _UpdateCard(controller: c),
-              ],
-              if (c.notice != null || c.error != null) ...[
-                const SizedBox(height: 16),
-                _Message(controller: c),
-              ],
-              // רק מה שחסר. כשהכול תקין — אין כאן רשימת הרשאות בכלל (המצב הטכני המלא: הגדרות)
-              if (!c.adminPauseActive && (c.missingRequired.isNotEmpty || running)) ...[
-                const SizedBox(height: 16),
-                _FixCard(controller: c),
-                if (!c.deviceOwner || running) ...[
-                  const SizedBox(height: 16),
-                  OneTapCard(controller: c),
-                ],
-              ],
-              if (c.device?.isActive ?? false) ...[
-                const SizedBox(height: 16),
-                _ActiveCard(controller: c),
-              ],
-            ],
-          ),
-        ),
-      ),
+        if (c.device?.isActive ?? false) ...[gap, _ActiveCard(controller: c)],
+      ],
     );
   }
 }
@@ -485,7 +437,7 @@ class _Stat extends StatelessWidget {
 }
 
 /// הפריטים שחסרים — כל אחד עם הסבר קצר וכפתור שפותח בדיוק את החלון של אנדרואיד שצריך.
-/// בטאב הסינון (_FixCard) ובחלון שקופץ לבד כשהרשאה נופלת (AppShell).
+/// במצב ההגנה שבפרופיל (_FixCard) ובחלון שקופץ לבד כשהרשאה נופלת (AppShell).
 class MissingChecksList extends StatelessWidget {
   const MissingChecksList({super.key, required this.controller, required this.only});
   final AppController controller;

@@ -282,6 +282,48 @@ abstract class NativeBridge {
 
   /// פתיחת אפליקציה מותקנת.
   Future<bool> openApp(String package);
+
+  // --- הסייר המוגן ---
+
+  /// המצב (full / essential / off), האתרים החיוניים, והאם FilterPhone היא דפדפן ברירת המחדל.
+  Future<SafeBrowserInfo> safeBrowser();
+
+  /// פתיחת הסייר: [url] — אתר מהרשימה, [query] — מה שהוקלד בחיפוש (הסייר מחליט אם זו כתובת או חיפוש).
+  Future<bool> openSafeBrowser({String? url, String? query});
+
+  /// חלון המערכת לקביעת הסייר כדפדפן ברירת המחדל (בגרסאות ישנות — מסך ההגדרות).
+  Future<bool> requestDefaultBrowser();
+}
+
+/// אתר חיוני בטאב "סייר מוגן" (הרשימה עצמה בצד של אנדרואיד — SafeSites, שם גם נאכף מה מותר).
+class SafeSite {
+  const SafeSite({required this.group, required this.title, required this.url});
+  final String group;
+  final String title;
+  final String url;
+}
+
+class SafeBrowserInfo {
+  const SafeBrowserInfo({required this.mode, required this.isDefault, required this.sites});
+  static const off = SafeBrowserInfo(mode: 'off', isDefault: false, sites: []);
+
+  /// full — גלישה + חיפוש; essential — רק האתרים החיוניים; off — הסייר לא פעיל בטלפון הזה.
+  final String mode;
+  final bool isDefault;
+  final List<SafeSite> sites;
+
+  bool get full => mode == 'full';
+  bool get enabled => mode == 'full' || mode == 'essential';
+
+  factory SafeBrowserInfo.fromMap(Map<Object?, Object?> m) => SafeBrowserInfo(
+        mode: m['mode'] as String? ?? 'off',
+        isDefault: m['isDefault'] as bool? ?? false,
+        sites: [
+          for (final s in (m['sites'] as List?) ?? const [])
+            if (s is Map)
+              SafeSite(group: '${s['group'] ?? ''}', title: '${s['title'] ?? ''}', url: '${s['url'] ?? ''}'),
+        ],
+      );
 }
 
 /// מימוש דרך MethodChannel (אנדרואיד היום; אייפון — כשנוסיף את ה-Network Extension).
@@ -456,6 +498,18 @@ class ChannelNativeBridge implements NativeBridge {
 
   @override
   Future<String?> launchTarget() => _channel.invokeMethod<String>('launchTarget');
+
+  @override
+  Future<SafeBrowserInfo> safeBrowser() async =>
+      SafeBrowserInfo.fromMap(await _call<Map<Object?, Object?>>('safeBrowser'));
+
+  @override
+  Future<bool> openSafeBrowser({String? url, String? query}) async =>
+      await _channel.invokeMethod<bool>('openSafeBrowser', {'url': url, 'query': query}) ?? false;
+
+  @override
+  Future<bool> requestDefaultBrowser() async =>
+      await _channel.invokeMethod<bool>('requestDefaultBrowser') ?? false;
 
   @override
   Future<void> clearSupportNotification() => _call<bool>('clearSupportNotification');
