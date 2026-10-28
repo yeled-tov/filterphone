@@ -15,6 +15,8 @@
 #   legacy-bot <start|stop|logs>   הבוט הישן (filterphone-bot ב-pm2) — להשוואה מול הבוט החדש
 #   devices            אבחון מכשירים (לקריאה בלבד, בלי מספרי טלפון): מצב, גרסה, דיווח אחרון,
 #                      חיבור VPN (WireGuard), ושגיאות אחרונות של השרת
+#   images             אבחון סינון התמונות (לקריאה בלבד, בלי פרטי לקוחות): מדדי המנוע והפרוקסי,
+#                      מונים לכל מכשיר, סיבות חסימה, ומדידה חיה — מקומי מול שרת ה-GPU (Modal)
 # =====================================================================
 set -euo pipefail
 
@@ -374,6 +376,11 @@ PY
     sudo -n journalctl -u caddy --since "-3h" --no-pager -o cat 2>&1 | grep -iE '"level":"error"|error' | tail -15 || true
     echo "== fp-api — אזהרות ושגיאות (3 שעות)"
     sudo -n journalctl -u fp-api --since "-3h" --no-pager -o cat 2>&1 | grep -E 'WARNING|ERROR|Traceback' | tail -25 || true
+    ;;
+images)
+    sudo -n "$A/venv/bin/python" "$A/src/deploy/diag_images.py" 2>&1 || true
+    echo "== fp-engine — אזהרות ושגיאות (3 שעות)"
+    sudo -n journalctl -u fp-engine --since "-3h" --no-pager -o cat 2>&1 | grep -E 'WARNING|ERROR|Traceback|Modal' | tail -30 || true
     ;;
 rollback)
     [[ "${arg:-}" =~ ^[0-9]{8}-[0-9]{6}$ ]] || { echo "שם גיבוי לא חוקי (למשל 20261005-213000)"; exit 2; }

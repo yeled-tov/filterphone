@@ -7,7 +7,7 @@ on:
       what:
         description: "מה לעשות"
         type: choice
-        options: [both, server, apk, status, rollback, wabot, devices, net, legacy-bot-start, legacy-bot-stop, legacy-bot-logs]
+        options: [both, server, apk, status, rollback, wabot, devices, net, images, legacy-bot-start, legacy-bot-stop, legacy-bot-logs]
         default: both
       backup:
         description: "לחזרה לאחור בלבד: שם תיקיית הגיבוי, למשל 20261005-213000"
@@ -190,6 +190,10 @@ jobs:
       - name: שרשרת התעבורה — אבחון (DNS, פרוקסי, NAT, תעבורה לכל מכשיר)
         if: inputs.what == 'net'
         run: ssh -o BatchMode=yes "$SERVER" net
+
+      - name: סינון תמונות — אבחון (מדדים, סיבות, מקומי מול GPU)
+        if: inputs.what == 'images'
+        run: ssh -o BatchMode=yes -o ServerAliveInterval=30 "$SERVER" images
 
       - name: הבוט הישן (pm2)
         if: startsWith(inputs.what, 'legacy-bot-')
