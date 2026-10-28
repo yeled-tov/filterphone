@@ -174,6 +174,19 @@ const option = (id) => catalog?.options.find((o) => o.id === id);
 const lines = (text) => text.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
 
 function chip(text, kind = "") { return el("span", { class: `chip ${kind}` }, text); }
+
+/** ההעברה האחרונה מהדפדפן הפנימי של וואטסאפ ל-Chrome (דיווח מהמגן בטלפון). */
+function waBrowserChip(v) {
+  const [code, found] = String(v).split(" — ");
+  const label = {
+    "ok:direct": "נפתח ב-Chrome", "ok:menu": "נפתח ב-Chrome", "ok:copy": "נפתח ב-Chrome (דרך העתקת הקישור)",
+    "skip:left": "המשתמש יצא לפני ההעברה", "blocked:chrome": "נחסם — Chrome חסום במכשיר",
+    "fail:no-menu": "לא נמצא התפריט (⋮) — נחסם", "fail:no-item": "לא נמצא \"פתיחה בדפדפן\" בתפריט — נחסם",
+    "fail:error": "תקלה — נחסם",
+  }[code] || code;
+  const tone = code.startsWith("ok") || code === "skip:left" ? "ok" : code === "blocked:chrome" ? "" : "warn";
+  return chip(found ? `${label} · נמצא: ${found}` : label, tone);
+}
 function statusChip(status) {
   const [k, t] = STATUS[status] || ["", status];
   return el("span", { class: "row gap nowrap" }, el("span", { class: `dot ${k}` }), t);
@@ -934,6 +947,7 @@ function complianceCard(d) {
         ["החזרה אוטומטית של המגן", acc.self_heal === undefined ? chip("לא דווח")
           : acc.self_heal ? chip(`פעילה${acc.restored ? ` · הוחזר ${num(acc.restored)} פעמים` : ""}`, "ok")
             : chip("לא — דרושה הרשאה בהקמה (root / adb)", "warn")],
+        ...(acc.wa_browser ? [["הדפדפן הפנימי של וואטסאפ → Chrome", waBrowserChip(acc.wa_browser)]] : []),
         ["חסימות שבוצעו בטלפון", hb.protections ? `${num(hb.protections.apps_blocked)} אפליקציות · ${num(hb.protections.screens_blocked)} מסכים · ${num(hb.protections.wa_profile_photo)} תמונות פרופיל · ${num(hb.protections.keywords_blocked)} מילות חיפוש` : "—"],
       ]),
       kv([

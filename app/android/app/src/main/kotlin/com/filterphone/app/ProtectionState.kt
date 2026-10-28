@@ -31,6 +31,7 @@ object ProtectionState {
     const val GUARD_ERROR = "guard_error"              // התקלה האחרונה (מקום + סוג) — לאבחון בשרת
     const val CA_PEM = "ca_pem"                       // תעודת הסינון (ציבורית) — לבדיקה אם מותקנת
     const val ORG_NAME = "org_name"                   // שם הארגון מהשרת ("המכשיר הזה שייך ל-…")
+    const val WA_BROWSER = "wa_browser"               // הדפדפן הפנימי של וואטסאפ: איך הסתיימה ההעברה האחרונה ל-Chrome
 
     fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

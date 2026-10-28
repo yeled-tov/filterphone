@@ -5,7 +5,9 @@
     <string name="guard_app_blocked">האפליקציה חסומה בטלפון הזה (FilterPhone)</string>
     <string name="guard_screen_blocked">המסך הזה חסום בטלפון הזה (FilterPhone)</string>
     <string name="guard_wa_browser_chrome">הקישור נפתח ב-Chrome (מסונן)</string>
-    <string name="guard_wa_browser_blocked">הדפדפן שבתוך וואטסאפ לא מסונן. לפתיחה ב-Chrome: ⋮ ← פתיחה בדפדפן, או לחיצה ארוכה על הקישור ← העתקה</string>
+    <string name="guard_wa_browser_blocked">הדפדפן שבתוך וואטסאפ לא מסונן, ולא הצלחנו להעביר את הקישור ל-Chrome. אפשר להעתיק את הקישור (לחיצה ארוכה על ההודעה ← העתקה) ולהדביק ב-Chrome</string>
+    <string name="guard_wa_browser_no_chrome">הדפדפן שבתוך וואטסאפ חסום — גלישה באינטרנט לא פתוחה בטלפון הזה</string>
+    <string name="relay_no_link">לא נמצא קישור להעברה ל-Chrome</string>
     <string name="guard_wa_updates_blocked">טאב העדכונים (סטטוסים וערוצים) חסום בטלפון הזה</string>
     <string name="guard_profile_photo_blocked">תמונות פרופיל חסומות בטלפון הזה (FilterPhone)</string>
     <string name="guard_keyword_blocked">החיפוש הזה חסום בטלפון הזה (FilterPhone)</string>

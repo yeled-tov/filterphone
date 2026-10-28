@@ -56,6 +56,16 @@
             </intent-filter>
         </activity>
 
+        <!-- הדפדפן הפנימי של וואטסאפ: "העתקת הקישור" → נפתח ב-Chrome (מסך שקוף לרגע; רק המגן מפעיל) -->
+        <activity
+            android:name=".LinkRelayActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- הקמה כ-Device Owner (אנדרואיד 10+): סוג ההקמה, וסוף ההקמה (הגדרות בסיס + קוד מה-QR) -->
         <activity
             android:name=".ProvisioningModeActivity"

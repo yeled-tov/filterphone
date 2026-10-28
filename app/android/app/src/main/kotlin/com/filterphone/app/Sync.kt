@@ -57,6 +57,7 @@ object Sync {
             .put("restored", ProtectionState.count(context, ProtectionState.GUARD_RESTORED))
             .put("errors", ProtectionState.count(context, ProtectionState.GUARD_ERRORS))
             .apply { ProtectionState.string(context, ProtectionState.GUARD_ERROR)?.let { put("error", it.take(80)) } }
+            .apply { ProtectionState.string(context, ProtectionState.WA_BROWSER)?.let { put("wa_browser", it.take(80)) } }
 
         val o = JSONObject()
             .put("app_version", runCatching { pm.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "")

@@ -24,6 +24,7 @@ import java.util.concurrent.Executors
  *
  * פרטיות: השירות רואה איזו אפליקציה / איזה מסך נפתחו. רק בוואטסאפ, ורק כשהמנהל חסם תמונות
  * פרופיל, הוא בודק גם מזהים ומיקום של רכיבי תמונה — לא קורא טקסט, הודעות או הקלדות, ולא שומר כלום.
+ * בדפדפן הפנימי של וואטסאפ — רק התוויות של הכפתורים בסרגל ובתפריט שלו (כדי ללחוץ "פתיחה בדפדפן").
  *
  * עמידות: עובד בלי רשת (המדיניות השמורה), אחרי אתחול / מוות של התהליך (המערכת מחברת את
  * השירות מחדש → onServiceConnected), ובודק את המסך הנוכחי מיד כשהמדיניות משתנה.
@@ -35,6 +36,8 @@ class GuardService : AccessibilityService() {
     private var lastToastAt = 0L
     private var lastServerCheckAt = 0L
     private var waBrowserAt = 0L
+    private var waBrowserBusy = false               // העברה ל-Chrome באמצע (כמה שלבים עם המתנה) — לא מתחילים שוב
+    private var waBrowserReturnUntil = 0L           // הקישור נפתח ב-Chrome והדפדפן הפנימי נשאר מאחור (עד מתי)
     private var foreground: String? = null
     private var contentEvents = false
     private var scanKeywords = false
@@ -130,7 +133,8 @@ class GuardService : AccessibilityService() {
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_VIEW_LONG_CLICKED or
             (if (wantContent) AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED else 0) or
             (if (scanKeywords) AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED else 0)
-        info.flags = info.flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        info.flags = info.flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+            AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS      // התפריט של הדפדפן הפנימי (חלון נפרד)
         info.notificationTimeout = if (wantContent) 150 else 0
         runCatching { serviceInfo = info }
         contentEvents = wantContent
@@ -618,6 +622,8 @@ class GuardService : AccessibilityService() {
         }.getOrDefault(false)
 
     private fun onWindow(pkg: String, cls: String?, policy: GuardPolicy.Policy) {
+        if (waBrowserReturnUntil != 0L && pkg in WaScreens.PACKAGES && cls?.startsWith("com.whatsapp") == true &&
+            !WaBrowser.isBrowserScreen(cls)) waBrowserReturnUntil = 0L     // חזרו לשיחה — הקישור הבא מועבר כרגיל
         when (GuardPolicy.check(this, policy, pkg, cls)) {
             GuardPolicy.Block.APP -> {
                 block(pkg, GLOBAL_ACTION_HOME, R.string.guard_app_blocked)
@@ -627,7 +633,7 @@ class GuardService : AccessibilityService() {
             }
             GuardPolicy.Block.SCREEN -> {
                 if (pkg in WaScreens.PACKAGES && WaBrowser.isBrowserScreen(cls)) {
-                    openWaLinkInChrome(pkg)                    // הדפדפן הפנימי של וואטסאפ → Chrome
+                    openWaLinkInChrome(pkg, policy)            // הדפדפן הפנימי של וואטסאפ → Chrome
                 } else {
                     block(pkg, GLOBAL_ACTION_BACK, R.string.guard_screen_blocked)
                 }
@@ -824,47 +830,184 @@ class GuardService : AccessibilityService() {
     }
 
     /**
-     * הדפדפן הפנימי של וואטסאפ נפתח (WaBrowser): לוחצים ⋮ ואז "פתיחה בדפדפן" — הקישור נפתח ב-Chrome, שם
-     * הוא מסונן. התפריט לא נמצא (גרסה אחרת של וואטסאפ) — אחורה, עם הסבר איך לפתוח ב-Chrome.
+     * הדפדפן הפנימי של וואטסאפ נפתח (WaBrowser) → הקישור נפתח ב-Chrome, שם הוא מסונן:
+     *   1. מחכים שהמסך שלו באמת עלה: האירוע מגיע לפני שהסרגל מוצג, ובינתיים החלון הפעיל הוא עדיין השיחה —
+     *      וה-⋮ שלה הוא תפריט אחר לגמרי (לכן: לא לוחצים כל עוד יש בחלון שדה הקלדה של שיחה).
+     *   2. כפתור "פתיחה בדפדפן" ישיר בסרגל, אם יש; אחרת ⋮ ← "פתיחה בדפדפן".
+     *   3. אין בתפריט "פתיחה בדפדפן" — "העתקת הקישור", ו-FilterPhone פותחת את הקישור ב-Chrome (LinkRelayActivity).
+     *   4. כלום לא נמצא — אחורה עם הסבר. מה שנמצא בסרגל / בתפריט (רק התוויות) נשמר לאבחון בדשבורד.
+     * Chrome חסום במכשיר הזה (מסלול בלי אינטרנט) — אין לאן להעביר: סוגרים.
      */
-    private fun openWaLinkInChrome(pkg: String) {
+    private fun openWaLinkInChrome(pkg: String, policy: GuardPolicy.Policy) {
         val now = SystemClock.elapsedRealtime()
-        if (now - waBrowserAt < 2_000) return
+        if ((waBrowserBusy && now - waBrowserAt < WA_FLOW_MAX_MS) || now - waBrowserAt < 2_000) return
         waBrowserAt = now
-        val opened = withActiveRoot { clickFirst(it) { t, d -> WaBrowser.isMoreMenu(t, d) } }
-        if (!opened) {
-            waBrowserFallback(pkg)
+        if (now < waBrowserReturnUntil) {
+            // חזרו מ-Chrome אל הדפדפן הפנימי שנשאר מאחור — סוגרים אותו (ולא פותחים שוב את Chrome בלולאה)
+            waBrowserReturnUntil = 0L
+            performGlobalAction(GLOBAL_ACTION_BACK)
             return
         }
-        pickExternalBrowser(pkg, attempt = 0)
+        if (GuardPolicy.check(this, policy, WaBrowser.CHROME, null) != null || !chromeInstalled()) {
+            waBrowserDone(pkg, "blocked:chrome", ok = false)
+            return
+        }
+        waBrowserBusy = true
+        main.postDelayed({ waBrowserFindMenu(pkg, attempt = 0) }, WA_STEP_MS)
     }
 
-    private fun pickExternalBrowser(pkg: String, attempt: Int) {
-        main.postDelayed({
-            safely("wa-browser") {
-                if (withActiveRoot { clickFirst(it) { t, d -> WaBrowser.isOpenExternal(t, d) } }) {
-                    Toast.makeText(this, R.string.guard_wa_browser_chrome, Toast.LENGTH_SHORT).show()
-                } else if (attempt < 3) {
-                    pickExternalBrowser(pkg, attempt + 1)
-                } else {
-                    performGlobalAction(GLOBAL_ACTION_BACK)          // סוגר את התפריט שנפתח
-                    waBrowserFallback(pkg)
-                }
+    /** שלב 1–2: הסרגל של הדפדפן הפנימי — כפתור ישיר, או ⋮. עד ~3 שניות (הסרגל עולה אחרי האירוע). */
+    private fun waBrowserFindMenu(pkg: String, attempt: Int): Unit = waStep(pkg) {
+        val labels = ArrayList<String>()
+        val step = withActiveRoot { root ->
+            when {
+                root.packageName?.toString() != pkg || hasComposer(root) -> -1         // עוד לא עלה (או שיצאו ממנו)
+                clickFirst(root) { t, d -> WaBrowser.isOpenExternal(t, d) } -> 2      // כפתור ישיר בסרגל
+                clickFirst(root) { t, d -> WaBrowser.isMoreMenu(t, d) } -> 1          // ⋮ נפתח
+                else -> { collectLabels(root, labels); 0 }
             }
-        }, 300L)
+        } ?: -1
+        when {
+            step == 2 -> waBrowserDone(pkg, "ok:direct", ok = true)
+            step == 1 -> main.postDelayed({ waBrowserPickItem(pkg, attempt = 0) }, WA_STEP_MS)
+            attempt < WA_MENU_TRIES -> main.postDelayed({ waBrowserFindMenu(pkg, attempt + 1) }, WA_STEP_MS)
+            // הדפדפן הפנימי כבר לא בחזית — לא לוחצים "אחורה" על מה שהמשתמש פתח אחריו
+            step == -1 -> waBrowserDone(pkg, "skip:left", ok = true, toast = false)
+            else -> waBrowserDone(pkg, "fail:no-menu", ok = false, labels = labels)
+        }
     }
 
-    private fun waBrowserFallback(pkg: String) {
+    /** שלב 2–3: בתפריט שנפתח (חלון נפרד) — "פתיחה בדפדפן", ובלעדיו "העתקת הקישור". */
+    private fun waBrowserPickItem(pkg: String, attempt: Int): Unit = waStep(pkg) {
+        val labels = ArrayList<String>()
+        // קודם "פתיחה בדפדפן" בכל החלונות, ורק אחר כך "העתקת הקישור" — שלא ייבחר העתקה מהסרגל שמאחורי התפריט
+        val step = withPkgWindows(pkg) { root ->
+            if (!hasComposer(root) && clickFirst(root) { t, d -> WaBrowser.isOpenExternal(t, d) }) 2 else 0
+        }.takeIf { it != 0 } ?: withPkgWindows(pkg) { root ->
+            when {
+                hasComposer(root) -> 0
+                clickFirst(root) { t, d -> WaBrowser.isCopyLink(t, d) } -> 3
+                else -> { collectLabels(root, labels); 0 }
+            }
+        }
+        when {
+            step == 2 -> waBrowserDone(pkg, "ok:menu", ok = true)
+            step == 3 -> main.postDelayed({
+                waStep(pkg) {
+                    performGlobalAction(GLOBAL_ACTION_BACK)                 // סוגר את הדפדפן הפנימי
+                    LinkRelayActivity.start(this)                           // והקישור שהועתק נפתח ב-Chrome
+                    waBrowserDone(pkg, "ok:copy", ok = true, toast = false)
+                }
+            }, WA_STEP_MS)
+            attempt < WA_ITEM_TRIES -> main.postDelayed({ waBrowserPickItem(pkg, attempt + 1) }, WA_STEP_MS)
+            else -> {
+                performGlobalAction(GLOBAL_ACTION_BACK)                     // סוגר את התפריט שנפתח
+                waBrowserDone(pkg, "fail:no-item", ok = false, labels = labels)
+            }
+        }
+    }
+
+    /** שלב בהעברה: תקלה לא משאירה את הדפדפן הפנימי פתוח — נסגר כמו כשלא נמצא תפריט. */
+    private inline fun waStep(pkg: String, step: () -> Unit) {
+        try {
+            step()
+        } catch (t: Throwable) {
+            if (t is OutOfMemoryError) throw t
+            onGuardError("wa-browser", t)
+            waBrowserDone(pkg, "fail:error", ok = false)
+        }
+    }
+
+    private fun waBrowserDone(pkg: String, result: String, ok: Boolean, labels: List<String> = emptyList(),
+                              toast: Boolean = true) {
+        waBrowserBusy = false
+        waBrowserAt = SystemClock.elapsedRealtime()
+        val found = WaBrowser.summary(labels)
+        ProtectionState.setString(this, ProtectionState.WA_BROWSER, if (found.isEmpty()) result else "$result — $found")
+        if (debug) Log.d(TAG, "wa-browser: $result ${if (found.isEmpty()) "" else found}")
+        if (ok) {
+            if (result == "ok:direct" || result == "ok:menu") waBrowserReturnUntil = waBrowserAt + WA_RETURN_MS
+            if (toast) Toast.makeText(this, R.string.guard_wa_browser_chrome, Toast.LENGTH_SHORT).show()
+            return
+        }
         lastBlockAt = 0
-        block(pkg, GLOBAL_ACTION_BACK, R.string.guard_wa_browser_blocked)
+        val message = if (result == "blocked:chrome") R.string.guard_wa_browser_no_chrome else R.string.guard_wa_browser_blocked
+        block(pkg, GLOBAL_ACTION_BACK, message)
     }
 
-    private fun withActiveRoot(action: (AccessibilityNodeInfo) -> Boolean): Boolean {
-        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+    private fun chromeInstalled(): Boolean = runCatching {
+        packageManager.getApplicationInfo(WaBrowser.CHROME, 0).enabled
+    }.getOrDefault(false)
+
+    /** בחלון יש שדה הקלדה של שיחה (com.whatsapp:id/entry) — זו השיחה, לא הדפדפן הפנימי. */
+    private fun hasComposer(root: AccessibilityNodeInfo): Boolean =
+        anyNode(root) { WaBrowser.isComposer(it.viewIdResourceName) }
+
+    /** תוויות של כפתורים (טקסט / תיאור קצרים) — רק לאבחון כשלא נמצא מה ללחוץ. */
+    private fun collectLabels(root: AccessibilityNodeInfo, out: MutableList<String>) {
+        anyNode(root) { n ->
+            if (n.isClickable || n.isCheckable) {
+                n.text?.toString()?.let { out += it }
+                n.contentDescription?.toString()?.let { out += it }
+            }
+            false
+        }
+    }
+
+    /** מעבר על כל הרכיבים (עד MAX_NODES) — true ברגע ש-[match] מחזיר true. */
+    private fun anyNode(root: AccessibilityNodeInfo, match: (AccessibilityNodeInfo) -> Boolean): Boolean {
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        try {
+            var visited = 0
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                if (n !== root) seen += n
+                visited++
+                if (match(n)) return true
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+            return false
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { if (it !== root) recycle(it) }
+        }
+    }
+
+    /**
+     * כל החלונות של [pkg] שעל המסך — התפריט של ⋮ נפתח בחלון נפרד (PopupWindow), שלא תמיד הוא "החלון
+     * הפעיל". בלי הרשאה לרשימת החלונות — החלון הפעיל בלבד. העליון קודם; עוצרים בתוצאה הראשונה שאינה 0.
+     */
+    private fun withPkgWindows(pkg: String, action: (AccessibilityNodeInfo) -> Int): Int {
+        val list = runCatching { windows }.getOrNull().orEmpty()
+        val roots = list.mapNotNull { w -> runCatching { w.root }.getOrNull() }
+        @Suppress("DEPRECATION")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) list.forEach { runCatching { it.recycle() } }
+        try {
+            for (root in roots) {
+                if (root.packageName?.toString() != pkg) continue
+                val r = runCatching { action(root) }.getOrDefault(0)
+                if (r != 0) return r
+            }
+        } finally {
+            roots.forEach { recycle(it) }
+        }
+        if (roots.isNotEmpty()) return 0
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return 0
+        return try {
+            if (root.packageName?.toString() == pkg) runCatching { action(root) }.getOrDefault(0) else 0
+        } finally {
+            recycle(root)
+        }
+    }
+
+    private fun <T> withActiveRoot(action: (AccessibilityNodeInfo) -> T): T? {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return null
         return try {
             action(root)
         } catch (e: Exception) {
-            false
+            null
         } finally {
             recycle(root)
         }
@@ -937,6 +1080,11 @@ class GuardService : AccessibilityService() {
         /** ל-block(): כבר טיפלנו בעצמנו (למשל לחצנו על טאב) — רק ההודעה, בלי פעולה גלובלית. */
         private const val NO_GLOBAL_ACTION = 0
         private const val MAX_NODES = 300
+        private const val WA_STEP_MS = 250L           // הדפדפן הפנימי: בין ניסיון לניסיון
+        private const val WA_MENU_TRIES = 12          // עד ~3 שניות עד שהסרגל שלו עולה
+        private const val WA_ITEM_TRIES = 8           // עד ~2 שניות עד שהתפריט נפתח
+        private const val WA_FLOW_MAX_MS = 10_000L    // העברה שנתקעה — לא חוסמת את הבאה
+        private const val WA_RETURN_MS = 10 * 60_000L // חזרה מ-Chrome לדפדפן הפנימי — עד 10 דקות אחרי ההעברה
         /** אפליקציות ההגדרות (כולל הגדרות הנגישות של סמסונג). */
         private val SETTINGS_PACKAGES = setOf("com.android.settings", "com.samsung.accessibility",
             "com.samsung.android.accessibility", "com.coloros.accessibility")

@@ -140,7 +140,9 @@ _HB_SECTIONS = {
             # רשת כשרה (נטפרי): ה-VPN מושהה בכוונה כי הספק מסנן. unknown = סינון לא מוכר שזוהה (לאבחון)
             "kosher": bool, "kosher_provider": str, "kosher_unknown": str},
     "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool,
-                      "self_heal": bool, "restored": int, "errors": int, "error": str},
+                      "self_heal": bool, "restored": int, "errors": int, "error": str,
+                      # הדפדפן הפנימי של וואטסאפ: איך הסתיימה ההעברה האחרונה ל-Chrome (ok:menu / fail:no-item — תוויות)
+                      "wa_browser": str},
     "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
     "dpc": {"applied": list, "failed": list, "always_on_vpn": str, "lockdown": bool, "frp": bool},
     "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int,
