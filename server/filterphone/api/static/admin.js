@@ -610,7 +610,9 @@ function requestCard(r) {
     await attempt(() => api(`/v1/admin/requests/${r.id}/approve`, { method: "POST", body: {
       level, options: [...selected], custom_hosts: lines(custom.value), payment: payment.value,
       paid_until: fromDateInput(until.value), admin_note: note.value,
-    } }), r.kind === "join" ? "אושר — החיבור נפתח. הטלפון יתחבר בתוך דקה." : "השינוי אושר והוחל");
+    } }), r.kind !== "join" ? "השינוי אושר והוחל"
+      : r.platform === "windows" ? "אושר — החיבור נפתח. המחשב יתחבר ויפעיל את החסימה בתוך דקה."
+      : "אושר — החיבור נפתח. הטלפון יתחבר בתוך דקה.");
     render();
   };
   const reject = async () => {
@@ -624,6 +626,7 @@ function requestCard(r) {
     el("div", { class: "grow stack tight" },
       el("div", { class: "row gap" }, el("h2", {}, r.customer_name || r.device_name || "—"),
         chip(r.kind === "join" ? "בקשת הצטרפות" : "בקשת שינוי", r.kind === "join" ? "accent" : "violet"),
+        r.platform === "windows" ? chip("מחשב Windows", "accent") : null,
         r.status !== "pending" ? chip({ approved: "אושרה", rejected: "נדחתה", cancelled: "בוטלה" }[r.status] || r.status,
           r.status === "approved" ? "ok" : "bad") : null,
         r.customer_devices > 1 ? chip(`לקוח קיים · ${r.customer_devices} מכשירים`, "warn") : null),
@@ -649,7 +652,7 @@ function requestCard(r) {
       el("p", { class: "muted small" }, "רק אתה קובע את הרמה והחסימות. מסומן מראש מה שהלקוח ביקש — אפשר לשנות לפני האישור."),
       levelPicker(level, (lv) => { level = lv; }),
       el("details", { class: "more" }, el("summary", {}, `חסימות: ${selected.size} מסומנות — לחצו לעריכה`),
-        policyEditor(selected, { requested })),
+        policyEditor(selected, { requested, filter: r.platform === "windows" ? pcApplies : null })),
       el("label", {}, "אתרים נוספים לחסימה (שורה לכל אתר)", custom),
       el("div", { class: "grid three" },
         el("label", {}, "תשלום", payment),
@@ -659,7 +662,8 @@ function requestCard(r) {
         el("button", { class: "danger", onclick: reject }, "דחייה"),
         el("button", { class: "ok", onclick: approve }, r.kind === "join" ? "אישור ופתיחת החיבור" : "אישור השינוי")));
   } else if (r.device_id) {
-    parts.push(el("div", { class: "row end" }, el("a", { href: `#/devices/${r.device_id}` }, "לדף המכשיר ›")));
+    parts.push(el("div", { class: "row end" }, el("a", { href: r.platform === "windows" ? `#/computers/${r.device_id}`
+      : `#/devices/${r.device_id}` }, r.platform === "windows" ? "לדף המחשב ›" : "לדף המכשיר ›")));
   }
   return el("section", { class: "card req" }, parts);
 }

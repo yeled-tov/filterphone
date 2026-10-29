@@ -162,3 +162,36 @@ def test_removal_code_only_for_windows(env):
     j = client.post("/v1/enroll", json={"code": code, "public_key": wg_key(9), "name": "טלפון",
                                         "platform": "android", "app_version": "2.0.0"}).json()
     assert client.post(f"/v1/admin/devices/{j['device_id']}/removal-code", headers=h).status_code == 409
+
+
+# ------------------------------------------------------------------ הרשמה ממחשב
+
+def test_catalog_marks_what_applies_to_a_pc(env):
+    _, client = env
+    cat = client.get("/v1/catalog").json()
+    by_id = {o["id"]: o for o in cat["options"]}
+    assert all(isinstance(o["pc"], bool) for o in cat["options"])
+    assert by_id["instagram"]["pc"]                    # נחסם ברשת — חל גם במחשב
+    assert not by_id["whatsapp_status"]["pc"]          # מסך בתוך וואטסאפ בטלפון — לא במחשב
+    assert "hosts" not in by_id["instagram"]           # פרטי האכיפה עדיין רק למנהל
+
+
+def test_a_pc_registers_waits_for_approval_and_then_gets_its_vpn(env):
+    svc, client = env
+    h = admin_headers(client)
+    r = client.post("/v1/register", json={"name": "משה כהן", "phone": "050-1234567", "level": 1,
+                                         "options": ["instagram"], "public_key": wg_key(30), "device_name": "מחשב הבית",
+                                         "platform": "windows", "app_version": "0.9.0", "note": "גם יוטיוב"})
+    assert r.status_code == 201, r.text
+    j = r.json()
+    dh = {"Authorization": f"Bearer {j['token']}"}
+    assert client.get("/v1/device", headers=dh).json()["status"] == "pending"
+    assert client.get("/v1/device/vpn", headers=dh).status_code in (403, 409)
+    req = next(x for x in client.get("/v1/admin/requests", headers=h).json() if x["device_id"] == j["device_id"])
+    assert req["platform"] == "windows" and req["kind"] == "join"
+    ok = client.post(f"/v1/admin/requests/{req['id']}/approve", headers=h,
+                     json={"level": 1, "options": ["instagram"], "payment": "paid"})
+    assert ok.status_code == 200, ok.text
+    assert client.get("/v1/device", headers=dh).json()["status"] == "active"
+    vpn = client.get("/v1/device/vpn", headers=dh).json()
+    assert vpn["address"].startswith("10.8.0.") and "ca" in vpn

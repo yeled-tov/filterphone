@@ -82,10 +82,15 @@ class Option:
             m.append("proxy")
         return m
 
+    @property
+    def applies_to_pc(self) -> bool:
+        """חל גם על מחשב: נחסם בשרת (DNS / פרוקסי) ולא רק במגן שבטלפון."""
+        return bool(self.hosts or self.paths or self.images or self.video)
+
     def public(self) -> dict:
-        """מה שהאפליקציה מקבלת לטופס ההרשמה (בלי פרטי אכיפה)."""
+        """מה שהאפליקציה מקבלת לטופס ההרשמה (בלי פרטי אכיפה). pc — מוצג גם בטופס ההרשמה במחשב."""
         return {"id": self.id, "category": self.category, "title": self.title, "desc": self.desc,
-                "popular": self.popular, "warn": self.warn}
+                "popular": self.popular, "warn": self.warn, "pc": self.applies_to_pc}
 
     def admin(self) -> dict:
         return {**self.public(), "hosts": list(self.hosts), "apps": list(self.apps),
