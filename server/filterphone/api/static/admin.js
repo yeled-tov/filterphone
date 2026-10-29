@@ -1016,7 +1016,7 @@ async function viewComputer(id, query = new URLSearchParams(), loaded = null) {
           render();
         } }, d.status === "active" ? "השבתה (סגירת הגלישה)" : "הפעלה") : null,
         el("button", { class: "danger small", onclick: async () => {
-          if (!await confirmDialog(`למחוק את "${d.name}"?`, "המחשב יתנתק ויצטרך קוד הפעלה חדש. הגלישה בו תישאר חסומה עד שיופעל מחדש או שהתוכנה תוסר בקוד הסרה. לא ניתן לבטל.", "מחיקה", true)) return;
+          if (!await confirmDialog(`למחוק את "${d.name}"?`, "המחשב יתנתק ויצטרך קוד הפעלה חדש. אחרי המחיקה אפשר יהיה להסיר ממנו את FilterPhone בלי קוד הסרה. לא ניתן לבטל.", "מחיקה", true)) return;
           await attempt(() => api(`/v1/admin/devices/${id}`, { method: "DELETE" }), "נמחק");
           location.hash = "#/computers";
         } }, "מחיקה"))));
