@@ -17,6 +17,8 @@
 #                      חיבור VPN (WireGuard), ושגיאות אחרונות של השרת
 #   images             אבחון סינון התמונות (לקריאה בלבד, בלי פרטי לקוחות): מדדי המנוע והפרוקסי,
 #                      מונים לכל מכשיר, סיבות חסימה, ומדידה חיה — מקומי מול שרת ה-GPU (Modal)
+#   web                אבחון רמות הגלישה (לקריאה בלבד, בלי פרטי לקוחות): רשימת האתרים למבוגרים,
+#                      פסקי דין, בקשות 'שליחה לבדיקה', מכשירים לפי רמה, ובדיקה חיה של הבוט
 # =====================================================================
 set -euo pipefail
 
@@ -376,6 +378,13 @@ PY
     sudo -n journalctl -u caddy --since "-3h" --no-pager -o cat 2>&1 | grep -iE '"level":"error"|error' | tail -15 || true
     echo "== fp-api — אזהרות ושגיאות (3 שעות)"
     sudo -n journalctl -u fp-api --since "-3h" --no-pager -o cat 2>&1 | grep -E 'WARNING|ERROR|Traceback' | tail -25 || true
+    ;;
+web)
+    # עם הגדרות השרת (FP_DATA_DIR / FP_REDIS_URL וכו') — כמו השירותים עצמם; כלום מהן לא מודפס
+    sudo -n bash -c 'set -a; [ -f /etc/filterphone/filterphone.env ] && . /etc/filterphone/filterphone.env; set +a
+        exec "$0" "$1"' "$A/venv/bin/python" "$A/src/deploy/diag_web.py" 2>&1 || true
+    echo "== fp-api / fp-proxy — רמות גלישה (3 שעות)"
+    sudo -n journalctl -u fp-api -u fp-proxy --since "-3h" --no-pager -o cat 2>&1 | grep -iE 'web|adult|site check|serp' | tail -30 || true
     ;;
 images)
     sudo -n "$A/venv/bin/python" "$A/src/deploy/diag_images.py" 2>&1 || true
