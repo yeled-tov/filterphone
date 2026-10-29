@@ -8,7 +8,8 @@
   * פסקי הדין שבמסד וב-Redis (לפי סוג), התור של הבוט, בקשות הבדיקה (לפי מצב).
   * מכשירים לפי רמת גלישה (מספרים בלבד).
   * מדדי הפרוקסי: ניווטים (allow/check/block), חיפושים שנחסמו, תוצאות שהוסתרו.
-  * בדיקה חיה של הבוט על כמה אתרים ציבוריים (בלי לשמור כלום) — שההורדה והמנוע עובדים מהשרת.
+  * מה הלקוח רואה בכל רמה: אתרים מהרשימות, ואתרים שלא ברשימות דרך בדיקה חיה של הבוט
+    (בלי לשמור כלום) — שההורדה והמנוע עובדים מהשרת, ושההחלטה יוצאת נכונה.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ import redis
 from filterphone.api import webcheck
 from filterphone.proxy.web import CHECK_KEY, VERDICT_KEY
 from filterphone.settings import get_settings
-from filterphone.websites import GROUPS, WEB_LEVELS
+from filterphone.websites import GROUPS, LEVEL_ORDER, WEB_LEVELS, WebPolicy, group_of, resolve_groups
 
 cfg = get_settings()
 r = redis.Redis.from_url(cfg.redis_url, decode_responses=True, socket_timeout=3)
@@ -74,8 +75,6 @@ for k in sorted(m):
 if not any(x in k for k in m for x in ("web_pages", "search_total", "serp")):
     print("  (עוד אין — מופיעים אחרי הניווט / החיפוש הראשון)")
 
-section("בדיקה חיה של הבוט (לא נשמר)")
-
 
 class _Svc:
     def __init__(self):
@@ -85,12 +84,37 @@ class _Svc:
 
 desk = webcheck.WebDesk(_Svc())
 desk.reload_adult_list()
-for host in ("hebcal.com", "ilovepdf.com", "kikar.co.il", "ynet.co.il", "example.com"):
+POLICIES = {lv: WebPolicy(level=lv, groups=frozenset(resolve_groups(lv))) for lv in LEVEL_ORDER if lv}
+SHORT = {"allow": "פתוח", "block": "חסום", "check": "בדיקה"}
+
+
+def row(host: str, verdict: str | None, source: str, took: float, keep: dict) -> None:
+    """מה הלקוח רואה בכל רמה — אותה החלטה שהפרוקסי מקבל (WebPolicy.decide)."""
+    adult = desk.is_adult(host)
+    cells = [f"{WEB_LEVELS[lv]['title']}: {SHORT[POLICIES[lv].decide(host, 'adult' if adult else verdict)]}"
+             for lv in POLICIES]
+    cells.append(f"{WEB_LEVELS['']['title']}: {'חסום' if adult else 'פתוח'}")
+    extra = f"  {json.dumps(keep, ensure_ascii=False)}" if keep else ""
+    print(f"  {host:18} {source:22} {took:4.1f}s  " + " · ".join(cells) + extra)
+
+
+section("מה הלקוח רואה — אתרים מהרשימות (בלי בוט)")
+for host in ("hebcal.com", "ilovepdf.com", "ksp.co.il", "kikar.co.il", "ynet.co.il", "aliexpress.com",
+             "facebook.com"):
+    g = group_of(host)
+    known = None if g else desk._known_verdict(host)
+    row(host, known, f"רשימה: {g}" if g else f"פסק דין: {known or '—'}", 0.0, {})
+
+section("מה הלקוח רואה — אתרים שלא ברשימות (בדיקה חיה של הבוט, לא נשמר)")
+for host in ("example.com", "python.org", "w3.org", "gnu.org", "debian.org"):
+    if group_of(host):
+        print(f"  {host:18} ברשימה {group_of(host)} — מדלגים")
+        continue
     t0 = time.monotonic()
     try:
         verdict, detail = desk.analyze(host)
     except Exception as e:      # האבחון לא נופל בגלל אתר אחד
-        verdict, detail = "exception", {"error": f"{type(e).__name__}: {e}"[:120]}
-    keep = {k: detail[k] for k in ("title", "images_checked", "women_images", "news", "cart_words", "error",
-                                   "source", "redirect") if k in detail}
-    print(f"  {host:16} → {verdict:16} {time.monotonic() - t0:5.1f}s  {json.dumps(keep, ensure_ascii=False)}")
+        verdict, detail = "error", {"error": f"{type(e).__name__}: {e}"[:120]}
+    keep = {k: detail[k] for k in ("images_checked", "women_images", "news", "cart_words", "error", "source",
+                                   "redirect") if k in detail}
+    row(host, verdict, f"בוט: {verdict}", time.monotonic() - t0, keep)
