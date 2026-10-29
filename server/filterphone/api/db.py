@@ -307,7 +307,34 @@ _V14 = """
 ALTER TABLE customers ADD COLUMN parent_code_sealed INTEGER NOT NULL DEFAULT 0;
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14]
+_V15 = """
+-- רמות גלישה: פסק דין לכל אתר (מהבוט או מהמנהל) ובקשות "שליחה לבדיקה" מדף החסימה
+CREATE TABLE web_sites (
+    host       TEXT PRIMARY KEY,                -- בלי www; חל גם על תת-האתרים
+    verdict    TEXT NOT NULL,                   -- websites.VERDICTS
+    source     TEXT NOT NULL DEFAULT 'auto',    -- auto (הבוט) / human (המנהל)
+    detail     TEXT NOT NULL DEFAULT '{}',      -- JSON: מה הבוט מצא (תמונות, מילים, סימנים)
+    checked_at INTEGER NOT NULL,
+    updated_by TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX web_sites_verdict ON web_sites(verdict, checked_at);
+CREATE TABLE web_reviews (
+    id           INTEGER PRIMARY KEY,
+    device_id    INTEGER REFERENCES devices(id) ON DELETE CASCADE,
+    host         TEXT NOT NULL,
+    url          TEXT NOT NULL DEFAULT '',
+    note         TEXT NOT NULL DEFAULT '',
+    status       TEXT NOT NULL DEFAULT 'pending',   -- pending / approved / rejected
+    auto_verdict TEXT NOT NULL DEFAULT '',          -- מה הבוט קבע כשהבקשה הגיעה
+    decision     TEXT NOT NULL DEFAULT '',          -- global:<verdict> / device / auto / reject
+    created_at   INTEGER NOT NULL,
+    decided_at   INTEGER,
+    decided_by   TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX web_reviews_status ON web_reviews(status, created_at);
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15]
 VERSION = len(MIGRATIONS)
 
 

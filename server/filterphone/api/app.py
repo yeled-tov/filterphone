@@ -50,6 +50,7 @@ from .security import RateLimiter
 from .service import KOSHER_PROVIDERS, LEVEL_NAMES, ApiError, Services, store_seed
 from .support import SupportDesk
 from .wabot import WaBot
+from .webcheck import WebDesk
 from .wg import WireGuard, WireGuardError
 
 log = logging.getLogger("filterphone.api")
@@ -139,10 +140,51 @@ async def _keep_in_sync(svc: Services) -> None:
                 log.error("adguard sync failed: %s", e)
 
 
+async def _web_worker(desk: WebDesk) -> None:
+    """רמות הגלישה: הבוט בודק אתרים מהתור, בקשות "שליחה לבדיקה" נקלטות, ורשימת האתרים למבוגרים
+    מתעדכנת פעם ביום. כל תקלה — נרשמת, והלולאה ממשיכה."""
+    try:
+        n = await asyncio.to_thread(desk.sync_redis)
+        log.info("web verdicts synced to redis: %d", n)
+    except Exception as e:
+        log.warning("web verdicts sync failed: %s", e)
+    loop = asyncio.get_running_loop()
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max(1, desk.cfg.web_check_workers), thread_name_prefix="fp-webcheck")
+    last_list = 0.0
+    try:
+        while True:
+            try:
+                if time.monotonic() - last_list >= 3600:
+                    last_list = time.monotonic()
+                    loop.run_in_executor(pool, _refresh_list, desk)
+                host = await asyncio.to_thread(desk.pop_check, 1.0)
+                if host:
+                    loop.run_in_executor(pool, desk.check_safe, host)
+                await asyncio.to_thread(desk.ingest_reviews)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.warning("web worker: %s", e)
+                await asyncio.sleep(2)
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def _refresh_list(desk: WebDesk) -> None:
+    try:
+        desk.refresh_adult_list()
+    except Exception as e:
+        log.warning("adult list refresh failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(_keep_in_sync(app.state.svc))
+    web_task = asyncio.create_task(_web_worker(app.state.web)) if app.state.web_worker else None
     yield
+    if web_task is not None:
+        web_task.cancel()
     task.cancel()
     app.state.svc.dirty.set()           # מעיר את החוט שמחכה, כדי שהכיבוי לא יתעכב
     app.state.svc.pool.close()
@@ -163,6 +205,8 @@ def create_app(svc: Services | None = None) -> FastAPI:
     )
     app.state.svc = svc or build_services()
     app.state.support = SupportDesk(app.state.svc)
+    app.state.web = WebDesk(app.state.svc)
+    app.state.web_worker = svc is None          # בבדיקות (svc מוזרק) — בלי לולאת רקע
     app.state.playinfo = PlayInfo(app.state.svc.redis)
     app.state.playcatalog = PlayCatalog(app.state.svc.redis)
     cfg = app.state.svc.cfg
@@ -258,7 +302,7 @@ ParentCode = Annotated[str | None, Header(alias="X-Parent-Code")]
 # שדות במכשיר שהם "חסימות" — שינוי שלהם דורש את קוד ההורים (שם / תווית — לא)
 _GATED_DEVICE_KEYS = {"level", "status", "options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules",
                       "app_images", "dpc", "keywords", "vpn_bypass", "track", "allow_google_accounts",
-                      "safe_browser"}
+                      "safe_browser", "web_level", "web_extras", "web_without"}
 DeskDep = Annotated[SupportDesk, Depends(support_dep)]
 BotDep = Annotated[BotDesk, Depends(bot_dep)]
 DeviceRow = Annotated[Any, Depends(device_dep)]
@@ -568,6 +612,22 @@ class DevicePatch(BaseModel):
     track: str | None = Field(default=None, max_length=20)     # מסלול סינון (catalog.TRACKS)
     allow_google_accounts: bool | None = None                 # מסך "הוספת חשבון Google" פתוח קבוע
     safe_browser: str | None = Field(default=None, max_length=12)  # הסייר המוגן: "" / essential / off
+    web_level: str | None = Field(default=None, max_length=12)     # רמת גלישה (websites.WEB_LEVELS)
+    web_extras: list[str] | None = Field(default=None, max_length=30)
+    web_without: list[str] | None = Field(default=None, max_length=30)
+
+
+class WebVerdictIn(BaseModel):
+    verdict: str = Field(min_length=1, max_length=40)
+
+
+class WebCheckIn(BaseModel):
+    host: str = Field(min_length=1, max_length=255)
+
+
+class WebReviewIn(BaseModel):
+    action: str = Field(min_length=1, max_length=20)      # global / device / reject
+    verdict: str = Field(default="", max_length=40)
 
 
 class PauseIn(BaseModel):
@@ -853,8 +913,9 @@ def _routes(app: FastAPI) -> None:
         svc.admin_logout(_bearer(authorization))
 
     @app.get("/v1/admin/overview")
-    def overview(svc: SvcDep, desk: DeskDep, admin: AdminRow):
-        return {**svc.overview(), "admin": admin["username"], "support_unread": desk.admin_unread()}
+    def overview(request: Request, svc: SvcDep, desk: DeskDep, admin: AdminRow):
+        return {**svc.overview(), "admin": admin["username"], "support_unread": desk.admin_unread(),
+                "web_pending": request.app.state.web.pending_count()}
 
     # --- תמיכה ---
 
@@ -1142,6 +1203,47 @@ def _routes(app: FastAPI) -> None:
     @app.delete("/v1/admin/profiles/{profile_id}", status_code=204)
     def delete_profile(profile_id: int, svc: SvcDep, admin: AdminRow):
         svc.delete_profile(profile_id, admin["username"])
+
+    # --- ניהול: רמות גלישה — אתרים שנבדקו ובקשות "שליחה לבדיקה" ---
+
+    @app.get("/v1/admin/web/sites")
+    def web_sites(request: Request, _: AdminRow, q: str = "", verdict: str = "", source: str = "", limit: int = 200):
+        desk: WebDesk = request.app.state.web
+        return {"sites": desk.sites(q, verdict, source, limit), "pending": desk.pending_count()}
+
+    @app.put("/v1/admin/web/sites/{host}")
+    def web_site_set(host: str, body: WebVerdictIn, request: Request, admin: AdminRow):
+        try:
+            return request.app.state.web.set_verdict(host, body.verdict, "human", admin["username"])
+        except ValueError as e:
+            raise ApiError(400, str(e)) from e
+
+    @app.delete("/v1/admin/web/sites/{host}", status_code=204)
+    def web_site_delete(host: str, request: Request, admin: AdminRow):
+        request.app.state.web.delete_verdict(host, admin["username"])
+
+    @app.post("/v1/admin/web/check")
+    def web_check_now(body: WebCheckIn, request: Request, _: AdminRow):
+        """בדיקה מיידית של אתר על ידי הבוט (גם אם כבר נבדק). החלטה של אדם לא נדרסת."""
+        desk: WebDesk = request.app.state.web
+        if not body.host.strip():
+            raise ApiError(400, "חסר אתר")
+        return desk.check(body.host, force=True)
+
+    @app.get("/v1/admin/web/reviews")
+    def web_reviews(request: Request, _: AdminRow, status: str = "pending"):
+        desk: WebDesk = request.app.state.web
+        return {"reviews": desk.reviews(status if status in ("pending", "approved", "rejected", "") else "pending"),
+                "pending": desk.pending_count()}
+
+    @app.post("/v1/admin/web/reviews/{review_id}")
+    def web_review_decide(review_id: int, body: WebReviewIn, request: Request, admin: AdminRow):
+        try:
+            return request.app.state.web.decide_review(review_id, body.action, body.verdict, admin["username"])
+        except LookupError as e:
+            raise ApiError(404, str(e)) from e
+        except ValueError as e:
+            raise ApiError(400, str(e)) from e
 
     # --- ניהול: קטלוג אפליקציות מאושרות ---
 

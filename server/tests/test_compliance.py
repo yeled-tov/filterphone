@@ -348,7 +348,7 @@ def test_device_log_is_removed_with_device(env):
     assert client.delete(f"/v1/admin/devices/{did}", headers=h).status_code == 204
     with svc.db() as c:
         assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
-    assert db.VERSION == 14
+    assert db.VERSION == 15
 
 
 def test_rekey_keeps_address_and_policy_and_swaps_wireguard_peer(env):

@@ -12,6 +12,7 @@ from PIL import Image
 
 from filterphone.proxy import addon as A
 from filterphone.proxy.policy import DevicePolicy, compile_hosts
+from filterphone.proxy.web import WebState
 
 IP = "10.8.0.20"
 CHROME_IMG_ACCEPT = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
@@ -43,6 +44,7 @@ class FakeEngine:
 def fp():
     a = A.FilterPhone()
     a.redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    a.web = WebState(a.redis)
     a.engine = FakeEngine()
     a.policies.set(IP, DevicePolicy(level=2))
     return a
@@ -238,7 +240,7 @@ async def test_inline_images_in_google_html_are_filtered(fp):
     html = b'<html><body><g-img><img id="dimg_1" src="data:image/jpeg;base64,' + b64 + b'"></g-img></body></html>'
     f = mkflow("https://www.google.com/search?q=x", {"sec-fetch-dest": "document"}, "text/html; charset=UTF-8", html)
     fp.responseheaders(f)
-    assert f.metadata["fp_kind"] == "inline"
+    assert f.metadata["fp_kind"] == "serp"              # דף תוצאות: סינון תוצאות + תמונות מוטמעות
     await fp.response(f)
     assert b64 not in f.response.content
     assert base64.b64encode(b"\x89PNGsized") in f.response.content

@@ -396,6 +396,7 @@ const ROUTES = {
   devices: ["מכשירים", viewDevices],
   customers: ["לקוחות", viewCustomers],
   profiles: ["פרופילים מוכנים", viewProfiles],
+  web: ["אתרים ורמות גלישה", viewWeb],
   apps: ["חנות אפליקציות", viewApps],
   events: ["חסימות אחרונות", viewEvents],
   test: ["בדיקת תמונה", viewTest],
@@ -442,6 +443,8 @@ async function updateBadge() {
     const sb = $("#badge-support");
     sb.hidden = !o.support_unread;
     sb.textContent = o.support_unread || "";
+    const wb = $("#badge-web");
+    if (wb) { wb.hidden = !o.web_pending; wb.textContent = o.web_pending || ""; }
     $("#whoami").textContent = o.admin;
   } catch (_) { /* לא קריטי */ }
 }
@@ -738,6 +741,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
 
   // --- מסלול סינון
   const trackCardEl = trackCard(d, patch);
+  const webCardEl = webLevelCard(d, patch);
   const safeBrowserCardEl = safeBrowserCard(d, patch);
 
   // --- רמה
@@ -830,7 +834,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
   // --- טאבים: כל נושא במקום אחד, במקום ערימה ארוכה של כרטיסים
   const tabs = [
     ["overview", "סקירה", [complianceCardEl, el("div", { class: "grid two" }, customerCard, logCard), maintenanceCardEl, tempCardEl]],
-    ["blocks", "חסימות", [trackCardEl, levelCard, policyCard, customCard, keywordCardEl, safeBrowserCardEl]],
+    ["blocks", "חסימות", [trackCardEl, webCardEl, levelCard, policyCard, customCard, keywordCardEl, safeBrowserCardEl]],
     ["apps", "אפליקציות", [appsCard, appImagesCard, bypassCardEl, learnedCard]],
     ["dpc", "מנהל מכשיר", [dpcCardEl]],
     ["activity", "פעילות", [el("div", { class: "grid two" }, statsCard, historyCard || card("היסטוריית בקשות", null, empty("אין בקשות."))), eventsCard]],
@@ -924,6 +928,50 @@ function trackCard(d, patch) {
     },
   }, el("strong", {}, t.title), el("span", { class: "muted small" }, t.desc))));
   return card("מסלול סינון", "בסיס מוכן למכשיר. המסלול רק מוסיף חסימות מעל מה שנבחר למטה — הוא לא פותח שום דבר.", box);
+}
+
+/** רמת גלישה בכרום: חיוני / נקי / נקי + קניות / פתוח — וקבוצות אתרים שאפשר להוסיף או להוריד. */
+function webLevelCard(d, patch) {
+  const w = catalog.web;
+  if (!w) return null;
+  const s = d.settings;
+  const cur = s.web_level || "";
+  const extras = new Set(s.web_extras || []);
+  const without = new Set(s.web_without || []);
+  const box = el("div", { class: "levels" }, w.levels.map((lv) => el("button", {
+    type: "button", class: `level-card${lv.id === cur ? " selected" : ""}`, role: "radio", "aria-checked": String(lv.id === cur),
+    onclick: async () => {
+      if (lv.id === cur) return;
+      if (lv.id === "essential" && !await confirmDialog("לעבור ל'חיוני בלבד'?", lv.desc, "מעבר")) return;
+      await patch({ web_level: lv.id }, `רמת הגלישה: ${lv.title}`);
+      render();
+    },
+  }, el("strong", {}, lv.title), el("span", { class: "muted small" }, lv.short))));
+  const parts = [box];
+  if (cur) {
+    const groups = w.groups.filter((g) => g.extra || g.infra);
+    const list = el("div", { class: "stack" }, groups.map((g) => {
+      const byLevel = g.levels.includes(cur);
+      const on = g.infra || (byLevel ? !without.has(g.id) : extras.has(g.id));
+      const box = el("input", { type: "checkbox", checked: on, disabled: g.infra });
+      box.addEventListener("change", async () => {
+        if (byLevel) { if (box.checked) without.delete(g.id); else without.add(g.id); }
+        else if (box.checked) extras.add(g.id); else extras.delete(g.id);
+        try {
+          await patch({ web_extras: [...extras], web_without: [...without] }, `${g.title}: ${box.checked ? "פתוח" : "סגור"}`);
+        } catch (_) { box.checked = !box.checked; }
+      });
+      return el("div", { class: "opt" }, el("label", { class: "switch" }, box, el("span")),
+        el("div", { class: "txt" },
+          el("div", { class: "title" }, g.title, g.count ? chip(`${g.count} אתרים`) : null,
+            g.infra ? chip("תמיד פתוח", "ok") : byLevel ? null : chip("תוספת", "violet")),
+          el("div", { class: "desc" }, g.desc)));
+    }));
+    parts.push(el("h3", {}, "מה פתוח ברמה הזו"), list,
+      el("p", { class: "muted small" }, "אתר בודד ללקוח הזה: 'אתרים מותרים' בכרטיס האתרים. אתרים שנבדקו ובקשות הבדיקה — ",
+        el("a", { href: "#/web" }, "בעמוד האתרים ›")));
+  }
+  return card("רמת גלישה בכרום", "כמה מהאינטרנט פתוח. מעל זה — סינון התמונות לפי הרמה. אתר שלא ברמה לא נפתח וגם לא מופיע בחיפוש.", ...parts);
 }
 
 /** הסייר המוגן באפליקציה: אוטומטי (לפי Chrome) / אתרים חיוניים בלבד / כבוי. */
@@ -1396,6 +1444,150 @@ async function viewSupportThread(id) {
       el("div", {}, el("b", {}, t.device.customer || t.device.name || `מכשיר #${id}`),
         el("div", { class: "muted small" }, t.device.name ? `${t.device.name} · #${id}` : `#${id}`))),
     box, el("div", { class: "composer" }, text, send));
+}
+
+const WEB_TONE = { auto_clean: "ok", clean: "ok", torah: "ok", tools: "ok", shopping_clean: "ok", essential: "ok",
+  payments: "ok", accounts: "ok", search: "ok", images: "warn", news: "warn", shopping: "warn", shopping_general: "warn",
+  news_haredi: "warn", news_general: "warn", sport: "warn", error: "", adult: "bad", social: "bad", video: "bad",
+  gambling: "bad", dating: "bad", games: "bad", ai: "bad", proxy: "bad", blocked: "bad" };
+
+function verdictChip(v) {
+  const t = catalog?.web?.verdicts.find((x) => x.id === v)?.title || v || "—";
+  return chip(t, WEB_TONE[v] || "");
+}
+
+function verdictSelect(value = "auto_clean") {
+  return el("select", {}, (catalog.web.verdicts || []).map((v) => el("option", { value: v.id, selected: v.id === value }, v.title)));
+}
+
+function botDetails(site) {
+  const x = site?.detail || {};
+  if (!site?.verdict) return el("span", { class: "muted small" }, "עוד לא נבדק");
+  const bits = [];
+  if (x.source === "list") bits.push("לפי הרשימות");
+  if (x.error) bits.push(`שגיאה: ${x.error}`);
+  if (x.redirect) bits.push(`מפנה ל-${x.redirect}`);
+  if (x.images_checked !== undefined) bits.push(`${x.women_images || 0} תמונות של נשים מתוך ${x.images_checked} שנבדקו`);
+  if (x.news) bits.push("סימני חדשות");
+  if (x.cart_words) bits.push("חנות (סל קניות)");
+  if (x.videos) bits.push(`${x.videos} סרטונים`);
+  if (x.explicit_hits) bits.push(`${x.explicit_hits} מילים בעייתיות`);
+  if (x.thin) bits.push("⚠ כמעט אין טקסט בדף — כדאי לבדוק בעצמך");
+  return el("div", { class: "muted small" }, x.title ? `"${x.title}" · ` : "", bits.join(" · ") || "—",
+    ` · ${site.source === "human" ? `נקבע ע"י ${site.updated_by || "מנהל"}` : "הבוט"} ${ago(site.checked_at)}`);
+}
+
+async function viewWeb(arg, query) {
+  catalog = catalog || await api("/v1/admin/catalog");
+  const tab = arg || "reviews";
+  const tabs = el("div", { class: "row gap" }, [["reviews", "בקשות בדיקה"], ["sites", "אתרים שנבדקו"], ["levels", "הרמות והקבוצות"]]
+    .map(([k, t]) => el("a", { href: `#/web/${k}` }, el("button", { class: k === tab ? "primary small" : "ghost small" }, t))));
+  if (tab === "sites") return [tabs, ...await webSitesView(query)];
+  if (tab === "levels") return [tabs, ...webLevelsView()];
+  return [tabs, ...await webReviewsView(query)];
+}
+
+async function webReviewsView(query) {
+  const status = query.get("status") ?? "pending";
+  const { reviews } = await api(`/v1/admin/web/reviews?status=${encodeURIComponent(status)}`);
+  const filters = el("div", { class: "row gap" }, [["pending", "ממתינות"], ["approved", "אושרו"], ["rejected", "נדחו"], ["", "הכול"]]
+    .map(([k, t]) => el("a", { href: `#/web/reviews?status=${k}` }, el("button", { class: k === status ? "primary small" : "ghost small" }, t))));
+  const rows = reviews.map((r) => {
+    const sel = verdictSelect(r.site?.verdict && r.site.verdict !== "error" ? r.site.verdict : "auto_clean");
+    const actions = r.status === "pending" ? el("div", { class: "row gap wrap" },
+      sel,
+      el("button", { class: "primary small", onclick: async () => {
+        await attempt(() => api(`/v1/admin/web/reviews/${r.id}`, { method: "POST", body: { action: "global", verdict: sel.value } }),
+          "נשמר לכל הלקוחות");
+        render();
+      } }, "קביעה לכולם"),
+      el("button", { class: "ghost small", onclick: async () => {
+        await attempt(() => api(`/v1/admin/web/reviews/${r.id}`, { method: "POST", body: { action: "device" } }), "נפתח למכשיר הזה");
+        render();
+      } }, "לפתוח רק למכשיר הזה"),
+      el("button", { class: "danger small", onclick: async () => {
+        await attempt(() => api(`/v1/admin/web/reviews/${r.id}`, { method: "POST", body: { action: "reject" } }), "נדחה");
+        render();
+      } }, "דחייה"))
+      : el("span", { class: "muted small" }, `${r.status === "approved" ? "אושר" : "נדחה"} · ${r.decision === "auto" ? "אוטומטית (הבוט)" : r.decided_by || ""} ${ago(r.decided_at)}`);
+    return el("div", { class: "card" },
+      el("div", { class: "row between wrap" },
+        el("div", {}, el("b", { dir: "ltr" }, r.host), " ", verdictChip(r.site?.verdict || r.auto_verdict),
+          el("div", { class: "muted small" }, r.device_id ? el("a", { href: `#/devices/${r.device_id}` }, `${r.customer || ""} · ${r.device_name || ""}`) : "—",
+            ` · ${ago(r.created_at)}`)),
+        r.url ? el("a", { href: r.url, target: "_blank", rel: "noopener noreferrer", class: "small", dir: "ltr" }, "הקישור ↗") : null),
+      r.note ? el("p", {}, `"${r.note}"`) : null,
+      botDetails(r.site), actions);
+  });
+  return [card("בקשות 'שליחה לבדיקה'", "לקוח שנכנס לאתר שלא ברמת הגלישה שלו יכול לשלוח אותו לבדיקה. הבוט בודק מיד — ואם האתר מתאים לרמה של הלקוח, הוא נפתח לבד. כאן מה שנשאר להחלטה שלך.",
+    filters), ...(rows.length ? rows : [el("p", { class: "muted" }, "אין בקשות.")])];
+}
+
+async function webSitesView(query) {
+  const q = query.get("q") || "";
+  const verdict = query.get("verdict") || "";
+  const { sites } = await api(`/v1/admin/web/sites?q=${encodeURIComponent(q)}&verdict=${encodeURIComponent(verdict)}`);
+  const qIn = el("input", { value: q, placeholder: "חיפוש אתר", dir: "ltr" });
+  const vSel = el("select", {}, el("option", { value: "" }, "כל הסוגים"),
+    (catalog.web.verdicts || []).map((v) => el("option", { value: v.id, selected: v.id === verdict }, v.title)));
+  const go = () => { location.hash = `#/web/sites?q=${encodeURIComponent(qIn.value.trim())}&verdict=${encodeURIComponent(vSel.value)}`; };
+  qIn.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+  const checkIn = el("input", { placeholder: "example.co.il", dir: "ltr" });
+  const checkOut = el("div");
+  const check = el("button", { class: "primary small", onclick: async () => {
+    const host = checkIn.value.trim();
+    if (!host) return;
+    check.disabled = true;
+    checkOut.replaceChildren(el("span", { class: "muted small" }, "הבוט בודק… (עד חצי דקה)"));
+    try {
+      const site = await api("/v1/admin/web/check", { method: "POST", body: { host } });
+      checkOut.replaceChildren(el("div", { class: "row gap" }, el("b", { dir: "ltr" }, site.host || host), verdictChip(site.verdict)), botDetails(site));
+    } catch (e) { checkOut.replaceChildren(el("p", { class: "error" }, e.message)); }
+    check.disabled = false;
+  } }, "בדיקה עכשיו");
+  const addIn = el("input", { placeholder: "אתר חדש — example.co.il", dir: "ltr" });
+  const addSel = verdictSelect("clean");
+  const table = el("table", { class: "table" }, el("thead", {}, el("tr", {}, ["אתר", "סוג", "מה נמצא", ""].map((h) => el("th", {}, h)))),
+    el("tbody", {}, sites.map((st) => {
+      const sel = verdictSelect(st.verdict);
+      sel.addEventListener("change", async () => {
+        await attempt(() => api(`/v1/admin/web/sites/${encodeURIComponent(st.host)}`, { method: "PUT", body: { verdict: sel.value } }), "נשמר");
+        render();
+      });
+      return el("tr", {}, el("td", { dir: "ltr" }, st.host), el("td", {}, sel), el("td", {}, botDetails(st)),
+        el("td", {}, el("button", { class: "ghost small", onclick: async () => {
+          if (!await confirmDialog("למחוק את פסק הדין?", `${st.host} ייבדק מחדש בכניסה הבאה.`, "מחיקה", true)) return;
+          await attempt(() => api(`/v1/admin/web/sites/${encodeURIComponent(st.host)}`, { method: "DELETE" }), "נמחק");
+          render();
+        } }, "מחיקה")));
+    })));
+  return [
+    card("בדיקת אתר", "הבוט מוריד את דף הבית, קורא את הטקסט ובודק את התמונות במנוע הסינון.",
+      el("div", { class: "row gap" }, checkIn, check), checkOut),
+    card("הוספת אתר", "פסק דין שלך לאתר — חל על כל הלקוחות (לפי הרמה של כל אחד) וגם על תת-האתרים שלו.",
+      el("div", { class: "row gap wrap" }, addIn, addSel, el("button", { class: "primary small", onclick: async () => {
+        const host = addIn.value.trim();
+        if (!host) return;
+        await attempt(() => api(`/v1/admin/web/sites/${encodeURIComponent(host)}`, { method: "PUT", body: { verdict: addSel.value } }), "נשמר");
+        render();
+      } }, "שמירה"))),
+    card("אתרים שנבדקו", `${sites.length} אתרים`, el("div", { class: "row gap wrap" }, qIn, vSel, el("button", { class: "ghost small", onclick: go }, "סינון")),
+      el("div", { class: "table-wrap" }, table)),
+  ];
+}
+
+function webLevelsView() {
+  const w = catalog.web;
+  return [
+    card("רמות הגלישה", "נבחרות לכל מכשיר בעמוד המכשיר (טאב 'חסימות'). התמונות עוברות סינון לפי רמת הסינון בכל רמה.",
+      el("div", { class: "stack" }, w.levels.map((lv) => el("div", {}, el("b", {}, lv.title), el("p", { class: "muted small" }, lv.desc))))),
+    card("קבוצות האתרים", "הרשימות המוכנות. 'תוספת' — אפשר לפתוח ללקוח מעל הרמה שלו.",
+      el("div", { class: "stack" }, w.groups.map((g) => el("div", {},
+        el("b", {}, g.title), " ", g.count ? chip(`${g.count} אתרים`) : null, " ",
+        g.infra ? chip("תמיד פתוח", "ok") : null,
+        el("span", { class: "muted small" }, g.levels.length ? ` · פתוח ב: ${g.levels.map((l) => w.levels.find((x) => x.id === l)?.title).join(", ")}` : " · רק כתוספת"),
+        el("p", { class: "muted small" }, g.desc))))),
+  ];
 }
 
 async function viewProfiles() {

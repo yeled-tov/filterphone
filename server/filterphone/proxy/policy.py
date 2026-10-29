@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 
 import redis.asyncio as aioredis
 
+from ..websites import WebPolicy
+
 log = logging.getLogger("filterphone.policy")
 
 POLICY_KEY = "fp:policy"
@@ -54,11 +56,12 @@ class DevicePolicy:
     app_images: str = "block"               # block = שרתי תמונות של אפליקציות לא עוברים בלי סינון
     paths: tuple[tuple[re.Pattern, re.Pattern], ...] = ()   # (אתר, נתיב) — למשל לשונית התמונות בגוגל
     host_list: tuple[str, ...] = field(default=(), compare=False)
+    web: WebPolicy = field(default_factory=WebPolicy)       # רמת גלישה (websites.py) — רק על ניווט לדפים
 
     @property
     def filtering(self) -> bool:
         """האם יש בכלל מה לבדוק במכשיר הזה (אחרת — הכול עובר ישר, בלי יירוט)."""
-        return self.level > 0 or self.images == "block" or self.video
+        return self.level > 0 or self.images == "block" or self.video or self.web.active
 
     def blocks(self, host: str | None) -> bool:
         return bool(host and self.hosts and self.hosts.match(host.lower().rstrip(".")))
@@ -85,6 +88,7 @@ class DevicePolicy:
             video=bool(d.get("video", False)),
             app_images=str(d.get("app_images") or default_app_images(level)),
             host_list=tuple(hosts),
+            web=WebPolicy.from_json(d.get("web")),
         )
 
 

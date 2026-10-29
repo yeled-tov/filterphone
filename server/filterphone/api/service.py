@@ -1652,7 +1652,8 @@ class Services:
         if "status" in allowed and allowed["status"] not in ("active", "disabled"):
             raise ApiError(400, "סטטוס לא חוקי")
         policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc",
-                       "keywords", "vpn_bypass", "track", "allow_google_accounts", "safe_browser")
+                       "keywords", "vpn_bypass", "track", "allow_google_accounts", "safe_browser",
+                       "web_level", "web_extras", "web_without")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
             row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
