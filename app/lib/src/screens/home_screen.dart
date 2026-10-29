@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app_controller.dart';
 import '../theme.dart';
 import 'change_request_screen.dart';
+import 'install_screen.dart';
 
 /// מצב ההגנה (מה שהיה בטאב "סינון", עכשיו בתוך טאב הפרופיל): האם הטלפון מוגן, ומה עוד צריך לעשות.
 /// רק מה שחסר — כשהכול תקין אין כאן רשימת הרשאות בכלל (המצב הטכני המלא: הגדרות).
@@ -166,14 +167,6 @@ class OneTapCard extends StatelessWidget {
     return '';
   }
 
-  /// צעד-אחר-צעד להקמה בלי מחשב ובלי אפליקציה חיצונית (אנדרואיד 11+, ניפוי אלחוטי מובנה) — בשפה פשוטה.
-  static const _adbSteps = [
-    'פותחים הגדרות ← אודות הטלפון, ולוחצים 7 פעמים על "מספר Build" (מספר גרסה) עד שכתוב "הפכת למפתח".',
-    'חוזרים להגדרות ← מערכת ← אפשרויות מפתחים, ומדליקים את "ניפוי באגים אלחוטי" (Wireless debugging).',
-    'נכנסים ל"ניפוי באגים אלחוטי" ← "התאמת מכשיר באמצעות קוד התאמה" — מופיע קוד בן 6 ספרות.',
-    'חוזרים לכאן, מזינים את הקוד — ו-FilterPhone יגדיר את הכול לבד. בלי מחשב, בלי אפליקציה נוספת.',
-  ];
-
   @override
   Widget build(BuildContext context) {
     final c = controller;
@@ -203,10 +196,10 @@ class OneTapCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('הקמה בלחיצה אחת', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  Text('התקנת הסינון', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 2),
-                  const Text('FilterPhone מגדיר הכול לבד: צריבת ניהול, מגן, תעודה, סוללה וחיבור לסינון. '
-                      'בחרו את הדרך שמתאימה לטלפון שלכם.'),
+                  const Text('FilterPhone מגדיר הכול: ניהול מכשיר, מגן, תעודה, סוללה וחיבור לסינון. '
+                      'במסך ההתקנה בוחרים את הדרך שמתאימה לטלפון.'),
                 ]),
               ),
             ]),
@@ -219,28 +212,14 @@ class OneTapCard extends StatelessWidget {
               Text(_howTo[step] ?? ''),
             ] else ...[
               const SizedBox(height: 14),
-              // דרך 1 — Root
-              _SetupOption(
-                icon: Icons.verified_user_rounded,
-                title: 'יש לי Root בטלפון',
-                body: 'אם הטלפון שלך עבר Root — לחצו כאן ואשרו את בקשת ה-Root (Superuser) שתקפוץ. '
-                    'כל השאר (צריבה, מגן, תעודה, סוללה, VPN) יוגדר אוטומטית, בלי אף אישור נוסף.',
-                buttonLabel: 'הקמה עם Root',
-                buttonIcon: Icons.bolt_rounded,
-                onPressed: disabled ? null : c.oneTapSetup,
+              FilledButton.icon(
+                onPressed: disabled ? null : () => openInstallScreen(context, c),
+                icon: const Icon(Icons.install_mobile_rounded, size: 18),
+                label: const Text('למסך ההתקנה'),
               ),
-              const SizedBox(height: 10),
-              // דרך 2 — בלי Root: ניפוי אלחוטי מובנה (בלי מחשב, בלי אפליקציה חיצונית)
-              _SetupOption(
-                icon: Icons.wifi_tethering_rounded,
-                title: 'אין לי Root — הקמה בלי מחשב',
-                body: 'ההקמה עובדת דרך "ניפוי אלחוטי" מתוך FilterPhone עצמה — בלי מחשב ובלי אפליקציה נוספת. '
-                    'צריך להפעיל פעם אחת "אפשרויות מפתחים" ו"ניפוי באגים אלחוטי", ולהזין קוד התאמה. ההסבר למטה.',
-                steps: _adbSteps,
-                buttonLabel: 'הקמה בלי Root',
-                buttonIcon: Icons.wifi_tethering_rounded,
-                onPressed: disabled ? null : () => _startWirelessSetup(context, c),
-              ),
+              const SizedBox(height: 6),
+              Text('אוטומטי (Root / ניפוי באגים אלחוטי — צעד אחרי צעד) או ידני (מחשב / צעד-צעד).',
+                  style: theme.textTheme.bodySmall, textAlign: TextAlign.center),
             ],
             if (r != null && r['error'] == null) ...[
               const SizedBox(height: 12),
@@ -260,96 +239,6 @@ class OneTapCard extends StatelessWidget {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// אריח של דרך הקמה (Root / ADB): כותרת, הסבר, שלבים (אופציונלי) וכפתור ברוחב מלא.
-class _SetupOption extends StatelessWidget {
-  const _SetupOption({
-    required this.icon,
-    required this.title,
-    required this.body,
-    required this.buttonLabel,
-    required this.buttonIcon,
-    required this.onPressed,
-    this.steps,
-  });
-
-  final IconData icon;
-  final String title;
-  final String body;
-  final String buttonLabel;
-  final IconData buttonIcon;
-  final VoidCallback? onPressed;
-  final List<String>? steps;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .4),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: theme.colorScheme.primary),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
-                  Text(body, style: theme.textTheme.bodySmall),
-                ]),
-              ),
-            ],
-          ),
-          if (steps != null)
-            Material(
-              type: MaterialType.transparency,     // ל-ExpansionTile (ListTile) בתוך רקע צבעוני
-              child: Theme(
-              data: theme.copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                title: Text('איך מפעילים (צעד אחר צעד)', style: theme.textTheme.bodyMedium),
-                children: [
-                  for (var i = 0; i < steps!.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          CircleAvatar(
-                            radius: 11,
-                            backgroundColor: theme.colorScheme.primary,
-                            child: Text('${i + 1}',
-                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(child: Text(steps![i], style: theme.textTheme.bodySmall)),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            onPressed: onPressed,
-            icon: Icon(buttonIcon, size: 18),
-            label: Text(buttonLabel),
-          ),
-        ],
       ),
     );
   }
@@ -885,156 +774,6 @@ class _RemovedBanner extends StatelessWidget {
       );
 }
 
-/// פותח את זרימת ההקמה בניפוי אלחוטי: מסביר, פותח אפשרויות מפתחים, ומקבל את קוד ההתאמה.
-Future<void> _startWirelessSetup(BuildContext context, AppController c) async {
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: true,
-    builder: (_) => _WirelessDialog(controller: c),
-  );
-}
-
-/// דיאלוג ההקמה בניפוי אלחוטי (בלי מחשב): הדלקת ניפוי אלחוטי + קוד התאמה בן 6 ספרות.
-class _WirelessDialog extends StatefulWidget {
-  const _WirelessDialog({required this.controller});
-  final AppController controller;
-
-  @override
-  State<_WirelessDialog> createState() => _WirelessDialogState();
-}
-
-class _WirelessDialogState extends State<_WirelessDialog> {
-  final _code = TextEditingController();
-  bool _working = false;
-  bool _posted = false;      // התראת הזנת הקוד הוצגה
-  bool _manual = false;      // המשתמש בחר להזין כאן ידנית (גיבוי)
-
-  @override
-  void initState() {
-    super.initState();
-    _post();
-  }
-
-  @override
-  void dispose() {
-    _code.dispose();
-    super.dispose();
-  }
-
-  Future<void> _post() async {
-    final ok = await widget.controller.startWirelessNotification();
-    if (mounted) setState(() => _posted = ok);
-  }
-
-  Future<void> _submit() async {
-    final code = _code.text.trim();
-    if (code.length != 6 || int.tryParse(code) == null) {
-      setState(() {});
-      return;
-    }
-    setState(() => _working = true);
-    final ok = await widget.controller.wirelessSetup(code);
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    if (!ok) {
-      final msg = widget.controller.notice;
-      if (msg != null && msg.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-      }
-    }
-  }
-
-  Widget _step(String n, String text) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          CircleAvatar(radius: 11, child: Text(n, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-          const SizedBox(width: 10),
-          Expanded(child: Text(text)),
-        ]),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final manual = _manual || !_posted;
-    final valid = _code.text.trim().length == 6 && int.tryParse(_code.text.trim()) != null;
-    return AlertDialog(
-      title: const Text('הקמה בלי מחשב'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('בלחיצה אחת — בלי מחשב ובלי לצאת מהמסך:'),
-            const SizedBox(height: 10),
-            _step('1', 'הדליקו "ניפוי באגים אלחוטי" באפשרויות המפתחים.'),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                onPressed: _working ? null : widget.controller.openDeveloperOptions,
-                icon: const Icon(Icons.settings_rounded, size: 18),
-                label: const Text('פתח אפשרויות מפתחים'),
-              ),
-            ),
-            _step('2', 'הקישו "התאמת מכשיר באמצעות קוד התאמה" — יופיע קוד בן 6 ספרות.'),
-            _step('3', 'משכו מלמעלה את פס ההתראות, הקלידו את הקוד בהתראת FilterPhone, ושלחו.'),
-            _step('4', 'אפשר לסגור את החלון — ההקמה תמשיך לבד.'),
-            const SizedBox(height: 10),
-            if (!manual)
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(children: [
-                  Icon(Icons.notifications_active_rounded, size: 18, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  const Expanded(child: Text('התראת הזנת הקוד מחכה בפס ההתראות.')),
-                ]),
-              ),
-            if (!manual)
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: TextButton(
-                  onPressed: _working ? null : () => setState(() => _manual = true),
-                  child: const Text('אין לי התראה? הזנת הקוד כאן'),
-                ),
-              ),
-            if (manual) ...[
-              const SizedBox(height: 4),
-              TextField(
-                controller: _code,
-                enabled: !_working,
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                maxLength: 6,
-                style: theme.textTheme.headlineSmall?.copyWith(letterSpacing: 8),
-                decoration: const InputDecoration(hintText: '••••••', counterText: '', border: OutlineInputBorder()),
-                onChanged: (_) => setState(() {}),
-                onSubmitted: (_) => _submit(),
-              ),
-            ],
-            if (_working) ...[
-              const SizedBox(height: 14),
-              const LinearProgressIndicator(),
-              const SizedBox(height: 8),
-              const Text('מתחבר ומגדיר… זה יכול לקחת כמה שניות.'),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _working ? null : () => Navigator.of(context).pop(),
-          child: Text(manual ? 'ביטול' : 'סגירה'),
-        ),
-        if (manual)
-          FilledButton(
-            onPressed: (_working || !valid) ? null : _submit,
-            child: const Text('התחל הקמה'),
-          ),
-      ],
-    );
-  }
-}
+/// פותח את מסך ההתקנה (אוטומטי / ידני).
+Future<void> openInstallScreen(BuildContext context, AppController c) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InstallScreen(controller: c)));

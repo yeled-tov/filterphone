@@ -8,6 +8,7 @@ import 'package:filterphone/src/app_controller.dart';
 import 'package:filterphone/src/native_bridge.dart';
 import 'package:filterphone/src/screens/app_shell.dart';
 import 'package:filterphone/src/screens/home_screen.dart';
+import 'package:filterphone/src/screens/install_screen.dart';
 import 'package:filterphone/src/screens/settings_screen.dart';
 import 'package:filterphone/src/support_bot.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -120,6 +121,21 @@ class FakeNative implements NativeBridge {
     wirelessCode = code;
     return wirelessResult;
   }
+
+  SetupStatus setupStatusValue = const SetupStatus(sdk: 34, manufacturer: 'samsung', model: 'SM-A546', vendor: 'samsung',
+      wirelessSupported: true, notifications: true);
+  final openedPages = <String>[];
+  Map<String, Object?>? lastReport;
+  @override
+  Future<SetupStatus> setupStatus() async => setupStatusValue;
+  @override
+  Future<bool> openSetupPage(String page) async {
+    openedPages.add(page);
+    return true;
+  }
+
+  @override
+  Future<Map<String, Object?>?> lastSetupReport() async => lastReport;
 
   int wirelessNotifications = 0;
   @override
@@ -1402,6 +1418,83 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(800, 2600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
     }
+
+    testWidgets('install screen: wireless steps follow the phone state and open the right settings page',
+        (tester) async {
+      await tallScreen(tester);
+      final native = FakeNative()
+        ..setupStatusValue = const SetupStatus(sdk: 34, manufacturer: 'samsung', model: 'SM-A546', vendor: 'samsung',
+            wirelessSupported: true, notifications: true, wifi: false);
+      final c = makeController(native, quietServer(), activeStore());
+      await c.start();
+      await tester.pumpWidget(rtl(InstallScreen(controller: c)));
+      await tester.pumpAndSettle();
+      expect(find.text('התקנה אוטומטית'), findsOneWidget);
+      expect(find.text('התקנה ידנית'), findsOneWidget);
+      expect(find.textContaining('samsung SM-A546 · Android 14'), findsOneWidget);
+      expect(c.installScreenOpen, isTrue);
+      expect(c.attentionNeeded, isEmpty);                       // חלון "חסרה הרשאה" לא קופץ מעל המסך
+      // צעד 2 (Wi-Fi) הוא הנוכחי
+      await tester.tap(find.text('הגדרות Wi-Fi'));
+      await tester.pump();
+      expect(native.openedPages, ['wifi']);
+      // חזר מחובר ל-Wi-Fi, אפשרויות מפתחים עוד כבויות → "אודות הטלפון" עם ההסבר של סמסונג
+      native.setupStatusValue = const SetupStatus(sdk: 34, manufacturer: 'samsung', vendor: 'samsung',
+          wirelessSupported: true, notifications: true, wifi: true);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('"מידע על התוכנה"'), findsWidgets);
+      await tester.tap(find.text('פתיחת "אודות הטלפון"'));
+      await tester.pump();
+      expect(native.openedPages.last, 'about');
+      // אפשרויות מפתחים דלוקות → ניפוי אלחוטי, ואז קוד ההתאמה בהתראה
+      native.setupStatusValue = const SetupStatus(sdk: 34, vendor: 'samsung', wirelessSupported: true,
+          notifications: true, wifi: true, devOptions: true);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('פתיחת "ניפוי באגים אלחוטי"'));
+      await tester.pumpAndSettle();
+      expect(native.openedPages.last, 'wireless');
+      await tester.tap(find.text('התראת הקוד + פתיחת המסך'));
+      await tester.pumpAndSettle();
+      expect(native.wirelessNotifications, 1);
+      expect(find.text('התראת הקוד מחכה בפס ההתראות.'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    testWidgets('install screen: explains exactly which account or user blocks, and lists the computer commands',
+        (tester) async {
+      await tallScreen(tester);
+      final native = FakeNative()
+        ..lastReport = {
+          'device_owner': false, 'device_owner_result': 'accounts_present', 'at': 5,
+          'blockers': ['com.osp.app.signin', 'user:Secure Folder'],
+        };
+      final c = makeController(native, quietServer(), activeStore());
+      await c.start();
+      await tester.pumpWidget(rtl(InstallScreen(controller: c)));
+      await tester.pumpAndSettle();
+      expect(find.text('הניסיון האחרון לא הושלם'), findsOneWidget);
+      expect(find.textContaining('חשבון Samsung: '), findsOneWidget);
+      expect(find.textContaining('תיקייה מאובטחת: '), findsOneWidget);
+      await tester.tap(find.text('עם מחשב (כבל USB)'));
+      await tester.pumpAndSettle();
+      expect(find.text('adb shell dpm set-device-owner com.filterphone.app/.DeviceAdmin'), findsOneWidget);
+      expect(find.text('העתקת כל הפקודות'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    test('install hints: every vendor gets its own build-number path, and unknown accounts still explain', () {
+      expect(buildNumberHint('xiaomi'), contains('MIUI'));
+      expect(buildNumberHint('oneplus'), contains('"גרסה"'));
+      expect(accountBlocker('com.google').$1, 'חשבון Google');
+      expect(accountBlocker('com.whatsapp.w4b').$1, 'WhatsApp');
+      expect(accountBlocker('org.example').$2, contains('הסרת חשבון'));
+      expect(userBlocker('DUAL_APP').$1, 'אפליקציות כפולות');
+      expect(failureText('multiple_users'), contains('משתמש נוסף'));
+    });
 
     testWidgets('protected phone: no permissions list — only what is active for this customer', (tester) async {
       await tallScreen(tester);

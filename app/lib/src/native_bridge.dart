@@ -3,6 +3,62 @@ import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
+/// מצב הטלפון למסך ההתקנה המודרך (SetupGuide בקוטלין).
+class SetupStatus {
+  const SetupStatus({
+    this.sdk = 0,
+    this.manufacturer = '',
+    this.model = '',
+    this.vendor = 'other',
+    this.devOptions = false,
+    this.adb = false,
+    this.adbWifi,
+    this.wifi = false,
+    this.notifications = false,
+    this.deviceOwner = false,
+    this.wirelessSupported = false,
+  });
+
+  factory SetupStatus.fromMap(Map<Object?, Object?> m) => SetupStatus(
+        sdk: (m['sdk'] as num?)?.toInt() ?? 0,
+        manufacturer: '${m['manufacturer'] ?? ''}',
+        model: '${m['model'] ?? ''}',
+        vendor: '${m['vendor'] ?? 'other'}',
+        devOptions: m['dev_options'] == true,
+        adb: m['adb'] == true,
+        adbWifi: m['adb_wifi'] as bool?,
+        wifi: m['wifi'] == true,
+        notifications: m['notifications'] == true,
+        deviceOwner: m['device_owner'] == true,
+        wirelessSupported: m['wireless_supported'] == true,
+      );
+
+  final int sdk;
+  final String manufacturer;
+  final String model;
+  final String vendor;            // samsung / xiaomi / oneplus / pixel / other — לפיו ההסבר איפה "מספר Build"
+  final bool devOptions;          // אפשרויות מפתחים דלוקות
+  final bool adb;                 // ניפוי באגים ב-USB דלוק
+  final bool? adbWifi;            // ניפוי באגים אלחוטי דלוק (null = אנדרואיד לא מגלה)
+  final bool wifi;
+  final bool notifications;
+  final bool deviceOwner;
+  final bool wirelessSupported;   // אנדרואיד 11 ומעלה
+
+  /// "Android 14" לפי ה-SDK.
+  String get androidVersion => switch (sdk) {
+        >= 36 => 'Android 16',
+        35 => 'Android 15',
+        34 => 'Android 14',
+        33 => 'Android 13',
+        32 || 31 => 'Android 12',
+        30 => 'Android 11',
+        29 => 'Android 10',
+        > 0 => 'Android (SDK $sdk)',
+        _ => 'Android',
+      };
+}
+
 /// מצב המנהרה כפי שהקוד הנייטיבי מדווח.
 class VpnStatus {
   const VpnStatus({
@@ -199,6 +255,15 @@ abstract class NativeBridge {
 
   /// הקמה בניפוי אלחוטי: קוד התאמה (6 ספרות) ופורט (0 = לגלות ב-mDNS). מבצע הכול ומחזיר מה הושלם.
   Future<Map<String, Object?>> provisionWireless(String code, int port, String? caPem);
+
+  /// מסך ההתקנה המודרך: מה המצב בטלפון (אפשרויות מפתחים, Wi-Fi, התראות, יצרן…).
+  Future<SetupStatus> setupStatus();
+
+  /// פותח מסך בהגדרות: about (אודות הטלפון) / developer / wireless (ניפוי באגים אלחוטי) / wifi.
+  Future<bool> openSetupPage(String page);
+
+  /// הדוח האחרון של ההקמה האלחוטית (גם כשהקוד הוקלד בהתראה), או null.
+  Future<Map<String, Object?>?> lastSetupReport();
 
   /// מציג התראה עם שדה קלט לקוד ההתאמה — מקלידים את הקוד בשורת ההתראה בלי לצאת ממסך "ניפוי אלחוטי".
   Future<bool> startWirelessNotification(String? caPem);
@@ -440,6 +505,18 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<bool> startWirelessNotification(String? caPem) async =>
       await _call<bool>('startWirelessNotification', {'ca': caPem});
+
+  @override
+  Future<SetupStatus> setupStatus() async => SetupStatus.fromMap(await _call<Map<Object?, Object?>>('setupStatus'));
+
+  @override
+  Future<bool> openSetupPage(String page) async => await _call<bool>('openSetupPage', {'page': page});
+
+  @override
+  Future<Map<String, Object?>?> lastSetupReport() async {
+    final r = await _call<Map<Object?, Object?>?>('lastSetupReport');
+    return r == null ? null : Map<String, Object?>.from(r);
+  }
 
   @override
   Future<List<Map<String, Object?>>> installedApps() async {

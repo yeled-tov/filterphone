@@ -38,6 +38,7 @@ object OneTapSetup {
             val r = RootProvisioner.provision(context)
             out["device_owner_result"] = r.resultKey
             out["technical"] = r.technical
+            out["blockers"] = r.blockers
         }
         val owner = DeviceOwnerManager.isDeviceOwner(context)
         out["device_owner"] = owner
@@ -94,10 +95,12 @@ object OneTapSetup {
         val r = WirelessSetup.provision(context, code, port)
         out["device_owner_result"] = r.resultKey
         out["technical"] = r.technical
+        out["blockers"] = r.blockers
         out["pairing_ok"] = r.resultKey != "pairing_failed" && r.resultKey != "pairing_port_not_found" &&
             r.resultKey != "bad_pairing_code"
         // אחרי שהפכנו למנהל מכשיר — ממשיכים באותם צעדים כמו ב-run() (סוללה כבר הוחלה דרך ADB; כאן VPN+תעודה)
-        out.putAll(run(context, caPem))
+        out.putAll(run(context, caPem).filterKeys { it !in out })
+        SetupGuide.saveReport(context, out)
         return out
     }
 }

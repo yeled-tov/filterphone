@@ -1165,6 +1165,10 @@ def summary(s: DeviceSettings) -> list[dict]:
     """רשימת החסימות הפעילות — לתצוגה (בממשק הניהול ובאפליקציה)."""
     out = [{"id": o, "title": CATALOG[o].title, "category": CATALOG[o].category}
            for o in s.active_options if o in CATALOG]
+    if s.web_level:
+        extras = [websites.GROUP_BY_ID[g].title for g in s.web_extras if g in websites.GROUP_BY_ID]
+        title = f"רמת גלישה: {websites.WEB_LEVELS[s.web_level]['title']}" + (f" + {', '.join(extras)}" if extras else "")
+        out.insert(0, {"id": f"web:{s.web_level}", "title": title, "category": "web"})
     if s.track:
         out.insert(0, {"id": f"track:{s.track}", "title": TRACKS[s.track]["title"], "category": "track"})
     if s.custom_hosts:

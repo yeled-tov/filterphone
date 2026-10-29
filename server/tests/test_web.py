@@ -377,6 +377,7 @@ def test_device_web_level_reaches_the_proxy(env):
     assert client.patch(f"/v1/admin/devices/{did}", headers=h, json={"web_level": "bogus"}).status_code == 400
     d = client.get(f"/v1/admin/devices/{did}", headers=h).json()
     assert d["settings"]["web_level"] == "clean"
+    assert {"id": "web:clean", "title": "רמת גלישה: נקי לגמרי + חדשות לציבור החרדי", "category": "web"} in d["blocks"]
     cat = client.get("/v1/admin/catalog", headers=h).json()
     assert [lv["id"] for lv in cat["web"]["levels"]] == ["essential", "clean", "shopping", ""]
 

@@ -24,8 +24,11 @@ object RootProvisioner {
     private const val TAG = "FilterPhone"
     private const val ADMIN = "com.filterphone.app/.DeviceAdmin"
 
-    data class Outcome(val ok: Boolean, val code: String, val resultKey: String, val technical: String = "") {
-        fun toMap(): Map<String, Any> = mapOf("ok" to ok, "code" to code, "result" to resultKey, "technical" to technical)
+    /** [blockers] — מה חוסם את ההקמה, להסבר למשתמש: סוגי חשבונות (com.osp.app.signin…) או "user:<שם>". */
+    data class Outcome(val ok: Boolean, val code: String, val resultKey: String, val technical: String = "",
+                       val blockers: List<String> = emptyList()) {
+        fun toMap(): Map<String, Any> = mapOf("ok" to ok, "code" to code, "result" to resultKey, "technical" to technical,
+            "blockers" to blockers)
     }
 
     /** מריץ את ההקמה. חוסם (I/O) — להריץ בחוט רקע. */
@@ -52,7 +55,13 @@ object RootProvisioner {
         // Attempt the official command even if the framework preflight says no. This does not bypass
         // Android restrictions: dpm itself validates provisioning state and returns the actual reason.
         val dpm = runSu("dpm set-device-owner $ADMIN", 30)
-        val combined = (dpm.out + "\n" + dpm.err).trim()
+        var combined = (dpm.out + "\n" + dpm.err).trim()
+        // חשבונות במכשיר — כמו בניפוי האלחוטי: משביתים זמנית את אפליקציות החשבון ומדליקים מיד בחזרה
+        if (!Preflight.capabilities(context).deviceOwner && AdbCommands.blockedByAccounts(combined)) {
+            val trick = runSu(AdbCommands.accountTrick(context.packageName,
+                WirelessSetup.accountPackages(context)), 60)
+            combined = (trick.out + "\n" + trick.err).trim()
+        }
         // לוודא בפועל (גם אם ה-exit code לא אמין בחלק מה-ROMים)
         if (Preflight.capabilities(context).deviceOwner) {
             // Optional high-privilege settings access used only on the explicitly root-enrolled,
@@ -77,7 +86,12 @@ object RootProvisioner {
         }
         val reason = classifyDpmFailure(combined)
         Log.w(TAG, "root provision failed: $reason")
-        return Outcome(false, "ENROLL-ROOT-003", reason, trim(combined))
+        val blockers = when (reason) {
+            "accounts_present" -> AdbCommands.accountTypes(runSu("dumpsys account", 20).out)
+            "multiple_users" -> AdbCommands.extraUsers(runSu("pm list users", 20).out).map { "user:$it" }
+            else -> emptyList()
+        }
+        return Outcome(false, "ENROLL-ROOT-003", reason, trim(combined), blockers)
     }
 
     /** מיפוי פלט הפקודה לסיבה (מפתח לתרגום). טהור — נבדק ביחידה. הסדר חשוב: הודעת "חשבונות"

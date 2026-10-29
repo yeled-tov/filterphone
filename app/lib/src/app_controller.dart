@@ -123,6 +123,7 @@ class AppController extends ChangeNotifier {
   int? _avatarAt;
   bool avatarBusy = false;
   static const _kUpdateExcluded = 'store_update_excluded';
+  static const _kInstallOffered = 'install_screen_offered';
 
   /// מצב ההרשאות נקרא מהטלפון לפחות פעם אחת (לפני זה לא "דורשים" כלום — עוד לא ידוע מה חסר).
   bool statusLoaded = false;
@@ -168,6 +169,7 @@ class AppController extends ChangeNotifier {
     if (phase != Phase.home || !statusLoaded || adminPauseActive || deviceRemoved) return const [];
     if (!(device?.isActive ?? false)) return const [];
     if (setupStep != null && setupStep != SetupStep.done) return const [];
+    if (installScreenOpen) return const [];
     return missingRequired;
   }
 
@@ -567,6 +569,9 @@ class AppController extends ChangeNotifier {
 
   Future<void> openVpnSettings() => native.openVpnSettings();
 
+  /// הרשאת התראות (מסך ההתקנה: קוד ההתאמה מוקלד בהתראה).
+  Future<void> requestNotifications() => _askNotifications();
+
   Future<void> _askNotifications() async {
     try {
       await native.requestNotifications();
@@ -899,6 +904,76 @@ class AppController extends ChangeNotifier {
     return ok;
   }
 
+  // ------------------------------------------------------------------ מסך ההתקנה המודרך
+
+  /// מצב הטלפון למסך ההתקנה (null = עוד לא נבדק / לא נתמך).
+  SetupStatus? setupInfo;
+
+  /// מסך ההתקנה פתוח — חלון "חסרה הרשאה" לא קופץ מעליו (המסך עצמו מוביל).
+  bool installScreenOpen = false;
+
+  /// מסך ההתקנה כבר נפתח לבד פעם אחת (אחרי אישור ההרשמה) — לא פותחים שוב בכל כניסה.
+  bool installOffered = false;
+
+  /// לפתוח את מסך ההתקנה לבד: מכשיר פעיל שעוד לא מנוהל ועוד חסר בו משהו — פעם אחת.
+  bool get shouldOfferInstall => phase == Phase.home && statusLoaded && !installOffered && !deviceOwner &&
+      (device?.isActive ?? false) && !adminPauseActive && missingRequired.isNotEmpty;
+
+  Future<void> markInstallOffered() async {
+    if (installOffered) return;
+    installOffered = true;
+    await store.write(_kInstallOffered, '1');
+  }
+
+  void setInstallScreenOpen(bool open) {
+    if (installScreenOpen == open) return;
+    installScreenOpen = open;
+    notifyListeners();
+  }
+
+  Future<SetupStatus?> refreshSetupInfo() async {
+    try {
+      setupInfo = await native.setupStatus();
+    } on PlatformException catch (e) {
+      debugPrint('setup status failed: $e');
+    } on MissingPluginException {
+      return null;
+    }
+    notifyListeners();
+    return setupInfo;
+  }
+
+  Future<bool> openSetupPage(String page) async {
+    try {
+      return await native.openSetupPage(page);
+    } on PlatformException catch (e) {
+      debugPrint('open $page failed: $e');
+      return false;
+    }
+  }
+
+  /// הדוח האחרון של ההקמה האלחוטית (גם כשהקוד הוקלד בהתראה) — מעדכן את setupReport.
+  Future<void> loadLastSetupReport() async {
+    try {
+      final r = await native.lastSetupReport();
+      if (r != null && (setupReport == null || (r['at'] as num? ?? 0) > (setupReport!['at'] as num? ?? 0))) {
+        setupReport = r;
+        notifyListeners();
+      }
+    } on PlatformException catch (_) {
+      // לא קריטי
+    }
+  }
+
+  /// צעד-צעד בלי ניהול מכשיר (פחות מומלץ): רק חלונות האישור של אנדרואיד, אחד אחרי השני.
+  Future<void> stepByStepSetup() async {
+    if (setupStep != null && setupStep != SetupStep.done) return;
+    _setupTried.clear();
+    error = null;
+    notice = null;
+    await _continueSetup();
+  }
+
   /// פותח את "אפשרויות מפתחים" (משם ל"ניפוי באגים אלחוטי").
   Future<void> openDeveloperOptions() async {
     try {
@@ -1090,6 +1165,7 @@ class AppController extends ChangeNotifier {
       if (t != null && const ['system', 'light', 'dark'].contains(t)) themeMode = t;
       final scale = double.tryParse(await store.read(_kTextScale) ?? '');
       if (scale != null && textScales.contains(scale)) textScale = scale;
+      installOffered = await store.read(_kInstallOffered) == '1';
       final ex = await store.read(_kUpdateExcluded);
       if (ex != null) updateExcluded = {...(jsonDecode(ex) as List).whereType<String>()};
     } on Exception catch (e) {

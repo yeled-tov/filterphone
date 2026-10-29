@@ -11,6 +11,7 @@ import '../support_bot.dart';
 import '../theme.dart';
 import 'change_request_screen.dart';
 import 'home_screen.dart';
+import 'install_screen.dart';
 import 'settings_screen.dart';
 import 'support_console_screen.dart';
 
@@ -64,9 +65,22 @@ class _AppShellState extends State<AppShell> {
   }
 
   /// נפתחנו מהתראה "יש תשובה מהתמיכה" — ישר לצ'אט. ואם הרשאה נדרשת חסרה — דורשים אותה.
+  bool _installPushed = false;
+
   void _onController() {
     final requested = _tabFor(c.takeRequestedTab());
     if (requested != null && mounted) setState(() => _index = requested);
+    // אחרי אישור ההרשמה: מסך ההתקנה נפתח לבד (פעם אחת) — משם ממשיכים להתקנה
+    if (c.shouldOfferInstall && !_installPushed && mounted) {
+      _installPushed = true;
+      c.markInstallOffered();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => InstallScreen(controller: c)));
+        }
+      });
+      return;
+    }
     final missing = c.attentionNeeded;
     if (missing.isEmpty) {
       _demandTimer?.cancel();

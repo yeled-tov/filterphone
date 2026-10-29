@@ -65,6 +65,29 @@ object AdbCommands {
     fun blockedByAccounts(output: String): Boolean =
         RootProvisioner.classifyDpmFailure(output) == "accounts_present"
 
+    /**
+     * סוגי החשבונות שבמכשיר (של המשתמש הראשי), מתוך הפלט של `dumpsys account` — רק הסוג
+     * (com.google, com.osp.app.signin…), לא השם/המייל. כדי להסביר למשתמש איזה חשבון חוסם את ההקמה.
+     */
+    fun accountTypes(dumpsys: String): List<String> {
+        val out = LinkedHashSet<String>()
+        var inOwner = true
+        for (line in dumpsys.lineSequence()) {
+            val t = line.trim()
+            if (t.startsWith("User UserInfo{")) inOwner = t.startsWith("User UserInfo{0:")
+            if (!inOwner || !t.startsWith("Account {")) continue
+            Regex("""type=([A-Za-z0-9_.\-]+)""").find(t)?.let { out += it.groupValues[1] }
+        }
+        return out.toList()
+    }
+
+    /** משתמשים נוספים במכשיר (תיקייה מאובטחת, אפליקציות כפולות, מרחב שני) מתוך `pm list users`. */
+    fun extraUsers(pmListUsers: String): List<String> =
+        Regex("""UserInfo\{(\d+):([^:}]*)""").findAll(pmListUsers)
+            .filter { it.groupValues[1] != "0" }
+            .map { it.groupValues[2].trim().ifEmpty { "משתמש ${it.groupValues[1]}" } }
+            .distinct().toList()
+
     /** האם ה-set-device-owner הצליח לפי הפלט (אין צורך להסתמך רק על בדיקת המערכת). */
     fun succeeded(output: String): Boolean {
         val o = output.lowercase()

@@ -202,6 +202,10 @@ class MainActivity : FlutterActivity() {
             // ניפוי אלחוטי מתוך האפליקציה (בלי מחשב, בלי Shizuku): נתמך? ופתיחת אפשרויות מפתחים.
             "wirelessSupported" -> result.success(WirelessSetup.isSupported())
             "openDeveloperOptions" -> result.success(WirelessSetup.openDeveloperOptions(this))
+            // מסך ההתקנה המודרך: מה המצב בטלפון, ופתיחת המסך הנכון בהגדרות (המשתמש לוחץ ומאשר בעצמו)
+            "setupStatus" -> result.success(SetupGuide.status(this))
+            "openSetupPage" -> result.success(SetupGuide.open(this, call.argument<String>("page").orEmpty()))
+            "lastSetupReport" -> result.success(SetupGuide.lastReport(this))
             // התראת הזנת קוד ההתאמה — מקלידים את הקוד בשורת ההתראה בלי לצאת ממסך "ניפוי אלחוטי"
             "startWirelessNotification" -> result.success(WirelessNotify.prompt(this, call.argument<String>("ca")))
             // ההקמה בניפוי אלחוטי: מקבל קוד התאמה (6 ספרות) ופורט (0 = לגלות ב-mDNS), ומבצע הכול.
