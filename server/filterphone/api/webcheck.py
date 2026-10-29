@@ -320,35 +320,46 @@ class WebDesk:
             if known:
                 return known, {"redirect": final_host}
         info = parse_page(html_text, final, self.cfg.web_check_images)
-        women = adult_images = checked = 0
+        women = adult_images = checked = unverifiable = 0
+        flagged: list[str] = []
 
-        def one(url: str) -> str:
+        def one(url: str) -> tuple[str, str]:
             try:
                 data, _ = self._fetch_image(url)
             except FetchError:
-                return "skip"
+                return "skip", ""
             if len(data) < MIN_IMAGE_BYTES:
-                return "skip"
+                return "skip", ""
             try:
                 header = self._classify(data)
             except (OSError, protocol.ProtocolError, ValueError) as e:
                 log.debug("engine unavailable for site check: %s", e)
-                return "skip"
+                return "skip", ""
             action = str(header.get("action", "pass"))
             reason = str(header.get("reason", ""))
             if action == "pass":
-                return "pass"
-            return "adult" if ("nsfw" in reason or "explicit" in reason) else "woman"
+                return "pass", ""
+            if reason.startswith("unverifiable"):
+                # פורמט שהמנוע לא מפענח (לוגו, אייקון) — לא ראיה לאישה; בגלישה עצמה סינון התמונות חוסם אותה
+                return "unverifiable", reason
+            return ("adult" if ("nsfw" in reason or "explicit" in reason) else "woman"), reason
 
         if info.images:
             with ThreadPoolExecutor(max_workers=4) as ex:
-                for r in ex.map(one, info.images):
-                    if r != "skip":
+                for kind, reason in ex.map(one, info.images):
+                    if kind in ("pass", "woman", "adult"):
                         checked += 1
-                    women += r == "woman"
-                    adult_images += r == "adult"
+                    women += kind == "woman"
+                    adult_images += kind == "adult"
+                    unverifiable += kind == "unverifiable"
+                    if reason:
+                        flagged.append(reason)
         verdict, signals = classify_page(info, self.terms, women, adult_images)
         signals["images_checked"] = checked
+        if unverifiable:
+            signals["images_unverifiable"] = unverifiable
+        if flagged:
+            signals["image_reasons"] = flagged[:12]       # לבודק האנושי: למה המנוע סימן (בלי התמונות)
         if final_host != host:
             signals["redirect"] = final_host
         return verdict, signals

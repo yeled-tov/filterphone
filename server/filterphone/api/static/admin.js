@@ -1468,6 +1468,8 @@ function botDetails(site) {
   if (x.error) bits.push(`שגיאה: ${x.error}`);
   if (x.redirect) bits.push(`מפנה ל-${x.redirect}`);
   if (x.images_checked !== undefined) bits.push(`${x.women_images || 0} תמונות של נשים מתוך ${x.images_checked} שנבדקו`);
+  if (x.images_unverifiable) bits.push(`${x.images_unverifiable} תמונות שלא ניתן לבדוק (לא נספרו)`);
+  if (x.image_reasons?.length) bits.push(`סיבות המנוע: ${x.image_reasons.join(", ")}`);
   if (x.news) bits.push("סימני חדשות");
   if (x.cart_words) bits.push("חנות (סל קניות)");
   if (x.videos) bits.push(`${x.videos} סרטונים`);

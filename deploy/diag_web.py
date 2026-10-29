@@ -115,6 +115,6 @@ for host in ("example.com", "python.org", "w3.org", "gnu.org", "debian.org"):
         verdict, detail = desk.analyze(host)
     except Exception as e:      # האבחון לא נופל בגלל אתר אחד
         verdict, detail = "error", {"error": f"{type(e).__name__}: {e}"[:120]}
-    keep = {k: detail[k] for k in ("images_checked", "women_images", "news", "cart_words", "error", "source",
-                                   "redirect") if k in detail}
+    keep = {k: detail[k] for k in ("images_checked", "women_images", "images_unverifiable", "image_reasons",
+                                   "news", "cart_words", "error", "source", "redirect") if k in detail}
     row(host, verdict, f"בוט: {verdict}", time.monotonic() - t0, keep)

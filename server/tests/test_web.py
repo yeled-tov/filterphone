@@ -326,12 +326,30 @@ class FakeSite:
         return self.images.get(url, b"x" * 5000), "image/jpeg"
 
 
-def desk_for(svc, pages, images=None, women=()):
+def desk_for(svc, pages, images=None, women=(), broken=()):
     site = FakeSite(pages, images or {})
 
     def classify(data):
+        if data in broken:
+            return {"action": "block", "reason": "unverifiable"}
         return {"action": "block", "reason": "female 0.9"} if data in women else {"action": "pass"}
     return WebDesk(svc, classify=classify, page_fetcher=site.page, image_fetcher=site.image)
+
+
+def test_undecodable_images_are_not_counted_as_women(env):
+    """לוגו בפורמט שהמנוע לא מפענח — המנוע חוסם ('unverifiable'), אבל זו לא ראיה לאישה."""
+    svc, _ = env
+    logo, woman = b"L" * 5000, b"W" * 5000
+    desk = desk_for(svc, {
+        "tools.example": "<title>כלים</title><img src='/hero.avif'><img src='/b.jpg'>",
+        "mixed.example": "<title>אתר</title><img src='/hero.avif'><img src='/w.jpg'>",
+    }, {"https://tools.example/hero.avif": logo, "https://mixed.example/hero.avif": logo,
+        "https://mixed.example/w.jpg": woman}, women=(woman,), broken=(logo,))
+    v, d = desk.analyze("tools.example")
+    assert v == "auto_clean" and d["images_checked"] == 1 and d["images_unverifiable"] == 1
+    assert d["women_images"] == 0 and d["image_reasons"] == ["unverifiable"]
+    v, d = desk.analyze("mixed.example")
+    assert v == "images" and d["women_images"] == 1 and sorted(d["image_reasons"]) == ["female 0.9", "unverifiable"]
 
 
 def test_bot_verdicts_are_saved_and_published(env):
