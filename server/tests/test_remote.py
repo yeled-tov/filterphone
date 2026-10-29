@@ -21,7 +21,7 @@ from filterphone.engine.cache import Entry
 from filterphone.engine.policy import Thresholds
 from filterphone.engine.remote import RemoteEngine, make_payload
 from filterphone.engine.segment import Person, SegStats
-from filterphone.engine.service import Engine
+from filterphone.engine.service import REMOTE_PROBE_S, Engine
 from filterphone.settings import Settings
 
 HEADS = "test-heads"
@@ -173,7 +173,7 @@ async def test_slow_modal_does_not_hold_images_back():
     modal.delay = 0
     await e.classify(b"borderline", 1)
     assert modal.started == 1 and e.runs["analyze"] == 3        # בשרת פנוי — מקומית, בלי לחכות לו
-    modal.probe_at = 0.0                    # עברו שתי דקות — תמונה אחת נשלחת למדידה מחדש
+    modal.probe_at -= REMOTE_PROBE_S + 1    # עברו שתי דקות — תמונה אחת נשלחת למדידה מחדש
     await e.classify(b"nsfw", 1)
     assert modal.started == 2 and e.runs["analyze"] == 3
     assert not modal.slower_than(0.05) or modal.ewma_s < 0.4    # המדידה החדשה (מהירה) מורידה את הממוצע
