@@ -533,6 +533,13 @@ _KEYWORD_SEED: tuple[str, ...] = (
     "性交", "色情", "裸体", "エロ", "アダルト", "포르노", "섹스",
 )
 KEYWORD_DEFAULTS: dict = {"enabled": True, "action": "back"}
+
+# מחשבי Windows (FilterPhone למחשב): מה שהמנהל קובע מהדשבורד. המחשב אוכף רק מה שהמנהל המקומי
+# אישר בהתקנה — כך שמכאן אפשר לכבות הגבלה או להחזיר אותה, לא לכפות משהו שלא אושר.
+DESKTOP_DEFAULTS: dict[str, bool] = {
+    "chrome_only": True,        # רק Google Chrome; דפדפנים אחרים נחסמים / נסגרים
+    "block_store": True,        # חנות Microsoft חסומה
+}
 MAX_KEYWORD_TERMS = 1000
 _TERM_STRIP = re.compile(r"\s+")
 
@@ -698,6 +705,7 @@ class DeviceSettings:
     track: str = ""                             # מסלול סינון (TRACKS): "" רגיל / no_internet / navigation / ...
     allow_google_accounts: bool = False         # מסך "הוספת חשבון Google" עובד: שירותי Google מחוץ ל-VPN (רק הם)
     safe_browser: str = ""                      # הסייר המוגן באפליקציה: "" אוטומטי / essential / off (SAFE_BROWSER)
+    desktop: dict = field(default_factory=dict)  # מחשבי Windows: רק מה ששונה מ-DESKTOP_DEFAULTS
 
     @property
     def active_options(self) -> list[str]:
@@ -795,6 +803,17 @@ class DeviceSettings:
         return out
 
     @staticmethod
+    def _load_desktop(raw) -> dict:
+        if not isinstance(raw, dict):
+            return {}
+        return {k: raw[k] for k, default in DESKTOP_DEFAULTS.items()
+                if isinstance(raw.get(k), bool) and raw[k] != default}
+
+    @property
+    def desktop_effective(self) -> dict[str, bool]:
+        return {**DESKTOP_DEFAULTS, **self.desktop}
+
+    @staticmethod
     def _load_temp_open(raw) -> dict:
         if not isinstance(raw, dict):
             return {}
@@ -826,6 +845,7 @@ class DeviceSettings:
             track=d.get("track") if d.get("track") in TRACKS else "",
             allow_google_accounts=bool(d.get("allow_google_accounts", False)),
             safe_browser=d.get("safe_browser") if d.get("safe_browser") in SAFE_BROWSER else "",
+            desktop=cls._load_desktop(d.get("desktop")),
         )
 
     def dump(self) -> str:
@@ -842,6 +862,8 @@ class DeviceSettings:
             d["allow_google_accounts"] = True
         if self.safe_browser:
             d["safe_browser"] = self.safe_browser
+        if self.desktop:
+            d["desktop"] = self.desktop
         return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
@@ -853,6 +875,7 @@ class DeviceSettings:
         d["vpn_bypass_defaults"] = [{"package": p, "label": t} for p, t in VPN_BYPASS_APPS.items()]
         d["allow_google_accounts"] = self.allow_google_accounts
         d["safe_browser"] = self.safe_browser
+        d["desktop_effective"] = self.desktop_effective
         return d
 
     def update(self, changes: dict) -> list[str]:
@@ -942,6 +965,12 @@ class DeviceSettings:
                 errors.append("מצב הסייר המוגן לא מוכר")
             else:
                 self.safe_browser = changes["safe_browser"]
+        if changes.get("desktop") is not None:
+            dk = changes["desktop"]
+            if not isinstance(dk, dict) or any(k not in DESKTOP_DEFAULTS or not isinstance(v, bool) for k, v in dk.items()):
+                errors.append("הגדרות המחשב לא תקינות")
+            else:
+                self.desktop = self._load_desktop({**self.desktop_effective, **dk})
         return errors
 
     def _update_vpn_bypass(self, vb) -> list[str]:

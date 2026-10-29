@@ -258,7 +258,7 @@ ParentCode = Annotated[str | None, Header(alias="X-Parent-Code")]
 # שדות במכשיר שהם "חסימות" — שינוי שלהם דורש את קוד ההורים (שם / תווית — לא)
 _GATED_DEVICE_KEYS = {"level", "status", "options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules",
                       "app_images", "dpc", "keywords", "vpn_bypass", "track", "allow_google_accounts",
-                      "safe_browser"}
+                      "safe_browser", "desktop"}
 DeskDep = Annotated[SupportDesk, Depends(support_dep)]
 BotDep = Annotated[BotDesk, Depends(bot_dep)]
 DeviceRow = Annotated[Any, Depends(device_dep)]
@@ -568,6 +568,7 @@ class DevicePatch(BaseModel):
     track: str | None = Field(default=None, max_length=20)     # מסלול סינון (catalog.TRACKS)
     allow_google_accounts: bool | None = None                 # מסך "הוספת חשבון Google" פתוח קבוע
     safe_browser: str | None = Field(default=None, max_length=12)  # הסייר המוגן: "" / essential / off
+    desktop: dict | None = None                               # מחשבי Windows: {chrome_only, block_store}
 
 
 class PauseIn(BaseModel):
@@ -1105,6 +1106,12 @@ def _routes(app: FastAPI) -> None:
     def pause_device(device_id: int, body: PauseIn, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
         svc.require_parent_code(device_id, parent_code, admin["username"])
         return svc.pause_device(device_id, body.minutes, body.reason, admin["username"])
+
+    @app.post("/v1/admin/devices/{device_id}/removal-code")
+    def removal_code(device_id: int, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
+        """קוד הסרה למחשב Windows (24–48 שעות) — רק איתו אפשר להסיר את FilterPhone מהמחשב."""
+        svc.require_parent_code(device_id, parent_code, admin["username"])
+        return svc.issue_removal_code(device_id, admin["username"])
 
     @app.post("/v1/admin/devices/{device_id}/resume")
     def resume_device(device_id: int, svc: SvcDep, admin: AdminRow):

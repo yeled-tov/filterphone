@@ -56,7 +56,42 @@ const LOG_KINDS = {
   restored: ["ok", "ההגנה שוחזרה (אותו טלפון)"], transfer_in: ["ok", "הועבר מטלפון קודם"],
   transfer_started: ["warn", "נוצר קוד החלפה"], transfer_done: ["warn", "הוחלף למכשיר אחר"], rekey: ["", "מפתח VPN חודש"],
   temp_open: ["warn", "נפתח זמנית"], temp_closed: ["ok", "נחסם שוב"],
+  win_lock_on: ["ok", "חסימת הגלישה מחוץ לסינון פעילה"], win_lock_off: ["bad", "חסימת הגלישה מחוץ לסינון כבתה"],
+  win_browsers_on: ["ok", "הגבלת הדפדפנים פעילה"], win_browsers_off: ["bad", "הגבלת הדפדפנים לא פועלת"],
+  removal_key: ["", "נוצר מפתח לקודי הסרה"], removal_code: ["warn", "הופק קוד הסרה"],
 };
+// מחשבי Windows: שכבות ההגנה שהמחשב בודק בעצמו ומדווח (FilterPhone.Core.Status.Layers)
+const WIN_LAYERS = {
+  tunnel: "חיבור מאובטח לשרת הסינון (VPN)",
+  server_path: "השרת מאשר שהתעבורה עוברת דרכו",
+  kill_switch: "חסימת גלישה מחוץ לסינון",
+  ca_trust: "תעודת הסינון",
+  interception: "סינון אתרים מאובטחים (HTTPS)",
+  image_path: "מסלול סינון התמונות",
+  chrome_only: "גלישה ב-Google Chrome בלבד",
+  chrome_policy: "הגדרות Chrome",
+  store_block: "חסימת חנות Microsoft",
+};
+const WIN_STATES = {
+  ok: ["ok", "תקין"], pending: ["", "בבדיקה"], failed: ["bad", "לא תקין"],
+  unsupported: ["warn", "חלקי — נסגר כשנפתח"], unknown: ["", "טרם נבדק"],
+};
+const WIN_OVERALL = {
+  Protected: ["ok", "מוגן"], ProtectedWithLimitations: ["warn", "מוגן, עם מגבלות של Windows Home"],
+  Connecting: ["", "מתחבר ובודק"], Reconnecting: ["warn", "מתחבר מחדש — הגלישה חסומה בינתיים"],
+  ServerUnavailable: ["warn", "שרת הסינון לא זמין — הגלישה חסומה"], FilteringTestFailed: ["bad", "בדיקת הסינון נכשלה"],
+  AdminActionRequired: ["bad", "נדרשת פעולה במחשב"], SetupIncomplete: ["warn", "ההתקנה לא הושלמה"],
+  DeviceInactive: ["", "לא פעיל בשרת"], NotEnrolled: ["", "לא הופעל"],
+};
+const DESKTOP_CONTROLS = {
+  chrome_only: ["גלישה ב-Google Chrome בלבד", "Edge, Firefox ושאר הדפדפנים נחסמים מראש (ב-Windows Home — נסגרים מיד כשנפתחים)."],
+  block_store: ["חסימת חנות Microsoft", "אי אפשר להתקין מהחנות דפדפנים, משחקים ואפליקציות."],
+};
+const isPc = (d) => d.platform === "windows";
+/** EditionID של Windows → השם שאנשים מכירים (Core = Home). */
+const winEdition = (id) => !id ? "" : id.startsWith("Core") ? "Home" : id.startsWith("Professional") ? "Pro"
+  : id.startsWith("Enterprise") ? "Enterprise" : id.startsWith("Education") ? "Education" : id;
+
 const UPDATE_STATES = {
   available: ["warn", "גרסה חדשה זמינה — הטלפון צריך להתקין ידנית"],
   waiting: ["", "ממתין ל-Wi-Fi לעדכון"],
@@ -255,10 +290,11 @@ function levelPicker(current, onPick, includeOff = false) {
 }
 
 /** עורך החסימות: קטגוריות → מתגים. onChange(set, id, on) — אם מחזיר Promise שנכשל, המתג חוזר. */
-function policyEditor(selected, { onChange, requested = new Set(), openAll = false } = {}) {
+function policyEditor(selected, { onChange, requested = new Set(), openAll = false, filter = null } = {}) {
   const root = el("div", { class: "policy" });
   for (const cat of catalog.categories) {
-    const opts = catalog.options.filter((o) => o.category === cat.id);
+    const opts = catalog.options.filter((o) => o.category === cat.id && (!filter || filter(o)));
+    if (!opts.length) continue;
     const count = el("span", { class: "count" });
     const updateCount = () => {
       const n = opts.filter((o) => selected.has(o.id)).length;
@@ -394,6 +430,7 @@ const ROUTES = {
   support: ["תמיכה", viewSupport],
   wabot: ["בוט וואטסאפ", viewWabot],
   devices: ["מכשירים", viewDevices],
+  computers: ["מחשבים", viewComputers],
   customers: ["לקוחות", viewCustomers],
   profiles: ["פרופילים מוכנים", viewProfiles],
   apps: ["חנות אפליקציות", viewApps],
@@ -631,7 +668,7 @@ function requestCard(r) {
 
 async function viewDevices(arg, query) {
   if (arg) return viewDevice(Number(arg), query);
-  const list = await api("/v1/admin/devices");
+  const list = (await api("/v1/admin/devices")).filter((d) => !isPc(d));     // מחשבים — בטאב "מחשבים"
   const customerFilter = query.get("customer");
   const search = el("input", { type: "search", placeholder: "חיפוש לפי שם, טלפון, כתובת..." });
   const status = el("select", {}, el("option", { value: "" }, "כל המצבים"),
@@ -665,7 +702,11 @@ async function viewDevices(arg, query) {
   };
   [search, status, level, health].forEach((x) => x.addEventListener("input", draw));
   draw();
-  autoRefresh(async () => { const fresh = await api("/v1/admin/devices"); list.splice(0, list.length, ...fresh); draw(); }, 20000);
+  autoRefresh(async () => {
+    const fresh = (await api("/v1/admin/devices")).filter((d) => !isPc(d));
+    list.splice(0, list.length, ...fresh);
+    draw();
+  }, 20000);
   topAction("רענון", render);
   const counts = list.reduce((m, d) => { m[d.compliance?.state] = (m[d.compliance?.state] || 0) + 1; return m; }, {});
   return [
@@ -682,6 +723,7 @@ async function viewDevices(arg, query) {
 
 async function viewDevice(id, query = new URLSearchParams()) {
   const d = await api(`/v1/admin/devices/${id}`);
+  if (isPc(d)) return viewComputer(id, query, d);
   $("#title").textContent = d.name;
   const patch = async (body, msg = "נשמר ✓") => {
     const fresh = await attempt(() => api(`/v1/admin/devices/${id}`, { method: "PATCH", body }), msg);
@@ -725,16 +767,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
   }
 
   // --- לקוח
-  const c = d.customer;
-  const customerCard = card("לקוח", null, c ? el("div", { class: "stack" }, kv([
-    d.avatar_at ? ["תמונת פרופיל", avatarEl(id, d.avatar_at, c.name, "avatar lg")] : null,
-    ["שם", c.name], ["טלפון", telLink(c.phone)], ["מייל", mailLink(c.email)],
-    ["תשלום", el("span", { class: "row gap" }, paymentChip(c.payment), c.paid_until ? `עד ${date(c.paid_until)}` : null)],
-    ["קוד הורים", parentCodeControl(c)],
-    c.notes ? ["הערות", c.notes] : null,
-  ]), el("div", { class: "row" }, el("button", { class: "ghost small", onclick: () => editCustomer(c).then((ok) => ok && render()) }, "עריכת פרטי לקוח"),
-    el("a", { href: `#/devices?customer=${c.id}` }, "כל המכשירים של הלקוח ›")))
-    : el("p", { class: "muted" }, d.label ? `הופעל בקוד: ${d.label}` : "מכשיר שהופעל בקוד, בלי פרטי לקוח."));
+  const customerCard = customerCardOf(d);
 
   // --- מסלול סינון
   const trackCardEl = trackCard(d, patch);
@@ -836,6 +869,224 @@ async function viewDevice(id, query = new URLSearchParams()) {
     ["activity", "פעילות", [el("div", { class: "grid two" }, statsCard, historyCard || card("היסטוריית בקשות", null, empty("אין בקשות."))), eventsCard]],
   ];
   return [back, header, tabbed(tabs, query.get("tab"))];
+}
+
+// ---------------------------------------------------------------- מחשבים (FilterPhone למחשב)
+
+/** במחשב חל רק מה שנאכף בשרת: חסימה ברשת (DNS + פרוקסי) וסינון תמונות/וידאו בפרוקסי. */
+const pcApplies = (o) => (o.mechanisms || []).some((m) => m === "network" || m === "proxy");
+
+function winStateChip(state) {
+  const [k, t] = WIN_STATES[state] || WIN_STATES.unknown;
+  return chip(t, k);
+}
+
+async function viewComputers(arg, query) {
+  if (arg) return viewComputer(Number(arg), query);
+  const list = (await api("/v1/admin/devices")).filter(isPc);
+  const search = el("input", { type: "search", placeholder: "חיפוש לפי שם מחשב, לקוח, טלפון..." });
+  const health = el("select", { "aria-label": "מצב הגנה" },
+    [["", "כל המחשבים"], ["green", "מוגנים (ירוק)"], ["yellow", "חלקי (צהוב)"], ["red", "ההגנה לא פועלת (אדום)"], ["offline", "לא מחוברים"]]
+      .map(([k, t]) => el("option", { value: k, selected: k === (query.get("state") || "") }, t)));
+  const body = el("tbody");
+  const rank = { red: 0, yellow: 1, green: 2, inactive: 3 };
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    const rows = list.filter((d) => matchesFilter(d, health.value)
+      && (!q || [d.name, d.label, d.vpn_ip, d.customer?.name, d.customer?.phone].some((x) => (x || "").toLowerCase().includes(q))))
+      .sort((a, b) => (rank[a.compliance?.state] ?? 9) - (rank[b.compliance?.state] ?? 9));
+    body.replaceChildren(...rows.map((d) => {
+      const win = d.heartbeat?.windows || {};
+      return el("tr", { class: "click", onclick: () => { location.hash = `#/computers/${d.id}`; } },
+        el("td", {}, el("b", {}, d.name), el("small", {}, [d.customer?.name, d.customer?.phone].filter(Boolean).join(" · "))),
+        el("td", {}, d.status === "active" ? el("div", { class: "stack tight" }, complianceChip(d.compliance),
+          el("small", {}, d.compliance.issues.length ? d.compliance.issues[0].text : (d.compliance.online ? "מחובר" : "")))
+          : statusChip(d.status)),
+        el("td", {}, levelBadge(d.level)),
+        el("td", { class: "nowrap" }, win.edition ? `Windows ${winEdition(win.edition)}` : "—", el("small", {}, d.app_version ? `גרסה ${d.app_version}` : "")),
+        el("td", { class: "nowrap" }, `${num(d.today.block)} / ${num(d.today.replace)}`, el("small", {}, "נחסמו / נצבעו")),
+        el("td", { class: "nowrap" }, ago(d.last_handshake || d.last_seen_at)),
+        el("td", {}, d.customer ? paymentChip(d.customer.payment) : null));
+    }));
+    if (!rows.length) {
+      body.replaceChildren(el("tr", {}, el("td", { colspan: 7 }, empty(list.length ? "לא נמצאו מחשבים."
+        : "עוד אין מחשבים. מתקינים את FilterPhone למחשב ומפעילים אותו עם קוד הפעלה (טאב 'קודי הפעלה')."))));
+    }
+  };
+  [search, health].forEach((x) => x.addEventListener("input", draw));
+  draw();
+  autoRefresh(async () => { const fresh = (await api("/v1/admin/devices")).filter(isPc); list.splice(0, list.length, ...fresh); draw(); }, 20000);
+  topAction("רענון", render);
+  return [
+    el("div", { class: "row gap" }, el("div", { class: "grow" }, search), health),
+    el("section", { class: "card" }, el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, el("th", {}, "מחשב"), el("th", {}, "הגנה"), el("th", {}, "רמה"), el("th", {}, "Windows"),
+        el("th", {}, "היום"), el("th", {}, "נראה לאחרונה"), el("th", {}, "תשלום"))), body))),
+  ];
+}
+
+/** מצב ההגנה כפי שהמחשב בדק אותו — כל שכבה לחוד, בלי "לנחש לטובה". */
+function winStatusCard(d) {
+  const c = d.compliance;
+  const win = d.heartbeat?.windows || {};
+  const [ok, overallText] = WIN_OVERALL[win.overall] || ["", win.overall || "לא דווח"];
+  const issues = c.issues.length ? el("ul", { class: "issues" }, c.issues.map((i) =>
+    el("li", { class: i.severity === "red" ? "bad" : "warn" }, i.text))) : el("p", { class: "ok-text" }, "✓ כל שכבות ההגנה נבדקו ועברו.");
+  return card("מצב ההגנה במחשב", d.heartbeat_at ? `דיווח אחרון מהמחשב ${ago(d.heartbeat_at)}` : "המחשב עוד לא שלח דיווח",
+    el("div", { class: "row gap" }, el("span", { class: `state-badge ${c.state}` }, COMPLIANCE[c.state]?.[1] || c.state),
+      win.overall ? chip(`במחשב: ${overallText}`, ok) : null),
+    issues,
+    el("div", { class: "grid two" },
+      el("div", { class: "layer-list" }, Object.entries(WIN_LAYERS).map(([k, t]) =>
+        el("div", { class: "app-row" }, el("div", { class: "grow" }, el("b", {}, t)), winStateChip(win[k])))),
+      kv([
+        ["VPN — נראה לאחרונה", ago(d.last_handshake)],
+        ["הדיווח עבר דרך המנהרה", yesNo(d.heartbeat?.via_vpn)],
+        ["Windows", win.edition ? `${winEdition(win.edition)}${win.build ? ` (build ${win.build})` : ""}` : "—"],
+        ["גרסת FilterPhone למחשב", d.app_version || "—"],
+        ["מוגן ברציפות מאז", win.protected_since ? dateTime(win.protected_since) : "—"],
+        ["כתובת במנהרה", el("span", { class: "ltr" }, d.vpn_ip || "—")],
+        ["נרשם", date(d.created_at)],
+      ])));
+}
+
+/** מה שהמנהל קובע למחשב. המחשב אוכף רק מה שאושר בהתקנה בו. */
+function desktopControlsCard(d, patch) {
+  const eff = d.settings.desktop_effective || {};
+  return card("שליטה במחשב", "כל מתג נשמר מיד ומגיע למחשב בדיווח הבא (עד כ-15 דקות). המחשב אוכף רק מה שמנהל המחשב אישר בזמן ההתקנה.",
+    el("div", { class: "dpc-list" }, Object.entries(DESKTOP_CONTROLS).map(([k, [title, sub]]) => {
+      const input = el("input", { type: "checkbox", checked: Boolean(eff[k]), "aria-label": title, onchange: async (e) => {
+        try { await patch({ desktop: { [k]: e.target.checked } }, e.target.checked ? `${title} — הופעל` : `${title} — כובה`); }
+        catch (_) { e.target.checked = !e.target.checked; }
+      } });
+      return el("div", { class: "app-row" }, el("label", { class: "switch" }, input, el("span")),
+        el("div", { class: "grow" }, el("b", {}, title), el("small", {}, sub)));
+    })));
+}
+
+/** קוד הסרה: בלי קוד מכאן אי אפשר להסיר את FilterPhone מהמחשב. */
+function removalCard(d) {
+  const out = el("div", { class: "stack" });
+  const issue = async () => {
+    if (!await confirmDialog("להפיק קוד הסרה?",
+      "עם הקוד אפשר להסיר את FilterPhone מהמחשב הזה — ואז הגלישה בו תהיה בלי סינון. הקוד עובד רק במחשב הזה ותקף עד יומיים.",
+      "הפקת קוד", true)) return;
+    const r = await attempt(() => api(`/v1/admin/devices/${d.id}/removal-code`, { method: "POST" }));
+    out.replaceChildren(
+      el("p", { class: "code-big ltr" }, r.code),
+      el("p", { class: "muted small" }, `תקף עד ${dateTime(r.valid_until)}. מקלידים אותו בהסרת התוכנה: הגדרות Windows ← אפליקציות ← FilterPhone Desktop ← הסרה.`));
+  };
+  return card("הסרת FilterPhone מהמחשב", "ההסרה דורשת קוד שמופק כאן, למחשב הזה בלבד. גם בלי אינטרנט במחשב — הקוד נבדק במחשב עצמו.",
+    d.removal_ready ? null : el("p", { class: "warn-text" }, "המחשב עוד לא קיבל מפתח לקודי הסרה (גרסה ישנה, או שעוד לא התחבר). אחרי שיתחבר — אפשר יהיה להפיק קוד."),
+    out,
+    el("div", { class: "row end" }, el("button", { class: "danger small", disabled: !d.removal_ready, onclick: issue }, "הפקת קוד הסרה")));
+}
+
+async function viewComputer(id, query = new URLSearchParams(), loaded = null) {
+  const d = loaded || await api(`/v1/admin/devices/${id}`);
+  if (!isPc(d)) return viewDevice(id, query);
+  $("#title").textContent = d.name;
+  const patch = async (body, msg = "נשמר ✓") => {
+    const fresh = await attempt(() => api(`/v1/admin/devices/${id}`, { method: "PATCH", body }), msg);
+    Object.assign(d, fresh);
+    return fresh;
+  };
+  const back = el("a", { href: "#/computers", class: "row gap" }, el("span", { class: "ico ico-back" }), "כל המחשבים");
+  const active = d.status === "active";
+  topAction("שיחת תמיכה", () => { location.hash = `#/support/${id}`; });
+
+  const header = el("section", { class: "card" },
+    el("div", { class: "req-top" },
+      el("span", { class: "avatar" }, el("span", { class: "ico ico-pc" })),
+      el("div", { class: "grow stack tight" },
+        el("div", { class: "row gap" }, el("h2", {}, d.name), statusChip(d.status),
+          active ? complianceChip(d.compliance) : null,
+          active ? el("span", { class: "row gap nowrap small" }, el("span", { class: `dot ${d.compliance.online ? "on" : ""}` }),
+            d.compliance.online ? "מחובר עכשיו" : `לא מחובר · ${ago(d.compliance.last_contact)}`) : null),
+        el("p", { class: "muted small" }, ["מחשב Windows", d.app_version && `גרסה ${d.app_version}`, `נרשם ${date(d.created_at)}`].filter(Boolean).join(" · "))),
+      el("div", { class: "actions" },
+        el("button", { class: "ghost small", onclick: async () => {
+          const input = el("input", { value: d.name });
+          if (await dialog("שם המחשב", el("label", {}, "שם", input), "שמירה")) { await patch({ name: input.value }); render(); }
+        } }, "שינוי שם"),
+        active || d.status === "disabled" ? el("button", { class: "ghost small", onclick: async () => {
+          const turnOff = d.status === "active";
+          if (turnOff && !await confirmDialog("להשבית את המחשב?", "החיבור לסינון יתנתק, ובגלל חסימת הגלישה מחוץ לסינון — לא תהיה במחשב גלישה בכלל עד שתפעילו שוב.", "השבתה", true)) return;
+          await patch({ status: turnOff ? "disabled" : "active" }, turnOff ? "המחשב הושבת — הגלישה בו חסומה" : "המחשב הופעל");
+          render();
+        } }, d.status === "active" ? "השבתה (סגירת הגלישה)" : "הפעלה") : null,
+        el("button", { class: "danger small", onclick: async () => {
+          if (!await confirmDialog(`למחוק את "${d.name}"?`, "המחשב יתנתק ויצטרך קוד הפעלה חדש. הגלישה בו תישאר חסומה עד שיופעל מחדש או שהתוכנה תוסר בקוד הסרה. לא ניתן לבטל.", "מחיקה", true)) return;
+          await attempt(() => api(`/v1/admin/devices/${id}`, { method: "DELETE" }), "נמחק");
+          location.hash = "#/computers";
+        } }, "מחיקה"))));
+
+  if (d.status === "pending") {
+    return [back, header, card("ממתין לאישור", null, el("p", {}, "המחשב עוד לא אושר. האישור נעשה מדף הבקשות."))];
+  }
+
+  const levelCard = card("רמת סינון תמונות", "השינוי חל תוך כמה שניות, גם במחשב.",
+    levelPicker(d.level, async (lv) => {
+      try { await patch({ level: lv }, `הרמה שונתה ל${levelName(lv)}`); return true; } catch (_) { return false; }
+    }, true));
+
+  const selected = new Set(d.settings.options);
+  const saveState = el("span", { class: "save-state" });
+  let pendingSave = Promise.resolve();
+  const policyCard = card("חסימות אתרים ושירותים", "כל מתג נשמר מיד ונחסם בשרת (DNS + פרוקסי), גם במחשב. מוצגות רק חסימות שחלות על מחשב.",
+    policyEditor(selected, { filter: pcApplies, onChange: (set) => {
+      saveState.textContent = "שומר…";
+      pendingSave = pendingSave.then(() => patch({ options: [...set] }, null)).then(() => { saveState.textContent = "נשמר ✓"; })
+        .catch((e) => { saveState.textContent = ""; throw e; });
+      return pendingSave;
+    } }), saveState);
+
+  const ta = (key, ph) => el("textarea", { class: "ltr", rows: 4, placeholder: ph, value: (d.settings[key] || []).join("\n") });
+  const hosts = ta("custom_hosts", "example.co.il");
+  const allow = ta("allow_hosts", "kosher-site.co.il");
+  const customCard = card("אתרים — ידני", "חסימה של אתר שלא ברשימות, ורשימת היתר (מסירה חסימה מאתר מסוים).",
+    el("div", { class: "grid two" }, el("label", {}, "אתרים לחסימה", hosts), el("label", {}, "אתרים מותרים (חריגים)", allow)),
+    el("div", { class: "row end" }, el("button", { class: "primary", onclick: async () => {
+      await patch({ custom_hosts: lines(hosts.value), allow_hosts: lines(allow.value) });
+      render();
+    } }, "שמירה")));
+
+  const statsCard = card("7 הימים האחרונים", null, statsBars(d.history));
+  const eventsCard = card("חסימות אחרונות במחשב", null, eventsTable(d.events, false),
+    el("div", { class: "row end" }, el("a", { href: `#/events?device=${id}` }, "לכל החסימות ›")));
+  const log = d.device_log || [];
+  const logCard = card("יומן המחשב", "שינויים במצב ההגנה כפי שדווחו, ופעולות רגישות (קודי הסרה).",
+    log.length ? el("div", { class: "table-wrap" }, el("table", {}, el("tbody", {}, log.map((e) => el("tr", {},
+      el("td", { class: "nowrap" }, dateTime(e.ts)),
+      el("td", {}, chip((LOG_KINDS[e.kind] || ["", e.kind])[1], (LOG_KINDS[e.kind] || [""])[0])),
+      el("td", { class: "small" }, e.detail || "")))))) : empty("אין אירועים."));
+
+  const tabs = [
+    ["overview", "סקירה", [winStatusCard(d), el("div", { class: "grid two" }, customerCardOf(d), logCard)]],
+    ["blocks", "חסימות", [levelCard, policyCard, customCard]],
+    ["control", "שליטה במחשב", [desktopControlsCard(d, patch), removalCard(d)]],
+    ["activity", "פעילות", [statsCard, eventsCard]],
+  ];
+  autoRefresh(async () => {
+    if (document.querySelector(".tab-panel:not([hidden]) textarea:focus")) return;
+    const fresh = await api(`/v1/admin/devices/${id}`);
+    if (fresh.heartbeat_at !== d.heartbeat_at || fresh.compliance.state !== d.compliance.state) render();
+  }, 30000);
+  return [back, header, tabbed(tabs, query.get("tab"))];
+}
+
+/** כרטיס הלקוח של מכשיר (טלפון או מחשב). */
+function customerCardOf(d) {
+  const c = d.customer;
+  return card("לקוח", null, c ? el("div", { class: "stack" }, kv([
+    d.avatar_at ? ["תמונת פרופיל", avatarEl(d.id, d.avatar_at, c.name, "avatar lg")] : null,
+    ["שם", c.name], ["טלפון", telLink(c.phone)], ["מייל", mailLink(c.email)],
+    ["תשלום", el("span", { class: "row gap" }, paymentChip(c.payment), c.paid_until ? `עד ${date(c.paid_until)}` : null)],
+    ["קוד הורים", parentCodeControl(c)],
+    c.notes ? ["הערות", c.notes] : null,
+  ]), el("div", { class: "row" }, el("button", { class: "ghost small", onclick: () => editCustomer(c).then((ok) => ok && render()) }, "עריכת פרטי לקוח"),
+    el("a", { href: `#/devices?customer=${c.id}` }, "כל המכשירים של הלקוח ›")))
+    : el("p", { class: "muted" }, d.label ? `הופעל בקוד: ${d.label}` : "מכשיר שהופעל בקוד, בלי פרטי לקוח."));
 }
 
 /** טאבים בתוך עמוד. הטאב שנבחר נשמר בכתובת (?tab=) — כך רענון / שמירה חוזרים לאותו מקום. */
