@@ -314,7 +314,7 @@ def region_mask(labels: np.ndarray, mode: str, size: tuple[int, int],
                 fill_boxes: tuple[Box, ...] = ()) -> Image.Image:
     """המסכה לצביעה (L, 0/255) בגודל התמונה.
 
-    mode="skin": עור חשוף (בלי פנים).  mode="body": כל הגוף חוץ מהפנים והשיער —
+    mode="skin": עור חשוף וגם הפנים.  mode="body": כל הגוף, כולל הפנים (חוץ מהשיער) —
     לבגד ים ולבוש חשוף מאוד, שבהם גם הבגד עצמו לא צריך להיראות.
     extra_boxes: אזורים מגלאי חלקי הגוף (x, y, w, h בקואורדינטות התמונה) — נצבעים רק
     איפה שיש אישה, כדי להשלים פספוס של הסגמנטציה בלי "מלבנים" על הרקע או על גבר.
@@ -326,9 +326,9 @@ def region_mask(labels: np.ndarray, mode: str, size: tuple[int, int],
     """
     W, H = size
     if mode == "body":
-        m = np.isin(labels, (SKIN, CLOTHES, OTHER))
+        m = np.isin(labels, (SKIN, FACE, CLOTHES, OTHER))
     else:
-        m = labels == SKIN
+        m = np.isin(labels, (SKIN, FACE))
     if fill_boxes:
         lh, lw = labels.shape
         woman = (labels != BG) & (labels != MAN)

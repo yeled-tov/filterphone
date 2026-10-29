@@ -99,17 +99,17 @@ def _labels_person() -> np.ndarray:
     return lab
 
 
-def test_skin_mode_paints_only_skin_and_keeps_face():
+def test_skin_mode_paints_skin_and_face():
     m = np.asarray(S.region_mask(_labels_person(), "skin", (200, 200)))
     assert m[90, 45] == 255                     # הזרוע
     assert m[120, 100] == 0                     # הבגד
-    assert m[40, 100] == 0                      # הפנים
+    assert m[40, 100] == 255                    # הפנים — גם הן לא נראות
     assert m[190, 190] == 0                     # הרקע
 
 
-def test_body_mode_paints_clothes_too():
+def test_body_mode_paints_clothes_and_face_too():
     m = np.asarray(S.region_mask(_labels_person(), "body", (200, 200)))
-    assert m[120, 100] == 255 and m[90, 45] == 255 and m[40, 100] == 0
+    assert m[120, 100] == 255 and m[90, 45] == 255 and m[40, 100] == 255
 
 
 def test_keep_boxes_protect_faces_even_if_marked_skin():
