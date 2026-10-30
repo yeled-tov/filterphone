@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import http.client
 import ipaddress
+import re
 import socket
 import ssl
 import time
@@ -16,6 +17,7 @@ import urllib.parse
 
 UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Mobile Safari/537.36"
 ACCEPT = "image/webp,image/apng,image/*,*/*;q=0.8"
+ACCEPT_PAGE = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5"
 MAX_REDIRECTS = 4
 
 
@@ -75,22 +77,48 @@ def _check_url(url: str) -> tuple[urllib.parse.SplitResult, int, str]:
     return u, port, _public_ip(u.hostname, port)
 
 
-def _open(url: str, timeout: float):
+def _open(url: str, timeout: float, accept: str = ACCEPT):
     u, port, ip = _check_url(url)
     cls = _PinnedHTTPSConnection if u.scheme == "https" else _PinnedHTTPConnection
     conn = cls(ip, u.hostname, port, timeout)
     path = urllib.parse.urlunsplit(("", "", u.path or "/", u.query, ""))
-    conn.request("GET", path, headers={"User-Agent": UA, "Accept": ACCEPT, "Accept-Encoding": "identity"})
+    conn.request("GET", path, headers={"User-Agent": UA, "Accept": accept, "Accept-Encoding": "identity",
+                                       "Accept-Language": "he-IL,he;q=0.9,en;q=0.8"})
     return conn, conn.getresponse()
 
 
 def fetch_image(url: str, max_bytes: int, timeout: float = 12.0, total_s: float = 20.0) -> tuple[bytes, str]:
     """→ (בייטים, סוג תוכן)."""
+    data, ct, _ = fetch(url, max_bytes, timeout, total_s, ACCEPT, "התמונה גדולה מדי")
+    return data, ct
+
+
+def fetch_page(url: str, max_bytes: int = 1_500_000, timeout: float = 10.0,
+               total_s: float = 15.0) -> tuple[str, str]:
+    """דף HTML (לבודק האתרים). דף גדול מהתקרה — נחתך (מספיק לסיווג). → (טקסט, הכתובת הסופית)."""
+    data, ct, final = fetch(url, max_bytes, timeout, total_s, ACCEPT_PAGE, "", truncate=True)
+    charset = ""
+    for part in ct.split(";")[1:]:
+        k, _, v = part.strip().partition("=")
+        if k.lower() == "charset":
+            charset = v.strip('"').lower()
+    if not charset:
+        m = re.search(rb'<meta[^>]+charset=["\']?([\w-]+)', data[:4096], re.IGNORECASE)
+        charset = m.group(1).decode("ascii", "replace").lower() if m else "utf-8"
+    try:
+        return data.decode(charset, "replace"), final
+    except LookupError:
+        return data.decode("utf-8", "replace"), final
+
+
+def fetch(url: str, max_bytes: int, timeout: float, total_s: float, accept: str, too_big: str,
+          truncate: bool = False) -> tuple[bytes, str, str]:
+    """→ (בייטים, סוג תוכן, הכתובת הסופית אחרי הפניות). [truncate] — מעבר לתקרה נחתך במקום שגיאה."""
     deadline = time.monotonic() + total_s
     url = url.strip()
     for _ in range(MAX_REDIRECTS + 1):
         try:
-            conn, resp = _open(url, timeout)
+            conn, resp = _open(url, timeout, accept)
         except FetchError:
             raise
         except (OSError, http.client.HTTPException, ValueError) as e:
@@ -102,19 +130,23 @@ def fetch_image(url: str, max_bytes: int, timeout: float = 12.0, total_s: float 
             if resp.status != 200:
                 raise FetchError(f"האתר החזיר {resp.status}")
             length = resp.getheader("content-length")
-            if length and length.isdigit() and int(length) > max_bytes:
-                raise FetchError("התמונה גדולה מדי")
+            if not truncate and length and length.isdigit() and int(length) > max_bytes:
+                raise FetchError(too_big)
             data = bytearray()
             while len(data) <= max_bytes:
                 if time.monotonic() > deadline:
+                    if truncate and data:
+                        break
                     raise FetchError("ההורדה איטית מדי")
                 chunk = resp.read1(min(65536, max_bytes + 1 - len(data)))
                 if not chunk:
                     break
                 data += chunk
             if len(data) > max_bytes:
-                raise FetchError("התמונה גדולה מדי")
-            return bytes(data), resp.getheader("content-type", "")
+                if not truncate:
+                    raise FetchError(too_big)
+                del data[max_bytes:]
+            return bytes(data), resp.getheader("content-type", ""), url
         except (OSError, http.client.HTTPException) as e:
             raise FetchError(f"ההורדה נכשלה: {type(e).__name__}") from e
         finally:

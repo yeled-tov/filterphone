@@ -102,6 +102,10 @@ class Settings:
     wa_public_number: str = ""
     wa_graph_version: str = ""
     wa_bot_token: str = ""
+    # רמות גלישה: רשימת האתרים למבוגרים (נחסמת בחיפוש ובגלישה לכולם; הבוט משתמש בה לסיווג)
+    web_adult_list_url: str = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/nsfw-onlydomains.txt"
+    web_check_workers: int = 3              # כמה אתרים הבוט בודק במקביל
+    web_check_images: int = 12              # כמה תמונות מדף הבית של אתר נבדקות במנוע
 
     @property
     def engine_socket(self) -> str:
@@ -110,6 +114,10 @@ class Settings:
     @property
     def db_path(self) -> str:
         return os.path.join(self.data_dir, "filterphone.db")
+
+    @property
+    def adult_list_file(self) -> str:
+        return os.path.join(self.data_dir, "lists", "nsfw.txt")
 
 
 def _coerce(raw: str, typ: type):

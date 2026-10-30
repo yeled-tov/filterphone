@@ -64,4 +64,28 @@ class AdbCommandsTest {
         assertTrue(notOwner.any { it.contains("ACTIVATE_VPN") })
         assertFalse(notOwner.any { it.contains("POST_NOTIFICATIONS") })
     }
+
+    @Test
+    fun accountTypesReadOnlyTheOwnerTypesWithoutNames() {
+        val dumpsys = """
+            User UserInfo{0:Owner:c13}:
+              Accounts: 3
+                Account {name=someone@gmail.com, type=com.google}
+                Account {name=someone@gmail.com, type=com.google}
+                Account {name=x@samsung.com, type=com.osp.app.signin}
+              AccountId, Action_Type, timestamp, UID, TableName, Key
+            User UserInfo{150:Secure Folder:1030}:
+              Accounts: 1
+                Account {name=y, type=com.whatsapp}
+        """.trimIndent()
+        assertEquals(listOf("com.google", "com.osp.app.signin"), AdbCommands.accountTypes(dumpsys))
+        assertEquals(emptyList<String>(), AdbCommands.accountTypes("Accounts: 0"))
+    }
+
+    @Test
+    fun extraUsersListsEverythingButTheOwner() {
+        val out = "Users:\n\tUserInfo{0:Owner:c13} running\n\tUserInfo{95:DUAL_APP:2000030}\n\tUserInfo{150:Secure Folder:1030}"
+        assertEquals(listOf("DUAL_APP", "Secure Folder"), AdbCommands.extraUsers(out))
+        assertEquals(emptyList<String>(), AdbCommands.extraUsers("Users:\n\tUserInfo{0:Owner:c13} running"))
+    }
 }

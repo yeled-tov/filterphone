@@ -16,21 +16,25 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from urllib.parse import parse_qs
 
 import redis.asyncio as aioredis
 from mitmproxy import http, tls
 from mitmproxy.proxy import server_hooks
 
 from .. import metrics
+from ..api.catalog import resolve_keywords
 from ..engine.imaging import PLACEHOLDER_PNG
 from ..engine.policy import Action, on_failure
 from ..settings import get_settings
-from . import inline, rewrite
-from .blockpage import block_page
+from ..websites import BLOCKED_VERDICTS, WEB_LEVELS
+from . import inline, rewrite, serp
+from .blockpage import REVIEW_PATH, block_page, checking_page, review_sent_page
 from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
 from .hosts import HostPolicy, is_chromium_hello, load_lists
 from .policy import DevicePolicy, PolicyTable
+from .web import CHECK_WAIT_S, WebState
 
 log = logging.getLogger("filterphone.proxy")
 
@@ -48,6 +52,10 @@ METRICS_EVERY_S = 15
 HOST_EVENT_EVERY_S = 60             # חסימת אתר נרשמת פעם בדקה לכל (מכשיר, אתר) — לא על כל בקשה
 PLACEHOLDER_HEADERS_DROP = ("etag", "last-modified", "content-md5", "content-range",
                             "accept-ranges", "content-encoding", "digest")
+MAX_SERP_BYTES = 6_000_000
+# לשוניות בחיפוש Google שסגורות ברמות הרשימה הלבנה (תמונות, חדשות, סרטונים, קניות, מצב AI)
+_GOOGLE_TABS = {"isch": "images", "nws": "news", "vid": "video", "shop": "shopping", "bks": "books"}
+_GOOGLE_UDM = {"2": "images", "12": "news", "7": "video", "28": "shopping", "36": "books", "50": "ai"}
 
 
 def _client_ip(flow_or_ctx) -> str:
@@ -85,6 +93,21 @@ def _is_document_request(req: http.Request) -> bool:
     return not dest and "text/html" in req.headers.get("accept", "").lower()
 
 
+def _is_navigation(req: http.Request) -> bool:
+    """ניווט לדף (המסמך הראשי בלשונית) — לא iframe, לא משאב של דף."""
+    dest = req.headers.get("sec-fetch-dest", "").lower()
+    if dest:
+        return dest == "document"
+    return req.method == "GET" and "text/html" in req.headers.get("accept", "").lower()
+
+
+def _google_tab(path: str) -> str | None:
+    """הלשונית בחיפוש Google (images / news / video / shopping / books / ai), או None לחיפוש הרגיל."""
+    q = parse_qs(path.partition("?")[2])
+    tab = _GOOGLE_TABS.get((q.get("tbm") or [""])[0])
+    return tab or _GOOGLE_UDM.get((q.get("udm") or [""])[0])
+
+
 def _is_video(flow: http.HTTPFlow) -> bool:
     ct = _ctype(flow.response)
     if ct.startswith("video/") or ct in VIDEO_TYPES:
@@ -107,6 +130,8 @@ class FilterPhone:
                                        socket_timeout=1.0, socket_connect_timeout=1.0,
                                        max_connections=64, health_check_interval=30)
         self.policies = PolicyTable(self.redis, self.cfg.default_level)
+        self.web = WebState(self.redis, self.cfg.adult_list_file)
+        self.terms = serp.TermMatcher(resolve_keywords({})["terms"])
         self._background: set[asyncio.Task] = set()
         self._host_events: dict[tuple[str, str], float] = {}
         m = self.metrics = metrics.Registry("fp_proxy")
@@ -121,6 +146,9 @@ class FilterPhone:
         self.m_devices = m.gauge("policy_devices", "מכשירים בטבלת המדיניות")
         self.m_learned_inspected = m.counter("learned_chrome_inspected_total",
                                              "חיבורי כרום לשרת תוכן שנלמד (בגלל אפליקציה אחרת) — נבדקו בכל זאת")
+        self.m_web = m.counter("web_pages_total", "ניווט לדפים ברמות גלישה, לפי תוצאה (allow/check/block)")
+        self.m_search = m.counter("search_total", "חיפושים: מילה מפורשת (query) / לשונית סגורה (tab)")
+        self.m_serp = m.counter("serp_results_hidden_total", "תוצאות חיפוש שהוסתרו")
 
     # ------------------------------------------------------------ מחזור חיים
 
@@ -130,7 +158,13 @@ class FilterPhone:
             await self.policies.refresh()
         except Exception as e:
             log.warning("initial policy load failed: %s", e)
+        try:
+            await self.web.load()
+        except Exception as e:
+            log.warning("initial web verdicts load failed: %s", e)
+        await asyncio.to_thread(self.web.reload_list_if_changed)
         self._spawn(self.policies.run())
+        self._spawn(self.web.run())
         self._spawn(self._reload_learned_forever())
         self._spawn(self._publish_metrics_forever())
         log.info("FilterPhone proxy ready (%d learned passthrough hosts)", self.hosts.learned_count())
@@ -209,6 +243,10 @@ class FilterPhone:
                     and is_chromium_hello(data.client_hello):
                 self.m_learned_inspected.inc()
                 return
+            # רמת גלישה: כרום לאתר שלא פתוח ללקוח — נבדק (דף חסימה), גם אם אפליקציה "לימדה" אותו
+            if pol.web.active and sni and is_chromium_hello(data.client_hello) \
+                    and pol.web.decide(sni, self.web.verdict(sni)) != "allow":
+                return
             data.ignore_connection = True
 
     def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
@@ -236,11 +274,18 @@ class FilterPhone:
         ip = _client_ip(flow)
         pol = self.policies.get(ip)
         host = req.pretty_host
+        if req.path.startswith(REVIEW_PATH):
+            # "שליחה לבדיקה" מדף החסימה — נענה כאן (request), לא יוצא לאתר
+            flow.metadata["fp_review"] = True
+            return
         if pol.blocks(host) or (pol.paths and pol.blocks_path(host, req.path)):
             flow.response = self._blocked_host_response(req, host)
             flow.metadata["fp_handled"] = True
             self.m_sites.inc()
             self._record_host_block(ip, host, req)
+            return
+        if pol.filtering and self._web_gate(flow, pol, ip, host):
+            flow.metadata["fp_handled"] = True
             return
         if not pol.filtering or not _is_image_request(req):
             return
@@ -259,6 +304,116 @@ class FilterPhone:
         path = rewrite.image_path(host, req.path)
         if path:
             req.path = path
+
+    # ------------------------------------------------------------ רמות גלישה וחיפוש
+
+    def _web_gate(self, flow: http.HTTPFlow, pol: DevicePolicy, ip: str, host: str) -> bool:
+        """חיפוש (מילים מפורשות, לשוניות סגורות), אתרים למבוגרים ורמת הגלישה. True = נענה כאן."""
+        req = flow.request
+        nav = _is_navigation(req)
+        sq = serp.search_query(host, req.path)
+        if sq is not None:
+            engine, query, suggest = sq
+            if query and self.terms.matches(query):
+                self.m_search.inc(kind="query")
+                flow.response = self._no_results(nav and not suggest)
+                self._spawn(self._record(ip, host, "search", "explicit search", "search", ""))
+                return True
+            if pol.web.active and engine == "google" and not suggest:
+                tab = _google_tab(req.path)
+                if tab and not (tab == "shopping" and "shopping_general" in pol.web.groups):
+                    self.m_search.inc(kind="tab")
+                    flow.response = self._no_results(nav)
+                    return True
+        if not nav:
+            return False
+        if self.web.is_adult(host):
+            flow.response = self._page(block_page(host, "תוכן למבוגרים — חסום תמיד."))
+            self._record_host_block(ip, host, req)
+            return True
+        if not pol.web.active:
+            return False
+        verdict = self.web.verdict(host)
+        decision = pol.web.decide(host, verdict)
+        if decision == "check" and self.web.waited(host) > CHECK_WAIT_S:
+            decision, verdict = "block", "error"
+        self.m_web.inc(result=decision)
+        if decision == "allow":
+            return False
+        if decision == "check":
+            if self.web.should_queue(host):
+                self._spawn(self.web.queue_check(host))
+            flow.response = self._page(checking_page(host))
+            return True
+        level = WEB_LEVELS.get(pol.web.level, {}).get("title", "")
+        reason = f"האתר לא נכלל ברמת הגלישה שלך ({level})."
+        if verdict in BLOCKED_VERDICTS:
+            reason = f"{BLOCKED_VERDICTS[verdict]} — לא נכלל ברמת הגלישה שלך ({level})."
+        flow.response = self._page(block_page(host, reason, review=True, url=req.pretty_url))
+        self._record_host_block(ip, host, req)
+        return True
+
+    @staticmethod
+    def _page(body: bytes, status: int = 200) -> http.Response:
+        return http.Response.make(status, body, {"content-type": "text/html; charset=utf-8",
+                                                 "cache-control": "no-store", "x-filterphone": "web"})
+
+    def _no_results(self, nav: bool) -> http.Response:
+        if nav:
+            return self._page(serp.no_results_page())
+        return http.Response.make(204, b"", {"cache-control": "no-store", "x-filterphone": "search"})
+
+    async def request(self, flow: http.HTTPFlow) -> None:
+        if not flow.metadata.get("fp_review"):
+            return
+        req = flow.request
+        ip = _client_ip(flow)
+        host = req.pretty_host
+        if req.method == "POST":
+            form = parse_qs(req.get_text(strict=False) or "")
+            url = (form.get("url") or [f"https://{host}/"])[0]
+            note = (form.get("note") or [""])[0]
+            try:
+                await self.web.review(ip, host, url, note)
+            except Exception as e:
+                log.warning("review request not recorded: %s", e)
+            flow.response = self._page(review_sent_page(host))
+        else:
+            flow.response = self._page(block_page(host, "שליחה לבדיקה — מדף החסימה בלבד."))
+        flow.metadata["fp_handled"] = True
+
+    async def _filter_serp(self, flow: http.HTTPFlow) -> None:
+        """דף תוצאות של Google / Bing: מוחקים תוצאות לאתרים שחסומים ללקוח."""
+        ip = _client_ip(flow)
+        pol = self.policies.get(ip)
+        resp = flow.response
+        body = bounded_content(resp, MAX_SERP_BYTES)
+        if not body:
+            return
+        charset = "utf-8"
+        for part in resp.headers.get("content-type", "").split(";")[1:]:
+            k, _, v = part.strip().partition("=")
+            if k.lower() == "charset" and v:
+                charset = v.strip('"')
+        try:
+            text = body.decode(charset, "surrogateescape")
+        except LookupError:
+            return
+
+        def hidden(h: str) -> bool:
+            return self.web.is_adult(h) or pol.blocks(h) or \
+                (pol.web.active and not pol.web.visible(h, self.web.verdict(h)))
+        try:
+            new, removed = await asyncio.to_thread(serp.filter_results, text, hidden)
+        except Exception as e:          # דף שלא הצלחנו לפענח — עובר כמו שהוא (האתר עצמו עדיין נחסם בלחיצה)
+            log.warning("serp filter failed: %s", e)
+            return
+        if not removed:
+            return
+        self.m_serp.inc(removed)
+        for h in ("etag", "last-modified", "content-md5", "digest"):
+            resp.headers.pop(h, None)
+        resp.content = new.encode(charset, "surrogateescape")
 
     def responseheaders(self, flow: http.HTTPFlow) -> None:
         if flow.metadata.get("fp_handled"):
@@ -291,6 +446,11 @@ class FilterPhone:
                 return
             flow.metadata["fp_kind"] = "image"
             return
+        if _ctype(resp) == "text/html" and resp.status_code == 200 \
+                and serp.search_query(flow.request.pretty_host, flow.request.path) is not None \
+                and (size is None or size <= MAX_SERP_BYTES):
+            flow.metadata["fp_kind"] = "serp"
+            return
         if (pol.level > 0 or pol.images == "block") \
                 and inline.should_scan(_ctype(resp), flow.request.pretty_host) \
                 and (size is None or size <= MAX_INLINE_BYTES):
@@ -306,6 +466,11 @@ class FilterPhone:
             await self._filter_image(flow)
         elif kind == "inline":
             await self._filter_inline(flow)
+        elif kind == "serp":
+            await self._filter_serp(flow)
+            pol = self.policies.get(_client_ip(flow))
+            if pol.level > 0 or pol.images == "block":
+                await self._filter_inline(flow)     # התמונות המוטמעות בדף התוצאות
 
     # ------------------------------------------------------------ תמונות
 

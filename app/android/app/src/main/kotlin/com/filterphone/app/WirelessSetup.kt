@@ -120,7 +120,13 @@ object WirelessSetup {
         }
         if (!DeviceOwnerManager.isDeviceOwner(context)) {
             val reason = RootProvisioner.classifyDpmFailure(out)
-            return RootProvisioner.Outcome(false, "ENROLL-WIFI-008", reason, out.take(300))
+            // מה בדיוק חוסם — כדי שהמסך יסביר מה להסיר (חשבון סמסונג, תיקייה מאובטחת…). רק סוגים, בלי שמות.
+            val blockers = when (reason) {
+                "accounts_present" -> AdbCommands.accountTypes(run(mgr, "dumpsys account 2>/dev/null"))
+                "multiple_users" -> AdbCommands.extraUsers(run(mgr, "pm list users 2>&1")).map { "user:$it" }
+                else -> emptyList()
+            }
+            return RootProvisioner.Outcome(false, "ENROLL-WIFI-008", reason, out.take(300), blockers)
         }
         // הצלחה: הרשאות ושאר הצעדים
         for (cmd in AdbCommands.followups(pkg, Build.VERSION.SDK_INT, owner = true)) run(mgr, cmd)
@@ -150,7 +156,7 @@ object WirelessSetup {
      * אפליקציות החשבון שאפשר להשבית זמנית (לטריק). נגזר מרשימת ה-authenticators — בלי הרשאת
      * GET_ACCOUNTS (שאסורה לפי בדיקת ה-APK), ובלי לקרוא את החשבונות עצמם.
      */
-    private fun accountPackages(context: Context): List<String> {
+    fun accountPackages(context: Context): List<String> {
         return try {
             val pkgs = AccountManager.get(context).authenticatorTypes.map { it.packageName }
             AdbCommands.accountPackages(pkgs, context.packageName)

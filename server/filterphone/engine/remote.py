@@ -106,7 +106,9 @@ class RemoteEngine:
         self.mode = "always"
         self._cooldown_until = 0.0
         self.ewma_s: float | None = None        # זמן תשובה ממוצע (ממוצע נע) של בקשות שהצליחו
-        self.probe_at = 0.0                     # מתי נשלחה הבקשה האחרונה (למדידה מחדש כש-Modal איטי)
+        # מתי נשלחה הבקשה האחרונה (למדידה מחדש כש-Modal איטי). "מזמן" = ‎-1e18 ולא 0: השעון (monotonic) מתחיל
+        # בהדלקת המחשב, ובשרת שעלה לפני פחות משתי דקות 0 היה נראה "ממש עכשיו"
+        self.probe_at = -1e18
         u = urllib.parse.urlsplit(url)
         self._host, self._port = u.hostname or "", u.port or 443
         self._path = (u.path or "/") + (f"?{u.query}" if u.query else "")

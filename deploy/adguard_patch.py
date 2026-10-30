@@ -16,6 +16,9 @@ import argparse
 import yaml
 
 BYPASS_LIST = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh-vpn-proxy-bypass.txt"
+# תוכן למבוגרים — חסום לכל הטלפונים בכל רמה (גם בחיפוש: הפרוקסי מסתיר תוצאות לאתרים האלה)
+NSFW_LIST = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/nsfw.txt"
+GLOBAL_LISTS = ((BYPASS_LIST, "HaGeZi — עקיפות DNS/VPN/פרוקסי"), (NSFW_LIST, "HaGeZi — תוכן למבוגרים (NSFW)"))
 CANARY_RULE = "||use-application-dns.net^$dnsrewrite=NXDOMAIN"
 # חריגים גלובליים ש"תיקון ה-DNS" מ-12/10/2026 הוסיף ליוטיוב. בגלל $important הם גברו על כל חסימה —
 # גם על חסימת YouTube שהמנהל בחר למכשיר מסוים. מוסרים (רק השורות המדויקות האלה; כל השאר נשאר).
@@ -73,10 +76,10 @@ def main(path: str, api_user: str = "", api_hash: str = "") -> None:
             holder["safe_search"][engine] = True
 
     filters = doc.setdefault("filters", []) or []
-    if not any(f.get("url") == BYPASS_LIST for f in filters):
-        next_id = max([int(f.get("id", 0)) for f in filters] + [1000]) + 1
-        filters.append({"enabled": True, "url": BYPASS_LIST, "id": next_id,
-                        "name": "HaGeZi — עקיפות DNS/VPN/פרוקסי"})
+    for url, name in GLOBAL_LISTS:
+        if not any(f.get("url") == url for f in filters):
+            next_id = max([int(f.get("id", 0)) for f in filters] + [1000]) + 1
+            filters.append({"enabled": True, "url": url, "id": next_id, "name": name})
     doc["filters"] = filters
 
     rules = doc.setdefault("user_rules", []) or []

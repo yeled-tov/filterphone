@@ -133,6 +133,12 @@ class WirelessCodeReceiver : BroadcastReceiver() {
                     WirelessNotify.done(app, true, "המכשיר מוגדר כעת כמנהל מכשיר והסינון פעיל.")
                 } else if (!pairingOk) {
                     WirelessNotify.prompt(app, caPem, error = "הקוד לא התאים או שפג תוקפו. לחצו שוב \"התאמת מכשיר באמצעות קוד\" והקלידו קוד חדש.")
+                } else if (report["device_owner_result"] == "accounts_present") {
+                    WirelessNotify.done(app, false, "יש בטלפון חשבון שאנדרואיד לא מאפשר לעקוף (למשל חשבון Samsung). " +
+                        "פתחו את FilterPhone ← התקנת הסינון — שם כתוב בדיוק מה להסיר.")
+                } else if (report["device_owner_result"] == "multiple_users") {
+                    WirelessNotify.done(app, false, "יש בטלפון משתמש נוסף (תיקייה מאובטחת / אפליקציות כפולות / מרחב שני). " +
+                        "פתחו את FilterPhone ← התקנת הסינון — שם כתוב מה להסיר.")
                 } else {
                     WirelessNotify.done(app, false, "ההתאמה הצליחה אך ההגדרה לא הושלמה. פתחו את FilterPhone להמשך.")
                 }

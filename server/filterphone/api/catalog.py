@@ -24,15 +24,18 @@ import json
 import re
 from dataclasses import dataclass, field
 
+from .. import websites
+
 LEVELS = {
     0: {"name": "כבוי", "short": "בלי סינון תמונות",
         "desc": "רק סינון האתרים (DNS) פעיל. תמונות לא נבדקות."},
     1: {"name": "מחמיר", "short": "כל תמונה של אישה נחסמת",
         "desc": "כל תמונה של אישה או ילדה נחסמת, גם בלבוש צנוע. תמונות של גברים, נופים ומוצרים עוברות. "
                 "באפליקציות שאי אפשר לסנן — תמונות לא נטענות."},
-    2: {"name": "בינוני", "short": "לבוש צנוע עובר, חשיפה נצבעת",
-        "desc": "תמונות בלבוש צנוע עוברות. עור חשוף נצבע בשחור לפי צורת הגוף (ידיים, כתפיים, רגליים "
-                "וכו'), ובלבוש חשוף מאוד — כל הגוף חוץ מהפנים. עירום נחסם לגמרי."},
+    2: {"name": "בינוני", "short": "לבוש צנוע עובר, פנים וחשיפה נצבעים",
+        "desc": "תמונות בלבוש צנוע עוברות, אבל הפנים של האישה וכל עור חשוף נצבעים באפור לפי צורת הגוף "
+                "(פנים, ידיים, כתפיים, רגליים וכו'). בלבוש חשוף מאוד — כל הגוף; חשופה ברובה (70% ומעלה) "
+                "— התמונה נחסמת כולה. עירום נחסם לגמרי."},
     3: {"name": "בסיסי", "short": "רק עירום נחסם",
         "desc": "רק תמונות עירום מפורש נחסמות. כל השאר עובר."},
 }
@@ -617,12 +620,14 @@ def item_title(item: str) -> str:
 def public_catalog() -> dict:
     """לטופס ההרשמה באפליקציה."""
     return {"levels": [{"level": k, **v} for k, v in LEVELS.items() if k > 0],
+            "web": websites.public_catalog(),
             "categories": CATEGORIES,
             "options": [o.public() for o in OPTIONS]}
 
 
 def admin_catalog() -> dict:
     return {"levels": [{"level": k, **v} for k, v in LEVELS.items()],
+            "web": websites.public_catalog(),
             "categories": CATEGORIES,
             "options": [{**o.admin(), "baseline": o.id in BASELINE_OPTIONS} for o in OPTIONS],
             "defaults": {"level": DEFAULT_LEVEL, "options": list(DEFAULT_OPTIONS)},
@@ -737,6 +742,13 @@ class DeviceSettings:
     allow_google_accounts: bool = False         # מסך "הוספת חשבון Google" עובד: שירותי Google מחוץ ל-VPN (רק הם)
     safe_browser: str = ""                      # הסייר המוגן באפליקציה: "" אוטומטי / essential / off (SAFE_BROWSER)
     desktop: dict = field(default_factory=dict)  # מחשבי Windows: רק מה ששונה מ-DESKTOP_DEFAULTS
+    web_level: str = ""                         # רמת גלישה בכרום (websites.WEB_LEVELS): "" פתוח / essential / clean / shopping
+    web_extras: list[str] = field(default_factory=list)    # קבוצות אתרים שנוספו מעל הרמה
+    web_without: list[str] = field(default_factory=list)   # קבוצות שהורדו מהרמה
+
+    @property
+    def web_groups(self) -> tuple[str, ...]:
+        return websites.resolve_groups(self.web_level, self.web_extras, self.web_without)
 
     @property
     def active_options(self) -> list[str]:
@@ -877,6 +889,9 @@ class DeviceSettings:
             allow_google_accounts=bool(d.get("allow_google_accounts", False)),
             safe_browser=d.get("safe_browser") if d.get("safe_browser") in SAFE_BROWSER else "",
             desktop=cls._load_desktop(d.get("desktop")),
+            web_level=d.get("web_level") if d.get("web_level") in websites.WEB_LEVELS else "",
+            web_extras=websites.clean_list(d.get("web_extras"), websites.GROUP_BY_ID),
+            web_without=websites.clean_list(d.get("web_without"), websites.GROUP_BY_ID),
         )
 
     def dump(self) -> str:
@@ -895,6 +910,12 @@ class DeviceSettings:
             d["safe_browser"] = self.safe_browser
         if self.desktop:
             d["desktop"] = self.desktop
+        if self.web_level:
+            d["web_level"] = self.web_level
+        if self.web_extras:
+            d["web_extras"] = self.web_extras
+        if self.web_without:
+            d["web_without"] = self.web_without
         return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
 
     def as_dict(self) -> dict:
@@ -907,6 +928,10 @@ class DeviceSettings:
         d["allow_google_accounts"] = self.allow_google_accounts
         d["safe_browser"] = self.safe_browser
         d["desktop_effective"] = self.desktop_effective
+        d["web_level"] = self.web_level
+        d["web_extras"] = self.web_extras
+        d["web_without"] = self.web_without
+        d["web_groups"] = list(self.web_groups)
         return d
 
     def update(self, changes: dict) -> list[str]:
@@ -1002,6 +1027,18 @@ class DeviceSettings:
                 errors.append("הגדרות המחשב לא תקינות")
             else:
                 self.desktop = self._load_desktop({**self.desktop_effective, **dk})
+        if changes.get("web_level") is not None:
+            if changes["web_level"] not in websites.WEB_LEVELS:
+                errors.append("רמת גלישה לא מוכרת")
+            else:
+                self.web_level = changes["web_level"]
+        for key in ("web_extras", "web_without"):
+            if changes.get(key) is not None:
+                vals = [str(v) for v in changes[key]]
+                unknown = [v for v in vals if v not in websites.GROUP_BY_ID]
+                if unknown:
+                    errors.append(f"קבוצות אתרים לא מוכרות: {', '.join(unknown[:5])}")
+                setattr(self, key, websites.clean_list(vals, websites.GROUP_BY_ID))
         return errors
 
     def _update_vpn_bypass(self, vb) -> list[str]:
@@ -1069,12 +1106,15 @@ class Compiled:
     track: str = ""                             # מסלול הסינון (TRACKS)
     allowlist_apps: tuple[str, ...] | None = None   # רשימה לבנה של המסלול; None = הקטלוג + Chrome
     safe_browser: str = "full"                  # הסייר המוגן: full / essential / off (safe_browser_mode)
+    web: dict = field(default_factory=dict)     # רמת גלישה: {level, groups, allow} — ריק = פתוח
 
     def proxy_json(self, level: int) -> str:
         """מה שהפרוקסי קורא (fp:policy ב-Redis)."""
-        return json.dumps({"level": level, "hosts": list(self.hosts), "paths": list(self.paths),
-                           "images": self.images, "video": self.video, "app_images": self.app_images},
-                          separators=(",", ":"))
+        d = {"level": level, "hosts": list(self.hosts), "paths": list(self.paths),
+             "images": self.images, "video": self.video, "app_images": self.app_images}
+        if self.web:
+            d["web"] = self.web
+        return json.dumps(d, separators=(",", ":"))
 
     @property
     def needs_accessibility(self) -> bool:
@@ -1170,6 +1210,7 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         track=s.track,
         allowlist_apps=None if track["allowlist"] is None else tuple(track["allowlist"]),
         safe_browser=safe_browser_mode(s, device_apps, None if track["allowlist"] is None else tuple(track["allowlist"])),
+        web={"level": s.web_level, "groups": list(s.web_groups), "allow": list(s.allow_hosts)} if s.web_level else {},
     )
 
 
@@ -1184,6 +1225,10 @@ def summary(s: DeviceSettings) -> list[dict]:
     """רשימת החסימות הפעילות — לתצוגה (בממשק הניהול ובאפליקציה)."""
     out = [{"id": o, "title": CATALOG[o].title, "category": CATALOG[o].category}
            for o in s.active_options if o in CATALOG]
+    if s.web_level:
+        extras = [websites.GROUP_BY_ID[g].title for g in s.web_extras if g in websites.GROUP_BY_ID]
+        title = f"רמת גלישה: {websites.WEB_LEVELS[s.web_level]['title']}" + (f" + {', '.join(extras)}" if extras else "")
+        out.insert(0, {"id": f"web:{s.web_level}", "title": title, "category": "web"})
     if s.track:
         out.insert(0, {"id": f"track:{s.track}", "title": TRACKS[s.track]["title"], "category": "track"})
     if s.custom_hosts:
