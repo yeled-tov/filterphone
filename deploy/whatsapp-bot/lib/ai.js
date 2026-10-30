@@ -6,7 +6,8 @@
  * מה מותר לחסום / לפתוח — רשימה סגורה מהשרת לכל מכשיר (lib/actions.js).
  */
 
-function systemPrompt({ botName, businessInfo, inHours, hoursText, crm, knowledge = '', askWhenUnsure = false, actions = '' }) {
+function systemPrompt({ botName, businessInfo, inHours, hoursText, crm, knowledge = '', askWhenUnsure = false, actions = '',
+  otherChannel = '' }) {
   const who = crm
     ? `\nהפונה הוא לקוח קיים: ${crm.customer.name || 'לקוח'}, ${crm.devices.length} מכשירים. אל תחשוף מספרים או פרטים פנימיים.`
     : '';
@@ -16,17 +17,21 @@ function systemPrompt({ botName, businessInfo, inHours, hoursText, crm, knowledg
   const askTag = askWhenUnsure
     ? '\n• חסר לך מידע כדי לענות → [[ASK:השאלה שלך לבעל העסק]] (במקום [[HUMAN]], אלא אם הלקוח ביקש נציג)'
     : '';
-  return `את/ה "${botName || 'פילטר'}", נציג/ת שירות של FilterPhone. עונים ללקוחות ולמתעניינים בוואטסאפ.
+  return `את/ה "${botName || 'פילטר'}", נציג/ת שירות של FilterPhone. עונים ללקוחות ולמתעניינים בוואטסאפ ובצ'אט התמיכה שבאפליקציה.
 כתוב/כתבי בעברית טבעית, חמה ואנושית — כמו בן אדם אמיתי, לא רובוט. משפטים קצרים, אדיבים, ענייניים ומכבדים.
-${inHours ? 'כעת שעות פעילות — נציג זמין בהמשך אם צריך.' : `כעת מחוץ לשעות הפעילות (${hoursText}). בפנייה ראשונה ציין/צייני בעדינות שנציג יחזור בשעות הפעילות.`}
-בהודעה הראשונה בשיחה — ברכה קצרה ושאלה "במה אפשר לעזור?".
+${inHours
+    ? 'כעת שעות פעילות. ענה/עני ועזור/עזרי עד הסוף בעצמך; נציג אנושי רק כשבאמת צריך (התקנה, תיאום הגעה, תשלום).'
+    : `כעת מחוץ לשעות הפעילות (${hoursText}) — ובשביל זה את/ה כאן: עזור/עזרי ללקוח עד הסוף, בדיוק כמו בשעות הפעילות. אל תדחה/תדחי אותו ל"שעות הפעילות" ואל תפתח/תפתחי בזה. רק כשמשהו באמת דורש בן אדם (התקנה, תיאום הגעה, תשלום) — עזור/עזרי בכל מה שאפשר עכשיו, וכתוב/כתבי שנציג ימשיך בשעות הפעילות.`}
+בהודעה הראשונה בשיחה — ברכה קצרה, ואם הלקוח כבר שאל משהו — ישר לעניין.
+הבן/י מה הלקוח באמת צריך, גם כשהניסוח לא מדויק או כתוב בשגיאות. בעזרה טכנית — הוראות ברורות צעד אחר צעד. חסר פרט חיוני? שאלה אחת קצרה.
 הודעת לקוח שמתחילה ב-🎤 היא תמלול אוטומטי של הודעה קולית — ייתכנו בה טעויות תמלול; הבן/י לפי ההקשר וענה/עני בכתב כרגיל. אם התמלול לא הצליח — בקש/י בנימוס לכתוב את הבקשה במילים.
+הודעת לקוח שמתחילה ב-📷 כוללת תיאור אוטומטי של תמונה ששלח (בדרך כלל צילום מסך מהטלפון: הודעת שגיאה, הגדרה, אפליקציה) — התייחס/י לתוכן שלה ועזור/עזרי לפיו. אם לא הצלחנו לראות אותה — בקש/י לתאר במילים מה מופיע במסך.
 ענה/עני רק לפי המידע הבא. אל תמציא/י מחירים, מבצעים או הבטחות. ${unsure}
 
 === מידע העסק ===
 ${businessInfo}
 === סוף המידע ===
-${knowledge ? `\n${knowledge}\n` : ''}${who}
+${knowledge ? `\n${knowledge}\n` : ''}${otherChannel ? `\n${otherChannel}\n` : ''}${who}
 ${actions ? `\n${actions}\n` : ''}
 תגיות (בשורה נפרדת בסוף, רק כשצריך):
 • שואלים על כתובת / איך מגיעים → [[ADDRESS]]
@@ -36,6 +41,17 @@ ${actions ? '• חסימה / פתיחה זמנית / סגירה — לפי הר
 }
 
 const TAG = /\[\[(ADDRESS|HUMAN|BLOCK|OPEN|CLOSE|ESCALATE|ASK)(?::([^\]]*))?\]\]/g;
+
+/**
+ * מה שהלקוח כתב לאחרונה בערוץ השני (וואטסאפ ↔ צ'אט התמיכה באפליקציה) — כדי שהבוט ימשיך מאותה נקודה
+ * ולא ישאל שוב מה כבר נאמר. ריק כשאין.
+ */
+function otherChannelSection(label, history, max = 6) {
+  const turns = (history || []).slice(-max).filter((h) => h && h.content);
+  if (!turns.length) return '';
+  const lines = turns.map((h) => `${h.role === 'user' ? 'לקוח' : 'אנחנו'}: ${String(h.content).slice(0, 300)}`);
+  return `=== מה שנאמר לאחרונה עם הלקוח ב${label} (להקשר — אל תחזור/תחזרי על מה שכבר נענה) ===\n${lines.join('\n')}\n=== סוף ===`;
+}
 
 /** מפריד בין הטקסט ללקוח לבין התגיות. תומך גם במילים הישנות ADDRESS / HANDOFF. */
 function parseTags(raw) {
@@ -296,6 +312,58 @@ async function transcribe(cfg, media, fetchImpl = fetch) {
   return '';
 }
 
+// --- תמונות ------------------------------------------------------------------------------------
+// הלקוח שלח תמונה (בדרך כלל צילום מסך של הטלפון) → תיאור קצר בטקסט, והבוט עונה לפיו כרגיל.
+// בלי תיאור של אנשים — רק התוכן הטכני והטקסט שעל המסך.
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
+const GROQ_VISION = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const DESCRIBE_PROMPT = `את/ה עוזר/ת לנציג שירות של חברת סינון תוכן לטלפונים. לקוח שלח את התמונה הזו.
+תאר/י בעברית, בקצרה ובדיוק, מה רואים בה — בעיקר את התוכן הטכני: איזו אפליקציה / מסך / הגדרה, ואת כל הטקסט שמופיע
+(הודעות שגיאה, כפתורים, מספרים, שמות) מילה במילה.
+אם יש בתמונה אנשים — אל תתאר/י את המראה שלהם; כתוב/כתבי רק "יש בתמונה אנשים".
+החזר/י רק את התיאור, בלי הקדמה.`;
+
+/** התיאור בלי הקדמה ("תיאור:"). מירכאות נשארות — בתוכן יש לעתים טקסט מצוטט מהמסך. */
+function cleanDescription(raw) {
+  return String(raw || '').trim().replace(/^(תיאור( התמונה)?|description)\s*:\s*/i, '').trim();
+}
+
+/** האם זה סוג קובץ שאפשר להבין: תמונה, וב-Gemini גם PDF. */
+function describable(mimetype, provider) {
+  const t = audioType(mimetype);
+  return IMAGE_TYPES.has(t) || (provider === 'gemini' && t === 'application/pdf');
+}
+
+/**
+ * תיאור תמונה / צילום מסך ששלח לקוח ({data: base64, mimetype} — כמו msg.downloadMedia()).
+ * '' כשאין מפתח / סוג שלא נתמך. תקלה (רשת / מכסה) — נזרקת; הבוט מבקש מהלקוח לתאר במילים.
+ */
+async function describeImage(cfg, media, fetchImpl = fetch) {
+  const data = String(media?.data || '');
+  if (!cfg?.ai_key || !data || !describable(media.mimetype, cfg.ai_provider)) return '';
+  if (data.length * 0.75 > IMAGE_MAX_BYTES) throw new Error('image: too big');
+  const type = audioType(media.mimetype);
+  if (cfg.ai_provider === 'gemini') {
+    const req = { system: 'את/ה מתאר/ת תמונות ששלחו לקוחות לשירות לקוחות.', temperature: 0.2, maxTokens: 1024,
+      timeoutMs: TRANSCRIBE_TIMEOUT_MS,
+      contents: [{ role: 'user', parts: [{ inlineData: { mimeType: type, data } }, { text: DESCRIBE_PROMPT }] }] };
+    return cleanDescription((await geminiWithRetry({ key: cfg.ai_key, model: cfg.ai_model, req, fetchImpl })).text);
+  }
+  if (cfg.ai_provider === 'groq') {
+    const r = await tfetch(fetchImpl, 'https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.ai_key}` },
+      body: JSON.stringify({ model: GROQ_VISION, max_tokens: 700, temperature: 0.2, messages: [{ role: 'user', content: [
+        { type: 'text', text: DESCRIBE_PROMPT },
+        { type: 'image_url', image_url: { url: `data:${type};base64,${data}` } }] }] }),
+    }, TRANSCRIBE_TIMEOUT_MS);
+    if (!r.ok) throw new AiHttpError('groq vision', r.status);
+    return cleanDescription((await r.json()).choices?.[0]?.message?.content || '');
+  }
+  return '';
+}
+
 /**
  * תשובה לפי ההגדרות.
  *   • בלי מפתח — תשובה קבועה ומסירה לנציג (HUMAN), כמו קודם.
@@ -317,9 +385,8 @@ async function answer(cfg, ctx, fetchImpl = fetch) {
 function fallback({ inHours, hoursText, history }, { outage = false } = {}) {
   const first = !history.length;
   if (outage) {
-    const text = inHours
-      ? (first ? 'שלום! תודה שפנית ל-FilterPhone 🙏 אני בודק ואחזור אליך בהקדם.' : 'קיבלתי 🙏 בודק ואחזור אליך בהקדם.')
-      : `שלום! כעת מחוץ לשעות הפעילות (${hoursText}). קיבלנו את ההודעה ונחזור אליך בהקדם 🙏`;
+    // גם מחוץ לשעות — לא "נחזור בשעות הפעילות": הבוט ינסה שוב בהודעה הבאה, ובעל העסק מקבל את השאלה
+    const text = first ? 'שלום! תודה שפנית ל-FilterPhone 🙏 אני בודק ואחזור אליך בהקדם.' : 'קיבלתי 🙏 בודק ואחזור אליך בהקדם.';
     return { text, tags: [{ kind: 'ASK', arg: 'ה-AI לא היה זמין לרגע — אפשר לענות ללקוח כאן' }], ai: 'none' };
   }
   const text = inHours
@@ -328,6 +395,6 @@ function fallback({ inHours, hoursText, history }, { outage = false } = {}) {
   return { text, tags: [{ kind: 'HUMAN', arg: '' }], ai: 'none' };
 }
 
-module.exports = { systemPrompt, parseTags, addressBlock, pickGemini, geminiFallbacks, askGemini, askGroq, answer, fallback,
-  thinkingFor, trimCut, transcribe, audioType, cleanTranscript,
+module.exports = { systemPrompt, otherChannelSection, parseTags, addressBlock, pickGemini, geminiFallbacks, askGemini, askGroq, answer, fallback,
+  thinkingFor, trimCut, transcribe, audioType, cleanTranscript, describeImage, describable,
   _resetModelCache: () => { modelCache = { key: '', names: [], at: 0 }; } };

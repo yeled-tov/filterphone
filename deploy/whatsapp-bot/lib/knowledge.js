@@ -38,10 +38,13 @@ function similarity(a, b) {
 }
 
 /**
- * מה מהידע להכניס לתשובה לשאלה הזו: כל העובדות (עד תקרת אורך, החדשות קודם), ועד [k] שאלות דומות
- * שבעל העסק כבר ענה עליהן (מעל סף דמיון; הכי דומה קודם, ובשוויון — העדכנית).
+ * מה מהידע להכניס לתשובה לשאלה הזו. ה-AI מקבל *את כל מה שלמד* בתוך תקציב אורך — לא רק שאלות שנוסחו
+ * במילים דומות (התאמה מילולית פספסה את רוב מה שנלמד: "כמה זה עולה" מול "מה המחיר"):
+ *   • כל העובדות (עד [factChars], החדשות קודם);
+ *   • השאלות והתשובות — הכי דומות לשאלה קודם, אחר כך הכי שימושיות / עדכניות — עד [qaChars] ו-[k].
+ * relevant — מה שבאמת דומה לשאלה (מעל [min]); רק הן נספרות כ"שימוש" בדשבורד.
  */
-function select(items, question, { k = 6, min = 0.3, factChars = 2500 } = {}) {
+function select(items, question, { k = 60, min = 0.3, factChars = 4000, qaChars = 14000 } = {}) {
   const facts = [];
   let used = 0;
   const all = (items || []).slice().sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
@@ -51,13 +54,20 @@ function select(items, question, { k = 6, min = 0.3, factChars = 2500 } = {}) {
     facts.push(it);
     used += it.answer.length;
   }
-  const qas = all.filter((it) => it.kind === 'qa')
+  const ranked = all.filter((it) => it.kind === 'qa')
     .map((it) => ({ it, s: similarity(question, it.question) }))
-    .filter((x) => x.s >= min)
-    .sort((a, b) => b.s - a.s || (b.it.updated_at || 0) - (a.it.updated_at || 0))
-    .slice(0, k)
-    .map((x) => x.it);
-  return { facts, qas, ids: [...facts, ...qas].map((it) => it.id).filter(Boolean) };
+    .sort((a, b) => b.s - a.s || (b.it.uses || 0) - (a.it.uses || 0) || (b.it.updated_at || 0) - (a.it.updated_at || 0));
+  const qas = [];
+  const relevant = [];
+  let chars = 0;
+  for (const { it, s } of ranked) {
+    const size = (it.question || '').length + it.answer.length;
+    if (qas.length >= k || chars + size > qaChars) continue;
+    qas.push(it);
+    chars += size;
+    if (s >= min) relevant.push(it);
+  }
+  return { facts, qas, relevant, ids: [...facts, ...relevant].map((it) => it.id).filter(Boolean) };
 }
 
 /** החלק בהוראות ל-AI. ריק אם אין מה להוסיף. */
@@ -69,7 +79,7 @@ function promptSection({ facts = [], qas = [] } = {}) {
     for (const f of facts) out.push(`• ${f.answer}`);
   }
   if (qas.length) {
-    out.push('שאלות שבעל העסק כבר ענה עליהן — ענה באותו תוכן ובאותה רוח, במילים שלך:');
+    out.push('שאלות שבעל העסק כבר ענה עליהן (הדומות לשאלה הנוכחית קודם) — אם השאלה עכשיו היא אחת מהן או קרובה, ענה באותו תוכן ובאותה רוח, במילים שלך:');
     for (const q of qas) out.push(`ש: ${q.question}\nת: ${q.answer}`);
     out.push('(אלה תשובות שניתנו ללקוחות אחרים — השתמש רק במידע הכללי שבהן, לעולם לא בפרטים אישיים של לקוח אחר.)');
   }

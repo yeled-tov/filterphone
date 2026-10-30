@@ -85,6 +85,9 @@ wabot)
     systemctl status fp-wabot --no-pager 2>&1 | head -12 || true
     echo "== יומן הבוט (150 שורות אחרונות)"
     sudo -n journalctl -u fp-wabot -n 150 --no-pager -o short-iso 2>&1 | tail -150 || true
+    echo "== קול, תמונות ו-AI (7 ימים; בלי מספרי טלפון)"
+    sudo -n journalctl -u fp-wabot --since "-7d" --no-pager -o short-iso 2>&1 \
+        | grep -E 'voice|image|media \(|AI:|reply:|message:|unhandled' | sed -E 's/972[0-9]{7,}/972…/g' | tail -40 || true
     echo "== Chrome"
     sudo -n cat /etc/filterphone/wabot.env 2>/dev/null | grep -E '^CHROME_(PATH|ALT)=' || true
     snap list chromium 2>/dev/null | tail -1 || true

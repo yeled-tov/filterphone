@@ -29,14 +29,14 @@ const { State } = require('./lib/state');
 const fp = require('./lib/fp');
 const ai = require('./lib/ai');
 const { israelNow, isOpen } = require('./lib/hours');
-const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice } = require('./lib/logic');
+const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice, mediaKind } = require('./lib/logic');
 const labels = require('./lib/labels');
 const know = require('./lib/knowledge');
 const aimark = require('./lib/aimark');
 const acts = require('./lib/actions');
 const pcode = require('./lib/parentcode');
 
-const VERSION = '2.6.0';
+const VERSION = '2.7.0';
 const API = (process.env.FP_API || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
@@ -99,14 +99,19 @@ const APP_CHECKING = 'קיבלנו את פנייתך 🙏 בודקים ונחז�
 const pending = new Map();    // תשובות שמחכות (5 שניות כשאתה פעיל — שתספיק לענות בעצמך)
 const bursts = new Map();     // הודעות של לקוח שעוד לא נענו (chatId → {parts, gen,...}) — הודעה חדשה בזמן
                               // שהבוט עוד כותב מבטלת את התשובה הקודמת, והתשובה החדשה עונה על הכול
-const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0, voice: 0 };
+const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0, voice: 0,
+  images: 0, media_errors: 0 };
 // הודעות קוליות: מתומללות ב-AI שבדשבורד, והבוט עונה בכתב. ההיסטוריה שומרת את התמלול עם 🎤.
 const VOICE_MARK = '🎤 ';
 const VOICE_UNHEARD = '🎤 (הודעה קולית — התמלול לא הצליח)';
 const VOICE_NOTE = '🎤 (הודעה קולית)';                         // שיחה שהבוט לא מטפל בה — לא מתמללים
 const unvoice = (t) => (t.startsWith(VOICE_MARK) ? t.slice(VOICE_MARK.length) : t);
 const heardVoice = (t) => t.startsWith(VOICE_MARK) && t !== VOICE_UNHEARD && t !== VOICE_NOTE;
-const transcripts = new Map();  // מזהה הודעה → התמלול (שלא נתמלל פעמיים: הודעה + השלמה אחרי הפעלה מחדש)
+// תמונות (בדרך כלל צילום מסך): מתוארות ב-AI (בלי תיאור של אנשים), והבוט עונה לפי התיאור. בהיסטוריה — עם 📷.
+const IMAGE_NOTE = '📷 (תמונה)';                               // שיחה שהבוט לא מטפל בה — לא שולחים ל-AI
+const IMAGE_UNSEEN = '📷 (תמונה — לא הצלחנו לראות אותה)';
+const VIDEO_NOTE = '🎬 (סרטון — הבוט לא יכול לצפות בו)';
+const transcripts = new Map();  // מזהה הודעה → התמלול / התיאור (לא פעמיים: הודעה + השלמה אחרי הפעלה מחדש)
 const inbox = new Map();        // שיחה → התור שלה: הודעות הלקוח מטופלות לפי הסדר (תמלול לוקח כמה שניות)
 let knowledge = [];           // מה שהבוט למד ממך (מהשרת)
 let knowledgeAt = 0;
@@ -362,7 +367,8 @@ async function catchUp() {
         const last = chat.lastMessage;
         const c = state.chat(chatId);
         if (inbox.has(chatId) || !labels.needsCatchUp(last, { answered: c.answered || '' })) continue;
-        const text = isVoice(last) ? await voiceText(last, true) : last.body.trim();
+        const kind = mediaKind(last);
+        const text = kind ? await mediaText(last, kind, String(last.body || '').trim(), true) : last.body.trim();
         if (c.lastIn !== last.id._serialized) {
           state.remember(chatId, 'user', text);
           c.lastIn = last.id._serialized;
@@ -577,6 +583,9 @@ async function tryParentCode(key, deviceId, text, reply) {
   return true;
 }
 
+/** השיחה של מכשיר בצ'אט התמיכה באפליקציה (בזיכרון הבוט, לצד שיחות הוואטסאפ). */
+const appThreadKey = (deviceId) => `app:${deviceId}`;
+
 /**
  * פנייה מצ'אט התמיכה באפליקציה: הבוט עונה ללקוח *בתוך האפליקציה* ב-AI (אותו מוח של וואטסאפ + מה שלמד).
  *   • בטוח בתשובה → עונה ללקוח מיד באפליקציה, ואצלך בצ'אט מופיע מה ענה (אפשר לתקן/להוסיף ב"השב").
@@ -613,11 +622,19 @@ async function handleAppSupport(m, waIds) {
   let crm = null;
   if (phone) { try { crm = await srv.customer(phone, { device: deviceId }); } catch { /* לא לקוח — עדיין עונים */ } }
 
-  const sel = know.select(await loadKnowledge(), m.text);
+  // השיחה באפליקציה נזכרת כמו בוואטסאפ (לכל מכשיר) — "ומה עם זה?" מובן לפי מה שנאמר קודם
+  const thread = appThreadKey(deviceId);
+  const history = state.chat(thread).history.slice();
+  state.remember(thread, 'user', m.text);
+  const prevUser = [...history].reverse().find((h) => h.role === 'user')?.content || '';
+  const sel = know.select(await loadKnowledge(), m.text.length < 25 && prevUser ? `${prevUser}\n${m.text}` : m.text,
+    knowledgeBudget());
+  const waChat = phone ? state.findByPhone(phone) : null;
+  const otherChannel = waChat ? ai.otherChannelSection('וואטסאפ', state.chat(waChat).history) : '';
   const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: inHours(),
-    hoursText: cfg.hours, crm, history: [], text: m.text, knowledge: know.promptSection(sel),
+    hoursText: cfg.hours, crm, history, text: m.text, knowledge: know.promptSection(sel), otherChannel,
     askWhenUnsure: cfg.ask_when_unsure !== false, actions: acts.promptSection(crm) });
-  if (sel.qas.length) srv.used(sel.qas.map((q) => q.id)).catch(() => {});
+  if (sel.relevant.length) srv.used(sel.relevant.map((q) => q.id)).catch(() => {});
   if (res.error) { stats.ai_errors += 1; status.error = `AI: ${res.error}`; }
   else if (status.error?.startsWith('AI:')) status.error = '';
   status.ai = res.ai;
@@ -641,7 +658,7 @@ async function handleAppSupport(m, waIds) {
       const block = ai.addressBlock(cfg.business_info);
       if (block) out = `${out ? out + '\n\n' : ''}${block}`;
     }
-    try { await srv.reply(deviceId, out); stats.app_replies += 1; }
+    try { await srv.reply(deviceId, out); stats.app_replies += 1; state.remember(thread, 'assistant', out); }
     catch (e) { await toAdmin(`⚠️ התשובה למכשיר #${deviceId} לא נשלחה: ${e.message}`); }
     const sent = await toAdmin(`${head}\n\n${m.text}\n\n🤖 *הבוט ענה ללקוח:*\n${out}\n\n↩️ לתיקון/תוספת: "השב" או #${deviceId} <טקסט>`);
     rememberAppThread(sent, deviceId, m.text, phone);
@@ -661,18 +678,23 @@ async function onMessage(msg) {
   if (msg.from?.endsWith('@g.us') || msg.to?.endsWith('@g.us')) return;   // קבוצות
   if (msg.from === 'status@broadcast' || msg.isStatus) return;
   const body = (msg.body || '').trim();
-  const voice = isVoice(msg);
-  if (!body && !voice) return;
+  const media = mediaKind(msg);
+  if (!body && !media) return;
+  const voice = media === 'voice';
   if (msg.fromMe) {
     const selfChat = msg.to === me || msg.to === msg.from;
     if (voice) return selfChat ? undefined : onAdminVoice(msg);           // הודעה קולית לעצמך — לא פקודה
+    if (media && !body) {
+      // שלחת ללקוח תמונה / סרטון בלי כיתוב — הבוט זז הצידה (אין מה ללמוד ממנה)
+      return selfChat ? undefined : onAdmin(msg, media === 'video' ? '🎬 (שלחת סרטון)' : '📷 (שלחת תמונה)', false, false);
+    }
     if (sentByBot(msg.id?._serialized, body)) return;                     // הבוט עצמו — לא "אתה כתבת"
     return onAdmin(msg, body, selfChat);
   }
   if (adminChat() !== me && (msg.from === adminChat() || (await realPhone(msg)) === adminChat().replace(/@.+/, ''))) {
-    return voice ? undefined : onAdmin(msg, body, true);                 // אתה, ממספר המנהל
+    return media && !body ? undefined : onAdmin(msg, body, true);        // אתה, ממספר המנהל
   }
-  return inOrder(msg.from, () => onCustomer(msg, body, voice));
+  return inOrder(msg.from, () => onCustomer(msg, body, media));
 }
 
 /** הודעות של אותה שיחה — אחת אחרי השנייה (טקסט שנשלח אחרי הודעה קולית לא "עוקף" את התמלול שלה). */
@@ -684,23 +706,88 @@ function inOrder(chatId, fn) {
   return run;
 }
 
-/** תמלול הודעה קולית (פעם אחת לכל הודעה). '' — אין AI / אין דיבור / תקלה. */
-async function transcript(msg) {
+/**
+ * הקובץ של הודעת מדיה. וואטסאפ ווב מחזיר לפעמים "כלום" בניסיון הראשון (הקובץ עוד לא ירד לדף) —
+ * ניסיון נוסף אחרי שנייה וחצי. null — לא הצליח (נרשם ביומן).
+ */
+async function downloadMedia(msg) {
+  for (let i = 0; i < 2; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 1500));
+    try {
+      const media = await withTimeout(msg.downloadMedia(), CALL_TIMEOUT_MS, 'downloadMedia');
+      if (media?.data) return media;
+    } catch (e) {
+      if (i) console.warn(`media (${msg.type}): ${e.message}`);
+    }
+  }
+  stats.media_errors += 1;
+  console.warn(`media (${msg.type}): download returned nothing`);
+  return null;
+}
+
+/** פעם אחת לכל הודעה (גם כשאותה הודעה מגיעה שוב בהשלמה אחרי הפעלה מחדש). */
+async function onceFor(msg, fn) {
   const id = msg.id?._serialized || '';
   if (id && transcripts.has(id)) return transcripts.get(id);
-  let text = '';
-  try {
-    const media = await withTimeout(msg.downloadMedia(), CALL_TIMEOUT_MS, 'downloadMedia');
-    text = await ai.transcribe(cfg, media);
-    if (text) stats.voice += 1;
-  } catch (e) {
-    console.warn('voice:', e.message);
-  }
+  const text = await fn();
   if (id) {
     transcripts.set(id, text);
     if (transcripts.size > 200) transcripts.delete(transcripts.keys().next().value);
   }
   return text;
+}
+
+/** תמלול הודעה קולית. '' — אין AI / אין דיבור / תקלה (נרשמת ביומן). */
+async function transcript(msg) {
+  return onceFor(msg, async () => {
+    const media = await downloadMedia(msg);
+    if (!media) return '';
+    try {
+      const text = await ai.transcribe(cfg, media);
+      if (text) stats.voice += 1;
+      console.log(`voice: ${text ? `transcribed (${text.length} chars)` : 'no speech'} · ${media.mimetype || '?'}`);
+      return text;
+    } catch (e) {
+      stats.media_errors += 1;
+      console.warn('voice:', e.message);
+      return '';
+    }
+  });
+}
+
+/** תיאור תמונה / צילום מסך. '' — אין AI / סוג לא נתמך / תקלה (נרשמת ביומן). */
+async function imageDescription(msg) {
+  return onceFor(msg, async () => {
+    const media = await downloadMedia(msg);
+    if (!media) return '';
+    try {
+      const text = await ai.describeImage(cfg, media);
+      if (text) stats.images += 1;
+      console.log(`image: ${text ? `described (${text.length} chars)` : 'not supported'} · ${media.mimetype || '?'}`);
+      return text;
+    } catch (e) {
+      stats.media_errors += 1;
+      console.warn('image:', e.message);
+      return '';
+    }
+  });
+}
+
+/** הטקסט של תמונה: התיאור + הכיתוב (רק כשהבוט מטפל בשיחה — לא שולחים ל-AI תמונות פרטיות). */
+async function imageText(msg, caption, handled) {
+  const tail = caption ? `\n${caption}` : '';
+  if (!handled) return IMAGE_NOTE + tail;
+  if (!cfg?.ai_key) return IMAGE_UNSEEN + tail;
+  const d = await imageDescription(msg);
+  return (d ? `📷 [תמונה: ${d}]` : IMAGE_UNSEEN) + tail;
+}
+
+/** הטקסט של כל הודעת מדיה (קולית / תמונה / סרטון), לפי הסוג. */
+async function mediaText(msg, media, caption, handled) {
+  if (media === 'voice') return voiceText(msg, handled);
+  if (media === 'image') return imageText(msg, caption, handled);
+  if (media === 'video') return VIDEO_NOTE + (caption ? `\n${caption}` : '');
+  return caption;
 }
 
 /** הטקסט של הודעה קולית: התמלול (רק כשהבוט מטפל בשיחה — לא שולחים ל-AI הקלטות פרטיות), או סימון. */
@@ -753,6 +840,7 @@ async function onAdmin(msg, body, selfChat, learnable = true) {
     try {
       await srv.reply(reply.deviceId, reply.text);
       stats.app_replies += 1;
+      state.remember(appThreadKey(reply.deviceId), 'assistant', reply.text);
       // לימוד: תשובתך לפנייה מהאפליקציה נשמרת, כדי שהבוט יֵדע לבד בפעם הבאה
       if (reply.thread?.question) {
         srv.learn({ kind: 'qa', question: reply.thread.question, answer: reply.text,
@@ -772,6 +860,14 @@ async function onAdmin(msg, body, selfChat, learnable = true) {
 }
 
 // ------------------------------------------------------------------ מצב לימוד
+
+/**
+ * כמה מהידע נכנס לכל תשובה: ב-Gemini — כמעט הכול (חלון ענק, זול); ב-Groq — פחות, כי בתוכנית החינמית
+ * יש מגבלת מילים לדקה, ופרומפט ארוך מדי נגמר ב-429 (ואז "בודק ואחזור").
+ */
+function knowledgeBudget() {
+  return cfg?.ai_provider === 'groq' ? { k: 15, factChars: 1500, qaChars: 3500 } : {};
+}
 
 /** מה שהבוט למד (מהשרת) — מתרענן כל כמה דקות, ומיד אחרי שלמד משהו חדש. */
 async function loadKnowledge(force = false) {
@@ -937,7 +1033,7 @@ async function onMenu(text) {
       list = (await withTimeout(client.getChatsByLabelId(botLabel.id), CALL_TIMEOUT_MS, 'getChatsByLabelId')
         .catch(() => [])).map((ch) => ch.id._serialized);
     }
-    const lines = state.recent(10).map(([id, c], i) => {
+    const lines = state.recent(20).filter(([id]) => !id.startsWith('app:')).slice(0, 10).map(([id, c], i) => {
       const st = botLabel ? (list.includes(id) ? '🤖 הבוט' : '👤 אתה') :
         state.paused(id) ? '👤 אתה מטפל' : c.handedOff ? '⏳ ממתין לנציג' : '🤖 הבוט';
       return `${i + 1}. ${c.phone || id.replace(/@.+/, '')} — ${st}`;
@@ -1008,14 +1104,15 @@ async function customerRoute(msg, chatId, c) {
   return state.paused(chatId) ? 'quiet' : 'bot';                      // אתה בשיחה
 }
 
-async function onCustomer(msg, text, voice = false) {
+async function onCustomer(msg, text, media = null) {
   const chatId = msg.from;
   const c = state.chat(chatId);
   if (!c.phone) c.phone = await realPhone(msg);
   const phone = c.phone;
   const route = cfg?.enabled ? await customerRoute(msg, chatId, c) : 'off';
-  if (voice) text = await voiceText(msg, route === 'bot');
-  const learnable = !voice || heardVoice(text);
+  if (media) text = await mediaText(msg, media, text, route === 'bot');
+  // לומדים רק משאלות בטקסט / בקול (תמונה היא מקרה פרטי — לא שאלה שחוזרת)
+  const learnable = !media || (media === 'voice' && heardVoice(text));
   // קוד הורים שהבוט ביקש — מבוצע כאן, לא נשמר בהיסטוריה ולא נשלח ל-AI
   if (cfg?.enabled && learnable && await tryParentCode(chatId, null, unvoice(text), (out) => sendAi(chatId, out, { typing: true }))) return;
   state.remember(chatId, 'user', text);
@@ -1103,11 +1200,15 @@ async function replyNow(msg, chatId, phone, text, open, current = () => true) {
   const history = state.chat(chatId).history.slice(0, -1);
   // מה שלמד ממך: העובדות + שאלות דומות שכבר ענית עליהן (הודעה קצרה — יחד עם ההודעה הקודמת של הלקוח)
   const prevUser = [...history].reverse().find((h) => h.role === 'user')?.content || '';
-  const sel = know.select(await loadKnowledge(), text.length < 25 && prevUser ? `${prevUser}\n${text}` : text);
+  const sel = know.select(await loadKnowledge(), text.length < 25 && prevUser ? `${prevUser}\n${text}` : text,
+    knowledgeBudget());
+  const appKey = crm?.selected ? appThreadKey(crm.selected) : null;
+  const otherChannel = appKey && state.data.chats[appKey]
+    ? ai.otherChannelSection("צ'אט התמיכה שבאפליקציה", state.chat(appKey).history) : '';
   const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: open,
-    hoursText: cfg.hours, crm, history, text, knowledge: know.promptSection(sel),
+    hoursText: cfg.hours, crm, history, text, knowledge: know.promptSection(sel), otherChannel,
     askWhenUnsure: cfg.ask_when_unsure !== false, actions: acts.promptSection(crm) });
-  if (sel.qas.length) srv.used(sel.qas.map((q) => q.id)).catch(() => {});
+  if (sel.relevant.length) srv.used(sel.relevant.map((q) => q.id)).catch(() => {});
   if (!current()) return;
   // פעולות במכשיר (חסימה / פתיחה זמנית) — מבוצעות לפני השליחה, והלקוח מקבל אישור אמיתי עם השעה
   const deviceId = crm?.selected || null;

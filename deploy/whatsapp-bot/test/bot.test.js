@@ -79,7 +79,8 @@ test('AI outage → polite answer and a question to the owner (bot stays in the 
   const boom = async () => ({ ok: false, status: 429, json: async () => ({}) });
   const r = await ai.answer({ ai_provider: 'gemini', ai_key: 'K', ai_model: 'gemini-2.5-flash' },
     { inHours: false, hoursText: HOURS, history: [], text: 'שלום' }, boom);
-  assert.match(r.text, /מחוץ לשעות הפעילות/);
+  assert.match(r.text, /בודק ואחזור/);
+  assert.doesNotMatch(r.text, /מחוץ לשעות/);               // מחוץ לשעות לא דוחים את הלקוח ל"שעות הפעילות"
   assert.equal(r.tags.length, 1);
   assert.equal(r.tags[0].kind, 'ASK');                     // לא HUMAN — לא מוציאים את הבוט מהשיחה
   assert.match(r.error, /429/);
@@ -252,13 +253,19 @@ test('learning: relevant past answers are picked, facts always, nothing personal
     { id: 3, kind: 'fact', question: '', answer: 'משלוח לכל הארץ תוך 3 ימי עסקים', updated_at: 5 },
   ];
   const sel = know.select(items, 'שלום, כמה עולה הסינון?');
-  assert.deepEqual(sel.qas.map((q) => q.id), [1]);
+  // הכול נכנס (בתוך התקציב), הדומה ביותר קודם; "שימוש" נספר רק למה שבאמת דומה
+  assert.deepEqual(sel.qas.map((q) => q.id), [1, 2]);
+  assert.deepEqual(sel.relevant.map((q) => q.id), [1]);
   assert.deepEqual(sel.facts.map((f) => f.id), [3]);
   assert.deepEqual(sel.ids.sort(), [1, 3]);
   const section = know.promptSection(sel);
   assert.match(section, /250 ₪/);
   assert.match(section, /משלוח לכל הארץ/);
-  assert.doesNotMatch(section, /עד 12:00/);
+  assert.ok(section.indexOf('250 ₪') < section.indexOf('עד 12:00'));
+  // "מה המחיר?" — בלי מילה משותפת, ועדיין התשובה שנלמדה מגיעה ל-AI
+  assert.deepEqual(know.select(items, 'מה המחיר?').qas.map((q) => q.id).sort(), [1, 2]);
+  // תקציב קטן (Groq): רק מה שנכנס
+  assert.equal(know.select(items, 'כמה עולה סינון?', { qaChars: 30 }).qas.length, 1);
   assert.equal(know.promptSection({ facts: [], qas: [] }), '');
   // הסינון של מה שנלמד מתשובה שלך בשיחה
   assert.equal(know.worthLearning('אוקיי', 'כמה עולה סינון?'), false);
@@ -465,4 +472,60 @@ test('voice notes: Groq uses Whisper with the audio file', async () => {
   const file = seen.form.get('file');
   assert.equal(file.name, 'voice.ogg');
   assert.equal(Buffer.from(await file.arrayBuffer()).toString(), 'voice');
+});
+
+test('images: kind of media, understanding a screenshot (gemini / groq), and the prompt explains 📷', async () => {
+  const { mediaKind } = require('../lib/logic');
+  assert.equal(mediaKind({ type: 'ptt', body: '' }), 'voice');
+  assert.equal(mediaKind({ type: 'image', body: '' }), 'image');
+  assert.equal(mediaKind({ type: 'image', body: 'מה זה?' }), 'image');
+  assert.equal(mediaKind({ type: 'document', body: '' }), 'image');
+  assert.equal(mediaKind({ type: 'video', body: '' }), 'video');
+  assert.equal(mediaKind({ type: 'sticker', body: '' }), null);
+  assert.equal(mediaKind({ type: 'chat', body: 'שלום' }), null);
+  assert.match(ai.systemPrompt({ businessInfo: 'x', inHours: true }), /📷/);
+
+  ai._resetModelCache();
+  const calls = [];
+  const gemini = async (url, opts = {}) => {
+    calls.push({ url, body: opts.body ? JSON.parse(opts.body) : null });
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'מסך הגדרות VPN, כתוב: "אין חיבור"' }] } }] }) };
+  };
+  const cfg = { ai_provider: 'gemini', ai_key: 'K', ai_model: 'gemini-2.5-flash' };
+  const png = { data: Buffer.from('PNG').toString('base64'), mimetype: 'image/png' };
+  assert.equal(await ai.describeImage(cfg, png, gemini), 'מסך הגדרות VPN, כתוב: "אין חיבור"');
+  const part = calls[0].body.contents[0].parts[0];
+  assert.equal(part.inlineData.mimeType, 'image/png');
+  assert.match(calls[0].body.contents[0].parts[1].text, /אל תתאר\/י את המראה/);     // בלי תיאור של אנשים
+  assert.equal(await ai.describeImage(cfg, { data: 'AAAA', mimetype: 'application/zip' }, gemini), '');   // לא נתמך
+  assert.equal(await ai.describeImage({ ...cfg, ai_key: '' }, png, gemini), '');                        // אין מפתח
+  assert.equal(ai.describable('application/pdf', 'gemini'), true);
+  assert.equal(ai.describable('application/pdf', 'groq'), false);
+
+  let groqBody = null;
+  const groq = async (url, opts = {}) => {
+    groqBody = JSON.parse(opts.body);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: 'צילום מסך של וואטסאפ' } }] }) };
+  };
+  assert.equal(await ai.describeImage({ ai_provider: 'groq', ai_key: 'G' }, png, groq), 'צילום מסך של וואטסאפ');
+  assert.match(groqBody.messages[0].content[1].image_url.url, /^data:image\/png;base64,/);
+});
+
+test('out of business hours the bot helps fully instead of deferring the customer', () => {
+  const p = ai.systemPrompt({ businessInfo: 'x', inHours: false, hoursText: HOURS });
+  assert.match(p, /עזור\/עזרי ללקוח עד הסוף/);
+  assert.doesNotMatch(p, /בפנייה ראשונה ציין\/צייני בעדינות שנציג יחזור/);
+  const labels = require('../lib/labels');
+  const now = Date.now();
+  assert.equal(labels.needsCatchUp({ fromMe: false, body: '', type: 'image', timestamp: now / 1000, id: 'x' }, { now }), true);
+  assert.equal(labels.needsCatchUp({ fromMe: false, body: '', type: 'sticker', timestamp: now / 1000, id: 'x' }, { now }), false);
+});
+
+test('the app chat and WhatsApp share context: the other channel goes into the prompt', () => {
+  const sec = ai.otherChannelSection('וואטסאפ', [{ role: 'user', content: 'הוואטסאפ לא עובד' }, { role: 'assistant', content: 'נבדוק' }]);
+  assert.match(sec, /לקוח: הוואטסאפ לא עובד/);
+  assert.match(sec, /אנחנו: נבדוק/);
+  assert.equal(ai.otherChannelSection('וואטסאפ', []), '');
+  const p = ai.systemPrompt({ businessInfo: 'x', inHours: true, otherChannel: sec });
+  assert.match(p, /הוואטסאפ לא עובד/);
 });

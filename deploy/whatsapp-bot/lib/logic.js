@@ -15,6 +15,18 @@ function isVoice(msg) {
   return Boolean(msg) && (msg.type === 'ptt' || msg.type === 'audio') && !String(msg.body || '').trim();
 }
 
+/**
+ * סוג המדיה בהודעה: voice (הודעה קולית / שמע בלי כיתוב), image (תמונה / צילום מסך / מסמך), video,
+ * או null (טקסט, מדבקה, מיקום...). לפיו הבוט מתמלל / מתאר, או מבקש לתאר במילים.
+ */
+function mediaKind(msg) {
+  if (!msg) return null;
+  if (isVoice(msg)) return 'voice';
+  if (msg.type === 'image' || msg.type === 'document') return 'image';
+  if (msg.type === 'video') return 'video';
+  return null;
+}
+
 /** כמה הודעות רצופות של הלקוח = שאלה אחת: מחברים לפסקאות, בלי כפילויות עוקבות ובלי ריקות. */
 function combineBurst(parts) {
   const out = [];
@@ -43,4 +55,4 @@ function waNumber(raw) {
   return d;
 }
 
-module.exports = { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice };
+module.exports = { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice, mediaKind };
