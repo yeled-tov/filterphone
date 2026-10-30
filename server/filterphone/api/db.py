@@ -334,7 +334,12 @@ CREATE TABLE web_reviews (
 CREATE INDEX web_reviews_status ON web_reviews(status, created_at);
 """
 
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15]
+_V16 = """
+-- מחשבי Windows: מפתח לקודי הסרה (HMAC). המחשב שומר עותק מוצפן ובודק קוד גם בלי אינטרנט; '' = עוד לא נוצר
+ALTER TABLE devices ADD COLUMN removal_key TEXT NOT NULL DEFAULT '';
+"""
+
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16]
 VERSION = len(MIGRATIONS)
 
 

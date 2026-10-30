@@ -34,7 +34,7 @@ import redis
 from .. import protocol
 from ..proxy.policy import LEVELS_KEY, POLICY_KEY, POLICY_REV_KEY
 from ..settings import Settings
-from . import compliance, db, security
+from . import compliance, db, removal, security
 from .adguard import AdGuard, build_rules
 from .apk import ApkError, read_apk
 from .catalog import (
@@ -156,6 +156,9 @@ _HB_SECTIONS = {
                      "profile_owner": bool, "provisioning_allowed": bool, "root": bool,
                      "accessibility": bool, "always_on": bool, "lockdown": bool},
     "update": {"state": str, "version": str, "error": str},
+    # מחשבי Windows: מצב כל שכבת הגנה כפי שהמחשב אימת אותה (ok / pending / failed / unsupported / unknown)
+    "windows": {"overall": str, "edition": str, "build": str, "protected_since": int,
+                **{layer: str for layer in compliance.WINDOWS_LAYERS}},
 }
 # מעברים שנרשמים ביומן המכשיר
 _LOG_TRANSITIONS = (
@@ -164,6 +167,8 @@ _LOG_TRANSITIONS = (
     (("device_owner",), True, "management_on", "management_removed"),
     (("battery_unrestricted",), True, "battery_unrestricted", "battery_restricted"),
     (("vpn", "kosher"), True, "kosher_on", "kosher_off"),
+    (("windows", "kill_switch"), "ok", "win_lock_on", "win_lock_off"),
+    (("windows", "chrome_only"), "ok", "win_browsers_on", "win_browsers_off"),
 )
 
 
@@ -1182,11 +1187,51 @@ class Services:
             out["policy"] = self.device_policy(fresh)
         if fresh["status"] == "active" and (release := self.app_release()):
             out["app_update"] = release     # הטלפון מחליט: עדכון שקט במנהל מכשיר, אחרת הודעה בלבד
-        if fresh["status"] == "active":
+        if fresh["status"] == "active" and fresh["platform"] == "windows":
+            out["windows"] = self.windows_controls(fresh, want_key=raw.get("want_removal_key") is True)
+        elif fresh["status"] == "active":
             # קטלוג מאושר (לפי מסלול הסינון); required יותקנו אוטומטית במנהל מכשיר
             out["managed_apps"] = self.device_managed_apps(DeviceSettings.load(fresh["policy"]).track)
             self.clear_account_passthrough(fresh["vpn_ip"])
         return out
+
+    # ------------------------------------------------------------ מחשבי Windows
+
+    def windows_controls(self, row: sqlite3.Row, want_key: bool = False) -> dict:
+        """מה שהמחשב מקבל בכל דיווח: ההגבלות שהמנהל קבע בדשבורד, ומפתח קודי ההסרה כשהמחשב מבקש
+        אותו (בפעם הראשונה, או אחרי שהשמירה שלו אבדה). המפתח נשלח רק בתוך המנהרה."""
+        out: dict = dict(DeviceSettings.load(row["policy"]).desktop_effective)
+        if want_key:
+            out["removal_key"] = self._ensure_removal_key(row["id"])
+        return out
+
+    def _ensure_removal_key(self, device_id: int) -> str:
+        with self.db() as c, db.transaction(c):
+            cur = c.execute("SELECT removal_key FROM devices WHERE id = ?", (device_id,)).fetchone()
+            if cur["removal_key"]:
+                return cur["removal_key"]
+            key = removal.new_key()
+            c.execute("UPDATE devices SET removal_key = ? WHERE id = ?", (key, device_id))
+            self.log_device(c, device_id, "removal_key", "נוצר מפתח לקודי הסרה")
+        return key
+
+    def issue_removal_code(self, device_id: int, admin: str) -> dict:
+        """קוד הסרה למחשב: מתיר להסיר את FilterPhone מהמחשב הזה בלבד, ל-24–48 שעות. פעולה רגישה —
+        נרשמת ב-audit וביומן המכשיר."""
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            if row["platform"] != "windows":
+                raise ApiError(409, "קוד הסרה קיים רק למחשבי Windows")
+            if not row["removal_key"]:
+                raise ApiError(409, "המחשב עוד לא דיווח לשרת — אין עדיין קוד הסרה. נסו שוב אחרי שהמחשב יתחבר.")
+            day = removal.day_of(t)
+            code = removal.code_for(row["removal_key"], device_id, day)
+            self.log_device(c, device_id, "removal_code", f"הופק קוד הסרה ע\"י {admin}")
+            self.audit(admin, "removal_code", f"device:{device_id}", "", c)
+        return {"code": code, "valid_until": removal.valid_until(day)}
 
     def _log_data_checks(self, c: sqlite3.Connection, device_id: int, prev: dict, vpn: dict) -> None:
         """בדיקות התעבורה של הטלפון: "המנהרה למעלה בלי אינטרנט" נרשם ביומן המכשיר (עם השלב שנכשל
@@ -1644,6 +1689,7 @@ class Services:
                       "by": r["pause_by"]} if r["pause_until"] else None,
             "unmanage_requested": bool(r["unmanage_at"]),
             "temp_opens": self.temp_opens(r),
+            "removal_ready": bool(r["removal_key"]),
         })
         return out
 
@@ -1654,7 +1700,7 @@ class Services:
         if "status" in allowed and allowed["status"] not in ("active", "disabled"):
             raise ApiError(400, "סטטוס לא חוקי")
         policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc",
-                       "keywords", "vpn_bypass", "track", "allow_google_accounts", "safe_browser",
+                       "keywords", "vpn_bypass", "track", "allow_google_accounts", "safe_browser", "desktop",
                        "web_level", "web_extras", "web_without")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
