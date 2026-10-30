@@ -54,6 +54,22 @@ class BackoffTest {
     }
 
     @Test
+    fun lockdownCapsTheWaitEvenWhenALongOneWasSaved() {
+        // בלי מנהרה + lockdown = בלי אינטרנט: המתנה של 15 דקות (שנשמרה מלפני אתחול) מתקצרת ל-30 שניות
+        var now = 0L
+        val b = Backoff(MemPrefs(), "vpn", clock = { now })
+        repeat(9) { b.failed() }
+        assertEquals(900_000L, b.waitMs())
+        b.capWait(30_000L)
+        assertEquals(30_000L, b.waitMs())
+        b.capWait(60_000L)                     // לא מאריך
+        assertEquals(30_000L, b.waitMs())
+        assertEquals(30_000L, b.failed(30_000L))
+        now += 30_000L
+        assertTrue(b.ready())
+    }
+
+    @Test
     fun stateSurvivesProcessDeath() {
         val prefs = MemPrefs()
         var now = 0L

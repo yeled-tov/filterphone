@@ -21,8 +21,12 @@ class BootReceiver : BroadcastReceiver() {
             TunnelManager.endUpdatePause()
             // עדכון עצמי במנהל מכשיר: מחזירים מיד חסימות ששוחררו לזמן ההתקנה
             Recovery.runAsync(context) { SelfUpdate.restoreRestrictions(context) }
+            // התחלה נקייה + החזרת ה-VPN אם אנדרואיד ביטל אותו + בדיקה שתעבורה באמת עוברת (10 דקות)
+            Recovery.runAsync(context) { TunnelManager.afterUpdate() }
         }
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            // בלי המתנות שנשמרו מלפני האתחול (עד 15 דקות) — בזמן הזה lockdown חוסם את כל האינטרנט
+            TunnelManager.freshStart("boot")
             Recovery.runAsync(context) { ManagedApps.restoreRestrictions(context) }
         }
         if (!TunnelManager.wantsConnection() || !TunnelManager.hasConfig()) return

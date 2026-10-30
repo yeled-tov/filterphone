@@ -18,6 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 
 /**
@@ -32,7 +33,13 @@ import java.util.concurrent.TimeUnit
  *   - בדיקת תקינות: מנהרה "למעלה" בלי handshake טרי כשיש רשת — מחברים מחדש.
  *   - בדיקת תעבורה (DataProbe): handshake טרי לא מוכיח שיש אינטרנט. בקשת HTTP אמיתית במנהרה, לכל
  *     היותר פעם בדקה; שני כשלים ברצף כשהרשת של הטלפון עצמה תקינה — מחברים מחדש.
- * לעולם לא בלולאה: כל ניסיון עובר דרך ה-Backoff.
+ *   - אנדרואיד ביטל את ה-VPN שלנו (אישור / "תמיד מופעל" — קורה סביב עדכון): במנהל מכשיר מחזירים
+ *     בעצמנו (DeviceOwnerManager.restoreVpnOwnership), בלי המשתמש ובלי הפעלה מחדש.
+ *   - בלי מנהרה ועם "חסימה בלי VPN" אין אינטרנט בכלל — אז לא מחכים יותר מ-30 שניות בין ניסיונות
+ *     (גם אם נשמרה המתנה ארוכה מלפני אתחול).
+ *   - אחרי עדכון של האפליקציה (afterUpdate): התחלה נקייה, ובמשך 10 דקות בודקים שתעבורה באמת עוברת;
+ *     אם לא — "מעבירים" את ה-VPN ומחזירים (unstick) — מה שמשחרר את באג אנדרואיד 16 בלי הפעלה מחדש.
+ * לעולם לא בלולאה: כל ניסיון עובר דרך ה-Backoff, ו-unstick מוגבל ל-3 ברצף.
  */
 object TunnelManager {
     private const val TAG = "FilterPhone"
@@ -47,11 +54,25 @@ object TunnelManager {
     private const val DATA_FAILS_TO_RECONNECT = 2      // כשל בודד יכול להיות רגעי — לא מחברים מחדש עליו
     private const val K_UPDATE_PAUSE = "vpn_update_pause_until"
     private const val UPDATE_PAUSE_MS = 2 * 60_000L     // לכל היותר — אחר כך מתחברים גם אם לא הגיע אישור
+    private const val URGENT_MAX_WAIT_MS = 30_000L      // בלי מנהרה + lockdown = בלי אינטרנט: לא מחכים יותר
+    private const val K_RECOVERY_UNTIL = "vpn_recovery_until"   // חלון הבדיקה המוגברת אחרי עדכון
+    private const val RECOVERY_WINDOW_MS = 10 * 60_000L
+    private const val RECOVERY_DATA_EVERY_MS = 20_000L  // בחלון הזה — בדיקת תעבורה כל 20 שניות
+    private const val K_UNSTICK = "vpn_unstick_in_row"
+    private const val MAX_UNSTICK_IN_ROW = 3
+    /** אחרי עדכון: מתי לבדוק שתעבורה עוברת (ואם לא — לשחרר). */
+    private val VERIFY_AT_MS = longArrayOf(15_000, 40_000, 80_000, 150_000, 300_000, 540_000)
 
     private lateinit var appContext: Context
     private val backend: GoBackend by lazy { GoBackend(appContext) }
     private val store: SecureStore by lazy { SecureStore(appContext) }
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
+    /** בדיקות התעבורה אחרי עדכון — חוט נפרד, כדי לא לעכב את Recovery (חיבור ברשת / אתחול). */
+    private val verifier: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "fp-vpn-verify").apply { isDaemon = true }
+    }
+    @Volatile private var verifyFails = 0
+    @Volatile private var verifyOks = 0
     private val listeners = CopyOnWriteArrayList<(Tunnel.State) -> Unit>()
     private val backoff: Backoff by lazy { Backoff(ProtectionState.prefs(appContext), "vpn") }
     /** חיבור מחדש בגלל "אין תעבורה" — השהיה נפרדת: אם הבעיה בשרת, חיבור מחדש לא יעזור ולא חוזרים עליו כל דקה. */
@@ -288,12 +309,15 @@ object TunnelManager {
         if (pausedGate()) return false
         if (kosherGate()) return false                       // ברשת כשרה — הסינון של הספק פעיל
         if (updatePaused()) return false                     // מותקן עדכון (אנדרואיד 16) — מתחברים אחריו
+        healOwnership(reason)
         if (!isPermissionGranted()) {
-            // בלי אישור VPN מהמשתמש אין מה לעשות ברקע — מוצג באפליקציה ובהתראה
+            // בלי אישור VPN (ובלי מנהל מכשיר שיחזיר אותו) אין מה לעשות ברקע — מוצג באפליקציה ובהתראה
             ProtectionState.setString(appContext, ProtectionState.VPN_ERROR, "vpn permission revoked")
             return false
         }
         if (state == Tunnel.State.UP) return true
+        val cap = if (offlineWithoutTunnel()) URGENT_MAX_WAIT_MS else Long.MAX_VALUE
+        if (cap != Long.MAX_VALUE) backoff.capWait(cap)
         if (!backoff.ready()) {
             Recovery.scheduleRetry(appContext, backoff.waitMs())
             return false
@@ -304,9 +328,136 @@ object TunnelManager {
             Log.i(TAG, "tunnel reconnected ($reason)")
             true
         } catch (e: Exception) {
-            val delay = backoff.failed()
+            val delay = backoff.failed(cap)
             Log.w(TAG, "reconnect ($reason) failed, next try in ${delay / 1000}s: ${e.javaClass.simpleName}")
             Recovery.scheduleRetry(appContext, delay)
+            false
+        }
+    }
+
+    /**
+     * מנהל מכשיר: אם אנדרואיד ביטל את ה-VPN שלנו (האישור או "תמיד מופעל") — מחזירים עכשיו, לפני החיבור.
+     * זול (קריאות ל-DevicePolicyManager בלבד); בטלפון שאינו מנהל מכשיר — כלום.
+     */
+    private fun healOwnership(reason: String) {
+        val missing = !isPermissionGranted() ||
+            runCatching { DeviceOwnerManager.vpnOwnershipMissing(appContext) }.getOrDefault(false)
+        if (!missing) return
+        val restored = runCatching { DeviceOwnerManager.restoreVpnOwnership(appContext) }
+            .onFailure { Log.w(TAG, "restoring the vpn through the device owner failed", it) }.getOrDefault(false)
+        if (restored) {
+            Log.i(TAG, "vpn permission / always-on restored by the device owner ($reason)")
+            ProtectionState.inc(appContext, ProtectionState.VPN_CONSENT_RESTORED)
+            if (isPermissionGranted()) ProtectionState.setString(appContext, ProtectionState.VPN_ERROR, null)
+        }
+    }
+
+    /** בלי מנהרה אין אינטרנט בכלל ("חסימה בלי VPN" פעילה) — אז מנסים לחבר בלי השהיות ארוכות. */
+    private fun offlineWithoutTunnel(): Boolean =
+        DeviceOwnerManager.alwaysOnLockdown(appContext) == true ||
+            (!DeviceOwnerManager.isDeviceOwner(appContext) && ProtectionState.string(appContext, "lockdown") == "true")
+
+    /** אם המנהרה למטה — חיבור ברקע עכשיו (למשל אחרי שמנהל המכשיר החזיר את "תמיד מופעל"). */
+    fun kickIfDown(reason: String) {
+        if (!isInitialized || state == Tunnel.State.UP || !wantsConnection() || !hasConfig()) return
+        Recovery.runAsync(appContext) { ensureConnected(reason) }
+    }
+
+    // ---------------------------------------------------------------- אתחול ועדכון
+
+    /** התחלה נקייה (אתחול / עדכון): בלי המתנות שנשמרו מניסיונות קודמים, ובלי ספירת כשלים ישנה. */
+    fun freshStart(reason: String) {
+        if (!isInitialized) return
+        backoff.succeeded()
+        dataBackoff.succeeded()
+        dataFailsInRow = 0
+        lastDataCheck = 0L
+        Log.i(TAG, "tunnel: fresh start ($reason)")
+    }
+
+    /**
+     * אחרי עדכון של האפליקציה (MY_PACKAGE_REPLACED, ברקע): התחלה נקייה; במנהל מכשיר מחזירים את ה-VPN
+     * שלנו (אנדרואיד מבטל אותו לפעמים סביב העדכון), ובאנדרואיד 16 גם "מעבירים ומחזירים" אותו מיד —
+     * מה שמשחרר את הבאג לפני שמישהו מרגיש. אחר כך מתחברים, ובמשך 10 דקות בודקים שתעבורה באמת עוברת.
+     */
+    fun afterUpdate() {
+        if (!isInitialized) return
+        endUpdatePause()
+        freshStart("update")
+        prefs().edit().putLong(K_RECOVERY_UNTIL, System.currentTimeMillis() + RECOVERY_WINDOW_MS)
+            .putInt(K_UNSTICK, 0).apply()
+        if (!wantsConnection() || !hasConfig()) return
+        val reset = updateBugAffected &&
+            runCatching { DeviceOwnerManager.resetVpnOwnership(appContext) }.getOrDefault(false)
+        if (reset) Log.i(TAG, "after the update: vpn handed off and back (Android 16 bug)")
+        ensureConnected("update")
+        verifyFails = 0
+        verifyOks = 0
+        for (delay in VERIFY_AT_MS) {
+            verifier.schedule({ runCatching { verifyAfterUpdate() }.onFailure { Log.w(TAG, "verify failed", it) } },
+                delay, TimeUnit.MILLISECONDS)
+        }
+    }
+
+    private fun inRecoveryWindow(): Boolean = System.currentTimeMillis() < prefs().getLong(K_RECOVERY_UNTIL, 0L)
+
+    /** בדיקה אחת אחרי עדכון: מחובר? תעבורה עוברת? שני כשלים ברצף כשהרשת עצמה תקינה — unstick. */
+    private fun verifyAfterUpdate() {
+        if (!inRecoveryWindow() || !wantsConnection() || !hasConfig()) return
+        if (AdminState.isPaused(appContext) || KosherNet.isActive(appContext)) return
+        if (state != Tunnel.State.UP) {
+            ensureConnected("verify")
+            return
+        }
+        val failure = DataProbe.run()
+        ProtectionState.mark(appContext, ProtectionState.VPN_DATA_CHECKED)
+        if (failure == null) {
+            verifyFails = 0
+            ProtectionState.mark(appContext, ProtectionState.VPN_DATA_OK)
+            prefs().edit().putInt(K_UNSTICK, 0).apply()
+            if (++verifyOks >= 2) prefs().edit().remove(K_RECOVERY_UNTIL).apply()   // עובד — סוף החלון
+            return
+        }
+        if (failure == "blocked" || !underlyingValidated()) return
+        ProtectionState.mark(appContext, ProtectionState.VPN_DATA_FAIL)
+        ProtectionState.setString(appContext, ProtectionState.VPN_DATA_ERROR, failure)
+        if (++verifyFails >= 2) {
+            verifyFails = 0
+            unstick("no traffic after the update: $failure")
+        }
+    }
+
+    private fun unstickLeft(): Boolean = prefs().getInt(K_UNSTICK, 0) < MAX_UNSTICK_IN_ROW
+
+    /**
+     * המנהרה "מחוברת" ואין תעבורה, וחיבור מחדש רגיל לא עוזר (באג אנדרואיד 16 אחרי עדכון): במנהל מכשיר —
+     * מעבירים את ה-VPN ומחזירים (DeviceOwnerManager.resetVpnOwnership) ומתחברים; אחרת — חיבור מחדש.
+     * לכל היותר 3 ברצף בלי שתעבורה עברה ביניהם; אחר כך התראה (UpdateBugNotice) ולא עוד ניסיונות.
+     */
+    private fun unstick(why: String): Boolean {
+        val n = prefs().getInt(K_UNSTICK, 0)
+        if (n >= MAX_UNSTICK_IN_ROW) {
+            UpdateBugNotice.maybeShow(appContext)
+            return false
+        }
+        prefs().edit().putInt(K_UNSTICK, n + 1).apply()
+        ProtectionState.inc(appContext, ProtectionState.VPN_UNSTUCK)
+        val reset = runCatching { DeviceOwnerManager.resetVpnOwnership(appContext) }
+            .onFailure { Log.w(TAG, "vpn hand-off failed", it) }.getOrDefault(false)
+        Log.w(TAG, "tunnel stuck ($why) — ${if (reset) "vpn handed off and back" else "reconnecting"} (${n + 1}/$MAX_UNSTICK_IN_ROW)")
+        backoff.succeeded()
+        lastDataCheck = 0L
+        if (!reset) return reconnect(why)
+        // אנדרואיד מוריד את המנהרה שלנו ב-reset ומפעיל אותה שוב ("תמיד מופעל") — מוודאים שעלתה
+        return try {
+            worker.submit<Tunnel.State> {
+                if (state != Tunnel.State.DOWN) backend.setState(tunnel, Tunnel.State.DOWN, null)
+                bringUp()
+            }.get(CONNECT_TIMEOUT_S, TimeUnit.SECONDS)
+            ProtectionState.inc(appContext, ProtectionState.VPN_RECONNECTS)
+            true
+        } catch (e: Exception) {
+            Recovery.scheduleRetry(appContext, backoff.failed(URGENT_MAX_WAIT_MS))
             false
         }
     }
@@ -322,6 +473,7 @@ object TunnelManager {
         if (kosherGate()) return true                        // ברשת כשרה — בכוונה
         if (updatePaused()) return true                      // מותקן עדכון — מתחברים אחריו
         if (state != Tunnel.State.UP) return ensureConnected("health")
+        healOwnership("health")                              // "תמיד מופעל" ירד בלי שהמנהרה ירדה
         val age = handshakeAgeMs()
         if (age != null && age < STALE_HANDSHAKE_MS) {
             ProtectionState.mark(appContext, ProtectionState.VPN_HEALTH_OK)
@@ -330,7 +482,7 @@ object TunnelManager {
         }
         val upFor = SystemClock.elapsedRealtime() - upSince
         if (upFor < STALE_HANDSHAKE_MS || !hasUnderlyingNetwork()) return true   // רק עלתה / אין רשת בכלל
-        UpdateBugNotice.maybeShow(appContext)
+        if (!DeviceOwnerManager.isDeviceOwner(appContext)) UpdateBugNotice.maybeShow(appContext)
         if (!backoff.ready()) return false
         return reconnect("no fresh handshake (${age?.div(1000)}s)")
     }
@@ -342,7 +494,8 @@ object TunnelManager {
      */
     private fun dataCheck(): Boolean {
         val now = SystemClock.elapsedRealtime()
-        if (lastDataCheck != 0L && now - lastDataCheck < DATA_CHECK_EVERY_MS) return dataFailsInRow == 0
+        val every = if (inRecoveryWindow()) RECOVERY_DATA_EVERY_MS else DATA_CHECK_EVERY_MS
+        if (lastDataCheck != 0L && now - lastDataCheck < every) return dataFailsInRow == 0
         lastDataCheck = now
         val failure = DataProbe.run()
         ProtectionState.mark(appContext, ProtectionState.VPN_DATA_CHECKED)
@@ -350,6 +503,7 @@ object TunnelManager {
             if (dataFailsInRow > 0) Log.i(TAG, "tunnel traffic flows again after $dataFailsInRow failed checks")
             dataFailsInRow = 0
             dataBackoff.succeeded()
+            prefs().edit().putInt(K_UNSTICK, 0).apply()
             ProtectionState.mark(appContext, ProtectionState.VPN_DATA_OK)
             return true
         }
@@ -359,8 +513,14 @@ object TunnelManager {
         ProtectionState.mark(appContext, ProtectionState.VPN_DATA_FAIL)
         ProtectionState.setString(appContext, ProtectionState.VPN_DATA_ERROR, failure)
         ProtectionState.inc(appContext, ProtectionState.VPN_DATA_FAILS)
-        UpdateBugNotice.maybeShow(appContext)
-        if (dataFailsInRow < DATA_FAILS_TO_RECONNECT || !dataBackoff.ready() || !backoff.ready()) return false
+        if (!DeviceOwnerManager.isDeviceOwner(appContext)) UpdateBugNotice.maybeShow(appContext)
+        if (dataFailsInRow < DATA_FAILS_TO_RECONNECT) return false
+        // חיבור מחדש רגיל כבר נוסה ולא עזר (או שזה מיד אחרי עדכון) — משחררים (באג אנדרואיד 16)
+        if (inRecoveryWindow() || dataFailsInRow >= DATA_FAILS_TO_RECONNECT * 2) {
+            if (unstickLeft()) return unstick("no traffic: $failure")
+            UpdateBugNotice.maybeShow(appContext)
+        }
+        if (!dataBackoff.ready() || !backoff.ready()) return false
         dataBackoff.failed()
         lastDataCheck = 0L                       // אחרי החיבור מחדש — בודקים שוב בהזדמנות הבאה
         return reconnect("no traffic: $failure")

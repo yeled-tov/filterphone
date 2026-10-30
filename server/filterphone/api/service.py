@@ -140,6 +140,8 @@ _HB_SECTIONS = {
             "reconnects": int, "error": str,
             # בדיקת תעבורה אמיתית במנהרה (DataProbe): handshake טרי לא מוכיח שיש אינטרנט
             "data_ok": bool, "data_error": str, "data_fail_age_s": int, "data_fails": int,
+            # תיקון עצמי: מנהל המכשיר החזיר VPN שאנדרואיד ביטל / שוחרר "מחובר בלי תעבורה" (באג אנדרואיד 16)
+            "consent_restored": int, "unstuck": int,
             # רשת כשרה (נטפרי): ה-VPN מושהה בכוונה כי הספק מסנן. unknown = סינון לא מוכר שזוהה (לאבחון)
             "kosher": bool, "kosher_provider": str, "kosher_unknown": str},
     "accessibility": {"enabled": bool, "running": bool, "last_event_age_s": int, "required": bool,

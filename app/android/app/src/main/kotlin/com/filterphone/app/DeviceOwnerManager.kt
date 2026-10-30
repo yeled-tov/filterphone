@@ -125,7 +125,7 @@ object DeviceOwnerManager {
             return
         }
         try {
-            dpm.setAlwaysOnVpnPackage(admin, pkg, lockdown, if (lockdown) allow else emptySet())
+            dpm.setAlwaysOnVpnPackage(admin, pkg, lockdown, if (lockdown) allow else null)   // בלי lockdown — אין רשימה
         } catch (e: PackageManager.NameNotFoundException) {
             Log.w(TAG, "lockdown allowlist: a package is gone — applying without it")
             dpm.setAlwaysOnVpnPackage(admin, pkg, lockdown, emptySet())
@@ -142,6 +142,86 @@ object DeviceOwnerManager {
         DEFAULTS.mapValues { (k, v) -> dpc?.optBoolean(k, v) ?: v }
 
     /**
+     * "VPN תמיד מופעל" של אנדרואיד:
+     *   LOCKDOWN — תמיד מופעל + חסימת חיבורים בלי VPN (always_on_vpn במדיניות — ברירת המחדל).
+     *   OPEN     — תמיד מופעל בלי חסימה (always_on_vpn כבוי במדיניות): ה-VPN חוזר לבד, ואם הוא נופל
+     *              יש אינטרנט. לא מבטלים את "תמיד מופעל" — ביטול שלו דרך מנהל המכשיר מבטל גם את אישור
+     *              ה-VPN של האפליקציה, ואז ה-VPN לא חוזר עד שמישהו מאשר ידנית (כך נשאר טלפון בלי VPN).
+     *   OFF      — כבוי: בהשהיה שהמנהל אישר וברשת כשרה. ביציאה מהם הוא חוזר (ואיתו האישור).
+     */
+    enum class VpnLock { LOCKDOWN, OPEN, OFF }
+
+    /** ההגדרות שצריכות להיות עכשיו: המדיניות, השהיה (PAUSED) ופתיחה זמנית (למשל נקודה חמה ל-10 דקות). */
+    private fun desired(context: Context, policy: GuardPolicy.Policy): Map<String, Boolean> =
+        if (AdminState.isPaused(context)) PAUSED else effective(policy.dpc) +
+            GuardPolicy.activeTempDpc(policy).filter { it in DEFAULTS }.associateWith { false }
+
+    private fun vpnLock(context: Context, want: Map<String, Boolean>): VpnLock = when {
+        // ברשת כשרה (נטפרי): כבוי רק בזמן שבה — חוזר ביציאה (KosherNet)
+        AdminState.isPaused(context) || KosherNet.isActive(context) -> VpnLock.OFF
+        want.getValue("always_on_vpn") -> VpnLock.LOCKDOWN
+        else -> VpnLock.OPEN
+    }
+
+    fun desiredVpnLock(context: Context): VpnLock = vpnLock(context, desired(context, GuardPolicy.get(context)))
+
+    private fun applyVpnLock(context: Context, dpm: DevicePolicyManager, admin: android.content.ComponentName,
+                             lock: VpnLock) {
+        when (lock) {
+            VpnLock.LOCKDOWN -> setAlwaysOn(dpm, admin, context.packageName, lockdown = true,
+                runCatching { VpnBypass.current(context).excluded }.getOrDefault(emptySet()))
+            VpnLock.OPEN -> setAlwaysOn(dpm, admin, context.packageName, lockdown = false, emptySet())
+            VpnLock.OFF -> if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) {
+                dpm.setAlwaysOnVpnPackage(admin, null, false)
+            }
+        }
+    }
+
+    /** לא כמו שצריך: ה-VPN התמיד-מופעל אינו שלנו, או ש-lockdown שונה מהמדיניות. */
+    fun vpnOwnershipMissing(context: Context): Boolean {
+        if (!isDeviceOwner(context) || !TunnelManager.isInitialized || !TunnelManager.hasConfig()) return false
+        val lock = desiredVpnLock(context)
+        if (lock == VpnLock.OFF) return false
+        return runCatching {
+            val dpm = dpm(context) ?: return false
+            val admin = DeviceAdmin.component(context)
+            dpm.getAlwaysOnVpnPackage(admin) != context.packageName ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                    dpm.isAlwaysOnVpnLockdownEnabled(admin) != (lock == VpnLock.LOCKDOWN))
+        }.getOrDefault(false)
+    }
+
+    /**
+     * אנדרואיד ביטל את ה-VPN שלנו (את האישור ו/או את "תמיד מופעל") — קורה סביב עדכון של האפליקציה,
+     * בעיקר באנדרואיד 16. מנהל המכשיר מחזיר אותו בעצמו: setAlwaysOnVpnPackage גם מאשר את ה-VPN
+     * לאפליקציה (במקום חלון האישור) — בלי המשתמש ובלי הפעלה מחדש. true אם הוחזר.
+     */
+    fun restoreVpnOwnership(context: Context): Boolean {
+        if (!isDeviceOwner(context) || !TunnelManager.isInitialized || !TunnelManager.hasConfig()) return false
+        val lock = desiredVpnLock(context)
+        if (lock == VpnLock.OFF) return false
+        val dpm = dpm(context) ?: return false
+        applyVpnLock(context, dpm, DeviceAdmin.component(context), lock)
+        return true
+    }
+
+    /**
+     * כמו שאפליקציית VPN אחרת לוקחת את החיבור לרגע — הדרך היחידה שידועה לשחרר את באג אנדרואיד 16
+     * ("ה-VPN מחובר ואין אינטרנט" אחרי עדכון) בלי הפעלה מחדש: מבטלים את "תמיד מופעל" — אנדרואיד מוריד
+     * את ה-VPN שלנו לגמרי ומאפס את המצב שלו — ומחזירים מיד (עם האישור). true אם בוצע.
+     */
+    fun resetVpnOwnership(context: Context): Boolean {
+        if (!isDeviceOwner(context) || !TunnelManager.isInitialized || !TunnelManager.hasConfig()) return false
+        val lock = desiredVpnLock(context)
+        if (lock == VpnLock.OFF) return false
+        val dpm = dpm(context) ?: return false
+        val admin = DeviceAdmin.component(context)
+        dpm.setAlwaysOnVpnPackage(admin, null, false)
+        applyVpnLock(context, dpm, admin, lock)
+        return true
+    }
+
+    /**
      * מחיל את המדיניות. בטלפון שאינו Device Owner — לא עושה כלום (ומחזיר null).
      * בטוח לקריאה חוזרת: כל הגדרה נקבעת למצב הרצוי (גם הסרה של מה שבוטל).
      */
@@ -149,12 +229,7 @@ object DeviceOwnerManager {
         if (!isDeviceOwner(context)) return null
         val dpm = dpm(context) ?: return null
         val admin = DeviceAdmin.component(context)
-        val paused = AdminState.isPaused(context)   // השהיה שהמנהל אישר — הטלפון פתוח (PAUSED)
-        // פתוח זמנית (למשל נקודה חמה ל-10 דקות) — ההגבלה מורפית עד הזמן, ואז חוזרת (Recovery.JOB_TEMP)
-        val want = if (paused) PAUSED else effective(policy.dpc) +
-            GuardPolicy.activeTempDpc(policy).filter { it in DEFAULTS }.associateWith { false } +
-            // ברשת כשרה (נטפרי): "תמיד מופעל" + lockdown כבויים רק בזמן שבה — חוזרים ביציאה (KosherNet)
-            (if (KosherNet.isActive(context)) mapOf("always_on_vpn" to false) else emptyMap())
+        val want = desired(context, policy)
         val applied = mutableListOf<String>()
         val failed = mutableListOf<String>()
         val pending = mutableListOf<String>()
@@ -178,19 +253,15 @@ object DeviceOwnerManager {
         }
         // lockdown: אין חיבור ישיר מחוץ ל-VPN, מלבד FilterPhone והאפליקציות שהוחרגו במפורש (VpnBypass).
         // לפני שיש הגדרות VPN (מיד אחרי ההקמה, לפני ההפעלה בקוד) לא נועלים — ממתינים להגדרות.
-        // בהשהיה: "תמיד מופעל" מבוטל לגמרי (ה-VPN כבוי) וחוזר בסוף ההשהיה.
+        // בהשהיה / ברשת כשרה: "תמיד מופעל" מבוטל (ה-VPN כבוי) וחוזר בסופם (VpnLock).
         val vpnReady = TunnelManager.isInitialized && TunnelManager.hasConfig()
-        if (want.getValue("always_on_vpn") && !vpnReady) {
+        val lock = vpnLock(context, want)
+        if (lock != VpnLock.OFF && !vpnReady) {
             pending += "always_on_vpn"
         } else {
-            step("always_on_vpn") {
-                if (want.getValue("always_on_vpn")) {
-                    val bypass = runCatching { VpnBypass.current(context).excluded }.getOrDefault(emptySet())
-                    setAlwaysOn(dpm, admin, context.packageName, lockdown = true, bypass)
-                } else if (dpm.getAlwaysOnVpnPackage(admin) == context.packageName) {
-                    dpm.setAlwaysOnVpnPackage(admin, null, false)
-                }
-            }
+            step("always_on_vpn") { applyVpnLock(context, dpm, admin, lock) }
+            // אם המנהרה למטה (למשל אחרי שאנדרואיד ביטל את ה-VPN) — מחברים עכשיו, לא בבדיקה הבאה
+            if (lock != VpnLock.OFF) TunnelManager.kickIfDown("device owner")
         }
         // התקנה שקטה באמצע (עדכון עצמי / חנות): חסימת ההתקנות חוזרת כשהיא מסתיימת, לא עכשיו
         val installWindow = runCatching { SelfUpdate.installWindowOpen(context) || ManagedApps.installWindowOpen(context) }

@@ -45,6 +45,8 @@ object Sync {
             ProtectionState.string(context, ProtectionState.VPN_DATA_ERROR)?.let { vpn.put("data_error", it.take(40)) }
         }
         vpn.put("data_fails", ProtectionState.count(context, ProtectionState.VPN_DATA_FAILS))
+        vpn.put("consent_restored", ProtectionState.count(context, ProtectionState.VPN_CONSENT_RESTORED))
+        vpn.put("unstuck", ProtectionState.count(context, ProtectionState.VPN_UNSTUCK))
         runCatching { KosherNet.report(context, vpn) }       // ברשת נטפרי וכו' — ה-VPN מושהה בכוונה
 
         val policy = GuardPolicy.get(context)

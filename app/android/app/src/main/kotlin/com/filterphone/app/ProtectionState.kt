@@ -18,6 +18,8 @@ object ProtectionState {
     const val VPN_DATA_FAIL = "vpn_data_fail_at"     // מתי לאחרונה המנהרה הייתה למעלה בלי תעבורה
     const val VPN_DATA_ERROR = "vpn_data_error"      // באיזה שלב נכשלה (dns / connect / timeout / http:bad)
     const val VPN_DATA_FAILS = "vpn_data_fails"      // כמה בדיקות תעבורה נכשלו בסך הכול
+    const val VPN_CONSENT_RESTORED = "vpn_consent_restored" // כמה פעמים מנהל המכשיר החזיר את ה-VPN שאנדרואיד ביטל
+    const val VPN_UNSTUCK = "vpn_unstuck"            // כמה פעמים שוחרר "מחובר בלי תעבורה" (באג אנדרואיד 16)
     const val POLICY_SYNC = "policy_sync_at"          // מתי לאחרונה קיבלנו / אישרנו מדיניות מהשרת
     const val HEARTBEAT_OK = "heartbeat_ok_at"
     const val HEARTBEAT_ERROR = "heartbeat_error"
@@ -76,12 +78,17 @@ class Backoff(
     /** כמה לחכות עד הניסיון הבא (0 = עכשיו). */
     fun waitMs(): Long = (notBefore - clock()).coerceAtLeast(0L)
 
-    /** ניסיון נכשל: הניסיון הבא רק אחרי ההשהיה הבאה. מחזיר את ההשהיה. */
-    fun failed(): Long {
+    /** ניסיון נכשל: הניסיון הבא רק אחרי ההשהיה הבאה (לכל היותר [cap]). מחזיר את ההשהיה. */
+    fun failed(cap: Long = Long.MAX_VALUE): Long {
         val n = attempts
-        val delay = steps[n.coerceAtMost(steps.size - 1)]
+        val delay = minOf(steps[n.coerceAtMost(steps.size - 1)], cap)
         prefs.edit().putInt("${name}_attempts", n + 1).putLong("${name}_not_before", clock() + delay).apply()
         return delay
+    }
+
+    /** מקצר המתנה ארוכה (למשל שנשמרה מלפני אתחול) ל-[cap] לכל היותר מעכשיו. */
+    fun capWait(cap: Long) {
+        if (notBefore - clock() > cap) prefs.edit().putLong("${name}_not_before", clock() + cap).apply()
     }
 
     fun succeeded() {

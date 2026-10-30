@@ -488,7 +488,7 @@ PROTECTIONS: dict[str, dict] = {
 # של DevicePolicyManager. במכשיר שאינו Device Owner — אין לזה השפעה (ומוצג ככזה בממשק).
 DPC_DEFAULTS: dict[str, bool | list] = {
     "block_uninstall": True,            # אי אפשר להסיר את FilterPhone
-    "always_on_vpn": True,              # VPN תמיד מופעל + חסימת חיבורים בלי VPN (lockdown)
+    "always_on_vpn": True,              # VPN תמיד מופעל + חסימת חיבורים בלי VPN (lockdown); כבוי = תמיד מופעל בלי חסימה
     "disallow_config_vpn": True,        # אי אפשר לשנות הגדרות VPN
     "disallow_factory_reset": True,     # איפוס להגדרות יצרן מתוך ההגדרות חסום (לא מצב שחזור!)
     "disallow_safe_boot": True,         # מצב בטוח (שעוקף אפליקציות) חסום
