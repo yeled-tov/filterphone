@@ -32,7 +32,23 @@ ISSUES: dict[str, tuple[str, str]] = {
     "no_heartbeat": (YELLOW, "גרסת אפליקציה ישנה — אין דיווח מהרקע, המצב לא ידוע"),
     "debugging": (YELLOW, "ניפוי באגים (ADB) פעיל במכשיר מנוהל"),
     "policy_error": (YELLOW, "הטלפון דיווח שלא הצליח להחיל את המדיניות"),
+    # מחשבי Windows
+    "win_outside_vpn": (RED, "המחשב פנה לשרת שלא דרך הסינון — ייתכן שיש בו גלישה בלי סינון"),
+    "win_lock_off": (RED, "חסימת הגלישה מחוץ לסינון לא פעילה במחשב"),
+    "win_filter_failed": (RED, "בדיקת הסינון במחשב נכשלה — התעבורה לא עוברת דרך מסנן התמונות"),
+    "win_browsers_open": (RED, "הגבלת הדפדפנים ל-Chrome לא פועלת במחשב"),
+    "win_store_open": (YELLOW, "חסימת חנות Microsoft לא פועלת במחשב"),
+    "win_limited": (YELLOW, "ב-Windows הזה דפדפנים אחרים / החנות לא נחסמים מראש — הם נסגרים מיד כשנפתחים"),
+    "win_tunnel_down": (YELLOW, "החיבור לסינון במחשב לא פעיל כרגע — הגלישה במחשב חסומה עד שיחזור"),
+    "win_checking": (YELLOW, "המחשב עדיין בודק את שכבות ההגנה"),
+    "win_no_report": (YELLOW, "המחשב עוד לא דיווח על מצב ההגנה"),
+    "win_offline": (YELLOW, "המחשב לא מחובר כרגע (כבוי / בלי רשת)"),
+    "win_lost": (RED, "אין שום קשר עם המחשב יותר מיומיים"),
 }
+
+# שכבות ההגנה שהמחשב מאמת ומדווח (FilterPhone.Core.Status.Layers)
+WINDOWS_LAYERS = ("enrollment", "tunnel", "server_path", "kill_switch", "ca_trust", "interception", "image_path",
+                  "chrome_only", "chrome_policy", "store_block")
 
 
 @dataclass
@@ -64,6 +80,8 @@ def evaluate(row, hb: dict, guard: dict, handshake: int, needs_device_block: boo
     kosher_allowed: המנהל מרשה מעבר אוטומטי לרשת כשרה (dpc.kosher_network)."""
     if row["status"] != "active":
         return Compliance(INACTIVE, False, "unknown", "unknown", "unknown", "unknown", row["last_seen_at"])
+    if "platform" in row.keys() and row["platform"] == "windows":
+        return evaluate_windows(row, hb, handshake, now, offline_after_s, lost_after_s)
 
     hb_at = row["heartbeat_at"] or 0
     hb_fresh = bool(hb_at and now - hb_at < offline_after_s)
@@ -170,3 +188,57 @@ def evaluate(row, hb: dict, guard: dict, handshake: int, needs_device_block: boo
     items = [_issue(c) for c in dict.fromkeys(issues)]
     state = RED if any(i["severity"] == RED for i in items) else YELLOW if items else GREEN
     return Compliance(state, online, vpn, accessibility, management, policy_sync, last_contact, items)
+
+
+def evaluate_windows(row, hb: dict, handshake: int, now: int, offline_after_s: int, lost_after_s: int) -> Compliance:
+    """מחשב Windows: המחשב בודק כל שכבה בעצמו (חיבור, חסימת גלישה מחוץ לסינון, תעודה, סינון בפועל,
+    הגבלת דפדפנים, חנות) ומדווח. כמו בטלפון — מה שלא דווח הוא "לא ידוע", לא "תקין"; WireGuard בשרת
+    ודיווח שהגיע מחוץ למנהרה גוברים על מה שהמחשב אומר."""
+    hb_at = row["heartbeat_at"] or 0
+    hb_fresh = bool(hb_at and now - hb_at < offline_after_s)
+    hs_fresh = bool(handshake and now - handshake < ONLINE_WINDOW_S)
+    contacts = [t for t in (hb_at, handshake, row["last_seen_at"]) if t]
+    last_contact = max(contacts) if contacts else None
+    online = hs_fresh or hb_fresh or bool(row["last_seen_at"] and now - row["last_seen_at"] < offline_after_s)
+    win = hb.get("windows") if isinstance(hb.get("windows"), dict) else {}
+    issues: list[str] = []
+
+    if hs_fresh or (hb_fresh and hb.get("via_vpn") is True):
+        vpn = "up"
+    elif hb_fresh and hb.get("via_vpn") is False:
+        vpn = "down"
+        # כשהמנהרה למטה והחסימה מחוץ לסינון פעילה, השירות פונה לשרת דרך החריג הצר שלו (רק השירות, רק לשרת)
+        # — זה צפוי ואין גלישה. דיווח מבחוץ כשהמחשב טוען שהמנהרה תקינה — סתירה: אדום.
+        if not (win.get("kill_switch") == "ok" and win.get("tunnel") != "ok"):
+            issues.append("win_outside_vpn")
+    elif win.get("tunnel") in ("failed", "pending"):
+        vpn = "down"
+    else:
+        vpn = "unknown"
+
+    if not win:
+        issues.append("win_no_report")
+    else:
+        if win.get("kill_switch") == "failed":
+            issues.append("win_lock_off")
+        if win.get("ca_trust") == "failed":
+            issues.append("ca_missing")
+        if "failed" in (win.get("interception"), win.get("image_path"), win.get("server_path")):
+            issues.append("win_filter_failed")
+        if win.get("chrome_only") == "failed":
+            issues.append("win_browsers_open")
+        if win.get("store_block") == "failed":
+            issues.append("win_store_open")
+        if "unsupported" in (win.get("chrome_only"), win.get("store_block")):
+            issues.append("win_limited")
+        if hb_fresh and win.get("tunnel") not in (None, "ok") and not hs_fresh:
+            issues.append("win_tunnel_down")
+        elif any(win.get(layer) in ("pending", "unknown") for layer in WINDOWS_LAYERS):
+            issues.append("win_checking")
+
+    if not online:
+        issues.append("win_lost" if not last_contact or now - last_contact >= lost_after_s else "win_offline")
+
+    items = [_issue(c) for c in dict.fromkeys(issues)]
+    state = RED if any(i["severity"] == RED for i in items) else YELLOW if items else GREEN
+    return Compliance(state, online, vpn, "not_required", "not_applicable", "synced", last_contact, items)

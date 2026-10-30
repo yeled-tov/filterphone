@@ -85,10 +85,15 @@ class Option:
             m.append("proxy")
         return m
 
+    @property
+    def applies_to_pc(self) -> bool:
+        """חל גם על מחשב: נחסם בשרת (DNS / פרוקסי) ולא רק במגן שבטלפון."""
+        return bool(self.hosts or self.paths or self.images or self.video)
+
     def public(self) -> dict:
-        """מה שהאפליקציה מקבלת לטופס ההרשמה (בלי פרטי אכיפה)."""
+        """מה שהאפליקציה מקבלת לטופס ההרשמה (בלי פרטי אכיפה). pc — מוצג גם בטופס ההרשמה במחשב."""
         return {"id": self.id, "category": self.category, "title": self.title, "desc": self.desc,
-                "popular": self.popular, "warn": self.warn}
+                "popular": self.popular, "warn": self.warn, "pc": self.applies_to_pc}
 
     def admin(self) -> dict:
         return {**self.public(), "hosts": list(self.hosts), "apps": list(self.apps),
@@ -344,6 +349,26 @@ OPTIONS: tuple[Option, ...] = (
                  "com.speedsoftware.rootexplorer", "com.mixplorer.silver", "bin.mt.plus", "bin.mt.plus.canary",
                  "com.chelpus.lackypatch", "com.dimonvideo.luckypatcher", "com.forpda.lp", "com.android.vending.billing.InAppBillingService.LUCK"),
            popular=True, needs_guard=True, protections=("block_root_prompt",)),
+    Option("remote_desktop", "protection", "שליטה מרחוק (AnyDesk, TeamViewer)",
+           "תוכנות שליטה מרחוק — דרכן אפשר לגלוש במחשב אחר בלי סינון. חוסם AnyDesk, TeamViewer, "
+           "RustDesk, Chrome Remote Desktop ו-VNC (גם האתר וגם האפליקציה).",
+           hosts=("anydesk.com", "anydesk.net", "teamviewer.com", "rustdesk.com", "remotedesktop.google.com",
+                  "realvnc.com", "logmein.com", "gotomypc.com", "splashtop.com", "ultraviewer.net",
+                  "getscreen.me", "dwservice.net"),
+           apps=("com.anydesk.anydeskandroid", "com.teamviewer.teamviewer.market.mobile",
+                 "com.teamviewer.host.market", "com.google.chromeremotedesktop", "com.realvnc.viewer.android",
+                 "com.splashtop.remote.pad.v2"),
+           popular=True, needs_guard=True),
+    Option("torrents", "protection", "טורנטים והורדות מפוקפקות",
+           "אתרי טורנטים ותוכנות הורדה — דרכם מורידים סרטים ותמונות בלי סינון. חוסם Pirate Bay, "
+           "1337x, YTS, RARBG, Nyaa ותוכנות כמו uTorrent, BitTorrent ו-qBittorrent.",
+           hosts=("thepiratebay.org", "1337x.to", "1337x.st", "rarbg.to", "yts.mx", "nyaa.si",
+                  "torrentz2.eu", "limetorrents.lol", "magnetdl.com", "eztv.re", "torlock.com",
+                  "utorrent.com", "bittorrent.com", "qbittorrent.org", "transmissionbt.com", "deluge-torrent.org",
+                  "kickasstorrents.to", "torrentgalaxy.to"),
+           apps=("com.bittorrent.client", "com.utorrent.client", "com.delphicoder.flud",
+                 "org.proninyaroslav.libretorrent", "com.frostwire.android", "hu.tagsoft.ttorrent.lite"),
+           popular=True, needs_guard=True),
 )
 
 CATALOG: dict[str, Option] = {o.id: o for o in OPTIONS}
@@ -536,6 +561,19 @@ _KEYWORD_SEED: tuple[str, ...] = (
     "性交", "色情", "裸体", "エロ", "アダルト", "포르노", "섹스",
 )
 KEYWORD_DEFAULTS: dict = {"enabled": True, "action": "back"}
+
+# מחשבי Windows (FilterPhone למחשב): מה שהמנהל קובע מהדשבורד. המחשב אוכף רק מה שהמנהל המקומי
+# אישר בהתקנה — כך שמכאן אפשר לכבות הגבלה או להחזיר אותה, לא לכפות משהו שלא אושר.
+DESKTOP_DEFAULTS: dict[str, bool] = {
+    "chrome_only": True,         # רק Google Chrome; דפדפנים אחרים נחסמים / נסגרים
+    "block_store": True,         # חנות Microsoft חסומה
+    # אפשרויות נוספות ל-Windows — כבויות כברירת מחדל, המנהל מדליק מה שרוצה בדשבורד (ניתן לשינוי בכל רגע):
+    "block_copilot": False,      # Copilot (העוזר של Microsoft) מכובה
+    "block_widgets": False,      # חלון החדשות/הווידג'טים (News and interests) מכובה
+    "block_spotlight": False,    # התמונות המתחלפות במסך הנעילה (Windows Spotlight) מכובות
+    "block_web_search": False,   # חיפוש באינטרנט ותמונות מתפריט "התחל" מכובה
+    "block_removable": False,    # חסימת דיסק און קי וכוננים חיצוניים (אחסון נשלף)
+}
 MAX_KEYWORD_TERMS = 1000
 _TERM_STRIP = re.compile(r"\s+")
 
@@ -703,6 +741,7 @@ class DeviceSettings:
     track: str = ""                             # מסלול סינון (TRACKS): "" רגיל / no_internet / navigation / ...
     allow_google_accounts: bool = False         # מסך "הוספת חשבון Google" עובד: שירותי Google מחוץ ל-VPN (רק הם)
     safe_browser: str = ""                      # הסייר המוגן באפליקציה: "" אוטומטי / essential / off (SAFE_BROWSER)
+    desktop: dict = field(default_factory=dict)  # מחשבי Windows: רק מה ששונה מ-DESKTOP_DEFAULTS
     web_level: str = ""                         # רמת גלישה בכרום (websites.WEB_LEVELS): "" פתוח / essential / clean / shopping
     web_extras: list[str] = field(default_factory=list)    # קבוצות אתרים שנוספו מעל הרמה
     web_without: list[str] = field(default_factory=list)   # קבוצות שהורדו מהרמה
@@ -807,6 +846,17 @@ class DeviceSettings:
         return out
 
     @staticmethod
+    def _load_desktop(raw) -> dict:
+        if not isinstance(raw, dict):
+            return {}
+        return {k: raw[k] for k, default in DESKTOP_DEFAULTS.items()
+                if isinstance(raw.get(k), bool) and raw[k] != default}
+
+    @property
+    def desktop_effective(self) -> dict[str, bool]:
+        return {**DESKTOP_DEFAULTS, **self.desktop}
+
+    @staticmethod
     def _load_temp_open(raw) -> dict:
         if not isinstance(raw, dict):
             return {}
@@ -838,6 +888,7 @@ class DeviceSettings:
             track=d.get("track") if d.get("track") in TRACKS else "",
             allow_google_accounts=bool(d.get("allow_google_accounts", False)),
             safe_browser=d.get("safe_browser") if d.get("safe_browser") in SAFE_BROWSER else "",
+            desktop=cls._load_desktop(d.get("desktop")),
             web_level=d.get("web_level") if d.get("web_level") in websites.WEB_LEVELS else "",
             web_extras=websites.clean_list(d.get("web_extras"), websites.GROUP_BY_ID),
             web_without=websites.clean_list(d.get("web_without"), websites.GROUP_BY_ID),
@@ -857,6 +908,8 @@ class DeviceSettings:
             d["allow_google_accounts"] = True
         if self.safe_browser:
             d["safe_browser"] = self.safe_browser
+        if self.desktop:
+            d["desktop"] = self.desktop
         if self.web_level:
             d["web_level"] = self.web_level
         if self.web_extras:
@@ -874,6 +927,7 @@ class DeviceSettings:
         d["vpn_bypass_defaults"] = [{"package": p, "label": t} for p, t in VPN_BYPASS_APPS.items()]
         d["allow_google_accounts"] = self.allow_google_accounts
         d["safe_browser"] = self.safe_browser
+        d["desktop_effective"] = self.desktop_effective
         d["web_level"] = self.web_level
         d["web_extras"] = self.web_extras
         d["web_without"] = self.web_without
@@ -967,6 +1021,12 @@ class DeviceSettings:
                 errors.append("מצב הסייר המוגן לא מוכר")
             else:
                 self.safe_browser = changes["safe_browser"]
+        if changes.get("desktop") is not None:
+            dk = changes["desktop"]
+            if not isinstance(dk, dict) or any(k not in DESKTOP_DEFAULTS or not isinstance(v, bool) for k, v in dk.items()):
+                errors.append("הגדרות המחשב לא תקינות")
+            else:
+                self.desktop = self._load_desktop({**self.desktop_effective, **dk})
         if changes.get("web_level") is not None:
             if changes["web_level"] not in websites.WEB_LEVELS:
                 errors.append("רמת גלישה לא מוכרת")
