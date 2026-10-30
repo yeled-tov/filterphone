@@ -7,6 +7,7 @@ from helpers import admin_headers, wg_key
 from filterphone.api import compliance as C
 from filterphone.api import removal
 from filterphone.api.app import device_limiter, enroll_limiter, heartbeat_limiter
+from filterphone.api.catalog import DESKTOP_DEFAULTS
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +57,8 @@ def test_heartbeat_answers_a_pc_with_its_controls_not_phone_data(env):
     svc, client = env
     did, dh = enroll_pc(svc, client)
     r = client.post("/v1/device/heartbeat", headers=dh, json=report()).json()
-    assert r["windows"] == {"chrome_only": True, "block_store": True}
+    assert r["windows"] == DESKTOP_DEFAULTS
+    assert r["windows"]["chrome_only"] is True and r["windows"]["block_copilot"] is False
     assert "managed_apps" not in r and "removal_key" not in r["windows"]
 
 
@@ -66,9 +68,14 @@ def test_dashboard_controls_reach_the_pc_and_need_valid_values(env):
     did, dh = enroll_pc(svc, client)
     assert client.patch(f"/v1/admin/devices/{did}", headers=h, json={"desktop": {"block_store": False}}).status_code == 200
     r = client.post("/v1/device/heartbeat", headers=dh, json=report()).json()
-    assert r["windows"] == {"chrome_only": True, "block_store": False}
+    assert r["windows"]["block_store"] is False and r["windows"]["chrome_only"] is True
     detail = client.get(f"/v1/admin/devices/{did}", headers=h).json()
-    assert detail["settings"]["desktop_effective"] == {"chrome_only": True, "block_store": False}
+    assert detail["settings"]["desktop_effective"]["block_store"] is False
+    # אפשרות חדשה אופציונלית: המנהל מדליק אותה, היא מגיעה למחשב, וניתנת לכיבוי חזרה
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"desktop": {"block_copilot": True}})
+    assert client.post("/v1/device/heartbeat", headers=dh, json=report()).json()["windows"]["block_copilot"] is True
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"desktop": {"block_copilot": False}})
+    assert client.post("/v1/device/heartbeat", headers=dh, json=report()).json()["windows"]["block_copilot"] is False
     bad = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"desktop": {"block_store": "no"}})
     assert bad.status_code == 400
     bad = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"desktop": {"disable_defender": True}})

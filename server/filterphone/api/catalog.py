@@ -346,6 +346,26 @@ OPTIONS: tuple[Option, ...] = (
                  "com.speedsoftware.rootexplorer", "com.mixplorer.silver", "bin.mt.plus", "bin.mt.plus.canary",
                  "com.chelpus.lackypatch", "com.dimonvideo.luckypatcher", "com.forpda.lp", "com.android.vending.billing.InAppBillingService.LUCK"),
            popular=True, needs_guard=True, protections=("block_root_prompt",)),
+    Option("remote_desktop", "protection", "שליטה מרחוק (AnyDesk, TeamViewer)",
+           "תוכנות שליטה מרחוק — דרכן אפשר לגלוש במחשב אחר בלי סינון. חוסם AnyDesk, TeamViewer, "
+           "RustDesk, Chrome Remote Desktop ו-VNC (גם האתר וגם האפליקציה).",
+           hosts=("anydesk.com", "anydesk.net", "teamviewer.com", "rustdesk.com", "remotedesktop.google.com",
+                  "realvnc.com", "logmein.com", "gotomypc.com", "splashtop.com", "ultraviewer.net",
+                  "getscreen.me", "dwservice.net"),
+           apps=("com.anydesk.anydeskandroid", "com.teamviewer.teamviewer.market.mobile",
+                 "com.teamviewer.host.market", "com.google.chromeremotedesktop", "com.realvnc.viewer.android",
+                 "com.splashtop.remote.pad.v2"),
+           popular=True, needs_guard=True),
+    Option("torrents", "protection", "טורנטים והורדות מפוקפקות",
+           "אתרי טורנטים ותוכנות הורדה — דרכם מורידים סרטים ותמונות בלי סינון. חוסם Pirate Bay, "
+           "1337x, YTS, RARBG, Nyaa ותוכנות כמו uTorrent, BitTorrent ו-qBittorrent.",
+           hosts=("thepiratebay.org", "1337x.to", "1337x.st", "rarbg.to", "yts.mx", "nyaa.si",
+                  "torrentz2.eu", "limetorrents.lol", "magnetdl.com", "eztv.re", "torlock.com",
+                  "utorrent.com", "bittorrent.com", "qbittorrent.org", "transmissionbt.com", "deluge-torrent.org",
+                  "kickasstorrents.to", "torrentgalaxy.to"),
+           apps=("com.bittorrent.client", "com.utorrent.client", "com.delphicoder.flud",
+                 "org.proninyaroslav.libretorrent", "com.frostwire.android", "hu.tagsoft.ttorrent.lite"),
+           popular=True, needs_guard=True),
 )
 
 CATALOG: dict[str, Option] = {o.id: o for o in OPTIONS}
@@ -542,8 +562,14 @@ KEYWORD_DEFAULTS: dict = {"enabled": True, "action": "back"}
 # מחשבי Windows (FilterPhone למחשב): מה שהמנהל קובע מהדשבורד. המחשב אוכף רק מה שהמנהל המקומי
 # אישר בהתקנה — כך שמכאן אפשר לכבות הגבלה או להחזיר אותה, לא לכפות משהו שלא אושר.
 DESKTOP_DEFAULTS: dict[str, bool] = {
-    "chrome_only": True,        # רק Google Chrome; דפדפנים אחרים נחסמים / נסגרים
-    "block_store": True,        # חנות Microsoft חסומה
+    "chrome_only": True,         # רק Google Chrome; דפדפנים אחרים נחסמים / נסגרים
+    "block_store": True,         # חנות Microsoft חסומה
+    # אפשרויות נוספות ל-Windows — כבויות כברירת מחדל, המנהל מדליק מה שרוצה בדשבורד (ניתן לשינוי בכל רגע):
+    "block_copilot": False,      # Copilot (העוזר של Microsoft) מכובה
+    "block_widgets": False,      # חלון החדשות/הווידג'טים (News and interests) מכובה
+    "block_spotlight": False,    # התמונות המתחלפות במסך הנעילה (Windows Spotlight) מכובות
+    "block_web_search": False,   # חיפוש באינטרנט ותמונות מתפריט "התחל" מכובה
+    "block_removable": False,    # חסימת דיסק און קי וכוננים חיצוניים (אחסון נשלף)
 }
 MAX_KEYWORD_TERMS = 1000
 _TERM_STRIP = re.compile(r"\s+")

@@ -290,3 +290,12 @@ def test_full_play_block_closes_the_network_and_allows_hiding():
     full = compile_settings(1, DeviceSettings(options=["play_store", "play_store_full"]))
     assert "play.googleapis.com" not in entry.hosts and entry.accessibility_only == ("com.android.vending",)
     assert "play.googleapis.com" in full.hosts and full.accessibility_only == ()
+
+
+def test_new_block_options_exist_and_apply_to_a_pc():
+    ids = {o.id for o in OPTIONS}
+    assert {"remote_desktop", "torrents", "games", "ai_chat"} <= ids    # כולל את מה שהתבקש
+    for oid in ("remote_desktop", "torrents"):
+        o = CATALOG[oid]
+        assert o.hosts and o.applies_to_pc                              # נחסם ברשת — חל גם על מחשב
+        assert o.public()["pc"] is True

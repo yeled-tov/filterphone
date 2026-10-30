@@ -86,6 +86,11 @@ const WIN_OVERALL = {
 const DESKTOP_CONTROLS = {
   chrome_only: ["גלישה ב-Google Chrome בלבד", "Edge, Firefox ושאר הדפדפנים נחסמים מראש (ב-Windows Home — נסגרים מיד כשנפתחים)."],
   block_store: ["חסימת חנות Microsoft", "אי אפשר להתקין מהחנות דפדפנים, משחקים ואפליקציות."],
+  block_copilot: ["חסימת Copilot", "העוזר של Microsoft (Copilot), שיכול ליצור ולהציג תמונות — מכובה."],
+  block_widgets: ["חסימת חלון החדשות (ווידג'טים)", "חלון החדשות והווידג'טים של Windows, שמציג תמונות וכותרות — מכובה."],
+  block_spotlight: ["חסימת תמונות במסך הנעילה", "התמונות המתחלפות במסך הנעילה (Windows Spotlight) — מכובות."],
+  block_web_search: ["חסימת חיפוש באינטרנט מתפריט התחל", "חיפוש באינטרנט ותמונות מתפריט 'התחל' של Windows — מכובה."],
+  block_removable: ["חסימת דיסק און קי וכוננים חיצוניים", "אי אפשר לפתוח אחסון נשלף (USB) — כדי שלא יעתיקו למחשב סרטים ותמונות מבחוץ."],
 };
 const isPc = (d) => d.platform === "windows";
 /** EditionID של Windows → השם שאנשים מכירים (Core = Home). */
