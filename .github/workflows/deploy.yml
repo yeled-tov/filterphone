@@ -7,7 +7,7 @@ on:
       what:
         description: "מה לעשות"
         type: choice
-        options: [both, server, apk, status, rollback, wabot, devices, net, images, web, legacy-bot-start, legacy-bot-stop, legacy-bot-logs]
+        options: [both, server, apk, crm, status, rollback, wabot, devices, net, images, web, legacy-bot-start, legacy-bot-stop, legacy-bot-logs]
         default: both
       backup:
         description: "לחזרה לאחור בלבד: שם תיקיית הגיבוי, למשל 20261005-213000"
@@ -47,7 +47,7 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
 
       - uses: actions/checkout@v4
-        if: inputs.what == 'both' || inputs.what == 'server' || inputs.what == 'apk'
+        if: inputs.what == 'both' || inputs.what == 'server' || inputs.what == 'apk' || inputs.what == 'crm'
 
       - name: לפני
         run: ssh -o BatchMode=yes "$SERVER" status
@@ -75,7 +75,7 @@ jobs:
           echo "Verified app build $number for $sha"
 
       - uses: actions/setup-java@v4
-        if: inputs.what == 'both' || inputs.what == 'apk'
+        if: inputs.what == 'both' || inputs.what == 'apk' || inputs.what == 'crm'
         with:
           distribution: temurin
           java-version: "17"
@@ -173,6 +173,66 @@ jobs:
           tar -cf - FilterPhone.apk FilterPhone-universal.apk FilterPhone.json | ssh -o BatchMode=yes "$SERVER" apk
           curl -fsSI "$PUBLIC/download/FilterPhone.apk" | head -1
 
+      # ---------------------------------------------------------------- CRM FilterPhone (אפליקציית המנהל, crm/)
+      # נפרדת מאפליקציית הסינון: נבנית ונחתמת כאן (אותו מפתח), מתפרסמת בדף ההורדה עם CRM.json,
+      # והשרת מציע אותה כ"חובה" רק למכשיר המנהל — FilterPhone מתקין ומעדכן אותה שם בשקט.
+      - uses: gradle/actions/setup-gradle@v4
+        if: inputs.what == 'crm'
+        with:
+          gradle-version: "9.1.0"
+
+      - name: CRM FilterPhone — בדיקות, lint ובנייה חתומה
+        if: inputs.what == 'crm'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CRM_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::חסרים סודות חתימת Android (ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS)"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > crm/upload.jks
+          {
+            echo "storeFile=upload.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+          } > crm/key.properties
+          cd crm
+          gradle --no-daemon :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../CRM-FilterPhone.apk
+
+      - name: CRM FilterPhone — בדיקת APK, חתימה ו-CRM.json
+        if: inputs.what == 'crm'
+        env:
+          CRM_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          badging=$("$AAPT2" dump badging CRM-FilterPhone.apk)
+          echo "$badging" | grep -q "package: name='com.filterphone.crm' versionCode='$CRM_VERSION_CODE'" \
+            || { echo "$badging" | head -3; echo "::error::שם חבילה / versionCode לא צפויים"; exit 1; }
+          if echo "$badging" | grep -q "application-debuggable"; then echo "::error::APK במצב debug"; exit 1; fi
+          out=$("$APKSIGNER" verify --verbose --print-certs CRM-FilterPhone.apk 2>&1) || { echo "$out"; exit 1; }
+          echo "$out" | grep -q "CN=FilterPhone" || { echo "::error::לא חתום במפתח של FilterPhone"; exit 1; }
+          python3 - <<'PY'
+          import hashlib, json, os
+          apk = "CRM-FilterPhone.apk"
+          code = int(os.environ["CRM_VERSION_CODE"])
+          json.dump({"name": apk, "version_code": code, "version_name": f"1.0.{code}",
+                     "sha256": hashlib.sha256(open(apk, "rb").read()).hexdigest(), "size": os.path.getsize(apk)},
+                    open("CRM.json", "w"))
+          PY
+          cat CRM.json; echo
+
+      - name: CRM FilterPhone — פרסום
+        if: inputs.what == 'crm'
+        run: |
+          tar -cf - CRM-FilterPhone.apk CRM.json | ssh -o BatchMode=yes "$SERVER" crm
+          curl -fsSI "$PUBLIC/download/CRM-FilterPhone.apk" | head -1
+
       - name: חזרה לגרסה הקודמת
         if: inputs.what == 'rollback'
         env:
@@ -207,7 +267,7 @@ jobs:
 
       - name: ניקוי מפתח החתימה
         if: always()
-        run: rm -f app/android/upload.jks app/android/key.properties
+        run: rm -f app/android/upload.jks app/android/key.properties crm/upload.jks crm/key.properties
 
       - name: אחרי
         if: always()

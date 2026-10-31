@@ -1,0 +1,56 @@
+name: CRM FilterPhone — אנדרואיד
+
+# אפליקציית המנהל (crm/) — בדיקות, lint ובניית APK (בלי חתימה). הפרסום: deploy.yml עם what=crm.
+on:
+  push:
+    branches: [main]
+    paths: ["crm/**", ".github/workflows/crm.yml"]
+  pull_request:
+    paths: ["crm/**", ".github/workflows/crm.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: בדיקות ובניית APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: crm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.1.0"
+
+      - name: בדיקות יחידה, lint ובנייה
+        run: gradle --no-daemon :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+
+      - name: בדיקת ה-APK
+        run: |
+          AAPT2=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$AAPT2" dump badging app/build/outputs/apk/release/app-release.apk | grep -E "^package|targetSdk|uses-permission"
+          if "$AAPT2" dump badging app/build/outputs/apk/release/app-release.apk | grep -q application-debuggable; then
+            echo "::error::APK במצב debug"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crm-reports
+          path: |
+            crm/app/build/reports/
+          retention-days: 7

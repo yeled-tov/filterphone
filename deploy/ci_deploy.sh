@@ -8,6 +8,8 @@
 # כך שמי שמחזיק במפתח לא מקבל shell — רק את הפקודות כאן:
 #   deploy <rev>       stdin: tar.gz של server/ tools/ deploy/ → התקנה (כמו deploy/deploy.sh)
 #   apk                stdin: tar עם FilterPhone.apk + FilterPhone-universal.apk (+ FilterPhone.json) → דף ההורדה
+#   crm                stdin: tar עם CRM-FilterPhone.apk + CRM.json → דף ההורדה (אפליקציית המנהל; מותקנת
+#                      בשקט רק במכשיר המנהל — השרת בודק SHA-256 מול CRM.json)
 #   status             גרסה, שירותים, מקום פנוי
 #   rollback <גיבוי>   חזרה לגרסה הקודמת (deploy/rollback_version.sh) עם /root/fp-backups/<גיבוי>
 #   net                אבחון שרשרת התעבורה של הטלפונים (DNS, פרוקסי, NAT, תעבורה לכל מכשיר)
@@ -70,6 +72,35 @@ apk)
     fi
     sudo -n install -m 644 -o root -g root "${files[@]}" /var/www/filterphone/
     ls -lh /var/www/filterphone/
+    ;;
+crm)
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    cat > "$tmp/in.tar"
+    while read -r name; do
+        case "$name" in
+            CRM-FilterPhone.apk|CRM.json) ;;
+            *) echo "קובץ לא צפוי בחבילה: $name"; exit 2 ;;
+        esac
+    done < <(tar -tf "$tmp/in.tar")
+    mkdir "$tmp/x"
+    tar -C "$tmp/x" -xf "$tmp/in.tar"
+    [ -f "$tmp/x/CRM-FilterPhone.apk" ] && [ "$(head -c 2 "$tmp/x/CRM-FilterPhone.apk")" = "PK" ] \
+        || { echo "CRM-FilterPhone.apk חסר או אינו APK"; exit 2; }
+    python3 - "$tmp/x" <<'PY' || { echo "CRM.json לא תקין / לא תואם לקובץ"; exit 2; }
+import hashlib, json, os, sys
+d = sys.argv[1]
+m = json.load(open(os.path.join(d, "CRM.json")))
+apk = os.path.join(d, "CRM-FilterPhone.apk")
+assert m.get("name") == "CRM-FilterPhone.apk"
+assert isinstance(m.get("version_code"), int) and m["version_code"] > 0
+assert m.get("size") == os.path.getsize(apk)
+assert m.get("sha256") == hashlib.sha256(open(apk, "rb").read()).hexdigest()
+PY
+    # קודם הקובץ ואחר כך הרשימה — השרת לא מציע קובץ שלא תואם לרשימה
+    sudo -n install -m 644 -o root -g root "$tmp/x/CRM-FilterPhone.apk" /var/www/filterphone/
+    sudo -n install -m 644 -o root -g root "$tmp/x/CRM.json" /var/www/filterphone/
+    ls -lh /var/www/filterphone/CRM-FilterPhone.apk /var/www/filterphone/CRM.json
     ;;
 status)
     echo "גרסה: $(cat "$A/src/REVISION" 2>/dev/null || echo '?') · קודמת: $(cat "$A/src.prev/REVISION" 2>/dev/null || echo '-')"

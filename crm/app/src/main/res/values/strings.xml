@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">CRM FilterPhone</string>
+    <string name="offline_title">אין חיבור לשרת</string>
+    <string name="offline_text">בדקו שיש אינטרנט ונסו שוב.</string>
+    <string name="offline_retry">נסה שוב</string>
+    <string name="channel_events">בקשות ופניות</string>
+    <string name="channel_events_desc">בקשת הצטרפות או שינוי, הודעה מלקוח בתמיכה, אתר לבדיקה</string>
+    <string name="channel_service">חיבור להתראות</string>
+    <string name="channel_service_desc">התראה קבועה ושקטה — כדי שההתראות יגיעו גם כשהאפליקציה סגורה</string>
+    <string name="service_title">מחובר — התראות על בקשות ופניות</string>
+    <string name="service_text">בודק בשרת כל דקה</string>
+    <string name="relogin_title">CRM FilterPhone — צריך להתחבר שוב</string>
+    <string name="relogin_text">פתחו את האפליקציה והתחברו כדי להמשיך לקבל התראות.</string>
+    <string name="summary_text">%1$d עדכונים חדשים</string>
+</resources>

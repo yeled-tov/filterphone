@@ -41,7 +41,7 @@ from pydantic import BaseModel, Field
 
 from .. import logs, metrics
 from ..settings import get_settings
-from . import db, gpu, observe, security
+from . import db, gpu, notify, observe, security
 from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
@@ -327,6 +327,13 @@ def client_ip(request: Request) -> str:
 def _limit(limiter: RateLimiter, key: str) -> None:
     if not limiter.allow(key):
         raise ApiError(429, "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות")
+
+
+def _with_crm(svc: Services, out: dict) -> None:
+    """מכשיר המנהל: אפליקציית המנהל (CRM FilterPhone) נוספת לקטלוג שלו כ"חובה" — מותקנת ומתעדכנת בשקט."""
+    crm = svc.crm_release()
+    if crm and isinstance(out.get("managed_apps"), list):
+        out["managed_apps"] = [a for a in out["managed_apps"] if a.get("package") != crm["package"]] + [crm]
 
 
 # ---------------------------------------------------------------- מודלים
@@ -770,6 +777,7 @@ def _routes(app: FastAPI) -> None:
         if desk.is_admin_device(row):
             # מכשיר המנהל: רואה כמה פניות ממתינות, וכך האפליקציה מציגה את כפתור "ניהול תמיכה"
             out["admin"] = {"support_unread": desk.admin_unread()}
+            _with_crm(svc, out)
         return out
 
     @app.delete("/v1/device", status_code=204)
@@ -808,6 +816,8 @@ def _routes(app: FastAPI) -> None:
         unread = request.app.state.support.device_unread(row["id"])
         if unread["unread"]:
             out["support"] = unread          # הטלפון מציג התראה "יש תשובה מהתמיכה"
+        if "managed_apps" in out and request.app.state.support.is_admin_device(row):
+            _with_crm(svc, out)
         return out
 
     @app.post("/v1/device/app-updates")
@@ -913,6 +923,11 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/admin/logout", status_code=204)
     def logout(svc: SvcDep, _: AdminRow, authorization: AuthHeader = None):
         svc.admin_logout(_bearer(authorization))
+
+    @app.get("/v1/admin/notifications")
+    def admin_notifications(svc: SvcDep, _: AdminRow, after: str = ""):
+        """אפליקציית המנהל (CRM FilterPhone) — אירועים חדשים מאז הסמן (ראו notify.py)."""
+        return notify.admin_events(svc, after)
 
     @app.get("/v1/admin/overview")
     def overview(request: Request, svc: SvcDep, desk: DeskDep, admin: AdminRow):

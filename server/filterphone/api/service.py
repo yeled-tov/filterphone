@@ -259,6 +259,12 @@ SEED_PROFILES: list[tuple[str, int, list[str], dict]] = [
     ("בסיסי — רק עירום מפורש", 3, ["play_store"], {}),
 ]
 _RELEASE_NAME = re.compile(r"^FilterPhone[A-Za-z0-9._-]{0,40}\.apk$")
+# אפליקציית המנהל ("CRM FilterPhone", crm/) — נפרדת מאפליקציית הסינון. מתפרסמת בדף ההורדה עם CRM.json
+# (deploy.yml what=crm), ומותקנת בשקט רק במכשיר המנהל (מנהל מכשיר — גם כשההתקנות חסומות בטלפון).
+CRM_PACKAGE = "com.filterphone.crm"
+CRM_LABEL = "CRM FilterPhone"
+CRM_MANIFEST = "CRM.json"
+_CRM_NAME = re.compile(r"^CRM-FilterPhone[A-Za-z0-9._-]{0,40}\.apk$")
 _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 _UID_RE = re.compile(r"^[0-9a-f]{16,64}$")
 _ABI = re.compile(r"^[a-z0-9_-]{1,20}$")
@@ -523,6 +529,8 @@ class Services:
         חייגן, הגדרות, מקלדת, FilterPhone) מוגנות בטלפון עצמו ולא נחסמות גם בלעדיהן."""
         pkgs = {a["package"] for a in self.managed_apps(enabled_only=True)}
         pkgs.add("com.android.chrome")
+        # אפליקציית המנהל — מותקנת רק במכשיר המנהל ודורשת כניסת מנהל; כאן רק כדי שלא תוסתר שם
+        pkgs.add(CRM_PACKAGE)
         return sorted(pkgs)
 
     def _allowlist(self, comp: Compiled) -> dict:
@@ -2464,6 +2472,44 @@ class Services:
                        "files": files} if files else None
             self._release_cache = (key, release)
             return release
+
+    _crm_cache: tuple[tuple, dict | None] = ((), None)
+
+    def crm_release(self) -> dict | None:
+        """אפליקציית המנהל לפי CRM.json בדף ההורדה — כפריט "חובה" בקטלוג של מכשיר המנהל בלבד (הטלפון
+        מתקין / מעדכן בשקט במנהל מכשיר). כמו app_release: קובץ שלא תואם ל-SHA-256 הרשום — לא מוצע."""
+        root = Path(self.cfg.apk_dir)
+        try:
+            raw = json.loads((root / CRM_MANIFEST).read_text(encoding="utf-8"))
+            name = raw.get("name") if isinstance(raw, dict) else None
+            if not isinstance(name, str) or not _CRM_NAME.match(name):
+                return None
+            fst = (root / name).stat()
+        except (OSError, ValueError):
+            return None
+        code, sha, size = raw.get("version_code"), str(raw.get("sha256", "")).lower(), raw.get("size")
+        if (not isinstance(code, int) or isinstance(code, bool) or not 0 < code < 2**31 or not _SHA256_HEX.match(sha)
+                or size != fst.st_size or not 0 < fst.st_size <= MAX_APK_BYTES):
+            log.warning("crm release: invalid %s", CRM_MANIFEST)
+            return None
+        with self._release_lock:
+            key = (name, code, sha, fst.st_mtime_ns, fst.st_size)
+            if self._crm_cache[0] == key:
+                return self._crm_cache[1]
+            if self._sha256_hex(root / name) != sha:
+                log.warning("crm release: %s does not match %s — not offered", name, CRM_MANIFEST)
+                entry = None
+            else:
+                vname = raw.get("version_name")
+                entry = {"package": CRM_PACKAGE, "label": CRM_LABEL, "category": "", "note": "אפליקציית המנהל",
+                         "description": "הדשבורד של FilterPhone והתראות על בקשות ופניות — רק במכשיר המנהל.",
+                         "icon_url": "", "screenshots": [], "play_url": "", "play_titles": [], "required": True,
+                         "added_at": int(fst.st_mtime), "updated_at": int(fst.st_mtime),
+                         "url": f"https://{self.cfg.public_host}/download/{name}", "sha256": sha,
+                         "version_code": code,
+                         "version_name": security.clean_text(vname, 20) if isinstance(vname, str) else ""}
+            self._crm_cache = (key, entry)
+            return entry
 
     @staticmethod
     def _sha256_hex(path: Path) -> str:
