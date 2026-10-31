@@ -136,7 +136,7 @@ for d in rows:
         hb = json.loads(d.get("heartbeat") or "{}")
     except Exception:
         pass
-    keep = {k: hb.get(k) for k in ("app_version", "via_vpn", "vpn", "vpn_bypass", "dpc", "accessibility",
+    keep = {k: hb.get(k) for k in ("app_version", "via_vpn", "vpn", "vpn_bypass", "dpc", "accessibility", "protections",
                                    "device_owner", "guard", "policy_version", "policy_error", "always_on", "lockdown",
                                    "error", "network", "private_dns", "update", "background_restricted",
                                    "battery_unrestricted") if k in hb}

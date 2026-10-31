@@ -19,6 +19,7 @@ object ProtectionState {
     const val VPN_DATA_ERROR = "vpn_data_error"      // באיזה שלב נכשלה (dns / connect / timeout / http:bad)
     const val VPN_DATA_FAILS = "vpn_data_fails"      // כמה בדיקות תעבורה נכשלו בסך הכול
     const val VPN_CONSENT_RESTORED = "vpn_consent_restored" // כמה פעמים מנהל המכשיר החזיר את ה-VPN שאנדרואיד ביטל
+    const val WA_IMAGE_IDS = "wa_image_ids"          // מזהי רכיבי תמונה ריבועיים שנראו בוואטסאפ (לכיול הכיסוי)
     const val VPN_UNSTUCK = "vpn_unstuck"            // כמה פעמים שוחרר "מחובר בלי תעבורה" (באג אנדרואיד 16)
     const val POLICY_SYNC = "policy_sync_at"          // מתי לאחרונה קיבלנו / אישרנו מדיניות מהשרת
     const val HEARTBEAT_OK = "heartbeat_ok_at"

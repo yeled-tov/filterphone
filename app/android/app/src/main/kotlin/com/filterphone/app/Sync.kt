@@ -80,7 +80,12 @@ object Sync {
                 .put("apps_blocked", ProtectionState.count(context, ProtectionState.APPS_BLOCKED))
                 .put("screens_blocked", ProtectionState.count(context, ProtectionState.SCREENS_BLOCKED))
                 .put("wa_profile_photo", ProtectionState.count(context, ProtectionState.WA_PHOTOS_BLOCKED))
-                .put("keywords_blocked", ProtectionState.count(context, ProtectionState.KEYWORDS_BLOCKED)))
+                .put("keywords_blocked", ProtectionState.count(context, ProtectionState.KEYWORDS_BLOCKED))
+                .apply {
+                    ProtectionState.string(context, ProtectionState.WA_IMAGE_IDS)?.takeIf { it.isNotBlank() }?.let { ids ->
+                        put("wa_image_ids", org.json.JSONArray(ids.split(',').take(30)))
+                    }
+                })
         power?.let { o.put("battery_unrestricted", it.isIgnoringBatteryOptimizations(context.packageName)) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) am?.let { o.put("background_restricted", it.isBackgroundRestricted) }
         context.getSystemService(NotificationManager::class.java)?.let { o.put("notifications", it.areNotificationsEnabled()) }

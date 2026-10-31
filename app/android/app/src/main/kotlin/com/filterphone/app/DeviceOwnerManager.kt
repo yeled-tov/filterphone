@@ -159,9 +159,25 @@ object DeviceOwnerManager {
     private fun vpnLock(context: Context, want: Map<String, Boolean>): VpnLock = when {
         // ברשת כשרה (נטפרי): כבוי רק בזמן שבה — חוזר ביציאה (KosherNet)
         AdminState.isPaused(context) || KosherNet.isActive(context) -> VpnLock.OFF
-        want.getValue("always_on_vpn") -> VpnLock.LOCKDOWN
+        want.getValue("always_on_vpn") && !googleAccountsNeedOpen(context) -> VpnLock.LOCKDOWN
         else -> VpnLock.OPEN
     }
+
+    /**
+     * אנדרואיד 11 ומטה: כשה-VPN מחובר עם lockdown, אנדרואיד מדווח לכל אפליקציה שמוחרגת מה-VPN "חסום / אין רשת"
+     * — גם כשהיא ברשימת ההיתר (Vpn.isBlockingUid: מחובר → !appliesToUid; תוקן באנדרואיד 12). מסך "הוספת חשבון
+     * Google" בודק את זה ומציג "אין לך חיבור לרשת". לכן כל עוד המתג "הוספת חשבונות Google" דלוק (שירותי Google
+     * מוחרגים) — תמיד מופעל בלי lockdown; כשהמנהל מכבה את המתג, lockdown חוזר.
+     */
+    private fun googleAccountsNeedOpen(context: Context): Boolean =
+        googleAccountsNeedOpen(Build.VERSION.SDK_INT,
+            runCatching { VpnBypass.current(context).excluded }.getOrDefault(emptySet()))
+
+    /** טהור — נבדק ביחידה. */
+    fun googleAccountsNeedOpen(sdk: Int, excluded: Set<String>): Boolean =
+        sdk <= Build.VERSION_CODES.R && GOOGLE_ACCOUNT_APP in excluded
+
+    const val GOOGLE_ACCOUNT_APP = "com.google.android.gms"
 
     fun desiredVpnLock(context: Context): VpnLock = vpnLock(context, desired(context, GuardPolicy.get(context)))
 

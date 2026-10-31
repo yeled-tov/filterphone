@@ -860,7 +860,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
     learned.length ? el("div", { class: "chips" }, learned.map((h) => chip(h.host))) : empty("אין."),
     el("div", { class: "app-row" }, el("label", { class: "switch" }, acctToggle, el("span")),
       el("div", { class: "grow" }, el("b", {}, "הוספת חשבונות Google"),
-        el("small", {}, "כשמופעל, מסך 'הוספת חשבון Google' עובד: רק שירותי Google (אפליקציית המערכת של החשבון) יוצאים מהסינון — כרום, אפליקציית Google וכל השאר נשארים מסוננים, כולל תמונות. נכנס לתוקף בטלפון כשהוא מתעדכן (פתיחת FilterPhone או מסך 'הוספת חשבון'). מומלץ לכבות אחרי שהחשבון נוסף (סנכרון תמונות אנשי קשר עובר דרך שירותי Google)."))),
+        el("small", {}, "כשמופעל, מסך 'הוספת חשבון Google' עובד: רק שירותי Google (אפליקציית המערכת של החשבון) יוצאים מהסינון — כרום, אפליקציית Google וכל השאר נשארים מסוננים, כולל תמונות. נכנס לתוקף בטלפון כשהוא מתעדכן (פתיחת FilterPhone או מסך 'הוספת חשבון'). מומלץ לכבות אחרי שהחשבון נוסף (סנכרון תמונות אנשי קשר עובר דרך שירותי Google). באנדרואיד 11 ומטה: כל עוד המתג דלוק, 'חסימה בלי VPN' כבויה (ה-VPN עדיין תמיד מופעל) — אחרת אנדרואיד מציג לשירותי Google 'אין חיבור לרשת'; כיבוי המתג מחזיר אותה."))),
     el("div", { class: "row end" }, el("button", { class: "ghost small", onclick: async () => {
       const r = await attempt(() => api(`/v1/admin/devices/${id}/reset-apps`, { method: "POST" }));
       toast(`אופסו ${r.cleared} כתובות`);

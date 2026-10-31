@@ -151,7 +151,9 @@ _HB_SECTIONS = {
     "tamper": {"adb": bool, "dev_options": bool, "safe_mode": bool, "unknown_sources": bool},
     "dpc": {"applied": list, "failed": list, "always_on_vpn": str, "lockdown": bool, "frp": bool},
     "protections": {"wa_profile_photo": int, "screens_blocked": int, "apps_blocked": int,
-                    "keywords_blocked": int},
+                    "keywords_blocked": int,
+                    # מזהי רכיבי תמונה ריבועיים שנראו בוואטסאפ — לכיול הכיסוי של תמונות הפרופיל (רק מזהים)
+                    "wa_image_ids": list},
     "capabilities": {"sdk": int, "manufacturer": str, "model": str, "device_owner": bool,
                      "profile_owner": bool, "provisioning_allowed": bool, "root": bool,
                      "accessibility": bool, "always_on": bool, "lockdown": bool},

@@ -67,3 +67,16 @@ class VpnBypassTest {
         assertEquals("garbage", VpnConfigFactory.withExcluded("garbage", setOf("a.b")))
     }
 }
+
+/** אנדרואיד 11 ומטה: lockdown + שירותי Google מוחרגים = "אין רשת" בהוספת חשבון — לכן בלי lockdown כשהמתג דלוק. */
+class GoogleAccountsLockdownTest {
+    @org.junit.Test
+    fun openOnlyOnAndroid11AndBelowWhileGoogleServicesAreExcluded() {
+        val gms = setOf("com.google.android.gms")
+        org.junit.Assert.assertTrue(DeviceOwnerManager.googleAccountsNeedOpen(30, gms))
+        org.junit.Assert.assertTrue(DeviceOwnerManager.googleAccountsNeedOpen(29, gms + "com.filtertube.app"))
+        org.junit.Assert.assertFalse(DeviceOwnerManager.googleAccountsNeedOpen(31, gms))          // תוקן באנדרואיד 12
+        org.junit.Assert.assertFalse(DeviceOwnerManager.googleAccountsNeedOpen(30, setOf("com.filtertube.app")))
+        org.junit.Assert.assertFalse(DeviceOwnerManager.googleAccountsNeedOpen(30, emptySet()))
+    }
+}

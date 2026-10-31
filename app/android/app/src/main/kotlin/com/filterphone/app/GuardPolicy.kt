@@ -53,6 +53,8 @@ object GuardPolicy {
         val descriptions: List<String>,
         val minArea: Float,
         val excludeWindows: List<String> = listOf("mediaview", "gallery", "camera", "status"),
+        val mask: Boolean = true,                         // לבן במקום כל תמונת פרופיל קטנה (AvatarMask)
+        val maskIds: List<String> = WaAvatars.DEFAULT_IDS,
     ) {
         companion object {
             val DEFAULT = WaDetector(
@@ -269,6 +271,8 @@ object GuardPolicy {
             descriptions = list("descriptions", d.descriptions),
             minArea = o.optDouble("min_area", d.minArea.toDouble()).toFloat().coerceIn(0.05f, 0.95f),
             excludeWindows = list("exclude_windows", d.excludeWindows),
+            mask = o.optBoolean("mask", d.mask),
+            maskIds = list("mask_ids", d.maskIds),
         )
     }
 
