@@ -114,7 +114,7 @@ legacy-bot)
 devices)
     echo "== מכשירים (24 השעות האחרונות / פעילים)"
     sudo -n python3 - <<'PY' || true
-import json, sqlite3, subprocess, time
+import json, re, sqlite3, subprocess, time
 now = int(time.time())
 hs = {}
 try:
@@ -155,6 +155,16 @@ for d in rows:
           f"vpn_ip={'yes' if d['vpn_ip'] else 'no'} policy={d.get('policy_version')}/{d.get('device_policy_version')} "
           f"pause={'yes' if (d.get('pause_until') or 0) > now else 'no'} unmanage={'yes' if d.get('unmanage_at') else 'no'}")
     print("    hb:", json.dumps(keep, ensure_ascii=False)[:1600])
+    if d.get("vpn_ip"):
+        # שרתי Google שהפרוקסי למד לא לפתוח למכשיר (אפליקציה שלא סומכת על התעודה עברה דרך ה-VPN) — שמות ציבוריים
+        try:
+            g = sorted(f.split("|", 1)[1] for f in subprocess.run(["redis-cli", "--raw", "HKEYS", "fp:pt"],
+                       capture_output=True, text=True).stdout.split()
+                       if f.startswith(d["vpn_ip"] + "|") and re.search(r"google|gstatic|gvt\d|android\.com", f))
+            if g:
+                print(f"    google דרך ה-VPN ({len(g)}):", ", ".join(g[:25]))
+        except Exception as e:
+            print("    redis:", e)
 peers = set(hs)
 known = {r[0] for r in db.execute("SELECT public_key FROM devices WHERE status = 'active'")}
 print(f"== WireGuard: {len(peers)} peers בשרת, {len(known)} מכשירים פעילים, חסרים ב-wg: {len(known - peers)}")
