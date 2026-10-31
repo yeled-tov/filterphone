@@ -12,6 +12,7 @@ object Events {
     const val ID_SERVICE = 1
     const val ID_SUMMARY = 2
     const val ID_RELOGIN = 3
+    const val ID_UPDATE = 4
 
     fun parse(body: String): Poll {
         val o = JSONObject(body)

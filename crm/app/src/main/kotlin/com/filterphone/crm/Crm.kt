@@ -16,6 +16,8 @@ object Crm {
     private const val K_CURSOR = "cursor"
     private const val K_ASKED_BATTERY = "asked_battery"
     private const val K_RELOGIN_SHOWN = "relogin_shown"
+    private const val K_UPDATE_CHECK = "update_check_at"
+    private const val K_UPDATE_NOTIFIED = "update_notified"
 
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -35,6 +37,11 @@ object Crm {
 
     fun reloginShown(c: Context): Boolean = prefs(c).getBoolean(K_RELOGIN_SHOWN, false)
     fun setReloginShown(c: Context, v: Boolean) = prefs(c).edit().putBoolean(K_RELOGIN_SHOWN, v).apply()
+
+    fun lastUpdateCheck(c: Context): Long = prefs(c).getLong(K_UPDATE_CHECK, 0)
+    fun setLastUpdateCheck(c: Context, v: Long) = prefs(c).edit().putLong(K_UPDATE_CHECK, v).apply()
+    fun notifiedVersion(c: Context): Long = prefs(c).getLong(K_UPDATE_NOTIFIED, -1)
+    fun setNotifiedVersion(c: Context, v: Long) = prefs(c).edit().putLong(K_UPDATE_NOTIFIED, v).apply()
 
     /** טוקן מהדשבורד: אורך סביר ותווים בטוחים בלבד (token_urlsafe בשרת). טהור. */
     fun validToken(t: String?): Boolean =

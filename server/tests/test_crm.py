@@ -142,3 +142,101 @@ def test_crm_with_a_mismatched_file_is_not_offered(env, tmp_path):
     assert svc.crm_release() is None
     publish_crm(svc, tmp_path, code=8)
     assert svc.crm_release()["version_code"] == 8
+
+
+# ---------------------------------------------------------------- צוות
+
+def login(client, username, password, remember=False):
+    return client.post("/v1/admin/login", json={"username": username, "password": password, "remember": remember})
+
+
+def test_owner_adds_staff_who_can_work_but_not_manage_the_team(env):
+    _, client = env
+    h = admin_headers(client)
+    team = client.get("/v1/admin/team", headers=h).json()
+    assert team["me"]["role"] == "owner" and [m["username"] for m in team["members"]] == ["admin"]
+
+    r = client.post("/v1/admin/team", headers=h, json={"username": "yossi", "password": "a-strong-pass-1"})
+    assert r.status_code == 201 and r.json()["role"] == "staff"
+    # אותו שם — לא
+    assert client.post("/v1/admin/team", headers=h,
+                       json={"username": "Yossi", "password": "a-strong-pass-1"}).status_code == 409
+    # סיסמה קצרה / שם עם רווח — לא
+    assert client.post("/v1/admin/team", headers=h, json={"username": "dan", "password": "short"}).status_code == 400
+    assert client.post("/v1/admin/team", headers=h,
+                       json={"username": "a b", "password": "a-strong-pass-1"}).status_code == 400
+
+    # איש הצוות נכנס (גם לאפליקציה — 30 יום) ועובד בדשבורד
+    lr = login(client, "yossi", "a-strong-pass-1", remember=True)
+    assert lr.status_code == 200 and lr.json()["role"] == "staff"
+    hs = {"Authorization": f"Bearer {lr.json()['token']}"}
+    assert client.get("/v1/admin/devices", headers=hs).status_code == 200
+    assert client.get("/v1/admin/notifications", headers=hs).status_code == 200
+    assert client.get("/v1/admin/overview", headers=hs).json()["admin_role"] == "staff"
+    # ...אבל לא מנהל את הצוות
+    assert client.get("/v1/admin/team", headers=hs).json()["members"] == []
+    assert client.post("/v1/admin/team", headers=hs,
+                       json={"username": "eve", "password": "a-strong-pass-1"}).status_code == 403
+    admin_id = team["members"][0]["id"]
+    assert client.delete(f"/v1/admin/team/{admin_id}", headers=hs).status_code == 403
+
+    # הבעלים מחליף לו סיסמה — החיבור שלו נסגר
+    yid = r.json()["id"]
+    assert client.patch(f"/v1/admin/team/{yid}", headers=h, json={"password": "another-pass-22"}).status_code == 200
+    assert client.get("/v1/admin/devices", headers=hs).status_code == 401
+    assert login(client, "yossi", "another-pass-22").status_code == 200
+
+    # הסרה — אי אפשר להיכנס יותר
+    assert client.delete(f"/v1/admin/team/{yid}", headers=h).status_code == 204
+    assert login(client, "yossi", "another-pass-22").status_code == 401
+
+
+def test_the_last_owner_cannot_be_removed_or_demoted(env):
+    _, client = env
+    h = admin_headers(client)
+    me = client.get("/v1/admin/team", headers=h).json()["me"]
+    assert client.delete(f"/v1/admin/team/{me['id']}", headers=h).status_code == 409          # לא את עצמך
+    assert client.patch(f"/v1/admin/team/{me['id']}", headers=h, json={"role": "staff"}).status_code == 409
+    # בעלים נוסף — עכשיו אפשר
+    other = client.post("/v1/admin/team", headers=h,
+                        json={"username": "partner", "password": "a-strong-pass-1", "role": "owner"}).json()
+    assert other["role"] == "owner"
+    assert client.patch(f"/v1/admin/team/{other['id']}", headers=h, json={"role": "staff"}).json()["role"] == "staff"
+
+
+def test_each_member_changes_their_own_password(env):
+    _, client = env
+    h = admin_headers(client)
+    other_session = admin_headers(client)       # עוד חיבור (למשל באפליקציה)
+    bad = client.post("/v1/admin/me/password", headers=h, json={"current": "wrong", "new": "brand-new-pass-1"})
+    assert bad.status_code == 400
+    ok = client.post("/v1/admin/me/password", headers=h,
+                     json={"current": "correct horse battery", "new": "brand-new-pass-1"})
+    assert ok.status_code == 204
+    assert client.get("/v1/admin/devices", headers=h).status_code == 200              # החיבור הנוכחי נשאר
+    assert client.get("/v1/admin/devices", headers=other_session).status_code == 401  # השאר נסגרו
+    assert login(client, "admin", "brand-new-pass-1").status_code == 200
+
+
+def test_owner_gives_the_crm_app_to_a_staff_members_filtered_phone(env, tmp_path):
+    svc, client = env
+    publish_crm(svc, tmp_path)
+    h = admin_headers(client)
+    did, token = register(client, "0529999999", "22" * 16, 2)
+    approve_all(client, h)
+
+    def has_crm():
+        apps = client.get("/v1/device", headers=auth(token)).json().get("managed_apps", [])
+        return any(a["package"] == CRM_PACKAGE for a in apps)
+
+    assert not has_crm()
+    assert client.get(f"/v1/admin/devices/{did}", headers=h).json()["crm_app"] is False
+    assert client.put(f"/v1/admin/devices/{did}/crm", headers=h, json={"enabled": True}).json() == {"crm_app": True}
+    assert has_crm()
+    assert client.get(f"/v1/admin/devices/{did}", headers=h).json()["crm_app"] is True
+    # איש צוות (לא בעלים) — לא יכול
+    client.post("/v1/admin/team", headers=h, json={"username": "yossi", "password": "a-strong-pass-1"})
+    hs = {"Authorization": f"Bearer {login(client, 'yossi', 'a-strong-pass-1').json()['token']}"}
+    assert client.put(f"/v1/admin/devices/{did}/crm", headers=hs, json={"enabled": False}).status_code == 403
+    assert client.put(f"/v1/admin/devices/{did}/crm", headers=h, json={"enabled": False}).status_code == 200
+    assert not has_crm()

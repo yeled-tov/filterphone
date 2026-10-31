@@ -1695,6 +1695,7 @@ class Services:
             "network_only_unknown": list(comp.network_only_unknown),
             "app_rules": [{"package": p, **rule} for p, rule in settings.app_rules.items()],
             "latest_app_version": (self.app_release() or {}).get("version_name"),
+            "crm_app": device_id in self.crm_device_ids(),
             "pause": {"active": self.is_paused(r), "until": r["pause_until"], "reason": r["pause_reason"],
                       "by": r["pause_by"]} if r["pause_until"] else None,
             "unmanage_requested": bool(r["unmanage_at"]),
@@ -2823,10 +2824,11 @@ class Services:
                 raise ApiError(401, "שם משתמש או סיסמה שגויים")
             token = security.new_token()
             expires = db.now() + (self.ADMIN_REMEMBER_S if remember else self.ADMIN_SESSION_S)
+            c.execute("UPDATE admins SET last_login_at = ? WHERE id = ?", (db.now(), row["id"]))
             c.execute("DELETE FROM admin_sessions WHERE expires_at < ?", (db.now(),))
             c.execute("INSERT INTO admin_sessions (token_hash, admin_id, expires_at) VALUES (?,?,?)",
                       (security.token_hash(token), row["id"], expires))
-        return {"token": token, "expires_at": expires, "username": row["username"]}
+        return {"token": token, "expires_at": expires, "username": row["username"], "role": row["role"]}
 
     def admin_by_token(self, token: str) -> sqlite3.Row:
         with self.db() as c:
@@ -2840,6 +2842,111 @@ class Services:
     def admin_logout(self, token: str) -> None:
         with self.db() as c:
             c.execute("DELETE FROM admin_sessions WHERE token_hash = ?", (security.token_hash(token),))
+
+    # ------------------------------------------------------------ צוות (כמה משתמשים לדשבורד / ל-CRM FilterPhone)
+
+    ADMIN_ROLES = ("owner", "staff")
+    _USERNAME = re.compile(r"^[\w.\-]{3,40}$")
+    MIN_PASSWORD = 10
+
+    def team(self) -> list[dict]:
+        with self.db() as c:
+            rows = c.execute(
+                "SELECT a.id, a.username, a.role, a.created_at, a.last_login_at,"
+                " (SELECT COUNT(*) FROM admin_sessions s WHERE s.admin_id = a.id AND s.expires_at > ?) AS sessions"
+                " FROM admins a ORDER BY a.role = 'owner' DESC, a.username", (db.now(),)).fetchall()
+        return [dict(r) for r in rows]
+
+    def _check_password(self, password: str) -> None:
+        if len(password) < self.MIN_PASSWORD:
+            raise ApiError(400, f"סיסמה קצרה מדי (לפחות {self.MIN_PASSWORD} תווים)")
+
+    @staticmethod
+    def _owners(c: sqlite3.Connection) -> int:
+        return c.execute("SELECT COUNT(*) FROM admins WHERE role = 'owner'").fetchone()[0]
+
+    def add_team_member(self, actor: str, username: str, password: str, role: str = "staff") -> dict:
+        name = username.strip()
+        if not self._USERNAME.match(name):
+            raise ApiError(400, "שם משתמש: 3–40 אותיות או ספרות (אפשר גם . - _), בלי רווחים")
+        if role not in self.ADMIN_ROLES:
+            raise ApiError(400, "תפקיד לא מוכר")
+        self._check_password(password)
+        with self.db() as c:
+            if c.execute("SELECT 1 FROM admins WHERE username = ? COLLATE NOCASE", (name,)).fetchone():
+                raise ApiError(409, "שם המשתמש הזה כבר קיים")
+            mid = c.execute("INSERT INTO admins (username, password_hash, created_at, role) VALUES (?,?,?,?)",
+                            (name, security.hash_password(password), db.now(), role)).lastrowid
+            self.audit(actor, "team_add", f"admin:{mid}", f"{name} ({role})", c=c)
+        return next(m for m in self.team() if m["id"] == mid)
+
+    def update_team_member(self, actor: str, member_id: int, password: str | None = None,
+                           role: str | None = None) -> dict:
+        with self.db() as c:
+            row = c.execute("SELECT * FROM admins WHERE id = ?", (member_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "איש הצוות לא נמצא")
+            if role is not None and role != row["role"]:
+                if role not in self.ADMIN_ROLES:
+                    raise ApiError(400, "תפקיד לא מוכר")
+                if row["role"] == "owner" and self._owners(c) <= 1:
+                    raise ApiError(409, "חייב להישאר לפחות בעלים אחד")
+                c.execute("UPDATE admins SET role = ? WHERE id = ?", (role, member_id))
+                self.audit(actor, "team_role", f"admin:{member_id}", f"{row['username']}: {row['role']} → {role}", c=c)
+            if password is not None:
+                self._check_password(password)
+                c.execute("UPDATE admins SET password_hash = ? WHERE id = ?",
+                          (security.hash_password(password), member_id))
+                # סיסמה חדשה — כל החיבורים הקיימים שלו נסגרים (גם באפליקציה)
+                c.execute("DELETE FROM admin_sessions WHERE admin_id = ?", (member_id,))
+                self.audit(actor, "team_password", f"admin:{member_id}", row["username"], c=c)
+        return next(m for m in self.team() if m["id"] == member_id)
+
+    def remove_team_member(self, actor_row: sqlite3.Row, member_id: int) -> None:
+        if member_id == actor_row["id"]:
+            raise ApiError(409, "אי אפשר להסיר את עצמך")
+        with self.db() as c:
+            row = c.execute("SELECT * FROM admins WHERE id = ?", (member_id,)).fetchone()
+            if row is None:
+                raise ApiError(404, "איש הצוות לא נמצא")
+            if row["role"] == "owner" and self._owners(c) <= 1:
+                raise ApiError(409, "חייב להישאר לפחות בעלים אחד")
+            c.execute("DELETE FROM admin_sessions WHERE admin_id = ?", (member_id,))
+            c.execute("DELETE FROM admins WHERE id = ?", (member_id,))
+            self.audit(actor_row["username"], "team_remove", f"admin:{member_id}", row["username"], c=c)
+
+    def change_own_password(self, admin_row: sqlite3.Row, current: str, new: str, keep_token: str) -> None:
+        """כל איש צוות — הסיסמה של עצמו. שאר החיבורים שלו נסגרים; החיבור הנוכחי נשאר."""
+        with self.db() as c:
+            row = c.execute("SELECT * FROM admins WHERE id = ?", (admin_row["id"],)).fetchone()
+            if row is None or not security.verify_password(row["password_hash"], current):
+                raise ApiError(400, "הסיסמה הנוכחית שגויה")
+            self._check_password(new)
+            c.execute("UPDATE admins SET password_hash = ? WHERE id = ?", (security.hash_password(new), row["id"]))
+            c.execute("DELETE FROM admin_sessions WHERE admin_id = ? AND token_hash != ?",
+                      (row["id"], security.token_hash(keep_token)))
+            self.audit(row["username"], "own_password", f"admin:{row['id']}", "", c=c)
+
+    # --- CRM FilterPhone בטלפונים מסוננים של הצוות (מנהל מכשיר חוסם התקנות — FilterPhone מתקין בשקט)
+
+    def crm_device_ids(self) -> set[int]:
+        with self.db() as c:
+            r = c.execute("SELECT value FROM meta WHERE key = 'crm_device_ids'").fetchone()
+        try:
+            return {int(x) for x in json.loads(r["value"])} if r and r["value"] else set()
+        except (ValueError, TypeError):
+            return set()
+
+    def set_crm_device(self, actor: str, device_id: int, enabled: bool) -> bool:
+        ids = self.crm_device_ids()
+        with self.db() as c:
+            if c.execute("SELECT 1 FROM devices WHERE id = ?", (device_id,)).fetchone() is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            ids = ids | {device_id} if enabled else ids - {device_id}
+            c.execute("INSERT INTO meta (key, value) VALUES ('crm_device_ids', ?)"
+                      " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(sorted(ids)),))
+            self.audit(actor, "crm_device", f"device:{device_id}", "on" if enabled else "off", c=c)
+        return enabled
 
     def set_admin(self, username: str, password: str) -> None:
         if len(password) < 10:

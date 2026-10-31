@@ -22,6 +22,7 @@ object Poller {
                 Crm.setReloginShown(c, false)
                 Notifier.cancelRelogin(c)
             }
+            Updates.maybeCheck(c)
             Result.OK
         } catch (e: Api.Unauthorized) {
             Notifier.relogin(c)

@@ -62,3 +62,20 @@ class EventsTest {
         assertFalse(Crm.validToken("א".repeat(30)))
     }
 }
+
+class UpdatesTest {
+    @Test
+    fun readsTheVersionFromCrmJson() {
+        assertEquals(97L, Updates.parseVersion("""{"name":"CRM-FilterPhone.apk","version_code":97}"""))
+        assertEquals(-1L, Updates.parseVersion("not json"))
+        assertEquals(-1L, Updates.parseVersion("{}"))
+    }
+
+    @Test
+    fun notifiesOnceAndOnlyForNewerVersions() {
+        assertTrue(Updates.shouldNotify(latest = 98, current = 97, alreadyNotified = -1))
+        assertFalse(Updates.shouldNotify(latest = 98, current = 97, alreadyNotified = 98))
+        assertFalse(Updates.shouldNotify(latest = 97, current = 97, alreadyNotified = -1))
+        assertFalse(Updates.shouldNotify(latest = -1, current = 97, alreadyNotified = -1))
+    }
+}

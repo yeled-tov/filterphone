@@ -14,7 +14,14 @@ const tokenStore = NATIVE ? {
   clear: () => sessionStorage.removeItem("fp_token"),
 };
 if (NATIVE || new URLSearchParams(location.search).has("app")) document.documentElement.classList.add("in-app");
+if (NATIVE) {
+  // אפליקציית הניהול — השם שלה בכותרות
+  document.title = "CRM FilterPhone";
+  document.querySelectorAll(".brand span:last-child").forEach((s) => { s.textContent = "CRM FilterPhone"; });
+}
 let token = tokenStore.get();
+let me = null;                // {id, username, role} — owner מנהל את הצוות
+const isOwner = () => !me || me.role === "owner";
 let catalog = null;           // רמות, קטגוריות ואפשרויות — נטען פעם אחת
 let refreshTimer = null;
 const ACTIONS = { block: "נחסם", replace: "נצבע", site: "אתר חסום", video: "וידאו נחסם" };
@@ -491,6 +498,7 @@ const ROUTES = {
   test: ["בדיקת תמונה", viewTest],
   codes: ["קודי הפעלה", viewCodes],
   audit: ["יומן פעולות", viewAudit],
+  team: ["צוות ואפליקציית הניהול", viewTeam],
   system: ["מערכת", viewSystem],
 };
 
@@ -924,11 +932,131 @@ async function viewDevice(id, query = new URLSearchParams()) {
   const tabs = [
     ["overview", "סקירה", [complianceCardEl, el("div", { class: "grid two" }, customerCard, logCard), maintenanceCardEl, tempCardEl]],
     ["blocks", "חסימות", [trackCardEl, webCardEl, levelCard, policyCard, customCard, keywordCardEl, safeBrowserCardEl]],
-    ["apps", "אפליקציות", [appsCard, appImagesCard, bypassCardEl, learnedCard]],
+    ["apps", "אפליקציות", [appsCard, appImagesCard, bypassCardEl, learnedCard, crmDeviceCard(d, id)]],
     ["dpc", "מנהל מכשיר", [dpcCardEl]],
     ["activity", "פעילות", [el("div", { class: "grid two" }, statsCard, historyCard || card("היסטוריית בקשות", null, empty("אין בקשות."))), eventsCard]],
   ];
   return [back, header, tabbed(tabs, query.get("tab"))];
+}
+
+/** טלפון מסונן של איש צוות: FilterPhone מתקין בו את אפליקציית הניהול (ההתקנות חסומות בטלפון). רק לבעלים. */
+function crmDeviceCard(d, id) {
+  if (!isOwner()) return null;
+  const input = el("input", { type: "checkbox", checked: Boolean(d.crm_app), "aria-label": "CRM FilterPhone בטלפון הזה",
+    onchange: async (e) => {
+      try {
+        await attempt(() => api(`/v1/admin/devices/${id}/crm`, { method: "PUT", body: { enabled: e.target.checked } }),
+          e.target.checked ? "תותקן בטלפון בעדכון הבא שלו (עד רבע שעה)" : "לא תותקן יותר בטלפון הזה");
+      } catch (_) { e.target.checked = !e.target.checked; }
+    } });
+  return card("אפליקציית הניהול — CRM FilterPhone", "לטלפון של מי שעוזר לך בניהול. בטלפון עם FilterPhone התקנות חסומות — לכן FilterPhone מתקין אותה כאן בשקט (ומעדכן). איש הצוות נכנס עם המשתמש שלו (עמוד 'צוות'). במכשיר המנהל היא מותקנת תמיד.",
+    el("div", { class: "app-row" }, el("label", { class: "switch" }, input, el("span")),
+      el("div", { class: "grow" }, el("b", {}, "להתקין את CRM FilterPhone בטלפון הזה"),
+        el("small", {}, "כיבוי לא מסיר אותה מהטלפון — רק מפסיק להתקין ולעדכן. כדי לחסום כניסה: מוחקים את המשתמש בעמוד 'צוות'."))));
+}
+
+// ---------------------------------------------------------------- צוות ואפליקציית הניהול
+
+const ROLE_NAMES = { owner: ["accent", "בעלים"], staff: ["", "איש צוות"] };
+
+function randomPassword() {
+  const abc = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const buf = new Uint32Array(14);
+  crypto.getRandomValues(buf);
+  return [...buf].map((n) => abc[n % abc.length]).join("");
+}
+
+async function viewTeam() {
+  const t = await api("/v1/admin/team");
+  me = t.me;
+  const out = [];
+
+  // --- האפליקציה: קישור להורדה ואיך משתפים
+  const link = t.crm?.url || "";
+  out.push(card("CRM FilterPhone — אפליקציית הניהול", "אפליקציה נפרדת מ-FilterPhone: הדשבורד בטלפון, כניסה שנשמרת 30 יום, והתראות על בקשות חדשות, פניות בתמיכה ואתרים לבדיקה — גם כשהיא סגורה.",
+    link ? el("div", { class: "stack" },
+      kv([["גרסה", t.crm.version || "—"], ["קישור להורדה", el("a", { href: link, class: "ltr", target: "_blank", rel: "noopener" }, link)]]),
+      el("div", { class: "row gap" },
+        el("button", { class: "primary", onclick: async () => {
+          try { await navigator.clipboard.writeText(link); toast("הקישור הועתק — אפשר לשלוח בוואטסאפ"); }
+          catch (_) { dialog("הקישור", el("p", { class: "ltr mono" }, link), "סגירה"); }
+        } }, "העתקת הקישור"),
+        el("a", { href: `https://wa.me/?text=${encodeURIComponent(`CRM FilterPhone — אפליקציית הניהול: ${link}`)}`,
+          target: "_blank", rel: "noopener", class: "row gap" }, "שליחה בוואטסאפ")),
+      el("ol", { class: "steps" },
+        el("li", {}, "מוסיפים לאיש הצוות משתמש למטה (שם משתמש + סיסמה)."),
+        el("li", {}, "טלפון רגיל: שולחים לו את הקישור — מוריד, מתקין ומתחבר. עדכונים — האפליקציה מודיעה לבד."),
+        el("li", {}, "טלפון עם FilterPhone (התקנות חסומות): בדף המכשיר שלו → טאב 'אפליקציות' → 'להתקין את CRM FilterPhone בטלפון הזה'. היא תותקן לבד תוך רבע שעה."),
+        el("li", {}, "כדי להפסיק גישה — מוחקים את המשתמש שלו. הוא מתנתק מיד, גם באפליקציה.")))
+      : empty("האפליקציה עוד לא פורסמה בשרת.")));
+
+  // --- הצוות (בעלים בלבד)
+  if (t.me.role === "owner") {
+    const rows = t.members.map((m) => {
+      const [k, name] = ROLE_NAMES[m.role] || ["", m.role];
+      const self = m.id === t.me.id;
+      return el("tr", {},
+        el("td", {}, el("b", {}, m.username), self ? el("small", {}, "זה אתה") : null),
+        el("td", {}, chip(name, k)),
+        el("td", { class: "nowrap" }, m.last_login_at ? ago(m.last_login_at) : "עוד לא נכנס"),
+        el("td", {}, m.sessions ? `${m.sessions} מחובר${m.sessions > 1 ? "ים" : ""}` : "—"),
+        el("td", {}, el("div", { class: "actions" },
+          el("button", { class: "ghost small", onclick: async () => {
+            const pw = el("input", { class: "ltr", value: randomPassword(), autocomplete: "new-password" });
+            if (!await dialog(`סיסמה חדשה ל-${m.username}`, [el("label", {}, "הסיסמה (לפחות 10 תווים) — שלחו לו אותה", pw),
+              el("p", { class: "muted small" }, "כל החיבורים הקיימים שלו ייסגרו (גם באפליקציה).")], "שמירה")) return;
+            await attempt(() => api(`/v1/admin/team/${m.id}`, { method: "PATCH", body: { password: pw.value } }), "הסיסמה הוחלפה");
+            render();
+          } }, "סיסמה חדשה"),
+          self ? null : el("button", { class: "ghost small", onclick: async () => {
+            const role = m.role === "owner" ? "staff" : "owner";
+            await attempt(() => api(`/v1/admin/team/${m.id}`, { method: "PATCH", body: { role } }),
+              role === "owner" ? "עכשיו בעלים" : "עכשיו איש צוות");
+            render();
+          } }, m.role === "owner" ? "להפוך לאיש צוות" : "להפוך לבעלים"),
+          self ? null : el("button", { class: "danger small", onclick: async () => {
+            if (!await confirmDialog("הסרת איש צוות", `${m.username} לא יוכל להיכנס יותר לדשבורד ולאפליקציה (מתנתק מיד).`, "הסרה", true)) return;
+            await attempt(() => api(`/v1/admin/team/${m.id}`, { method: "DELETE" }), "הוסר");
+            render();
+          } }, "הסרה"))));
+    });
+    const username = el("input", { class: "ltr", autocomplete: "off", placeholder: "yossi", required: true });
+    const password = el("input", { class: "ltr", value: randomPassword(), autocomplete: "new-password", required: true });
+    const role = el("select", {}, el("option", { value: "staff" }, "איש צוות — הכול חוץ מניהול הצוות"),
+      el("option", { value: "owner" }, "בעלים — הכול, כולל הוספה והסרה של אנשי צוות"));
+    const form = el("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      const m = await attempt(() => api("/v1/admin/team", { method: "POST",
+        body: { username: username.value.trim(), password: password.value, role: role.value } }), "נוסף ✓");
+      await dialog("פרטי הכניסה", [el("p", {}, "שלחו לו את הפרטים ואת הקישור לאפליקציה:"),
+        kv([["שם משתמש", el("span", { class: "ltr mono" }, m.username)], ["סיסמה", el("span", { class: "ltr mono" }, password.value)],
+          link ? ["אפליקציה", el("span", { class: "ltr mono" }, link)] : null])], "סגירה");
+      render();
+    } },
+      el("div", { class: "grid two" }, el("label", {}, "שם משתמש (אנגלית / ספרות, בלי רווחים)", username),
+        el("label", {}, "סיסמה (לפחות 10 תווים)", password)),
+      el("label", {}, "תפקיד", role),
+      el("div", { class: "row end" }, el("button", { class: "ghost", type: "button", onclick: () => { password.value = randomPassword(); } }, "סיסמה אחרת"),
+        el("button", { class: "primary", type: "submit" }, "הוספה")));
+    out.push(card(`הצוות (${t.members.length})`, "מי יכול להיכנס לדשבורד ולאפליקציית הניהול. כל אחד עם משתמש משלו — ביומן הפעולות רואים מי עשה מה.",
+      el("div", { class: "table-wrap" }, el("table", {},
+        el("thead", {}, el("tr", {}, el("th", {}, "משתמש"), el("th", {}, "תפקיד"), el("th", {}, "כניסה אחרונה"),
+          el("th", {}, "חיבורים"), el("th", {}, ""))),
+        el("tbody", {}, rows)))));
+    out.push(card("הוספת איש צוות", null, form));
+  }
+
+  // --- הסיסמה שלי (כולם)
+  const cur = el("input", { type: "password", autocomplete: "current-password", required: true });
+  const nw = el("input", { type: "password", autocomplete: "new-password", required: true, minlength: 10 });
+  out.push(card("הסיסמה שלי", `מחובר כ-${t.me.username}. אחרי ההחלפה שאר החיבורים שלך ייסגרו; כאן נשארים מחוברים.`,
+    el("form", { class: "stack", onsubmit: async (e) => {
+      e.preventDefault();
+      await attempt(() => api("/v1/admin/me/password", { method: "POST", body: { current: cur.value, new: nw.value } }), "הסיסמה הוחלפה ✓");
+      e.target.reset();
+    } }, el("div", { class: "grid two" }, el("label", {}, "הסיסמה הנוכחית", cur), el("label", {}, "סיסמה חדשה (לפחות 10 תווים)", nw)),
+      el("div", { class: "row end" }, el("button", { class: "primary", type: "submit" }, "החלפה")))));
+  return out;
 }
 
 // ---------------------------------------------------------------- מחשבים (FilterPhone למחשב)
@@ -2871,6 +2999,7 @@ async function start() {
   $("#app").hidden = false;
   try {
     catalog = catalog || await api("/v1/admin/catalog");
+    me = (await api("/v1/admin/team")).me;
   } catch (e) {
     if (!token) return;
     toast(e.message, true);

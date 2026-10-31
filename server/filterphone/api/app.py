@@ -29,7 +29,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import redis
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, Request
@@ -307,6 +307,16 @@ DeskDep = Annotated[SupportDesk, Depends(support_dep)]
 BotDep = Annotated[BotDesk, Depends(bot_dep)]
 DeviceRow = Annotated[Any, Depends(device_dep)]
 AdminRow = Annotated[Any, Depends(admin_dep)]
+
+
+def owner_dep(admin: AdminRow):
+    """ניהול הצוות (ומתן אפליקציית הניהול למכשיר) — רק לבעלים."""
+    if admin["role"] != "owner":
+        raise ApiError(403, "רק הבעלים יכול לעשות את זה")
+    return admin
+
+
+OwnerRow = Annotated[Any, Depends(owner_dep)]
 AuthHeader = Annotated[str | None, Header()]
 
 
@@ -329,10 +339,15 @@ def _limit(limiter: RateLimiter, key: str) -> None:
         raise ApiError(429, "יותר מדי ניסיונות. נסו שוב בעוד כמה דקות")
 
 
-def _with_crm(svc: Services, out: dict) -> None:
-    """מכשיר המנהל: אפליקציית המנהל (CRM FilterPhone) נוספת לקטלוג שלו כ"חובה" — מותקנת ומתעדכנת בשקט."""
+def _with_crm(svc: Services, desk: SupportDesk, row, out: dict) -> None:
+    """מכשיר המנהל, ומכשירים של הצוות שהבעלים סימן: אפליקציית הניהול (CRM FilterPhone) נוספת לקטלוג שלהם
+    כ"חובה" — FilterPhone מתקין ומעדכן אותה בשקט (בטלפון מסונן ההתקנות חסומות). לקוחות לא רואים אותה."""
+    if not isinstance(out.get("managed_apps"), list):
+        return
+    if row["id"] not in svc.crm_device_ids() and not desk.is_admin_device(row):
+        return
     crm = svc.crm_release()
-    if crm and isinstance(out.get("managed_apps"), list):
+    if crm:
         out["managed_apps"] = [a for a in out["managed_apps"] if a.get("package") != crm["package"]] + [crm]
 
 
@@ -603,6 +618,26 @@ class LoginIn(BaseModel):
     remember: bool = False          # אפליקציית הניהול בטלפון — כניסה ל-30 יום (נשמרת מוצפנת בטלפון)
 
 
+class TeamMemberIn(BaseModel):
+    username: str = Field(min_length=3, max_length=40)
+    password: str = Field(min_length=1, max_length=200)
+    role: Literal["owner", "staff"] = "staff"
+
+
+class TeamPatch(BaseModel):
+    password: str | None = Field(default=None, max_length=200)
+    role: Literal["owner", "staff"] | None = None
+
+
+class OwnPasswordIn(BaseModel):
+    current: str = Field(min_length=1, max_length=200)
+    new: str = Field(min_length=1, max_length=200)
+
+
+class CrmDeviceIn(BaseModel):
+    enabled: bool
+
+
 class DevicePatch(BaseModel):
     name: str | None = Field(default=None, max_length=60)
     label: str | None = Field(default=None, max_length=80)
@@ -777,7 +812,7 @@ def _routes(app: FastAPI) -> None:
         if desk.is_admin_device(row):
             # מכשיר המנהל: רואה כמה פניות ממתינות, וכך האפליקציה מציגה את כפתור "ניהול תמיכה"
             out["admin"] = {"support_unread": desk.admin_unread()}
-            _with_crm(svc, out)
+        _with_crm(svc, desk, row, out)
         return out
 
     @app.delete("/v1/device", status_code=204)
@@ -816,8 +851,7 @@ def _routes(app: FastAPI) -> None:
         unread = request.app.state.support.device_unread(row["id"])
         if unread["unread"]:
             out["support"] = unread          # הטלפון מציג התראה "יש תשובה מהתמיכה"
-        if "managed_apps" in out and request.app.state.support.is_admin_device(row):
-            _with_crm(svc, out)
+        _with_crm(svc, request.app.state.support, row, out)
         return out
 
     @app.post("/v1/device/app-updates")
@@ -924,6 +958,37 @@ def _routes(app: FastAPI) -> None:
     def logout(svc: SvcDep, _: AdminRow, authorization: AuthHeader = None):
         svc.admin_logout(_bearer(authorization))
 
+    # --- צוות: מי יכול להיכנס לדשבורד ולאפליקציית CRM FilterPhone ---
+
+    @app.get("/v1/admin/team")
+    def team_list(svc: SvcDep, admin: AdminRow):
+        crm = svc.crm_release()
+        return {"me": {"id": admin["id"], "username": admin["username"], "role": admin["role"]},
+                "members": svc.team() if admin["role"] == "owner" else [],
+                "crm": {"url": crm["url"], "version": crm["version_name"]} if crm else None}
+
+    @app.post("/v1/admin/team", status_code=201)
+    def team_add(body: TeamMemberIn, svc: SvcDep, admin: OwnerRow):
+        return svc.add_team_member(admin["username"], body.username, body.password, body.role)
+
+    @app.patch("/v1/admin/team/{member_id}")
+    def team_update(member_id: int, body: TeamPatch, svc: SvcDep, admin: OwnerRow):
+        return svc.update_team_member(admin["username"], member_id, password=body.password, role=body.role)
+
+    @app.delete("/v1/admin/team/{member_id}", status_code=204)
+    def team_remove(member_id: int, svc: SvcDep, admin: OwnerRow):
+        svc.remove_team_member(admin, member_id)
+
+    @app.post("/v1/admin/me/password", status_code=204)
+    def own_password(body: OwnPasswordIn, request: Request, svc: SvcDep, admin: AdminRow,
+                     authorization: AuthHeader = None):
+        _limit(login_limiter, client_ip(request))
+        svc.change_own_password(admin, body.current, body.new, _bearer(authorization))
+
+    @app.put("/v1/admin/devices/{device_id}/crm")
+    def device_crm(device_id: int, body: CrmDeviceIn, svc: SvcDep, admin: OwnerRow):
+        return {"crm_app": svc.set_crm_device(admin["username"], device_id, body.enabled)}
+
     @app.get("/v1/admin/notifications")
     def admin_notifications(svc: SvcDep, _: AdminRow, after: str = ""):
         """אפליקציית המנהל (CRM FilterPhone) — אירועים חדשים מאז הסמן (ראו notify.py)."""
@@ -931,7 +996,8 @@ def _routes(app: FastAPI) -> None:
 
     @app.get("/v1/admin/overview")
     def overview(request: Request, svc: SvcDep, desk: DeskDep, admin: AdminRow):
-        return {**svc.overview(), "admin": admin["username"], "support_unread": desk.admin_unread(),
+        return {**svc.overview(), "admin": admin["username"], "admin_role": admin["role"],
+                "support_unread": desk.admin_unread(),
                 "web_pending": request.app.state.web.pending_count()}
 
     # --- תמיכה ---

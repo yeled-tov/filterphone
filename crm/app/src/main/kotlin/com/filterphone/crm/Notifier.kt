@@ -11,6 +11,7 @@ import android.content.Intent
 object Notifier {
     const val CH_EVENTS = "events_v1"
     const val CH_SERVICE = "service_v1"
+    const val CH_UPDATES = "updates_v1"
     private const val GROUP = "crm_events"
     const val EXTRA_ROUTE = "com.filterphone.crm.ROUTE"
 
@@ -23,6 +24,8 @@ object Notifier {
             description = c.getString(R.string.channel_events_desc)
             enableVibration(true)
         })
+        nm.createNotificationChannel(NotificationChannel(CH_UPDATES, c.getString(R.string.channel_updates),
+            NotificationManager.IMPORTANCE_DEFAULT))
         nm.createNotificationChannel(NotificationChannel(CH_SERVICE, c.getString(R.string.channel_service),
             NotificationManager.IMPORTANCE_MIN).apply {
             description = c.getString(R.string.channel_service_desc)
@@ -106,10 +109,26 @@ object Notifier {
         Crm.setReloginShown(c, true)
     }
 
+    /** גרסה חדשה (טלפון רגיל) — לחיצה פותחת את ההורדה; אחרי ההורדה מתקינים כמו בפעם הראשונה. */
+    fun update(c: Context) {
+        val nm = nm(c) ?: return
+        channels(c)
+        val view = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Updates.APK_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        nm.notify(Events.ID_UPDATE, Notification.Builder(c, CH_UPDATES)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setColor(c.getColor(R.color.accent))
+            .setContentTitle(c.getString(R.string.update_title))
+            .setContentText(c.getString(R.string.update_text))
+            .setContentIntent(PendingIntent.getActivity(c, Events.ID_UPDATE, view,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            .setAutoCancel(true)
+            .build())
+    }
+
     fun cancelRelogin(c: Context) = nm(c)?.cancel(Events.ID_RELOGIN)
 
     fun cancelEvents(c: Context) {
         val nm = nm(c) ?: return
-        nm.activeNotifications.filter { it.id != Events.ID_SERVICE }.forEach { nm.cancel(it.id) }
+        nm.activeNotifications.filter { it.id != Events.ID_SERVICE && it.id != Events.ID_UPDATE }.forEach { nm.cancel(it.id) }
     }
 }

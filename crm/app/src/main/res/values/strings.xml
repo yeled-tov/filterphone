@@ -13,4 +13,7 @@
     <string name="relogin_title">CRM FilterPhone — צריך להתחבר שוב</string>
     <string name="relogin_text">פתחו את האפליקציה והתחברו כדי להמשיך לקבל התראות.</string>
     <string name="summary_text">%1$d עדכונים חדשים</string>
+    <string name="channel_updates">גרסה חדשה של האפליקציה</string>
+    <string name="update_title">גרסה חדשה של CRM FilterPhone</string>
+    <string name="update_text">לחצו להורדה, ואז התקינו כמו בפעם הראשונה.</string>
 </resources>
