@@ -136,12 +136,15 @@ for d in rows:
         hb = json.loads(d.get("heartbeat") or "{}")
     except Exception:
         pass
-    keep = {k: hb.get(k) for k in ("app_version", "via_vpn", "vpn", "dpc", "accessibility", "device_owner", "guard",
-                                   "policy_version", "policy_error", "always_on", "lockdown", "error", "network",
-                                   "private_dns", "update", "background_restricted", "battery_unrestricted") if k in hb}
+    keep = {k: hb.get(k) for k in ("app_version", "via_vpn", "vpn", "vpn_bypass", "dpc", "accessibility",
+                                   "device_owner", "guard", "policy_version", "policy_error", "always_on", "lockdown",
+                                   "error", "network", "private_dns", "update", "background_restricted",
+                                   "battery_unrestricted") if k in hb}
     try:
         pol = json.loads(d.get("policy") or "{}")
         keep["policy_dpc"] = {k: v for k, v in (pol.get("dpc") or {}).items() if k in ("always_on_vpn",)}
+        if pol.get("allow_google_accounts"):
+            keep["policy_google_accounts"] = True
     except Exception:
         pass
     caps = hb.get("capabilities") or {}
@@ -151,7 +154,7 @@ for d in rows:
           f"seen={ago(d['last_seen_at'])} hb={ago(d.get('heartbeat_at'))} wg={ago(h) if h else 'never'} "
           f"vpn_ip={'yes' if d['vpn_ip'] else 'no'} policy={d.get('policy_version')}/{d.get('device_policy_version')} "
           f"pause={'yes' if (d.get('pause_until') or 0) > now else 'no'} unmanage={'yes' if d.get('unmanage_at') else 'no'}")
-    print("    hb:", json.dumps(keep, ensure_ascii=False)[:1100])
+    print("    hb:", json.dumps(keep, ensure_ascii=False)[:1600])
 peers = set(hs)
 known = {r[0] for r in db.execute("SELECT public_key FROM devices WHERE status = 'active'")}
 print(f"== WireGuard: {len(peers)} peers בשרת, {len(known)} מכשירים פעילים, חסרים ב-wg: {len(known - peers)}")
