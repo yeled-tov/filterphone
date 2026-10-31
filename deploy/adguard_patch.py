@@ -4,6 +4,7 @@
   * חיפוש בטוח: Google, ‏YouTube, ‏Bing ועוד — מאולץ ברמת ה-DNS.
   * רשימת חסימה לשירותי DNS מוצפן / VPN / פרוקסי — כדי שאפליקציות לא יעקפו.
   * use-application-dns.net → NXDOMAIN: מסמן ל-Firefox לא להפעיל DNS מוצפן.
+  * אתר חסום → הכתובת של הפרוקסי (SINKHOLE) במקום 0.0.0.0: דף "חסום על ידי FilterPhone".
   * הגבלת קצב לכל טלפון בנפרד (‎/32), לא לכל רשת ה-VPN יחד — ראו _per_phone_ratelimit.
   * --api-user/--api-hash: משתמש נפרד ל-API של FilterPhone (חסימות DNS לפי מכשיר).
     המשתמשים הקיימים (של בעל השרת) לא משתנים. אם ל-AdGuard אין משתמשים בכלל — לא מוסיפים,
@@ -12,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 import yaml
 
@@ -28,6 +30,9 @@ _YOUTUBE_HOTFIX_HOSTS = (
     "youtube.co.il", "ggpht.com", "yt3.googleusercontent.com",
 )
 STALE_RULES = frozenset(f"@@||{h}^$important" for h in _YOUTUBE_HOTFIX_HOSTS)
+# אתר חסום מקבל את הכתובת הזו (ולא 0.0.0.0): היא מנותבת במנהרה לפרוקסי, שמציג "חסום על ידי FilterPhone".
+# בלי זה הדפדפן מראה "האתר לא זמין" — כאילו אין אינטרנט. זהה ל-dns_sinkhole_ip בהגדרות השרת.
+SINKHOLE = os.environ.get("FP_DNS_SINKHOLE", "198.18.0.1")
 # שאילתות בשנייה לכל טלפון. טלפון שה-VPN שלו עולה שולח בבת אחת עשרות שאילתות (כל אפליקציה מתחברת מחדש).
 PHONE_RATELIMIT = 300
 
@@ -61,12 +66,25 @@ def _per_phone_ratelimit(doc: dict) -> None:
         holder["ratelimit_subnet_len_ipv4"] = 32
 
 
+def _sinkhole(doc: dict) -> None:
+    """חסימה ב-DNS עונה בכתובת הפרוקסי (custom_ip) — דף "חסום על ידי FilterPhone" במקום "אין אינטרנט".
+    IPv6: "::" (במנהרה אין IPv6 — הדפדפן משתמש בכתובת ה-IPv4). זמן חיים קצר — שינוי חסימה נקלט מהר."""
+    holder = find_key(doc, "blocking_mode")
+    if holder is None:
+        return                          # גרסה בלי המפתח — לא מוסיפים מפתח לא מוכר
+    holder["blocking_mode"] = "custom_ip"
+    holder["blocking_ipv4"] = SINKHOLE
+    holder["blocking_ipv6"] = "::"
+    holder["blocked_response_ttl"] = 10
+
+
 def main(path: str, api_user: str = "", api_hash: str = "") -> None:
     with open(path, encoding="utf-8") as f:
         doc = yaml.safe_load(f)
 
     doc.setdefault("tls", {})["enabled"] = False
     _per_phone_ratelimit(doc)
+    _sinkhole(doc)
 
     holder = find_key(doc, "safe_search")
     if holder is not None and isinstance(holder["safe_search"], dict):

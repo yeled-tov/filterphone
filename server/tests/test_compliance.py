@@ -262,7 +262,15 @@ def test_whatsapp_profile_option_sends_detector_and_needs_accessibility():
     comp = compile_settings(2, s)
     assert "pps.whatsapp.net" in comp.hosts
     assert comp.device_json()["protections"]["wa_profile_photo"] == PROTECTIONS["wa_profile_photo"]
+    assert comp.device_json()["protections"]["wa_profile_photo"]["mask"] is False     # בלי כיסוי לבן
     assert comp.needs_accessibility
+    # "כיסוי לבן" — אופציה נפרדת: מדליקה mask (וכוללת את החסימה ברשת ובגדול)
+    cover = compile_settings(2, DeviceSettings(options=["whatsapp_profile_cover"]))
+    prot = cover.device_json()["protections"]
+    assert prot["wa_profile_photo"]["mask"] is True and "wa_profile_mask" not in prot
+    assert "pps.whatsapp.net" in cover.hosts
+    both = compile_settings(2, DeviceSettings(options=["whatsapp_profile", "whatsapp_profile_cover"]))
+    assert both.device_json()["protections"]["wa_profile_photo"]["mask"] is True and "pps.whatsapp.net" in both.hosts
 
 
 # ------------------------------------------------------------------ מנהל מכשיר

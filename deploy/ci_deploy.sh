@@ -163,6 +163,12 @@ for d in rows:
                        if f.startswith(d["vpn_ip"] + "|") and re.search(r"google|gstatic|gvt\d|android\.com", f))
             if g:
                 print(f"    google דרך ה-VPN ({len(g)}):", ", ".join(g[:25]))
+            # לאילו שרתי וואטסאפ המכשיר מתחבר (3 ימים) — open / blocked ומספר חיבורים
+            raw = subprocess.run(["redis-cli", "--raw", "HGETALL", "fp:wa_sni"], capture_output=True, text=True).stdout.split()
+            wa = sorted(((f.split("|", 1)[1], int(n)) for f, n in zip(raw[::2], raw[1::2])
+                         if f.startswith(d["vpn_ip"] + "|")), key=lambda x: -x[1])
+            if wa:
+                print("    whatsapp:", ", ".join(f"{h}×{n}" for h, n in wa[:30]))
         except Exception as e:
             print("    redis:", e)
 peers = set(hs)

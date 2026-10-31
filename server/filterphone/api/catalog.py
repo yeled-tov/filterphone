@@ -127,12 +127,17 @@ OPTIONS: tuple[Option, ...] = (
 
     # ------------------------------------------------------------ וואטסאפ והודעות
     Option("whatsapp_profile", "messaging", "תמונות פרופיל בוואטסאפ",
-           "במקום כל תמונת פרופיל רואים לבן — ברשימת הצ'אטים, בראש השיחה, בפרטי איש קשר וקבוצה, במשתתפים "
-           "ובשיחות — גם תמונות שכבר שמורות בטלפון; אי אפשר לפתוח תמונת פרופיל בגדול, ותמונות חדשות לא נטענות "
-           "ברשת. הודעות, שיחות, קבצים ותמונות בצ'אט — כרגיל.",
+           "תמונות הפרופיל של אנשי הקשר והקבוצות לא נטענות מהרשת, ואי אפשר לפתוח תמונת פרופיל בגדול (גם כזו "
+           "שכבר שמורה בטלפון). הודעות, שיחות, קבצים ותמונות בצ'אט — כרגיל.",
            hosts=("pps.whatsapp.net",), protections=("wa_profile_photo",), popular=True, needs_guard=True,
-           warn="הכיסוי והחסימה בגדול נעשים בטלפון עצמו (מגן FilterPhone), ולכן גם תמונות ששמורות בזיכרון של "
-                "וואטסאפ מכוסות. תמונות בהתראות של וואטסאפ — לא נכללות."),
+           warn="תמונות שוואטסאפ כבר הוריד בעבר שמורות בזיכרון שלו ועשויות להמשיך להופיע ברשימה. להסתרה מלאה שלהן — "
+                "'כיסוי לבן על תמונות פרופיל' (בטלפון), או ניקוי הנתונים של וואטסאפ אחרי גיבוי."),
+    Option("whatsapp_profile_cover", "messaging", "כיסוי לבן על תמונות פרופיל בוואטסאפ",
+           "מגן FilterPhone מצייר עיגול לבן על כל תמונת פרופיל במסך — רשימת הצ'אטים, ראש השיחה, פרטי איש קשר "
+           "וקבוצה, משתתפים ושיחות — גם על תמונות שכבר שמורות בזיכרון של וואטסאפ. כולל את החסימה ברשת ובגדול.",
+           hosts=("pps.whatsapp.net",), protections=("wa_profile_photo", "wa_profile_mask"), needs_guard=True,
+           warn="נעשה בטלפון (שכבה על המסך): בגלילה מהירה מאוד ייתכן הבזק קצר. מתאים בעיקר למי שוואטסאפ כבר "
+                "הוריד אצלו תמונות לפני החסימה."),
     Option("whatsapp_status", "messaging", "סטטוסים בוואטסאפ",
            "אי אפשר לפתוח סטטוסים. נאכף בטלפון עצמו (מגן FilterPhone), כי וואטסאפ מוריד סטטוסים מאותם "
            "שרתים כמו תמונות בצ'אט. לחסימה מלאה גם של התמונות — 'מדיה בוואטסאפ'.",
@@ -510,12 +515,14 @@ PROTECTIONS: dict[str, dict] = {
         # לבן במקום כל תמונת פרופיל קטנה (רשימת צ'אטים, כותרת שיחה, פרטים, משתתפים) — גם מהזיכרון של וואטסאפ.
         # מזהי הרכיבים (מספיק שהמזהה מכיל אחד מהם; רק רכיב כמעט ריבועי). הטלפון מדווח מזהים שראה
         # (protections.wa_image_ids) — כשוואטסאפ משנה מזהה, מוסיפים כאן בלי גרסה חדשה.
-        "mask": True,
+        "mask": False,          # "כיסוי לבן" — אופציה נפרדת (wa_profile_mask) מדליקה
         "mask_ids": ["contact_photo", "profile_picture", "profile_photo", "wds_profile_picture",
                      "contactpicker_row_photo", "contact_row_photo", "avatar", "group_photo", "participant_photo",
                      "status_contact_photo", "chat_photo", "community_photo", "subgroup_photo", "newsletter_photo",
                      "channel_photo", "contact_icon", "photo_image"],
     },
+    # סימון בלבד: "כיסוי לבן" — מדליק את mask בתוך wa_profile_photo (Compiled.device_json)
+    "wa_profile_mask": {},
 }
 
 # מנהל מכשיר (Device Owner) — מה נאכף כשהאפליקציה מוגדרת כמנהלת המכשיר. רק יכולות רשמיות
@@ -1130,6 +1137,13 @@ class Compiled:
         """מסכים, הגנות מיוחדות וחסימת מילים — רק בנגישות. חסימת אפליקציות — גם מנהל מכשיר (הסתרה)."""
         return bool(self.screens or self.protections or self.keywords.get("enabled"))
 
+    def _protections_json(self) -> dict:
+        """ההגדרות של כל הגנה בטלפון. "כיסוי לבן" (wa_profile_mask) = mask בתוך wa_profile_photo."""
+        out = {k: PROTECTIONS[k] for k in self.protections if k in PROTECTIONS and k != "wa_profile_mask"}
+        if "wa_profile_mask" in self.protections and "wa_profile_photo" in out:
+            out["wa_profile_photo"] = {**out["wa_profile_photo"], "mask": True}
+        return out
+
     def device_json(self) -> dict:
         """מה שהאפליקציה בטלפון אוכפת (מגן FilterPhone / מנהל מכשיר).
 
@@ -1139,7 +1153,7 @@ class Compiled:
             "blocked_apps": list(self.apps),
             "blocked_screens": list(self.screens),
             "app_rules": list(self.app_rules),
-            "protections": {k: PROTECTIONS[k] for k in self.protections if k in PROTECTIONS},
+            "protections": self._protections_json(),
             "dpc": self.dpc,
             "keywords": self.keywords,
             "vpn_bypass": self.vpn_bypass,

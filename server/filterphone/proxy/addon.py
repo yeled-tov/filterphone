@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from urllib.parse import parse_qs
 
@@ -91,6 +92,17 @@ def _is_document_request(req: http.Request) -> bool:
     if dest in ("document", "iframe", "frame"):
         return True
     return not dest and "text/html" in req.headers.get("accept", "").lower()
+
+
+_WA_HOST = re.compile(r"(?:^|\.)(?:whatsapp\.(?:net|com)|wa\.me)$")
+WA_SNI_KEY = "fp:wa_sni"          # אבחון: לאילו שרתי וואטסאפ כל מכשיר מתחבר (ומה נחסם) — שמות שרתים בלבד
+
+
+def _dst_ip(flow_or_data) -> str:
+    """הכתובת שהטלפון ניסה להגיע אליה (פרוקסי שקוף — היעד המקורי)."""
+    conn = getattr(flow_or_data, "server_conn", None) or getattr(flow_or_data, "server", None)
+    addr = getattr(conn, "address", None)
+    return addr[0] if addr else ""
 
 
 def _is_navigation(req: http.Request) -> bool:
@@ -231,6 +243,10 @@ class FilterPhone:
         ip = _client_ip(data.context)
         pol = self.policies.get(ip)
         sni = data.client_hello.sni
+        if sni and _WA_HOST.search(sni.lower()):
+            self._spawn(self._note_wa_sni(ip, sni.lower(), pol.blocks(sni)))
+        if _dst_ip(data.context) == self.cfg.dns_sinkhole_ip:
+            return          # חסום ב-DNS: לא מתחברים לשום מקום — יירוט, ודף "חסום על ידי FilterPhone"
         if pol.blocks(sni):
             return          # אתר חסום: לא עוקפים — יירוט, ואז דף חסימה / כשל TLS באפליקציה
         if not pol.filtering:
@@ -252,6 +268,9 @@ class FilterPhone:
     def server_connect(self, data: server_hooks.ServerConnectionHookData) -> None:
         """אתר חסום — לא פותחים אליו חיבור בכלל (הטלפון מקבל דף חסימה או כשל)."""
         sni = data.server.sni
+        if _dst_ip(data) == self.cfg.dns_sinkhole_ip:
+            data.server.error = "blocked by FilterPhone (dns)"
+            return
         if sni and data.client.peername and self.policies.get(data.client.peername[0]).blocks(sni):
             data.server.error = "blocked by FilterPhone"
 
@@ -277,6 +296,14 @@ class FilterPhone:
         if req.path.startswith(REVIEW_PATH):
             # "שליחה לבדיקה" מדף החסימה — נענה כאן (request), לא יוצא לאתר
             flow.metadata["fp_review"] = True
+            return
+        if _dst_ip(flow) == self.cfg.dns_sinkhole_ip:
+            # חסום ב-DNS (AdGuard — רשימות גלובליות או של המכשיר): דף חסימה במקום "האתר לא זמין"
+            reason = "תוכן למבוגרים — חסום תמיד." if self.web.is_adult(host) else "האתר חסום ברשת של FilterPhone."
+            flow.response = self._blocked_host_response(req, host, reason)
+            flow.metadata["fp_handled"] = True
+            self.m_sites.inc()
+            self._record_host_block(ip, host, req)
             return
         if pol.blocks(host) or (pol.paths and pol.blocks_path(host, req.path)):
             flow.response = self._blocked_host_response(req, host)
@@ -570,9 +597,9 @@ class FilterPhone:
         return http.Response.make(200, body, {"content-type": ct, "cache-control": "no-store",
                                               "x-filterphone": tag})
 
-    def _blocked_host_response(self, req: http.Request, host: str) -> http.Response:
+    def _blocked_host_response(self, req: http.Request, host: str, reason: str | None = None) -> http.Response:
         if _is_document_request(req):
-            return http.Response.make(403, block_page(host), {
+            return http.Response.make(403, block_page(host, reason) if reason else block_page(host), {
                 "content-type": "text/html; charset=utf-8", "cache-control": "no-store",
                 "x-filterphone": "blocked-host"})
         if _is_image_request(req):
@@ -590,6 +617,16 @@ class FilterPhone:
             self._host_events.clear()
         self._host_events[(ip, host)] = now
         self._spawn(self._record(ip, host, "site", "site blocked", "host", _short_path(req)))
+
+    async def _note_wa_sni(self, ip: str, sni: str, blocked: bool) -> None:
+        """אבחון תמונות הפרופיל: איזה שרת וואטסאפ, כמה פעמים, ונחסם או לא (ל-3 ימים)."""
+        try:
+            async with self.redis.pipeline(transaction=False) as p:
+                p.hincrby(WA_SNI_KEY, f"{ip}|{sni}|{'blocked' if blocked else 'open'}", 1)
+                p.expire(WA_SNI_KEY, 3 * 86400)
+                await p.execute()
+        except Exception as e:
+            log.debug("wa sni note failed: %s", e)
 
     async def _count(self, ip: str, what: str) -> None:
         try:

@@ -266,3 +266,42 @@ async def test_video_is_killed_when_blocked(fp):
     ok = mkflow("https://x.com/song.mp3", {}, "audio/mpeg", b"\x00")
     fp.responseheaders(ok)
     assert ok.error is None
+
+
+# ------------------------------------------------------------------ חסימה ב-DNS → דף חסימה (לא "אין אינטרנט")
+
+async def test_dns_blocked_site_gets_a_filterphone_page_not_a_dead_end(fp):
+    """AdGuard עונה על אתר חסום בכתובת הפרוקסי (dns_sinkhole_ip) — הדפדפן מקבל "חסום על ידי FilterPhone"."""
+    f = mkflow("https://blocked.example/page", {"sec-fetch-dest": "document"})
+    f.server_conn.address = (fp.cfg.dns_sinkhole_ip, 443)
+    fp.requestheaders(f)
+    assert f.response.status_code == 403
+    assert "חסום ברשת של FilterPhone".encode() in f.response.content and b"blocked.example" in f.response.content
+    img = mkflow("https://blocked.example/a.png", {"sec-fetch-dest": "image"})
+    img.server_conn.address = (fp.cfg.dns_sinkhole_ip, 443)
+    fp.requestheaders(img)
+    assert img.response.headers["content-type"] == "image/png"      # משאב בדף — תמונה ריקה, בלי דף חסימה
+    ok = mkflow("https://open.example/", {"sec-fetch-dest": "document"})
+    ok.server_conn.address = ("93.184.216.34", 443)
+    fp.requestheaders(ok)
+    assert ok.response is None
+    # TLS: לא עוקפים (גם שרת שברשימת ה-passthrough), ולא מתחברים לשום מקום
+    hello = SimpleNamespace(context=SimpleNamespace(client=SimpleNamespace(peername=(IP, 1)),
+                                                    server=SimpleNamespace(address=(fp.cfg.dns_sinkhole_ip, 443))),
+                            client_hello=SimpleNamespace(sni="g.whatsapp.net"), ignore_connection=False)
+    fp.tls_clienthello(hello)
+    assert hello.ignore_connection is False
+    conn = SimpleNamespace(server=SimpleNamespace(address=(fp.cfg.dns_sinkhole_ip, 443), sni="x.example", error=None),
+                           client=SimpleNamespace(peername=(IP, 1)))
+    fp.server_connect(conn)
+    assert conn.server.error and "dns" in conn.server.error
+
+
+async def test_whatsapp_servers_are_counted_for_the_profile_photo_diagnosis(fp):
+    fp.policies.set(IP, DevicePolicy(level=1, hosts=compile_hosts(["pps.whatsapp.net"])))
+    for sni in ("pps.whatsapp.net", "mmg.whatsapp.net", "mmg.whatsapp.net", "www.google.com"):
+        fp.tls_clienthello(SimpleNamespace(context=SimpleNamespace(client=SimpleNamespace(peername=(IP, 1))),
+                                           client_hello=SimpleNamespace(sni=sni), ignore_connection=False))
+    await drain(fp)
+    seen = await fp.redis.hgetall(A.WA_SNI_KEY)
+    assert seen == {f"{IP}|pps.whatsapp.net|blocked": "1", f"{IP}|mmg.whatsapp.net|open": "2"}

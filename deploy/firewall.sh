@@ -6,6 +6,7 @@
 # מהאינטרנט: SSH, WireGuard, HTTP/HTTPS (Caddy). כל השאר רק מתוך ה-VPN.
 # מתוך ה-VPN: כל ה-DNS מופנה בכוח ל-AdGuard, ‏HTTP/HTTPS לפרוקסי הסינון,
 # ‏QUIC ו-DNS מוצפן חיצוני (853) נחסמים כדי שלא יעקפו את הסינון.
+# אתר שחסום ב-DNS מקבל את SINKHOLE — הפרוקסי מציג עליו "חסום על ידי FilterPhone".
 # =====================================================================
 set -euo pipefail
 
@@ -13,6 +14,8 @@ RULES=/etc/iptables/rules.v4
 WG_NET=${FP_VPN_NETWORK:-10.8.0.0/24}
 WG_IP=${FP_VPN_SERVER_IP:-10.8.0.1}
 PUBLIC_IP=${FP_PUBLIC_IP:-151.145.88.42}
+# אתר חסום ב-DNS מקבל את הכתובת הזו: 80/443 מגיעים לפרוקסי (כללי ה-REDIRECT), שמציג דף חסימה; כל השאר — דחייה מיידית
+SINKHOLE=${FP_DNS_SINKHOLE:-198.18.0.1}
 PUB_IF=$(ip -o -4 route show default | awk '{print $5; exit}')
 [ -n "$PUB_IF" ] || { echo "לא נמצא ממשק ברירת מחדל"; exit 1; }
 
@@ -38,6 +41,7 @@ ${ORACLE_DECL:+$ORACLE_DECL}
 -A INPUT -i wg0 -p tcp -m multiport --dports 53,8080,3002 -j ACCEPT
 -A INPUT -j REJECT --reject-with icmp-host-prohibited
 -A FORWARD -p tcp -m tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+-A FORWARD -i wg0 -d $SINKHOLE -j REJECT --reject-with icmp-port-unreachable
 -A FORWARD -i wg0 -p udp -m udp --dport 443 -j REJECT --reject-with icmp-port-unreachable
 -A FORWARD -i wg0 -p tcp -m tcp --dport 853 -j REJECT --reject-with tcp-reset
 -A FORWARD -i wg0 -p udp -m udp --dport 853 -j REJECT --reject-with icmp-port-unreachable

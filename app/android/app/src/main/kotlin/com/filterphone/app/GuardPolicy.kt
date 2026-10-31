@@ -53,7 +53,7 @@ object GuardPolicy {
         val descriptions: List<String>,
         val minArea: Float,
         val excludeWindows: List<String> = listOf("mediaview", "gallery", "camera", "status"),
-        val mask: Boolean = true,                         // לבן במקום כל תמונת פרופיל קטנה (AvatarMask)
+        val mask: Boolean = false,                        // "כיסוי לבן" (אופציה נפרדת בשרת) — AvatarMask
         val maskIds: List<String> = WaAvatars.DEFAULT_IDS,
     ) {
         companion object {

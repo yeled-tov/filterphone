@@ -206,6 +206,23 @@ def test_adguard_patch_rate_limits_each_phone_not_the_whole_vpn_subnet(tmp_path)
     assert yaml.safe_load(cfg.read_text(encoding="utf-8"))["dns"] == {"ratelimit": 0}
 
 
+def test_adguard_answers_blocked_sites_with_the_proxy_block_page_address(tmp_path):
+    """אתר חסום ב-DNS → הכתובת של הפרוקסי (דף "חסום על ידי FilterPhone"), לא 0.0.0.0 ("אין אינטרנט")."""
+    spec = importlib.util.spec_from_file_location("adguard_patch", REPO / "deploy" / "adguard_patch.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    cfg = tmp_path / "AdGuardHome.yaml"
+    cfg.write_text(yaml.safe_dump({"dns": {"blocking_mode": "default", "blocking_ipv4": "", "blocking_ipv6": ""}}),
+                   encoding="utf-8")
+    mod.main(str(cfg))
+    dns = yaml.safe_load(cfg.read_text(encoding="utf-8"))["dns"]
+    assert dns["blocking_mode"] == "custom_ip" and dns["blocking_ipv6"] == "::"
+    from filterphone.settings import Settings
+    assert dns["blocking_ipv4"] == mod.SINKHOLE == Settings().dns_sinkhole_ip      # אותה כתובת בשרת ובפרוקסי
+    firewall = (REPO / "deploy" / "firewall.sh").read_text(encoding="utf-8")
+    assert f"SINKHOLE=${{FP_DNS_SINKHOLE:-{mod.SINKHOLE}}}" in firewall
+
+
 # ------------------------------------------------------------------ גוגל ≠ ג'מיני
 
 

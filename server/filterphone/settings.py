@@ -106,6 +106,10 @@ class Settings:
     web_adult_list_url: str = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/nsfw-onlydomains.txt"
     web_check_workers: int = 3              # כמה אתרים הבוט בודק במקביל
     web_check_images: int = 12              # כמה תמונות מדף הבית של אתר נבדקות במנוע
+    # אתר שחסום ב-DNS (AdGuard) מקבל את הכתובת הזו במקום 0.0.0.0 — היא מנותבת במנהרה לפרוקסי, שמציג
+    # "חסום על ידי FilterPhone" (במקום דף "האתר לא זמין" שנראה כמו "אין אינטרנט"). טווח 198.18/15 שמור
+    # לבדיקות ולא מנותב באינטרנט. זהה ל-FP_DNS_SINKHOLE ב-firewall.sh / adguard_patch.py.
+    dns_sinkhole_ip: str = "198.18.0.1"
 
     @property
     def engine_socket(self) -> str:
