@@ -71,7 +71,7 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); }
 .login-card { width: min(380px, 100%); display: grid; gap: 14px; padding: 28px 24px; }
 
 /* ---------------------------------------------------------------- מבנה */
-.shell { display: grid; grid-template-columns: var(--side-w) 1fr; grid-template-rows: auto 1fr; min-height: 100vh; }
+.shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); grid-template-rows: auto 1fr; min-height: 100vh; }
 .side {
   grid-row: 1 / 3; background: var(--surface); border-inline-start: 0; border-inline-end: 1px solid var(--line);
   display: flex; flex-direction: column; padding: 18px 12px; gap: 18px; position: sticky; top: 0; height: 100vh;
@@ -98,22 +98,10 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); }
 .topbar h1 { flex: 1; }
 .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 #menu { display: none; }
-.view { padding: 20px 24px 60px; display: grid; gap: 16px; align-content: start; max-width: 1280px; width: 100%; }
+.view { padding: 20px 24px 60px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-content: start; max-width: 1280px; width: 100%; }
 .badge {
   margin-inline-start: auto; background: var(--bad); color: #fff; border-radius: 999px; font-size: 12px;
   padding: 0 8px; line-height: 20px; min-width: 20px; text-align: center;
-}
-
-@media (max-width: 860px) {
-  .shell { grid-template-columns: 1fr; }
-  .side {
-    position: fixed; inset: 0 0 0 auto; width: min(280px, 86vw); z-index: 20; height: 100vh;
-    transform: translateX(100%); transition: transform .2s ease; box-shadow: 0 0 40px rgba(0, 0, 0, .25);
-  }
-  .side.open { transform: none; }
-  #menu { display: inline-flex; }
-  .topbar { padding: 12px 16px; }
-  .view { padding: 16px 16px 60px; }
 }
 
 /* ---------------------------------------------------------------- אייקונים (מסכה) */
@@ -141,8 +129,9 @@ button.link { background: none; border: 0; padding: 0; color: var(--accent); }
 .card-head h2 { flex: 1; }
 .card-sub { margin-top: 2px; }
 .grid { display: grid; gap: 16px; }
-.grid.two { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-.grid.three { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+/* min(…, 100%) — במסך צר עמודה אחת בלי גלישה הצידה */
+.grid.two { grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); }
+.grid.three { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
 .tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
 .tile b { display: block; font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -204,7 +193,7 @@ td small, .sub { display: block; color: var(--muted); font-size: 12.5px; }
 .switch input:disabled + span { opacity: .5; }
 
 /* ---------------------------------------------------------------- רמות */
-.levels { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.levels { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); }
 .level-card {
   border: 2px solid var(--line); border-radius: var(--radius); padding: 12px 14px; cursor: pointer;
   background: var(--surface); display: grid; gap: 4px; text-align: start; font-weight: 400;
@@ -315,11 +304,11 @@ button.selected { outline: 2px solid var(--accent); }
 img.qr { width: 280px; max-width: 100%; align-self: center; background: #fff; padding: 8px; border-radius: 8px; }
 .dpc-list { margin-bottom: 12px; }
 input.narrow { width: 6rem; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 12px; }
 .card.profile { margin: 0; }
 
 /* --- תמיכה --- */
-.threads { display: grid; gap: 2px; }
+.threads { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .thread-row { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-bottom: 1px solid var(--line-2); color: inherit; border-radius: var(--radius-sm); }
 .thread-row:hover { background: var(--surface-2); }
 .thread-row .grow { min-width: 0; }
@@ -357,3 +346,120 @@ ol.steps { padding-inline-start: 20px; display: grid; gap: 6px; line-height: 1.5
 .code-big { font: 700 28px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .08em; }
 .layer-list { display: grid; gap: 2px; }
 .layer-list .app-row b { font-weight: 600; }
+
+/* רשת של עמודה אחת: התוכן לא מרחיב את העמודה מעבר למסך (טקסט ארוך נחתך ב-… / נשבר) */
+.stack, .apps, .layer-list, .tab-panel, .policy, .req { grid-template-columns: minmax(0, 1fr); }
+
+/* ================================================================ טלפון / מסך צר — בסוף הקובץ, כדי לגבור על הכללים הרגילים */
+.bottom-nav { display: none; }
+.app-only { display: none; }
+html.in-app .app-only { display: block; }
+html.in-app { -webkit-tap-highlight-color: transparent; }
+
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .side {
+    position: fixed; inset: 0 0 0 auto; width: min(300px, 86vw); z-index: 30; height: 100vh; height: 100dvh;
+    transform: translateX(100%); box-shadow: 0 0 40px rgba(0, 0, 0, .25);
+    visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s;     /* סגורה — לא מציצה ולא בפוקוס */
+    overflow-y: auto; overscroll-behavior: contain;
+    padding-top: max(18px, env(safe-area-inset-top)); padding-bottom: max(18px, env(safe-area-inset-bottom));
+  }
+  .side.open { transform: none; visibility: visible; transition: transform .2s ease; }
+  .side nav a { padding: 12px; font-size: 16px; }
+  .side nav .ico { width: 20px; height: 20px; }
+  .scrim { position: fixed; inset: 0; background: rgba(10, 15, 20, .45); z-index: 25; }
+  body.drawer-open { overflow: hidden; }
+  #menu { display: inline-flex; }
+  .topbar { padding: max(10px, env(safe-area-inset-top)) 12px 10px; gap: 8px; }
+  .topbar h1 { font-size: 18px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .top-actions { flex-wrap: nowrap; gap: 6px; }
+  .view { padding: 12px 12px calc(88px + env(safe-area-inset-bottom)); gap: 12px; }
+
+  /* שורת ניווט תחתונה — בהישג האגודל */
+  .bottom-nav {
+    display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; inset-inline: 0; bottom: 0; z-index: 20;
+    background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -2px 12px rgba(16, 24, 40, .06);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bottom-nav a, .bottom-nav button {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 62px; padding: 6px 2px; color: var(--muted); font-size: 12.5px; font-weight: 600; line-height: 1.2;
+    background: none; border: 0; border-radius: 0; white-space: nowrap; text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bottom-nav a:hover { text-decoration: none; }
+  .bottom-nav .ico { width: 24px; height: 24px; }
+  .bottom-nav .active { color: var(--accent); }
+  .bottom-nav .active::before {
+    content: ""; position: absolute; top: 0; inset-inline: 24%; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent);
+  }
+  .bottom-nav .badge {
+    position: absolute; top: 6px; inset-inline-start: calc(50% + 4px); margin: 0;
+    font-size: 11px; line-height: 18px; min-width: 18px; padding: 0 5px;
+  }
+  .toasts { bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+  /* מגע: טקסט 16, כפתורים ושדות בגובה אצבע (44px+) */
+  body { font-size: 16px; }
+  .small { font-size: 14px; }
+  input, select, textarea { font-size: 16px; padding: 11px 12px; min-height: 46px; }
+  textarea { min-height: 96px; }
+  button { min-height: 44px; padding: 10px 16px; }
+  button.small { min-height: 38px; padding: 7px 12px; font-size: 14px; }
+  button.link { min-height: 0; padding: 4px 0; }
+  .icon-btn { min-width: 44px; padding: 8px; }
+  .icon-btn .ico { width: 22px; height: 22px; }
+  .tab { min-height: 46px; padding: 12px 14px; }
+  .cat-head { min-height: 52px; }
+  .switch { width: 52px; height: 30px; }
+  .switch span::after { width: 24px; height: 24px; }
+  .switch input:checked + span::after { inset-inline-start: 25px; }
+  .chip { font-size: 13px; padding: 3px 10px; white-space: normal; max-width: 100%; }
+  .ltr, .mono, code { overflow-wrap: anywhere; max-width: 100%; }
+  .card { padding: 14px; }
+  .card-head { margin-bottom: 12px; }
+  .tiles { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; }
+  .tile { padding: 12px 14px; }
+  .tile b { font-size: 24px; }
+  .tile span { font-size: 14px; }
+  th { font-size: 13px; }
+  td small, .sub { font-size: 13px; }
+  .opt { padding: 12px 0; gap: 14px; }
+  .opt .desc, .opt .warn-text { font-size: 14px; }
+  .thread-row { padding: 12px 6px; }
+  .thread-row .last { font-size: 14px; }
+  .bubble { max-width: 88%; }
+  .bubble .meta { font-size: 12px; }
+  .composer textarea { min-height: 56px; }
+  .app-row { padding: 10px 4px; flex-wrap: wrap; }
+  .app-row > .grow { flex: 1 1 160px; }
+  .actions { gap: 8px; }
+  .legend, .bar-labels { font-size: 12px; }
+  .dialog { width: calc(100vw - 24px); max-height: calc(100dvh - 32px); padding: 18px 16px; overflow-y: auto; }
+  .dialog .row.end button { flex: 1; }
+}
+
+/* טלפון: טבלה = רשימת כרטיסים (שם העמודה ליד כל ערך — data-label מ-admin.js), פרטים אחד מתחת לשני */
+@media (max-width: 600px) {
+  .table-wrap { overflow: visible; margin: 0; }
+  .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; width: 100%; }
+  .table-wrap thead { display: none; }
+  .table-wrap tr { padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .table-wrap tr:last-child { border-bottom: 0; }
+  .table-wrap td { border: 0; padding: 3px 0; position: relative; min-height: 26px; overflow-wrap: anywhere; }
+  .table-wrap td[data-label]:not([data-label=""]):not(:first-child) { padding-inline-start: 36%; }
+  .table-wrap td[data-label]:not([data-label=""]):not(:first-child)::before {
+    content: attr(data-label); position: absolute; inset-inline-start: 0; top: 4px; width: 33%;
+    color: var(--muted); font-size: 13px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis;
+  }
+  .table-wrap td:first-child { font-weight: 600; font-size: 16px; padding-bottom: 6px; }
+  .table-wrap td:first-child small, .table-wrap td:first-child .sub { font-weight: 400; }
+  .table-wrap .actions { justify-content: flex-start; }
+  tbody tr.click:hover td { background: none; }
+  tbody tr.click:active { background: var(--surface-2); }
+  .kv { grid-template-columns: 1fr; gap: 0; }
+  .kv dt { font-size: 13px; }
+  .kv dd { margin-bottom: 10px; }
+  .row > select, .row > input:not([type="checkbox"]):not([type="radio"]) { flex: 1 1 140px; width: auto; }
+}

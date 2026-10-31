@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- סמל "FilterPhone ניהול": מגן עם לוח מחוונים (שלושה עמודים) — במרכז 66dp מתוך 108 (אזור בטוח) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M54,26 L76,35.5 L76,52 C76,66 66.6,78 54,81.5 C41.4,78 32,66 32,52 L32,35.5 Z" />
+    <path android:fillColor="#FF1F6FEB" android:pathData="M43,58 h6 v10 h-6 z" />
+    <path android:fillColor="#FF1F6FEB" android:pathData="M51,48 h6 v20 h-6 z" />
+    <path android:fillColor="#FF1F6FEB" android:pathData="M59,53 h6 v15 h-6 z" />
+</vector>

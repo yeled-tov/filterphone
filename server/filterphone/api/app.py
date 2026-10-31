@@ -593,6 +593,7 @@ class ProvisionIn(BaseModel):
 class LoginIn(BaseModel):
     username: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=1, max_length=200)
+    remember: bool = False          # אפליקציית הניהול בטלפון — כניסה ל-30 יום (נשמרת מוצפנת בטלפון)
 
 
 class DevicePatch(BaseModel):
@@ -907,7 +908,7 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/admin/login")
     def login(body: LoginIn, request: Request, svc: SvcDep):
         _limit(login_limiter, client_ip(request))
-        return svc.admin_login(body.username, body.password)
+        return svc.admin_login(body.username, body.password, remember=body.remember)
 
     @app.post("/v1/admin/logout", status_code=204)
     def logout(svc: SvcDep, _: AdminRow, authorization: AuthHeader = None):

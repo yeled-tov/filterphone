@@ -31,8 +31,50 @@ class ProtectionPanel extends StatelessWidget {
           _FixCard(controller: c),
           if (!c.deviceOwner || running) ...[gap, OneTapCard(controller: c)],
         ],
+        if (c.isAdminDevice) ...[gap, _AdminCard(controller: c)],
         if (c.device?.isActive ?? false) ...[gap, _ActiveCard(controller: c)],
       ],
+    );
+  }
+}
+
+/// מכשיר המנהל: כניסה מהירה לדשבורד (כאפליקציה, בלי Chrome). יש גם סמל "FilterPhone ניהול" במסך הבית.
+class _AdminCard extends StatelessWidget {
+  const _AdminCard({required this.controller});
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: controller.openAdminDashboard,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: scheme.primaryContainer,
+                child: Icon(Icons.dashboard_rounded, color: scheme.onPrimaryContainer),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('דשבורד ניהול', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                    SizedBox(height: 2),
+                    Text('לקוחות, מכשירים, בקשות ותמיכה — מותאם לטלפון'),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_left_rounded),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

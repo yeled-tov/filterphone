@@ -274,6 +274,15 @@ class FakeNative implements NativeBridge {
     browserOpens.add(url ?? 'q:$query');
     return true;
   }
+  bool? adminLauncher;
+  int adminDashboardOpens = 0;
+  @override
+  Future<void> setAdminLauncher(bool enabled) async => adminLauncher = enabled;
+  @override
+  Future<bool> openAdminDashboard() async {
+    adminDashboardOpens++;
+    return true;
+  }
   @override
   Future<bool> requestDefaultBrowser() async {
     defaultBrowserRequests++;
@@ -1789,6 +1798,10 @@ void main() {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await tester.pump();
       expect(c.isAdminDevice, isTrue);
+      // אפליקציית הדשבורד: הסמל "FilterPhone ניהול" נדלק במכשיר המנהל, והכרטיס פותח אותה
+      expect(native.adminLauncher, isTrue);
+      await c.openAdminDashboard();
+      expect(native.adminDashboardOpens, 1);
       // קובייה שלישית למעלה, עם מספר הפניות שממתינות
       expect(find.text('ניהול תמיכה'), findsOneWidget);
       expect(find.descendant(of: find.byType(Badge), matching: find.text('2')), findsOneWidget);
@@ -1800,6 +1813,16 @@ void main() {
       expect(find.text('דוד'), findsOneWidget);
       expect(find.text('אין אינטרנט'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    test('a customer device keeps the admin dashboard icon off', () async {
+      final native = FakeNative();
+      final c = makeController(native, quietServer(), activeStore());
+      await c.start();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(c.isAdminDevice, isFalse);
+      expect(native.adminLauncher, isFalse);
       c.dispose();
     });
 

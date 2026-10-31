@@ -1,7 +1,20 @@
 // ממשק הניהול של FilterPhone. בלי ספריות; כל טקסט מהשרת נכנס דרך textContent (בלי innerHTML).
 "use strict";
 
-let token = sessionStorage.getItem("fp_token") || "";
+// אפליקציית הניהול בטלפון ("FilterPhone ניהול", AdminDashboardActivity): הכניסה נשמרת מוצפנת בטלפון דרך
+// הגשר FPApp (30 יום); בדפדפן — sessionStorage כמו קודם (נמחק בסגירה).
+const NATIVE = typeof window.FPApp === "object" && window.FPApp !== null;
+const tokenStore = NATIVE ? {
+  get: () => { try { return window.FPApp.token() || ""; } catch (_) { return ""; } },
+  set: (t) => { try { window.FPApp.saveToken(t); } catch (_) { /* בלי שמירה — רק לסשן הזה */ } },
+  clear: () => { try { window.FPApp.clearToken(); } catch (_) { /* אין מה לנקות */ } },
+} : {
+  get: () => sessionStorage.getItem("fp_token") || "",
+  set: (t) => sessionStorage.setItem("fp_token", t),
+  clear: () => sessionStorage.removeItem("fp_token"),
+};
+if (NATIVE || new URLSearchParams(location.search).has("app")) document.documentElement.classList.add("in-app");
+let token = tokenStore.get();
 let catalog = null;           // רמות, קטגוריות ואפשרויות — נטען פעם אחת
 let refreshTimer = null;
 const ACTIONS = { block: "נחסם", replace: "נצבע", site: "אתר חסום", video: "וידאו נחסם" };
@@ -400,7 +413,7 @@ function eventsTable(list, showDevice = true) {
 
 function showLogin() {
   token = "";
-  sessionStorage.removeItem("fp_token");
+  tokenStore.clear();
   clearInterval(refreshTimer);
   $("#app").hidden = true;
   $("#login").hidden = false;
@@ -411,9 +424,10 @@ $("#login-form").addEventListener("submit", async (e) => {
   const f = new FormData(e.target);
   $("#login-error").textContent = "";
   try {
-    const r = await api("/v1/admin/login", { method: "POST", body: { username: f.get("username"), password: f.get("password") } });
+    const r = await api("/v1/admin/login", { method: "POST",
+      body: { username: f.get("username"), password: f.get("password"), remember: NATIVE } });
     token = r.token;
-    sessionStorage.setItem("fp_token", token);
+    tokenStore.set(token);
     e.target.reset();
     start();
   } catch (err) {
@@ -425,7 +439,40 @@ $("#logout").addEventListener("click", async () => {
   try { await api("/v1/admin/logout", { method: "POST" }); } catch (_) { /* ממילא יוצאים */ }
   showLogin();
 });
-$("#menu").addEventListener("click", () => $("#side").classList.toggle("open"));
+// המגירה (מסך צר): נפתחת מ"תפריט" למעלה או "עוד" למטה; לחיצה ברקע / Esc / מעבר עמוד — סוגרת
+function setDrawer(open) {
+  $("#side").classList.toggle("open", open);
+  $("#scrim").hidden = !open;
+  document.body.classList.toggle("drawer-open", open);
+}
+$("#menu").addEventListener("click", () => setDrawer(!$("#side").classList.contains("open")));
+$("#more").addEventListener("click", () => setDrawer(!$("#side").classList.contains("open")));
+$("#scrim").addEventListener("click", () => setDrawer(false));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#side").classList.contains("open")) setDrawer(false); });
+const BOTTOM_ROUTES = new Set(["overview", "requests", "support", "devices"]);
+
+// טבלאות במסך צר מוצגות ככרטיסים (CSS): כל תא מקבל את שם העמודה שלו מהכותרת. רץ על כל שינוי בעמוד —
+// גם כשרשימה מתעדכנת בלי מעבר עמוד (סינון, רענון אוטומטי).
+function labelTables(root = document) {
+  root.querySelectorAll("table").forEach((t) => {
+    const heads = [...t.querySelectorAll("thead th")].map((th) => th.textContent.trim());
+    if (!heads.length) return;
+    t.querySelectorAll("tbody tr").forEach((tr) => {
+      let i = 0;
+      for (const td of tr.children) {
+        if (td.colSpan > 1) { i += td.colSpan; continue; }
+        const label = heads[i++] || "";
+        if (td.dataset.label !== label) td.dataset.label = label;
+      }
+    });
+  });
+}
+let labelQueued = false;
+new MutationObserver(() => {
+  if (labelQueued) return;
+  labelQueued = true;
+  requestAnimationFrame(() => { labelQueued = false; labelTables(); });
+}).observe(document.body, { childList: true, subtree: true });
 
 // ---------------------------------------------------------------- ניתוב
 
@@ -458,8 +505,9 @@ async function render() {
   const { route, arg, query } = parseHash();
   const seq = ++renderSeq;
   clearInterval(refreshTimer);
-  document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === route));
-  $("#side").classList.remove("open");
+  document.querySelectorAll("#nav a, #bottom-nav a").forEach((a) => a.classList.toggle("active", a.dataset.route === route));
+  $("#more").classList.toggle("active", !BOTTOM_ROUTES.has(route));
+  setDrawer(false);
   const [title, fn] = ROUTES[route];
   $("#title").textContent = title;
   $("#top-actions").replaceChildren();
@@ -479,14 +527,13 @@ async function updateBadge() {
   try {
     const o = await api("/v1/admin/overview");
     const n = (o.pending.join || 0) + (o.pending.change || 0);
-    const b = $("#badge-requests");
-    b.hidden = !n;
-    b.textContent = n;
-    const sb = $("#badge-support");
-    sb.hidden = !o.support_unread;
-    sb.textContent = o.support_unread || "";
-    const wb = $("#badge-web");
-    if (wb) { wb.hidden = !o.web_pending; wb.textContent = o.web_pending || ""; }
+    const setBadge = (ids, v) => ids.forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) { b.hidden = !v; b.textContent = v || ""; }
+    });
+    setBadge(["badge-requests", "bbadge-requests"], n);
+    setBadge(["badge-support", "bbadge-support"], o.support_unread);
+    setBadge(["badge-web", "bbadge-more"], o.web_pending);
     $("#whoami").textContent = o.admin;
   } catch (_) { /* לא קריטי */ }
 }

@@ -2,8 +2,10 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f3f5f8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1318" media="(prefers-color-scheme: dark)">
   <title>FilterPhone — ניהול</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/admin/static/admin.css">
@@ -17,6 +19,7 @@
       <label>שם משתמש<input name="username" autocomplete="username" required></label>
       <label>סיסמה<input name="password" type="password" autocomplete="current-password" required></label>
       <button type="submit" class="primary">כניסה</button>
+      <p class="muted small app-only">הכניסה נשמרת בטלפון (מוצפנת) ל-30 יום.</p>
       <p class="error" id="login-error" role="alert"></p>
     </form>
   </section>
@@ -52,6 +55,15 @@
       <div class="top-actions" id="top-actions"></div>
     </header>
     <main id="view" class="view" tabindex="-1"></main>
+    <!-- טלפון / מסך צר: שורת ניווט תחתונה (באגודל), "עוד" — שאר העמודים במגירה -->
+    <nav id="bottom-nav" class="bottom-nav" aria-label="ניווט מהיר">
+      <a href="#/overview" data-route="overview"><span class="ico ico-home"></span><span>סקירה</span></a>
+      <a href="#/requests" data-route="requests"><span class="ico ico-inbox"></span><span>בקשות</span><b class="badge" id="bbadge-requests" hidden></b></a>
+      <a href="#/support" data-route="support"><span class="ico ico-chat"></span><span>תמיכה</span><b class="badge" id="bbadge-support" hidden></b></a>
+      <a href="#/devices" data-route="devices"><span class="ico ico-phone"></span><span>מכשירים</span></a>
+      <button type="button" id="more" aria-label="עוד עמודים"><span class="ico ico-menu"></span><span>עוד</span><b class="badge" id="bbadge-more" hidden></b></button>
+    </nav>
+    <div id="scrim" class="scrim" hidden></div>
   </div>
 
   <div id="toasts" class="toasts" aria-live="polite"></div>

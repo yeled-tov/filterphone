@@ -2,6 +2,7 @@ import os
 
 from helpers import CA_PEM, admin_headers, wg_key
 
+from filterphone.api import db
 from filterphone.api.cli import parse_wg_conf
 
 
@@ -52,6 +53,18 @@ def test_admin_requires_login(env):
     assert client.get("/v1/admin/devices", headers={"Authorization": "Bearer nope"}).status_code == 401
     r = client.post("/v1/admin/login", json={"username": "admin", "password": "wrong"})
     assert r.status_code == 401
+
+
+def test_admin_login_remember_lasts_30_days(env):
+    """אפליקציית הניהול בטלפון שולחת remember — הכניסה נשמרת 30 יום; בדפדפן — 12 שעות כמו קודם."""
+    _, client = env
+    creds = {"username": "admin", "password": "correct horse battery"}
+    short = client.post("/v1/admin/login", json=creds).json()
+    long = client.post("/v1/admin/login", json={**creds, "remember": True}).json()
+    now = db.now()
+    assert abs(short["expires_at"] - (now + 12 * 3600)) < 60
+    assert abs(long["expires_at"] - (now + 30 * 24 * 3600)) < 60
+    assert client.get("/v1/admin/overview", headers={"Authorization": f"Bearer {long['token']}"}).status_code == 200
 
 
 def test_admin_changes_level_and_disables_device(env):

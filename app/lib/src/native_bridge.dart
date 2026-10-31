@@ -359,6 +359,12 @@ abstract class NativeBridge {
   /// חלון המערכת לקביעת הסייר כדפדפן ברירת המחדל (בגרסאות ישנות — מסך ההגדרות).
   Future<bool> requestDefaultBrowser();
 
+  /// מכשיר המנהל: הסמל "FilterPhone ניהול" במסך הבית (דולק רק כשהשרת סימן את המכשיר כמכשיר המנהל).
+  Future<void> setAdminLauncher(bool enabled);
+
+  /// פתיחת הדשבורד כאפליקציה (בלי Chrome) — מכשיר המנהל בלבד.
+  Future<bool> openAdminDashboard();
+
   /// תמונת פרופיל: בוחר התמונות של אנדרואיד → JPEG ריבועי מוקטן (base64). null — בוטל.
   Future<String?> pickAvatar();
 }
@@ -590,6 +596,12 @@ class ChannelNativeBridge implements NativeBridge {
   @override
   Future<bool> requestDefaultBrowser() async =>
       await _channel.invokeMethod<bool>('requestDefaultBrowser') ?? false;
+
+  @override
+  Future<void> setAdminLauncher(bool enabled) => _channel.invokeMethod('setAdminLauncher', {'enabled': enabled});
+
+  @override
+  Future<bool> openAdminDashboard() async => await _channel.invokeMethod<bool>('openAdminDashboard') ?? false;
 
   @override
   Future<String?> pickAvatar() => _channel.invokeMethod<String>('pickAvatar');

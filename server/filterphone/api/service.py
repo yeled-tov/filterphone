@@ -2767,13 +2767,16 @@ class Services:
 
     # ------------------------------------------------------------ מנהלים
 
-    def admin_login(self, username: str, password: str) -> dict:
+    ADMIN_SESSION_S = 12 * 3600
+    ADMIN_REMEMBER_S = 30 * 24 * 3600
+
+    def admin_login(self, username: str, password: str, remember: bool = False) -> dict:
         with self.db() as c:
             row = c.execute("SELECT * FROM admins WHERE username = ?", (username.strip(),)).fetchone()
             if row is None or not security.verify_password(row["password_hash"], password):
                 raise ApiError(401, "שם משתמש או סיסמה שגויים")
             token = security.new_token()
-            expires = db.now() + 12 * 3600
+            expires = db.now() + (self.ADMIN_REMEMBER_S if remember else self.ADMIN_SESSION_S)
             c.execute("DELETE FROM admin_sessions WHERE expires_at < ?", (db.now(),))
             c.execute("INSERT INTO admin_sessions (token_hash, admin_id, expires_at) VALUES (?,?,?)",
                       (security.token_hash(token), row["id"], expires))
