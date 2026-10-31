@@ -315,15 +315,6 @@ class MainActivity : FlutterActivity() {
                 "isDefault" to BrowserActivity.isDefault(this),
                 "sites" to SafeSites.SITES.map { mapOf("group" to it.group, "title" to it.title, "url" to it.url) },
             ))
-            // מכשיר המנהל: הסמל "FilterPhone ניהול" במסך הבית, ופתיחת הדשבורד כאפליקציה
-            "setAdminLauncher" -> {
-                AdminDashboardActivity.setLauncher(this, call.argument<Boolean>("enabled") == true)
-                result.success(true)
-            }
-            "openAdminDashboard" -> {
-                launchingChild = true
-                result.success(runCatching { AdminDashboardActivity.open(this); true }.getOrDefault(false))
-            }
             "openSafeBrowser" -> {
                 launchingChild = true          // הסייר נפתח מעל — חזרה ממנו מגיעה לכאן
                 result.success(runCatching {

@@ -76,34 +76,6 @@
             </intent-filter>
         </activity>
 
-        <!-- "FilterPhone ניהול": הדשבורד כאפליקציה (WebView של המערכת, בלי Chrome) — רק במכשיר המנהל.
-             משימה נפרדת (מופיעה באחרונים בשם משלה). הסמל במסך הבית — AdminLauncher, כבוי עד שהשרת מסמן
-             את המכשיר כמכשיר המנהל (AdminDashboardActivity.setLauncher). -->
-        <activity
-            android:name=".AdminDashboardActivity"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:taskAffinity="com.filterphone.app.admin"
-            android:label="@string/admin_app_label"
-            android:icon="@mipmap/ic_admin"
-            android:roundIcon="@mipmap/ic_admin"
-            android:theme="@style/BrowserTheme"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|density|uiMode|fontScale"
-            android:windowSoftInputMode="adjustResize" />
-        <activity-alias
-            android:name=".AdminLauncher"
-            android:targetActivity=".AdminDashboardActivity"
-            android:enabled="false"
-            android:exported="true"
-            android:label="@string/admin_app_label"
-            android:icon="@mipmap/ic_admin"
-            android:roundIcon="@mipmap/ic_admin">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity-alias>
-
         <!-- הדפדפן הפנימי של וואטסאפ: "העתקת הקישור" → נפתח ב-Chrome (מסך שקוף לרגע; רק המגן מפעיל) -->
         <activity
             android:name=".LinkRelayActivity"

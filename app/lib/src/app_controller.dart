@@ -716,7 +716,6 @@ class AppController extends ChangeNotifier {
         device = await api.device(token);
         serverReachable = true;
         deviceRemoved = false;
-        unawaited(_syncAdminLauncher());
         await _applyGuardPolicy(device!.guardPolicy);
         unawaited(_maybeReport(token));
         unawaited(_syncAvatar(token, device!.avatarAt));
@@ -1048,26 +1047,6 @@ class AppController extends ChangeNotifier {
 
   /// מכשיר המנהל — מותר לו לנהל תמיכה מתוך האפליקציה (רואה את כל השיחות ועונה).
   bool get isAdminDevice => device?.isAdmin ?? false;
-
-  /// הסמל "FilterPhone ניהול" במסך הבית — דולק רק במכשיר המנהל (וכבה אם השרת הסיר את הסימון).
-  Future<void> _syncAdminLauncher() async {
-    try {
-      await native.setAdminLauncher(isAdminDevice);
-    } on PlatformException catch (e) {
-      debugPrint('admin launcher: $e');
-    } on MissingPluginException {
-      // גרסה בלי הערוץ (בדיקות) — אין סמל
-    }
-  }
-
-  /// הדשבורד כאפליקציה (מכשיר המנהל).
-  Future<void> openAdminDashboard() async {
-    try {
-      await native.openAdminDashboard();
-    } on PlatformException catch (e) {
-      debugPrint('admin dashboard: $e');
-    }
-  }
   int get adminSupportUnread => device?.adminUnread ?? 0;
 
   /// רשימת השיחות של כל הלקוחות (מכשיר המנהל). זורק ApiException אם אין הרשאה.

@@ -9,10 +9,6 @@
     <string name="guard_wa_browser_blocked">הדפדפן שבתוך וואטסאפ לא מסונן, ולא הצלחנו להעביר את הקישור ל-Chrome. אפשר להעתיק את הקישור (לחיצה ארוכה על ההודעה ← העתקה) ולהדביק ב-Chrome</string>
     <string name="guard_wa_browser_no_chrome">הדפדפן שבתוך וואטסאפ חסום — גלישה באינטרנט לא פתוחה בטלפון הזה</string>
     <string name="browser_label">סייר מוגן</string>
-    <string name="admin_app_label">FilterPhone ניהול</string>
-    <string name="admin_offline_title">אין חיבור לשרת</string>
-    <string name="admin_offline_text">בדוק שיש אינטרנט בטלפון ונסה שוב.</string>
-    <string name="admin_offline_retry">נסה שוב</string>
     <string name="browser_hint_full">חיפוש או כתובת אתר</string>
     <string name="browser_hint_essential">כתובת של אתר חיוני (gov.il, בנק, קופת חולים)</string>
     <string name="browser_home">האתרים החיוניים</string>
