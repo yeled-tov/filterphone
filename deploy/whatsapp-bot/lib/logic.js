@@ -2,12 +2,30 @@
 /** החלטות קטנות וטהורות (נבדקות בלי וואטסאפ). */
 
 /**
- * כמה לחכות לפני שהבוט עונה — כמו בבוט הישן: מחוץ לשעות — מיד; בשעות הפעילות, אם אתה פעיל
- * (כתבת לאחרונה / קראת את ההתראה) — 5 שניות, כדי שתספיק לענות בעצמך; אחרת — מיד.
+ * כמה לחכות לפני שהבוט עונה: מחוץ לשעות הפעילות — מיד. בשעות הפעילות — waitMs (ברירת מחדל 2 דקות),
+ * כדי שתספיק לענות בעצמך (ענית — הבוט זז הצידה). engaged — הבוט כבר באמצע שיחה עם הלקוח הזה (ענה
+ * לו לפני רגע ואתה לא התערבת) — ממשיך מיד, בלי לחכות שוב על כל הודעה.
  */
-function replyDelayMs({ inHours, adminActive, adminRead }) {
-  if (!inHours) return 0;
-  return adminActive || adminRead ? 5000 : 0;
+function replyDelayMs({ inHours, waitMs = DEFAULT_WAIT_MS, engaged = false }) {
+  if (!inHours || engaged) return 0;
+  return Math.max(0, Number.isFinite(waitMs) ? waitMs : DEFAULT_WAIT_MS);
+}
+
+/** בשעות הפעילות — כמה זמן מחכים שהמנהל יענה בעצמו (ברירת מחדל; בדשבורד: wait_seconds). */
+const DEFAULT_WAIT_MS = 2 * 60e3;
+
+/** wait_seconds מהדשבורד → מילישניות (חסר / לא תקין = ברירת המחדל). */
+function waitMsFrom(cfg) {
+  const s = Number(cfg?.wait_seconds);
+  return Number.isFinite(s) && s >= 0 ? s * 1000 : DEFAULT_WAIT_MS;
+}
+
+/** "בעוד 2 דקות" / "בעוד 30 שניות" — להודעה אליך. */
+function waitText(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} שניות`;
+  const m = Math.round(s / 30) / 2;
+  return m === 1 ? 'דקה' : `${m} דקות`;
 }
 
 /** הודעה קולית (או קובץ שמע) בלי כיתוב — מתמללים אותה, והבוט עונה בכתב. */
@@ -55,4 +73,5 @@ function waNumber(raw) {
   return d;
 }
 
-module.exports = { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice, mediaKind };
+module.exports = { replyDelayMs, waitMsFrom, waitText, DEFAULT_WAIT_MS, combineBurst, typingMs, parseHashReply, waNumber,
+  isVoice, mediaKind };

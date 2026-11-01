@@ -189,3 +189,15 @@ def test_status_carries_progress_and_log(env):
                                                            "log": ["08:00 מפעיל", "08:01 authenticated"]})
     st = client.get("/v1/admin/wabot", headers=h).json()["status"]
     assert st["progress"] == 45 and st["log"][-1] == "08:01 authenticated"
+
+
+def test_wait_for_owner_in_business_hours_is_configurable(env):
+    """בשעות הפעילות הבוט מחכה שתענה (ברירת מחדל 2 דקות); מחוץ לשעות — מיד (בבוט עצמו)."""
+    _, client = env
+    set_bot(client)
+    h = admin_headers(client)
+    assert client.get("/v1/admin/wabot", headers=h).json()["wait_seconds"] == 120
+    assert client.put("/v1/admin/wabot", headers=h, json={"wait_seconds": 60}).json()["wait_seconds"] == 60
+    assert client.get("/v1/bot/config", headers=auth(BOT)).json()["wait_seconds"] == 60
+    for bad in (-1, 99999):
+        assert client.put("/v1/admin/wabot", headers=h, json={"wait_seconds": bad}).status_code == 400

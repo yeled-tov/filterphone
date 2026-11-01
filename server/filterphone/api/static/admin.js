@@ -2939,6 +2939,8 @@ async function viewWabot() {
   const autoNew = el("input", { type: "checkbox", checked: v.auto_new !== false, "aria-label": "לקוח חדש נכנס לרשימה" });
   const contacts = el("input", { type: "checkbox", checked: Boolean(v.include_contacts), "aria-label": "גם אנשי קשר שמורים" });
   const handoff = el("input", { type: "number", min: 1, max: 1440, value: v.handoff_minutes || 60, class: "ltr" });
+  const waitMin = el("input", { type: "number", min: 0, max: 30, step: 0.5, class: "ltr",
+    value: v.wait_seconds === undefined || v.wait_seconds === null ? 2 : v.wait_seconds / 60 });
   const hours = el("input", { class: "ltr", value: v.hours || "", placeholder: "13:00-15:00, 20:00-22:30" });
   const friday = el("input", { class: "ltr", value: v.friday_until || "", placeholder: "12:00" });
   const info = el("textarea", { rows: 16, value: v.business_info || "" });
@@ -2950,7 +2952,7 @@ async function viewWabot() {
       enabled: enabled.checked, ai_provider: provider.value, ai_key: key.value, ai_model: model.value,
       bot_name: botName.value, label_name: labelName.value, auto_new: autoNew.checked, include_contacts: contacts.checked,
       mark_ai: markAi.checked, ai_tag: aiTag.value, learn_from_replies: learn.checked, ask_when_unsure: askMe.checked,
-      handoff_minutes: Number(handoff.value), hours: hours.value, friday_until: friday.value, business_info: info.value } }),
+      handoff_minutes: Number(handoff.value), wait_seconds: Math.round(Number(waitMin.value || 0) * 60), hours: hours.value, friday_until: friday.value, business_info: info.value } }),
     "נשמר — הבוט יקלוט תוך כ-15 שניות");
     render();
   };
@@ -3015,8 +3017,9 @@ async function viewWabot() {
       info,
       el("div", { class: "grid two" },
         el("label", {}, "שעות פעילות (א'–ה')", hours),
-        el("label", {}, "שישי עד (שבת — סגור)", friday)),
-      el("p", { class: "muted small" }, "בשעות הפעילות: אם אתה פעיל בוואטסאפ, הבוט מחכה כמה שניות — ענית? הוא זז הצידה; לא ענית? הוא עונה ועוזר. מחוץ לשעות: הבוט עונה ועוזר עד הסוף בעצמו (בלי \"נחזור בשעות הפעילות\") — רק מה שבאמת דורש בן אדם (התקנה, תיאום, תשלום) עובר אליך לשעות הפעילות."),
+        el("label", {}, "שישי עד (שבת — סגור)", friday),
+        el("label", {}, "בשעות הפעילות: כמה דקות הבוט מחכה לך", waitMin)),
+      el("p", { class: "muted small" }, "מחוץ לשעות הפעילות: הבוט עונה מיד ועוזר עד הסוף בעצמו (בלי \"נחזור בשעות הפעילות\") — רק מה שבאמת דורש בן אדם (התקנה, תיאום, תשלום) עובר אליך. בשעות הפעילות: מגיעה אליך הודעה, והבוט מחכה את הזמן שבחרת — ענית בעצמך? הוא זז הצידה בשיחה הזו; לא ענית? הוא עונה."),
       el("div", { class: "row end" }, el("button", { class: "primary", onclick: save }, "שמירה"))),
     card("מצב לימוד — מה הבוט למד ממך", "מה שכתוב כאן גובר על המידע הכללי למעלה. הבוט משתמש רק בתוכן הכללי של כל תשובה — לא בפרטים של לקוח אחר.",
       toggleRow(learn, "לומד מהתשובות שלך",

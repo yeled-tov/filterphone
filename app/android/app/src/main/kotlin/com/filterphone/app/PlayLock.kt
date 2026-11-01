@@ -113,6 +113,16 @@ object PlayLock {
         return Action.UNKNOWN
     }
 
+    /** מסך רשימה (חיפוש / דף הבית של Play) — לא עמוד של אפליקציה אחת. טהור. */
+    fun isBrowseScreen(texts: List<String>, searchField: Boolean): Boolean =
+        searchField || texts.count { norm(it) in NAV_LABELS } >= 2
+
+    /** מסך העדכונים של Play ("ניהול אפליקציות" → "עדכונים זמינים" / "עדכון הכול"). טהור. */
+    fun isUpdatesScreen(texts: List<String>): Boolean = texts.any { t ->
+        val n = norm(t)
+        n in UPDATE_ALL || UPDATES_HEADERS.any { n.contains(it) }
+    }
+
     /** כפתור שיכול להיות הכפתור הראשי של עמוד אפליקציה (התקנה / עדכון / ביטול / פתיחה / הסרה). */
     fun isPrimaryLabel(text: String?): Boolean = text != null && norm(text) in PRIMARY_LABELS
 
@@ -198,6 +208,10 @@ object PlayLock {
     private val CANCEL_BUTTONS = setOf("ביטול", "בטל", "cancel")
     private val OPEN_BUTTONS = setOf("פתיחה", "פתח", "הפעלה", "open", "play", "enable")
     private val UNINSTALL_BUTTONS = setOf("הסרת התקנה", "הסר התקנה", "uninstall")
+    private val UPDATE_ALL = setOf("עדכון הכול", "עדכון הכל", "עדכן הכול", "עדכן הכל", "לעדכן הכול", "לעדכן הכל",
+        "עדכון של הכול", "עדכון של הכל", "update all")
+    private val UPDATES_HEADERS = listOf("עדכונים זמינים", "יש עדכונים", "updates available", "update available",
+        "עדכונים בהמתנה", "pending downloads")
     private val PRIMARY_LABELS = INSTALL_ONLY + UPDATE_BUTTONS + CANCEL_BUTTONS + OPEN_BUTTONS + UNINSTALL_BUTTONS
     private const val AFTER_UNINSTALL = 4
     private val PENDING = listOf("ממתין", "בהמתנה", "מוריד", "מתקין", "בהורדה", "pending", "waiting", "downloading",

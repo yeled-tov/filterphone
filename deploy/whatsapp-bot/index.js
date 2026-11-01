@@ -29,7 +29,8 @@ const { State } = require('./lib/state');
 const fp = require('./lib/fp');
 const ai = require('./lib/ai');
 const { israelNow, isOpen } = require('./lib/hours');
-const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice, mediaKind } = require('./lib/logic');
+const { replyDelayMs, waitMsFrom, waitText, combineBurst, typingMs, parseHashReply, waNumber, isVoice, mediaKind } =
+  require('./lib/logic');
 const labels = require('./lib/labels');
 const know = require('./lib/knowledge');
 const aimark = require('./lib/aimark');
@@ -42,8 +43,7 @@ const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
 const CONFIG_EVERY_MS = 15000;
 const OUTBOX_EVERY_MS = 5000;
-const ADMIN_ACTIVE_MS = 2 * 60e3;
-const READ_CHECK_MS = 3000;
+const ENGAGED_MS = 15 * 60e3;          // הבוט ענה ללקוח בזמן הזה ואתה לא התערבת — ההודעה הבאה נענית מיד
 const LABEL_EVERY_MS = 60e3;
 const CATCHUP_EVERY_MS = 20e3;
 const READY_TIMEOUT_MS = 2 * 60e3;   // "מחובר" בוואטסאפ אבל לא סיים לטעון — אחרי זה מאתחלים (בלי סריקה)
@@ -86,7 +86,6 @@ let cfg = null;               // ההגדרות מהדשבורד
 let client = null;            // מחובר רק כשהבוט מופעל
 let status = { state: 'off' };
 let me = '';                  // המספר שלי (972…@c.us)
-let adminLastSeen = 0;
 let lastOutboxId = 0;
 const botMsgIds = new Set();  // הודעות שהבוט שלח — כדי לא להתייחס אליהן כאילו אתה כתבת
 const acks = new Map();       // מזהה הודעה → {ack, at} (האישורים האחרונים מוואטסאפ — לבדיקת סימון ה-AI)
@@ -812,12 +811,12 @@ async function onAdminVoice(msg) {
  * מוציא את השיחה מהרשימה "בוט" (או, בלי רשימה, שותק בה לזמן שנקבע).
  */
 async function onAdmin(msg, body, selfChat, learnable = true) {
-  adminLastSeen = Date.now();
   if (!selfChat) {
     const chatId = msg.to;
     cancelPending(chatId);
     const c = state.chat(chatId);
     c.known = true;
+    c.botAt = 0;                                                     // התערבת — הבוט זז הצידה
     state.remember(chatId, 'assistant', body);
     state.closeAsks(chatId);                                         // ענית לו בעצמך
     if (learnable) noteOwnerReply(chatId, c, unvoice(body));         // מצב לימוד
@@ -1067,17 +1066,6 @@ async function realPhone(msg) {
   return msg.from.replace(/@.+/, '');
 }
 
-async function adminReadSoon(notice) {
-  if (!notice) return false;
-  await sleep(READ_CHECK_MS);
-  try {
-    const chat = await notice.getChat();
-    const msgs = await withTimeout(chat.fetchMessages({ limit: 5 }), CALL_TIMEOUT_MS, 'fetchMessages');
-    const m = msgs.find((x) => x.id._serialized === notice.id._serialized);
-    return Boolean(m && m.ack >= 3);
-  } catch { return false; }
-}
-
 /**
  * מי מטפל בהודעת הלקוח: 'bot' — הבוט עונה; 'notify' — רק הודעה אליך (בלי רשימה: הבוט עצור / ממתין
  * לנציג); 'quiet' — שיחה שלך / הבוט עצור / אתה באמצע שיחה. לקוח חדש מצטרף כאן לרשימה "בוט".
@@ -1114,7 +1102,7 @@ async function onCustomer(msg, text, media = null) {
   // לומדים רק משאלות בטקסט / בקול (תמונה היא מקרה פרטי — לא שאלה שחוזרת)
   const learnable = !media || (media === 'voice' && heardVoice(text));
   // קוד הורים שהבוט ביקש — מבוצע כאן, לא נשמר בהיסטוריה ולא נשלח ל-AI
-  if (cfg?.enabled && learnable && await tryParentCode(chatId, null, unvoice(text), (out) => sendAi(chatId, out, { typing: true }))) return;
+  if (cfg?.enabled && learnable && await tryParentCode(chatId, null, unvoice(text), (out) => sendAi(chatId, out))) return;
   state.remember(chatId, 'user', text);
   c.lastIn = msg.id?._serialized || '';
   c.deviceHint = acts.deviceHint(unvoice(text), c.deviceHint || {});  // "מכשיר #16" + מזהה — מההודעה של האפליקציה
@@ -1131,14 +1119,17 @@ async function onCustomer(msg, text, media = null) {
 
 async function notifyAndSchedule(msg, chatId, phone, text) {
   const open = inHours();
-  let adminRead = false;
-  const adminActive = Date.now() - adminLastSeen < ADMIN_ACTIVE_MS;
-  if (open) {
-    const notice = await toAdmin(`💬 *הודעה חדשה* · ${phone}\n💭 ${text}\n🔗 https://wa.me/${phone}` +
-      (adminActive ? '\n_הבוט יענה בעוד 5 שניות — אם לא תענה_' : ''));
-    if (!adminActive) adminRead = await adminReadSoon(notice);
+  const c = state.chat(chatId);
+  // הבוט כבר באמצע שיחה עם הלקוח הזה (ענה לפני רגע, ואתה לא התערבת) — ממשיך מיד
+  const engaged = Boolean(c.botAt && Date.now() - c.botAt < ENGAGED_MS);
+  const waitMs = waitMsFrom(cfg);
+  const delay = replyDelayMs({ inHours: open, waitMs, engaged });
+  // מחוץ לשעות — עונים מיד. בשעות הפעילות — הודעה אליך, והבוט מחכה שתענה בעצמך
+  schedule(msg, chatId, phone, text, open, delay);
+  if (open && !engaged) {
+    await toAdmin(`💬 *הודעה חדשה* · ${phone}\n💭 ${text}\n🔗 https://wa.me/${phone}` +
+      (delay ? `\n_הבוט יענה בעוד ${waitText(delay)} — אם לא תענה בעצמך_` : ''));
   }
-  schedule(msg, chatId, phone, text, open, replyDelayMs({ inHours: open, adminActive, adminRead }));
 }
 
 /**
@@ -1147,6 +1138,10 @@ async function notifyAndSchedule(msg, chatId, phone, text) {
  */
 function schedule(msg, chatId, phone, text, open, delay) {
   const b = bursts.get(chatId) || { parts: [], gen: 0 };
+  // הזמן שבו עונים נקבע לפי ההודעה הראשונה שעוד לא נענתה — הודעות נוספות של הלקוח לא דוחות אותו
+  const now = Date.now();
+  if (!b.parts.length || !b.due) b.due = now + delay;
+  const wait = Math.max(0, Math.min(b.due, now + delay) - now);
   b.parts.push(text);
   b.msg = msg;                                   // ההודעה האחרונה — כדי לסמן/להגיב עליה
   b.phone = phone;
@@ -1163,10 +1158,19 @@ function schedule(msg, chatId, phone, text, open, delay) {
       .then(() => {
         if (bursts.get(chatId) !== b || b.gen !== gen) return;   // הגיעה הודעה חדשה — התשובה הבאה עונה על הכול
         b.parts.splice(0, n);
+        b.due = 0;
         if (!b.parts.length) bursts.delete(chatId);
       })
       .catch((e) => console.error('reply:', e.message));
-  }, delay));
+  }, wait));
+}
+
+/** "מקליד..." אצל הלקוח (לא מחכים לזה; נעלם לבד כשההודעה נשלחת). */
+function typingNow(chatId) {
+  if (!client) return;
+  withTimeout(client.getChatById(chatId), CALL_TIMEOUT_MS, 'getChatById')
+    .then((chat) => chat.sendStateTyping())
+    .catch(() => { /* לא קריטי */ });
 }
 
 /** מבטל תשובה שמחכה או שנכתבת עכשיו (ענית בעצמך / הלקוח הועבר לנציג). */
@@ -1195,6 +1199,8 @@ async function replyNow(msg, chatId, phone, text, open, current = () => true) {
     }
     return;
   }
+  // "מקליד..." אצל הלקוח כבר עכשיו, בזמן שה-AI חושב — במקום השהיה מלאכותית אחרי שהתשובה מוכנה
+  typingNow(chatId);
   let crm = null;
   try { crm = await srv.customer(phone, state.chat(chatId).deviceHint || {}); } catch { /* לא לקוח — עדיין עונים */ }
   const history = state.chat(chatId).history.slice(0, -1);
@@ -1227,8 +1233,10 @@ async function replyNow(msg, chatId, phone, text, open, current = () => true) {
   }
   if (out) {
     // עם הסימון ✦AI של וואטסאפ (או בטקסט, אם וואטסאפ לא מאפשר) — אם הופעל בדשבורד
-    if (!(await sendAi(chatId, out, { typing: true, guard: current }))) return;
+    if (!(await sendAi(chatId, out, { guard: current }))) return;
     state.remember(chatId, 'assistant', out);
+    state.chat(chatId).botAt = Date.now();
+    state.save();
     stats.replies += 1;
   }
   for (const t of res.tags) {

@@ -186,6 +186,17 @@ class PlayLockTest {
     }
 
     @Test
+    fun recognisesPlaysUpdatesScreenAndBrowseScreens() {
+        assertTrue(PlayLock.isUpdatesScreen(listOf("ניהול אפליקציות ומכשיר", "3 עדכונים זמינים", "עדכון הכול")))
+        assertTrue(PlayLock.isUpdatesScreen(listOf("Manage apps & device", "Updates available", "Update all")))
+        assertFalse(PlayLock.isUpdatesScreen(listOf("Waze", "התקנה", "עודכן ב-3 בנוב׳")))
+        // מסך חיפוש / דף הבית של Play — לא עמוד של אפליקציה ("עדכון" של תוצאה לא פותח את השער)
+        assertTrue(PlayLock.isBrowseScreen(listOf("Temu", "עדכון"), searchField = true))
+        assertTrue(PlayLock.isBrowseScreen(listOf("בשבילך", "משחקים", "אפליקציות", "עדכון"), searchField = false))
+        assertFalse(PlayLock.isBrowseScreen(listOf("WhatsApp", "הסרת התקנה", "עדכון"), searchField = false))
+    }
+
+    @Test
     fun targetPageMatchesWhenPlayTitleIsShorterThanLabel() {
         // הכותרת ב-Play קצרה משם האפליקציה שבטלפון ("waze" מול "waze navigation")
         assertEquals(true, PlayLock.isTargetPage(listOf("waze"), listOf("waze navigation")))

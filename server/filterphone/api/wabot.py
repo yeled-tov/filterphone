@@ -23,7 +23,7 @@ from .service import ApiError, Services
 PROVIDERS = ("gemini", "groq", "none")
 _SECRET = ("ai_key",)
 _FIELDS = ("enabled", "ai_provider", "ai_key", "ai_model", "business_info", "hours", "friday_until",
-           "handoff_minutes", "bot_name", "label_name", "auto_new", "include_contacts",
+           "handoff_minutes", "wait_seconds", "bot_name", "label_name", "auto_new", "include_contacts",
            "mark_ai", "ai_tag", "learn_from_replies", "ask_when_unsure")
 STATUS_STALE_S = 120            # בלי דיווח מהבוט יותר מזה — "השירות לא רץ"
 
@@ -50,6 +50,8 @@ DEFAULTS: dict = {
     "hours": "13:00-15:00, 20:00-22:30",
     "friday_until": "12:00",            # שבת — תמיד מחוץ לשעות
     "handoff_minutes": 60,              # בלי רשימה בוואטסאפ: כתבת בעצמך ללקוח → הבוט שותק בשיחה הזו
+    # בשעות הפעילות: כמה זמן הבוט מחכה שתענה בעצמך לפני שהוא עונה (מחוץ לשעות — עונה מיד)
+    "wait_seconds": 120,
     "bot_name": "פילטר",
     # ניהול מתוך הוואטסאפ (ביזנס): שיחה ברשימה הזו — הבוט עונה; כתבת בעצמך — יוצאת ממנה
     "label_name": "בוט",
@@ -135,6 +137,13 @@ class WaBot:
                     raise ApiError(400, "דקות לא תקינות") from None
                 if not 1 <= v <= 24 * 60:
                     raise ApiError(400, "דקות: 1–1440")
+            elif k == "wait_seconds":
+                try:
+                    v = int(v)
+                except (TypeError, ValueError):
+                    raise ApiError(400, "זמן המתנה לא תקין") from None
+                if not 0 <= v <= 30 * 60:
+                    raise ApiError(400, "זמן המתנה: 0–1800 שניות")
             elif k == "bot_name":
                 v = str(v).strip()[:30]
             elif k == "ai_tag":

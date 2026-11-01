@@ -562,6 +562,7 @@ class WaBotIn(BaseModel):
     hours: str | None = Field(default=None, max_length=120)
     friday_until: str | None = Field(default=None, max_length=5)
     handoff_minutes: int | None = None
+    wait_seconds: int | None = None
     bot_name: str | None = Field(default=None, max_length=30)
     label_name: str | None = Field(default=None, max_length=30)
     auto_new: bool | None = None

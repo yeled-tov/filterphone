@@ -22,6 +22,14 @@ class PlayGateTest {
     }
 
     @Test
+    fun updatesStayOpenLongerThanASingleInstall() {
+        // עדכונים ("עדכון הכול") — עד 10 דקות מאז העדכון האחרון שרץ; התקנה — 5 דקות לכל היותר
+        assertTrue(PlayGate.isOpen(1_000L, 1_000L + 7 * 60_000L, PlayGate.UPDATE_MAX_MS))
+        assertFalse(PlayGate.isOpen(1_000L, 1_000L + 7 * 60_000L))
+        assertFalse(PlayGate.isOpen(1_000L, 1_000L + PlayGate.UPDATE_MAX_MS, PlayGate.UPDATE_MAX_MS))
+    }
+
+    @Test
     fun nightUpdatesOnlyWhileChargingWithTheScreenOff() {
         assertTrue(PlayGate.nightWindow(hour = 3, charging = true, interactive = false))
         assertFalse(PlayGate.nightWindow(hour = 3, charging = false, interactive = false))

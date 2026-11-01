@@ -58,32 +58,64 @@ class GuardService : AccessibilityService() {
     /** Play מנוהל — מתי יצאו מעמוד האפליקציה המאושרת (0 = עדיין בו / השער סגור), ועד מתי לא לפתוח שוב. */
     private var gateLeftAt = 0L
     private var gateQuietUntil = 0L
-    private val gateClose = Runnable {
+    private val gateClose: Runnable = Runnable {
         safely("play-gate") {
             gateLeftAt = 0L
-            PlayGate.close(this, "left the approved app page")
+            // עדכונים: נסגר רק כשאין עדכון שרץ כבר UPDATE_IDLE_MS ("עדכון הכול" ממשיך גם אחרי שיוצאים)
+            val idle = PlayGate.idleMs(this)
+            if (PlayGate.isOpen(this) && PlayGate.mode(this) == PlayGate.Mode.UPDATE && idle < PlayGate.UPDATE_IDLE_MS) {
+                gateLeftAt = SystemClock.elapsedRealtime()
+                main.postDelayed(gateClose, PlayGate.UPDATE_IDLE_MS - idle)
+                return@safely
+            }
+            PlayGate.close(this, "left Play / the app page")
         }
     }
-    /** התקנה של אפליקציה מאושרת התחילה (נוצר session) — סוגרים את השער מיד; ההתקנה ממשיכה עד הסוף. */
+    /** עדכונים שרצים עכשיו בזמן שהשער פתוח — כל התקדמות שומרת אותו פתוח לעדכון הבא בתור. */
+    private val gateUpdates = HashSet<Int>()
+    private var gateTouchedAt = 0L
+    /**
+     * התקנה / עדכון מתחילים (נוצר session):
+     *   - עדכון של אפליקציה שכבר בטלפון — מותר תמיד; במצב עדכונים השער נשאר פתוח לבא בתור;
+     *   - התקנה של אפליקציה מאושרת — במצב התקנה סוגרים מיד (ההתקנה ממשיכה עד הסוף);
+     *   - התקנה חדשה של אפליקציה שלא אושרה — סוגרים מיד (והיא עצמה מוסרת — PlayManaged).
+     */
     private val gateSessions = object : android.content.pm.PackageInstaller.SessionCallback() {
         override fun onCreated(sessionId: Int) {
             safely("play-gate-session") {
                 if (!PlayGate.isOpen(this@GuardService)) return@safely
                 val pkg = runCatching { packageManager.packageInstaller.getSessionInfo(sessionId)?.appPackageName }.getOrNull()
+                val update = pkg != null && runCatching { packageManager.getPackageInfo(pkg, 0) }.isSuccess
                 val approved = pkg != null && pkg in GuardPolicy.get(this@GuardService).allowed
-                Log.i(TAG, "play gate: install session for $pkg (approved=$approved)")
-                if (approved) {
-                    gateQuietUntil = SystemClock.elapsedRealtime() + GATE_QUIET_MS
-                    main.removeCallbacks(gateClose)
-                    gateLeftAt = 0L
-                    PlayGate.close(this@GuardService, "install of $pkg started")
+                val mode = PlayGate.mode(this@GuardService)
+                Log.i(TAG, "play gate: session for $pkg (update=$update approved=$approved mode=$mode)")
+                when {
+                    update -> {
+                        gateUpdates += sessionId
+                        PlayGate.touch(this@GuardService)
+                    }
+                    approved && mode == PlayGate.Mode.UPDATE -> PlayGate.touch(this@GuardService)
+                    else -> {
+                        gateQuietUntil = SystemClock.elapsedRealtime() + GATE_QUIET_MS
+                        main.removeCallbacks(gateClose)
+                        gateLeftAt = 0L
+                        PlayGate.close(this@GuardService,
+                            if (approved) "install of $pkg started" else "unapproved install of $pkg — closing")
+                    }
                 }
             }
         }
         override fun onBadgingChanged(sessionId: Int) = Unit
         override fun onActiveChanged(sessionId: Int, active: Boolean) = Unit
-        override fun onProgressChanged(sessionId: Int, progress: Float) = Unit
-        override fun onFinished(sessionId: Int, success: Boolean) = Unit
+        override fun onProgressChanged(sessionId: Int, progress: Float) {
+            val now = SystemClock.elapsedRealtime()
+            if (sessionId !in gateUpdates || now - gateTouchedAt < 10_000L) return
+            gateTouchedAt = now
+            safely("play-gate-progress") { PlayGate.touch(this@GuardService) }
+        }
+        override fun onFinished(sessionId: Int, success: Boolean) {
+            if (gateUpdates.remove(sessionId)) safely("play-gate-finished") { PlayGate.touch(this@GuardService) }
+        }
     }
     private val avatarMask by lazy { AvatarMask(this) }   // תמונות פרופיל בוואטסאפ — לבן במקומן (WaAvatars)
     private var maskScrollUntil = 0L                // רשימה בוואטסאפ בגלילה — עד אז פסים במקום עיגולים
@@ -670,11 +702,17 @@ class GuardService : AccessibilityService() {
             }
             val texts = ArrayList<String>(64)
             val buttons = ArrayList<Pair<Rect, Boolean>>(4)
-            collectInstallButtons(root, texts, buttons)
+            val searchField = collectInstallButtons(root, texts, buttons)
             val approved = PlayManaged.pageApproved(texts, policy.approvedTitles)
-            // שער ההתקנות (מנהל מכשיר): פתוח רק בעמוד של אפליקציה מאושרת שהכפתור הראשי שלה "התקנה" / "עדכון"
-            val action = if (approved) PlayLock.action(texts) else PlayLock.Action.UNKNOWN
-            if (action == PlayLock.Action.INSTALL || action == PlayLock.Action.UPDATE) gateApproved(now) else gateLeft()
+            // שער ההתקנות (מנהל מכשיר): התקנה — רק בעמוד של אפליקציה מאושרת; עדכון — כל אפליקציה שכבר
+            // בטלפון (הכפתור הראשי בעמוד שלה "עדכון"), ומסך העדכונים של Play ("עדכון הכול")
+            val appPage = !PlayLock.isBrowseScreen(texts, searchField)
+            val action = if (appPage) PlayLock.action(texts) else PlayLock.Action.UNKNOWN
+            when {
+                action == PlayLock.Action.UPDATE || PlayLock.isUpdatesScreen(texts) -> gateApproved(now, PlayGate.Mode.UPDATE)
+                approved && action == PlayLock.Action.INSTALL -> gateApproved(now, PlayGate.Mode.INSTALL)
+                else -> gateLeft()
+            }
             // תוויות "חסום להתקנה": כל כפתור התקנה — חוץ מהכפתור הראשי של אפליקציה מאושרת. גם בעמוד מאושר
             // יש פרסומות והמלצות עם "התקנה" משלהן; הן לא מאושרות.
             val title = PlayManaged.guessTitle(texts)
@@ -688,12 +726,12 @@ class GuardService : AccessibilityService() {
         }
     }
 
-    /** בעמוד של אפליקציה מאושרת (עם "התקנה" / "עדכון") — השער פתוח. */
-    private fun gateApproved(now: Long) {
+    /** בעמוד של אפליקציה מאושרת ("התקנה"), או עדכון של אפליקציה שבטלפון — השער פתוח. */
+    private fun gateApproved(now: Long, mode: PlayGate.Mode) {
         main.removeCallbacks(gateClose)
         gateLeftAt = 0L
-        if (now < gateQuietUntil) return              // ההתקנה כבר התחילה — לא פותחים שוב באותו רגע
-        PlayGate.open(this)
+        if (mode == PlayGate.Mode.INSTALL && now < gateQuietUntil) return   // ההתקנה כבר התחילה — לא פותחים שוב מיד
+        PlayGate.open(this, mode)
     }
 
     /** לא בעמוד מאושר: השער נסגר אחרי השהיה קצרה (הלחיצה על "התקנה" לפעמים מקדימה את הסריקה). */
@@ -712,17 +750,19 @@ class GuardService : AccessibilityService() {
 
     /**
      * הטקסטים בסדר הרכיבים, ומיקום כל כפתור התקנה גלוי — עם סימון אם הוא הכפתור הראשי של העמוד
-     * (PlayLock.primaryIndex) או כפתור של פרסומת / המלצה בהמשך.
+     * (PlayLock.primaryIndex) או כפתור של פרסומת / המלצה בהמשך. true = יש שדה הקלדה (מסך חיפוש).
      */
     private fun collectInstallButtons(root: AccessibilityNodeInfo, texts: MutableList<String>,
-                                      buttons: MutableList<Pair<Rect, Boolean>>) {
+                                      buttons: MutableList<Pair<Rect, Boolean>>): Boolean {
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.addLast(root)
         val primaryLabels = ArrayList<String?>()
+        var editable = false
         var seen = 0
         while (stack.isNotEmpty() && seen < MAX_NODES) {
             val node = stack.removeLast()
             seen++
+            if (node.isEditable || node.className?.toString() == "android.widget.EditText") editable = true
             val text = node.text?.toString()?.takeIf { it.isNotBlank() }
             val desc = node.contentDescription?.toString()?.takeIf { it.isNotBlank() }
             text?.let(texts::add)
@@ -752,6 +792,7 @@ class GuardService : AccessibilityService() {
             if (node !== root) recycle(node)
         }
         stack.forEach { if (it !== root) recycle(it) }
+        return editable
     }
 
     private fun onPlayBadgeTap(title: String) {

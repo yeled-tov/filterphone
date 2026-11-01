@@ -7,7 +7,8 @@ const path = require('path');
 const { isOpen, parseRanges } = require('../lib/hours');
 const ai = require('../lib/ai');
 const { State } = require('../lib/state');
-const { replyDelayMs, combineBurst, typingMs, parseHashReply, waNumber, isVoice } = require('../lib/logic');
+const { replyDelayMs, waitMsFrom, waitText, combineBurst, typingMs, parseHashReply, waNumber, isVoice } =
+  require('../lib/logic');
 const labels = require('../lib/labels');
 const aimark = require('../lib/aimark');
 const acts = require('../lib/actions');
@@ -179,9 +180,19 @@ test('state: handoff pause, rate limit, persistence and lookup by phone', () => 
 });
 
 test('small decisions: reply delay, typing time, #reply, phone format', () => {
-  assert.equal(replyDelayMs({ inHours: false, adminActive: true, adminRead: true }), 0);
-  assert.equal(replyDelayMs({ inHours: true, adminActive: true }), 5000);
-  assert.equal(replyDelayMs({ inHours: true, adminActive: false, adminRead: false }), 0);
+  // מחוץ לשעות הפעילות — מיד; בשעות הפעילות — מחכים שתענה (ברירת מחדל 2 דקות, או מה שבחרת בדשבורד)
+  assert.equal(replyDelayMs({ inHours: false, waitMs: 120e3 }), 0);
+  assert.equal(replyDelayMs({ inHours: true }), 120e3);
+  assert.equal(replyDelayMs({ inHours: true, waitMs: 60e3 }), 60e3);
+  assert.equal(replyDelayMs({ inHours: true, waitMs: 0 }), 0);
+  // הבוט כבר באמצע שיחה עם הלקוח (ואתה לא התערבת) — ממשיך מיד
+  assert.equal(replyDelayMs({ inHours: true, waitMs: 120e3, engaged: true }), 0);
+  assert.equal(waitMsFrom({ wait_seconds: 90 }), 90e3);
+  assert.equal(waitMsFrom({}), 120e3);
+  assert.equal(waitMsFrom({ wait_seconds: 'x' }), 120e3);
+  assert.equal(waitText(120e3), '2 דקות');
+  assert.equal(waitText(60e3), 'דקה');
+  assert.equal(waitText(30e3), '30 שניות');
   // חלון שקט: תמיד מחכים שהלקוח יסיים לכתוב — לפחות 7 שניות, וגם לא פחות מההמתנה למנהל
   assert.ok(typingMs('קצר') >= 1200 && typingMs('x'.repeat(5000)) === 6000);
   assert.deepEqual(parseHashReply('#42 תפעיל מחדש'), { deviceId: 42, text: 'תפעיל מחדש' });
