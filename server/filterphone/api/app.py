@@ -41,7 +41,7 @@ from pydantic import BaseModel, Field
 
 from .. import logs, metrics
 from ..settings import get_settings
-from . import db, gpu, notify, observe, security
+from . import db, gpu, notify, observe, perms, security
 from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
 from .fetch import FetchError, fetch_image
@@ -280,9 +280,17 @@ def device_dep(svc: Annotated[Services, Depends(svc_dep)],
     return svc.device_by_token(_bearer(authorization))
 
 
-def admin_dep(svc: Annotated[Services, Depends(svc_dep)],
+def admin_dep(request: Request, svc: Annotated[Services, Depends(svc_dep)],
               authorization: Annotated[str | None, Header()] = None):
-    return svc.admin_by_token(_bearer(authorization))
+    admin = svc.admin_by_token(_bearer(authorization))
+    # איש צוות — רק האזורים שהבעלים נתן לו (perms.py); בעלים — הכול
+    if not perms.allowed(admin["role"], perms.load(admin["perms"]), request.method, request.url.path):
+        raise ApiError(403, "אין לך הרשאה לאזור הזה — אפשר לבקש מהבעלים")
+    return admin
+
+
+def admin_perms(admin) -> dict[str, str]:
+    return perms.effective(admin["role"], perms.load(admin["perms"]))
 
 
 def support_dep(request: Request) -> SupportDesk:
@@ -622,11 +630,13 @@ class TeamMemberIn(BaseModel):
     username: str = Field(min_length=3, max_length=40)
     password: str = Field(min_length=1, max_length=200)
     role: Literal["owner", "staff"] = "staff"
+    perms: dict[str, Literal["view", "edit"]] | None = None      # אזור → צפייה / עריכה (perms.AREAS)
 
 
 class TeamPatch(BaseModel):
     password: str | None = Field(default=None, max_length=200)
     role: Literal["owner", "staff"] | None = None
+    perms: dict[str, Literal["view", "edit"]] | None = None
 
 
 class OwnPasswordIn(BaseModel):
@@ -963,17 +973,20 @@ def _routes(app: FastAPI) -> None:
     @app.get("/v1/admin/team")
     def team_list(svc: SvcDep, admin: AdminRow):
         crm = svc.crm_release()
-        return {"me": {"id": admin["id"], "username": admin["username"], "role": admin["role"]},
+        return {"me": {"id": admin["id"], "username": admin["username"], "role": admin["role"],
+                       "perms": admin_perms(admin)},
                 "members": svc.team() if admin["role"] == "owner" else [],
+                "areas": perms.AREAS, "presets": perms.PRESETS,
                 "crm": {"url": crm["url"], "version": crm["version_name"]} if crm else None}
 
     @app.post("/v1/admin/team", status_code=201)
     def team_add(body: TeamMemberIn, svc: SvcDep, admin: OwnerRow):
-        return svc.add_team_member(admin["username"], body.username, body.password, body.role)
+        return svc.add_team_member(admin["username"], body.username, body.password, body.role, body.perms)
 
     @app.patch("/v1/admin/team/{member_id}")
     def team_update(member_id: int, body: TeamPatch, svc: SvcDep, admin: OwnerRow):
-        return svc.update_team_member(admin["username"], member_id, password=body.password, role=body.role)
+        return svc.update_team_member(admin["username"], member_id, password=body.password, role=body.role,
+                                      perms=body.perms)
 
     @app.delete("/v1/admin/team/{member_id}", status_code=204)
     def team_remove(member_id: int, svc: SvcDep, admin: OwnerRow):
@@ -990,9 +1003,10 @@ def _routes(app: FastAPI) -> None:
         return {"crm_app": svc.set_crm_device(admin["username"], device_id, body.enabled)}
 
     @app.get("/v1/admin/notifications")
-    def admin_notifications(svc: SvcDep, _: AdminRow, after: str = ""):
-        """אפליקציית המנהל (CRM FilterPhone) — אירועים חדשים מאז הסמן (ראו notify.py)."""
-        return notify.admin_events(svc, after)
+    def admin_notifications(svc: SvcDep, admin: AdminRow, after: str = ""):
+        """אפליקציית המנהל (CRM FilterPhone) — אירועים חדשים מאז הסמן (ראו notify.py), רק מהאזורים שלו."""
+        granted = admin_perms(admin)
+        return notify.admin_events(svc, after, allow=lambda area: perms.can(granted, area))
 
     @app.get("/v1/admin/overview")
     def overview(request: Request, svc: SvcDep, desk: DeskDep, admin: AdminRow):

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from . import security
 
@@ -34,8 +35,18 @@ def _who(customer: str | None, device: str | None, device_id: int | None = None)
     return name or dev or (f"מכשיר #{device_id}" if device_id else "")
 
 
-def admin_events(svc, after: str | None) -> dict:
-    """{"cursor", "events": [...], "counts": {"requests", "support", "web"}} — ראו בראש הקובץ."""
+def admin_events(svc, after: str | None, allow: Callable[[str], bool] = lambda _area: True) -> dict:
+    """{"cursor", "events": [...], "counts": {"requests", "support", "web"}} — ראו בראש הקובץ.
+    allow(אזור) — הרשאות איש הצוות: אירועים ומונים רק מהאזורים שמותרים לו."""
+    out = _events(svc, after)
+    keep = {"requests": allow("requests"), "support": allow("support"), "web": allow("web")}
+    area_of = {"join": "requests", "change": "requests", "support": "support", "web": "web"}
+    out["events"] = [e for e in out["events"] if keep.get(area_of.get(e["kind"], ""), False)]
+    out["counts"] = {k: (v if keep[k] else 0) for k, v in out["counts"].items()}
+    return out
+
+
+def _events(svc, after: str | None) -> dict:
     prev = parse_cursor(after)
     with svc.db() as c:
         top = tuple(c.execute(f"SELECT COALESCE(MAX(id), 0) FROM {t}").fetchone()[0]

@@ -346,8 +346,13 @@ ALTER TABLE admins ADD COLUMN role TEXT NOT NULL DEFAULT 'owner';
 ALTER TABLE admins ADD COLUMN last_login_at INTEGER;
 """
 
+_V18 = """
+-- הרשאות לכל איש צוות (JSON: אזור → view / edit; ראו perms.py). NULL = לא נקבעו — הכול, כמו שהיה.
+ALTER TABLE admins ADD COLUMN perms TEXT;
+"""
+
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16,
-                         _V17]
+                         _V17, _V18]
 VERSION = len(MIGRATIONS)
 
 

@@ -240,3 +240,59 @@ def test_owner_gives_the_crm_app_to_a_staff_members_filtered_phone(env, tmp_path
     assert client.put(f"/v1/admin/devices/{did}/crm", headers=hs, json={"enabled": False}).status_code == 403
     assert client.put(f"/v1/admin/devices/{did}/crm", headers=h, json={"enabled": False}).status_code == 200
     assert not has_crm()
+
+
+# ---------------------------------------------------------------- הרשאות לכל איש צוות
+
+def test_permission_rules_by_area_and_action():
+    from filterphone.api.perms import allowed
+    support_only = {"support": "edit"}
+    viewer = {"devices": "view"}
+    assert allowed("owner", None, "DELETE", "/v1/admin/devices/3")                 # בעלים — הכול
+    assert allowed("staff", None, "PATCH", "/v1/admin/devices/3")                  # חשבון ישן בלי הרשאות — הכול
+    assert allowed("staff", support_only, "POST", "/v1/admin/support/7")
+    assert allowed("staff", support_only, "GET", "/v1/admin/devices/7/avatar")    # תמונת הלקוח בצ'אט
+    assert not allowed("staff", support_only, "GET", "/v1/admin/devices/7")
+    assert not allowed("staff", support_only, "GET", "/v1/admin/apps")
+    assert allowed("staff", support_only, "GET", "/v1/admin/overview")            # תמיד
+    assert allowed("staff", support_only, "GET", "/v1/admin/notifications")
+    assert allowed("staff", viewer, "GET", "/v1/admin/devices/7")
+    assert not allowed("staff", viewer, "PATCH", "/v1/admin/devices/7")           # צפייה בלבד
+    assert not allowed("staff", {"devices": "edit"}, "PUT", "/v1/admin/devices/7/crm")   # רק בעלים
+    assert allowed("staff", {"devices": "view"}, "GET", "/v1/admin/profiles")     # "החלת פרופיל" מדף המכשיר
+    assert not allowed("staff", {"system": "edit"}, "GET", "/v1/admin/something-new")    # לא מוכר — נכשל סגור
+    assert allowed("staff", {"system": "edit"}, "PUT", "/v1/admin/gpu")
+
+
+def test_owner_chooses_what_each_member_can_do(env):
+    svc, client = env
+    h = admin_headers(client)
+    r = client.post("/v1/admin/team", headers=h, json={"username": "yossi", "password": "a-strong-pass-1",
+                                                        "perms": {"support": "edit", "devices": "view", "bogus": "edit"}})
+    assert r.status_code == 201
+    yid = r.json()["id"]
+    assert r.json()["perms"] == {"support": "edit", "devices": "view"}                   # אזור לא מוכר — נזרק
+    did, token = register(client, "0501234567", "11" * 16, 1)
+    approve_all(client, h)
+    hs = {"Authorization": f"Bearer {login(client, 'yossi', 'a-strong-pass-1').json()['token']}"}
+    me = client.get("/v1/admin/team", headers=hs).json()["me"]
+    assert me["perms"] == {"support": "edit", "devices": "view"}
+    # תמיכה — כן; מכשירים — רק צפייה; חנות / בקשות — לא
+    assert client.post(f"/v1/admin/support/{did}", headers=hs, json={"text": "שלום"}).status_code == 201
+    assert client.get(f"/v1/admin/devices/{did}", headers=hs).status_code == 200
+    denied = client.patch(f"/v1/admin/devices/{did}", headers=hs, json={"level": 2})
+    assert denied.status_code == 403 and "הרשאה" in denied.json()["error"]
+    assert client.get("/v1/admin/apps", headers=hs).status_code == 403
+    assert client.get("/v1/admin/requests", headers=hs).status_code == 403
+    # התראות — רק מהאזורים שלו (תמיכה כן, בקשות לא)
+    cur = client.get("/v1/admin/notifications", headers=hs).json()["cursor"]
+    register(client, "0529999999", "22" * 16, 2)                                         # בקשת הצטרפות חדשה
+    client.post("/v1/device/support", json={"text": "עזרה"}, headers=auth(token))
+    got = client.get("/v1/admin/notifications", params={"after": cur}, headers=hs).json()
+    assert [e["kind"] for e in got["events"]] == ["support"]
+    assert got["counts"]["requests"] == 0
+    # הבעלים מרחיב — נכנס לתוקף מיד
+    assert client.patch(f"/v1/admin/team/{yid}", headers=h,
+                        json={"perms": {"support": "edit", "devices": "edit", "requests": "edit"}}).status_code == 200
+    assert client.patch(f"/v1/admin/devices/{did}", headers=hs, json={"level": 2}).status_code == 200
+    assert client.get("/v1/admin/requests", headers=hs).status_code == 200

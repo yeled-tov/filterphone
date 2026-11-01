@@ -35,6 +35,7 @@ from .. import protocol
 from ..proxy.policy import LEVELS_KEY, POLICY_KEY, POLICY_REV_KEY
 from ..settings import Settings
 from . import compliance, db, removal, security
+from . import perms as perms_mod
 from .adguard import AdGuard, build_rules
 from .apk import ApkError, read_apk
 from .catalog import (
@@ -259,6 +260,10 @@ SEED_PROFILES: list[tuple[str, int, list[str], dict]] = [
     ("בסיסי — רק עירום מפורש", 3, ["play_store"], {}),
 ]
 _RELEASE_NAME = re.compile(r"^FilterPhone[A-Za-z0-9._-]{0,40}\.apk$")
+def _perms_text(granted: dict[str, str]) -> str:
+    return ", ".join(f"{a}:{lvl}" for a, lvl in sorted(granted.items())) or "בלי גישה לאזורים"
+
+
 # אפליקציית המנהל ("CRM FilterPhone", crm/) — נפרדת מאפליקציית הסינון. מתפרסמת בדף ההורדה עם CRM.json
 # (deploy.yml what=crm), ומותקנת בשקט רק במכשיר המנהל (מנהל מכשיר — גם כשההתקנות חסומות בטלפון).
 CRM_PACKAGE = "com.filterphone.crm"
@@ -2852,10 +2857,10 @@ class Services:
     def team(self) -> list[dict]:
         with self.db() as c:
             rows = c.execute(
-                "SELECT a.id, a.username, a.role, a.created_at, a.last_login_at,"
+                "SELECT a.id, a.username, a.role, a.perms, a.created_at, a.last_login_at,"
                 " (SELECT COUNT(*) FROM admin_sessions s WHERE s.admin_id = a.id AND s.expires_at > ?) AS sessions"
                 " FROM admins a ORDER BY a.role = 'owner' DESC, a.username", (db.now(),)).fetchall()
-        return [dict(r) for r in rows]
+        return [{**dict(r), "perms": perms_mod.effective(r["role"], perms_mod.load(r["perms"]))} for r in rows]
 
     def _check_password(self, password: str) -> None:
         if len(password) < self.MIN_PASSWORD:
@@ -2865,7 +2870,8 @@ class Services:
     def _owners(c: sqlite3.Connection) -> int:
         return c.execute("SELECT COUNT(*) FROM admins WHERE role = 'owner'").fetchone()[0]
 
-    def add_team_member(self, actor: str, username: str, password: str, role: str = "staff") -> dict:
+    def add_team_member(self, actor: str, username: str, password: str, role: str = "staff",
+                        perms: dict | None = None) -> dict:
         name = username.strip()
         if not self._USERNAME.match(name):
             raise ApiError(400, "שם משתמש: 3–40 אותיות או ספרות (אפשר גם . - _), בלי רווחים")
@@ -2875,13 +2881,15 @@ class Services:
         with self.db() as c:
             if c.execute("SELECT 1 FROM admins WHERE username = ? COLLATE NOCASE", (name,)).fetchone():
                 raise ApiError(409, "שם המשתמש הזה כבר קיים")
-            mid = c.execute("INSERT INTO admins (username, password_hash, created_at, role) VALUES (?,?,?,?)",
-                            (name, security.hash_password(password), db.now(), role)).lastrowid
-            self.audit(actor, "team_add", f"admin:{mid}", f"{name} ({role})", c=c)
+            granted = perms_mod.clean(perms if perms is not None else perms_mod.PRESETS["support"])
+            mid = c.execute("INSERT INTO admins (username, password_hash, created_at, role, perms) VALUES (?,?,?,?,?)",
+                            (name, security.hash_password(password), db.now(), role,
+                             json.dumps(granted, sort_keys=True))).lastrowid
+            self.audit(actor, "team_add", f"admin:{mid}", f"{name} ({role}) {_perms_text(granted)}", c=c)
         return next(m for m in self.team() if m["id"] == mid)
 
     def update_team_member(self, actor: str, member_id: int, password: str | None = None,
-                           role: str | None = None) -> dict:
+                           role: str | None = None, perms: dict | None = None) -> dict:
         with self.db() as c:
             row = c.execute("SELECT * FROM admins WHERE id = ?", (member_id,)).fetchone()
             if row is None:
@@ -2893,6 +2901,10 @@ class Services:
                     raise ApiError(409, "חייב להישאר לפחות בעלים אחד")
                 c.execute("UPDATE admins SET role = ? WHERE id = ?", (role, member_id))
                 self.audit(actor, "team_role", f"admin:{member_id}", f"{row['username']}: {row['role']} → {role}", c=c)
+            if perms is not None:
+                granted = perms_mod.clean(perms)
+                c.execute("UPDATE admins SET perms = ? WHERE id = ?", (json.dumps(granted, sort_keys=True), member_id))
+                self.audit(actor, "team_perms", f"admin:{member_id}", f"{row['username']}: {_perms_text(granted)}", c=c)
             if password is not None:
                 self._check_password(password)
                 c.execute("UPDATE admins SET password_hash = ? WHERE id = ?",

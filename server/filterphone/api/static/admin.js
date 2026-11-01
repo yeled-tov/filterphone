@@ -20,8 +20,22 @@ if (NATIVE) {
   document.querySelectorAll(".brand span:last-child").forEach((s) => { s.textContent = "CRM FilterPhone"; });
 }
 let token = tokenStore.get();
-let me = null;                // {id, username, role} — owner מנהל את הצוות
+let me = null;                // {id, username, role, perms} — owner מנהל את הצוות
 const isOwner = () => !me || me.role === "owner";
+// הרשאות איש הצוות (השרת אוכף; כאן — רק כדי להסתיר את מה שאין לו): אזור → view / edit
+const can = (area, write = false) => {
+  if (!area || !me || me.role === "owner") return true;
+  const lvl = (me.perms || {})[area];
+  return lvl === "edit" || (lvl === "view" && !write);
+};
+const ROUTE_AREA = {
+  requests: "requests", support: "support", wabot: "wabot", devices: "devices", computers: "devices",
+  customers: "customers", profiles: "profiles", web: "web", apps: "apps", events: "devices", test: "test",
+  codes: "codes", audit: "audit", system: "system",
+};
+function applyPerms() {
+  document.querySelectorAll("#nav a, #bottom-nav a").forEach((a) => { a.hidden = !can(ROUTE_AREA[a.dataset.route]); });
+}
 let catalog = null;           // רמות, קטגוריות ואפשרויות — נטען פעם אחת
 let refreshTimer = null;
 const ACTIONS = { block: "נחסם", replace: "נצבע", site: "אתר חסום", video: "וידאו נחסם" };
@@ -520,11 +534,18 @@ async function render() {
   $("#title").textContent = title;
   $("#top-actions").replaceChildren();
   const view = $("#view");
+  const area = ROUTE_AREA[route];
+  if (!can(area)) {
+    view.replaceChildren(card("אין לך הרשאה לעמוד הזה", "הבעלים בוחר לכל איש צוות לאילו אזורים יש לו גישה (עמוד 'צוות')."));
+    return;
+  }
   view.replaceChildren(loading());
   try {
     const node = await fn(arg, query);
     if (seq !== renderSeq) return;          // בינתיים עברו לעמוד אחר
-    view.replaceChildren(...[node].flat().filter((n) => n !== null && n !== undefined && n !== false));
+    const viewOnly = area && !can(area, true)
+      ? el("div", { class: "note" }, "צפייה בלבד — אין לך הרשאה לשנות כאן (אפשר לבקש מהבעלים).") : null;
+    view.replaceChildren(...[viewOnly, node].flat().filter((n) => n !== null && n !== undefined && n !== false));
   } catch (e) {
     if (seq === renderSeq) view.replaceChildren(card("שגיאה", null, el("p", { class: "error" }, e.message)));
   }
@@ -564,7 +585,7 @@ async function viewOverview() {
   const o = await api("/v1/admin/overview");
   const pendingN = (o.pending.join || 0) + (o.pending.change || 0);
   const t = o.today;
-  const reqs = pendingN ? await api("/v1/admin/requests") : [];
+  const reqs = pendingN && can("requests") ? await api("/v1/admin/requests") : [];
   autoRefresh(render, 30000);
   topAction("רענון", render);
   const tile = (value, label, cls = "", href) => el("div", {
@@ -966,9 +987,39 @@ function randomPassword() {
   return [...buf].map((n) => abc[n % abc.length]).join("");
 }
 
+const PERM_LEVELS = [["", "בלי גישה"], ["view", "צפייה"], ["edit", "צפייה ועריכה"]];
+const PRESET_NAMES = { support: "תמיכה", helper: "עוזר", all: "הכול", none: "כלום" };
+
+/** בחירת הרשאות לכל אזור (בלי גישה / צפייה / עריכה) + קיצורים. */
+function permsEditor(areas, presets, current = {}) {
+  const selects = {};
+  const rows = Object.entries(areas).map(([a, label]) => {
+    selects[a] = el("select", { "aria-label": label }, PERM_LEVELS.map(([v, t]) =>
+      el("option", { value: v, selected: (current[a] || "") === v }, t)));
+    return el("div", { class: "app-row" }, el("div", { class: "grow" }, el("b", {}, label)), selects[a]);
+  });
+  const set = (p) => Object.entries(selects).forEach(([a, sel]) => { sel.value = p[a] || ""; });
+  const node = el("div", { class: "stack" },
+    el("div", { class: "row gap" }, el("span", { class: "muted small" }, "מהיר:"),
+      Object.entries({ ...presets, none: {} }).map(([k, p]) =>
+        el("button", { type: "button", class: "ghost small", onclick: () => set(p) }, PRESET_NAMES[k] || k))),
+    el("div", { class: "apps" }, rows));
+  const value = () => Object.fromEntries(Object.entries(selects).filter(([, sel]) => sel.value).map(([a, sel]) => [a, sel.value]));
+  return { node, value };
+}
+
+function permsSummary(areas, p) {
+  const edit = Object.keys(areas).filter((a) => p[a] === "edit").length;
+  const view = Object.keys(areas).filter((a) => p[a] === "view").length;
+  if (edit === Object.keys(areas).length) return "הכול";
+  if (!edit && !view) return "בלי גישה לאזורים";
+  return [edit ? `עריכה: ${edit}` : null, view ? `צפייה: ${view}` : null].filter(Boolean).join(" · ");
+}
+
 async function viewTeam() {
   const t = await api("/v1/admin/team");
   me = t.me;
+  applyPerms();
   const out = [];
 
   // --- האפליקציה: קישור להורדה ואיך משתפים
@@ -997,10 +1048,17 @@ async function viewTeam() {
       const self = m.id === t.me.id;
       return el("tr", {},
         el("td", {}, el("b", {}, m.username), self ? el("small", {}, "זה אתה") : null),
-        el("td", {}, chip(name, k)),
+        el("td", {}, chip(name, k), m.role === "owner" ? null : el("small", {}, permsSummary(t.areas || {}, m.perms || {}))),
         el("td", { class: "nowrap" }, m.last_login_at ? ago(m.last_login_at) : "עוד לא נכנס"),
         el("td", {}, m.sessions ? `${m.sessions} מחובר${m.sessions > 1 ? "ים" : ""}` : "—"),
         el("td", {}, el("div", { class: "actions" },
+          m.role === "owner" ? null : el("button", { class: "ghost small", onclick: async () => {
+            const ed = permsEditor(t.areas || {}, t.presets || {}, m.perms || {});
+            if (!await dialog(`הרשאות — ${m.username}`, [el("p", { class: "muted small" },
+              "לכל אזור: בלי גישה (לא רואה אותו בכלל), צפייה, או צפייה ועריכה. נכנס לתוקף מיד — גם באפליקציה."), ed.node], "שמירה")) return;
+            await attempt(() => api(`/v1/admin/team/${m.id}`, { method: "PATCH", body: { perms: ed.value() } }), "ההרשאות נשמרו");
+            render();
+          } }, "הרשאות"),
           el("button", { class: "ghost small", onclick: async () => {
             const pw = el("input", { class: "ltr", value: randomPassword(), autocomplete: "new-password" });
             if (!await dialog(`סיסמה חדשה ל-${m.username}`, [el("label", {}, "הסיסמה (לפחות 10 תווים) — שלחו לו אותה", pw),
@@ -1022,12 +1080,16 @@ async function viewTeam() {
     });
     const username = el("input", { class: "ltr", autocomplete: "off", placeholder: "yossi", required: true });
     const password = el("input", { class: "ltr", value: randomPassword(), autocomplete: "new-password", required: true });
-    const role = el("select", {}, el("option", { value: "staff" }, "איש צוות — הכול חוץ מניהול הצוות"),
+    const ed = permsEditor(t.areas || {}, t.presets || {}, (t.presets || {}).support || {});
+    const permsBox = el("div", { class: "stack" }, el("b", {}, "הרשאות — לאילו אזורים תהיה לו גישה"), ed.node);
+    const role = el("select", { onchange: () => { permsBox.hidden = role.value === "owner"; } },
+      el("option", { value: "staff" }, "איש צוות — רק האזורים שתבחר כאן"),
       el("option", { value: "owner" }, "בעלים — הכול, כולל הוספה והסרה של אנשי צוות"));
     const form = el("form", { class: "stack", onsubmit: async (e) => {
       e.preventDefault();
       const m = await attempt(() => api("/v1/admin/team", { method: "POST",
-        body: { username: username.value.trim(), password: password.value, role: role.value } }), "נוסף ✓");
+        body: { username: username.value.trim(), password: password.value, role: role.value,
+          perms: role.value === "owner" ? null : ed.value() } }), "נוסף ✓");
       await dialog("פרטי הכניסה", [el("p", {}, "שלחו לו את הפרטים ואת הקישור לאפליקציה:"),
         kv([["שם משתמש", el("span", { class: "ltr mono" }, m.username)], ["סיסמה", el("span", { class: "ltr mono" }, password.value)],
           link ? ["אפליקציה", el("span", { class: "ltr mono" }, link)] : null])], "סגירה");
@@ -1036,6 +1098,7 @@ async function viewTeam() {
       el("div", { class: "grid two" }, el("label", {}, "שם משתמש (אנגלית / ספרות, בלי רווחים)", username),
         el("label", {}, "סיסמה (לפחות 10 תווים)", password)),
       el("label", {}, "תפקיד", role),
+      permsBox,
       el("div", { class: "row end" }, el("button", { class: "ghost", type: "button", onclick: () => { password.value = randomPassword(); } }, "סיסמה אחרת"),
         el("button", { class: "primary", type: "submit" }, "הוספה")));
     out.push(card(`הצוות (${t.members.length})`, "מי יכול להיכנס לדשבורד ולאפליקציית הניהול. כל אחד עם משתמש משלו — ביומן הפעולות רואים מי עשה מה.",
@@ -3000,6 +3063,7 @@ async function start() {
   try {
     catalog = catalog || await api("/v1/admin/catalog");
     me = (await api("/v1/admin/team")).me;
+    applyPerms();
   } catch (e) {
     if (!token) return;
     toast(e.message, true);
