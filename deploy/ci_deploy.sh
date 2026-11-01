@@ -145,7 +145,7 @@ legacy-bot)
 devices)
     echo "== מכשירים (24 השעות האחרונות / פעילים)"
     sudo -n python3 - <<'PY' || true
-import json, re, sqlite3, subprocess, time
+import collections, json, re, sqlite3, subprocess, time
 now = int(time.time())
 hs = {}
 try:
@@ -156,6 +156,31 @@ try:
 except Exception as e:
     print("wg:", e)
 ago = lambda t: "-" if not t else f"{(now - int(t)) // 60}m"
+# שאילתות DNS לשרתי וואטסאפ (3 ימים, מיומן AdGuard): האם וואטסאפ בכלל מחפש את שרת תמונות הפרופיל (pps)
+wa_dns = collections.Counter()
+try:
+    import calendar, os as _os
+    qp = "/opt/AdGuardHome/data/querylog.json"
+    size = _os.path.getsize(qp)
+    with open(qp, "rb") as f:
+        if size > 800_000_000:
+            f.seek(size - 800_000_000)
+            f.readline()
+        for raw in f:
+            if b"whatsapp" not in raw and b"wa.me" not in raw:
+                continue
+            line = raw.decode("utf-8", "replace")
+            mh = re.search(r'"QH":\s*"([^"]+)"', line)
+            mi = re.search(r'"IP":\s*"([^"]+)"', line)
+            mt = re.search(r'"T":\s*"(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d):(\d\d)', line)
+            if not mh or not mi or not mt:
+                continue
+            if calendar.timegm(tuple(int(x) for x in mt.groups())) < now - 3 * 86400:
+                continue
+            filtered = '"IsFiltered":true' in line.replace(" ", "")
+            wa_dns[(mi.group(1), mh.group(1).lower().rstrip("."), "blocked" if filtered else "ok")] += 1
+except Exception as e:
+    print("wa dns:", e)
 db = sqlite3.connect("file:/var/lib/filterphone/filterphone.db?mode=ro", uri=True)
 db.row_factory = sqlite3.Row
 rows = db.execute("SELECT * FROM devices WHERE status IN ('active','pending') OR last_seen_at > ? "
@@ -200,6 +225,14 @@ for d in rows:
                          if f.startswith(d["vpn_ip"] + "|")), key=lambda x: -x[1])
             if wa:
                 print("    whatsapp:", ", ".join(f"{h}×{n}" for h, n in wa[:30]))
+            dns = sorted(((h, r, n) for (ip, h, r), n in wa_dns.items() if ip == d["vpn_ip"]), key=lambda x: -x[2])
+            if dns:
+                print("    whatsapp dns:", ", ".join(f"{h}|{r}×{n}" for h, r, n in dns[:30]))
+            try:
+                opts = [o for o in (json.loads(d.get("policy") or "{}").get("options") or []) if "whatsapp" in o]
+                print("    whatsapp options:", ", ".join(opts) or "-")
+            except Exception:
+                pass
         except Exception as e:
             print("    redis:", e)
 peers = set(hs)
