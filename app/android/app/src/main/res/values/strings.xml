@@ -24,8 +24,25 @@
     <string name="guard_keyword_blocked">החיפוש הזה חסום בטלפון הזה (FilterPhone)</string>
     <string name="guard_play_only_selected">בחלון הזה אפשר להתקין רק את האפליקציה שנבחרה בחנות FilterPhone</string>
     <string name="guard_play_window_closed">חלון ההתקנה נסגר. להתקנת אפליקציה — דרך חנות FilterPhone</string>
-    <string name="guard_play_curtain_title">🔒 חלון התקנה של FilterPhone</string>
-    <string name="guard_play_curtain_sub">כאן אפשר רק להתקין את האפליקציה שנבחרה בחנות</string>
+    <!-- מסך ההתקנה מעל Google Play (PlayInstallOverlay) -->
+    <string name="play_overlay_title">%1$s</string>
+    <string name="play_overlay_app">האפליקציה</string>
+    <string name="play_overlay_note">החנות של Google נעולה בזמן ההתקנה — FilterPhone עושה הכול לבד.</string>
+    <string name="play_overlay_loading">פותח את החנות…</string>
+    <string name="play_overlay_starting">מתחיל התקנה…</string>
+    <string name="play_overlay_starting_update">מתחיל עדכון…</string>
+    <string name="play_overlay_installing">מוריד ומתקין…</string>
+    <string name="play_overlay_installing_pct">מוריד ומתקין… %1$d%%</string>
+    <string name="play_overlay_done">הותקן ✓ חוזרים לפילטר פון…</string>
+    <string name="play_overlay_already">האפליקציה כבר מותקנת ומעודכנת</string>
+    <string name="play_overlay_manual">ההתקנה לא התחילה לבד. לחצו כאן על "התקנה".</string>
+    <string name="play_overlay_install">התקנה</string>
+    <string name="play_overlay_reveal">יש בחנות חלון שצריך לאשר</string>
+    <string name="play_overlay_open">פתיחת האפליקציה</string>
+    <string name="play_overlay_back">חזרה לפילטר פון</string>
+    <string name="play_overlay_back_continue">חזרה לפילטר פון (ההתקנה תמשיך)</string>
+    <string name="play_overlay_cancel_install">ביטול ההתקנה</string>
+    <string name="play_overlay_cancel">ביטול</string>
     <string name="guard_self_protected">ההגדרה הזו מוגנת על ידי מנהל הסינון (FilterPhone)</string>
     <string name="protection_channel">הגנת FilterPhone</string>
     <string name="protection_channel_desc">התראה קבועה כל עוד הסינון פעיל — כדי שאנדרואיד לא יעצור את ההגנה ברקע.</string>

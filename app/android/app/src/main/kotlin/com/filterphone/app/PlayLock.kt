@@ -9,8 +9,9 @@ package com.filterphone.app
  *   • וחלונות ביניים של ההתקנה (חשבון, הרשאות, טעינה) — כל מה שאינו "ניווט החוצה".
  * ניווט החוצה — דף הבית של Play, חיפוש, או עמוד של אפליקציה אחרת — מחזיר מיד לעמוד המבוקש.
  * אחרי שהאפליקציה הותקנה/עודכנה (או כשהזמן נגמר, או כשיוצאים מ-Play) — Play חוזר להיות חסום.
- * בעמוד האפליקציה עצמה — "דף לבן" (PlayCurtain) מכסה את כל מה שמתחת לכפתור ההתקנה, כך שאי אפשר לגלול
- * ל"אפליקציות דומות" ולמודעות.
+ * בעמוד האפליקציה עצמה — מסך של FilterPhone מכסה את Play כולו (PlayInstallOverlay): אי אפשר לגעת, לגלול
+ * או לנווט ב-Play. FilterPhone לוחץ בעצמו על "התקנה" / "עדכון" (רק בעמוד של האפליקציה שנבחרה), מציג
+ * התקדמות, ובסיום חוזר לחנות של FilterPhone. חלון ביניים של Play (חשבון / אישור) — המסך יורד והמשתמש מטפל.
  *
  * כאן רק ההחלטה (טהור, נבדק ביחידה) ומצב החלון; הביצוע ב-GuardService.
  */
@@ -33,7 +34,21 @@ object PlayLock {
         val until: Long,
         /** הגרסה שהייתה מותקנת כשהחלון נפתח (null = לא מותקנת) — כדי לזהות שההתקנה הסתיימה. */
         val versionAtStart: Long?,
+        /** השם להצגה במסך ההתקנה. */
+        val label: String = "",
+        /** כמה פעמים FilterPhone לחץ "התקנה" / "עדכון" ב-Play, ומתי בפעם האחרונה. */
+        val clicks: Int = 0,
+        val lastClickAt: Long = 0,
+        /** "לאישור בחנות": המסך יורד עד הזמן הזה (חלון של Play שצריך לגעת בו). */
+        val revealUntil: Long = 0,
     )
+
+    /** מצב עמוד האפליקציה ב-Play, לפי הכפתורים בו. */
+    enum class Action { INSTALL, UPDATE, INSTALLING, INSTALLED, UNKNOWN }
+
+    const val MAX_CLICKS = 3
+    const val CLICK_RETRY_MS = 4_000L
+    const val REVEAL_MS = 20_000L
 
     enum class Verdict { ALLOW, RETURN }
 
@@ -42,8 +57,61 @@ object PlayLock {
 
     fun start(pkg: String, titles: List<String>, versionAtStart: Long?, now: Long) {
         val clean = titles.map(::norm).filter { it.length >= 2 }.distinct()
-        session = Session(pkg, clean, now + WINDOW_MS, versionAtStart)
+        val label = titles.firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        session = Session(pkg, clean, now + WINDOW_MS, versionAtStart, label = label)
     }
+
+    /** FilterPhone לחץ על הכפתור ב-Play. */
+    fun noteClick(now: Long) {
+        session = session?.let { it.copy(clicks = it.clicks + 1, lastClickAt = now) }
+    }
+
+    /** "לאישור בחנות" — מורידים את המסך לזמן קצר. */
+    fun reveal(now: Long) {
+        session = session?.copy(revealUntil = now + REVEAL_MS)
+    }
+
+    fun revealed(now: Long): Boolean = (session?.revealUntil ?: 0) > now
+
+    /** ללחוץ עכשיו על "התקנה" / "עדכון"? עד MAX_CLICKS פעמים, בהפרש של CLICK_RETRY_MS. טהור. */
+    fun shouldClick(s: Session, action: Action, now: Long): Boolean =
+        (action == Action.INSTALL || action == Action.UPDATE) && s.clicks < MAX_CLICKS && now - s.lastClickAt >= CLICK_RETRY_MS
+
+    /** ההתקנה / העדכון הסתיימו בחלון הזה (הגרסה המותקנת השתנתה). טהור. */
+    fun installedDuring(s: Session, installed: Long?): Boolean = installed != null && installed != s.versionAtStart
+
+    /**
+     * מצב העמוד לפי הכפתורים (התאמה מדויקת — "מספר התקנות" או "עודכן ב-" לא נחשבים). טהור.
+     * עדכון / התקנה — לפני הכול (עוד לא התחיל); ביטול / אחוזים / "ממתין" — בהתקנה; פתיחה — מותקנת.
+     */
+    fun action(texts: List<String>): Action {
+        val all = texts.map(::norm).filter { it.isNotEmpty() }
+        val set = all.toSet()
+        return when {
+            set.any { it in UPDATE_BUTTONS } -> Action.UPDATE
+            set.any { it in INSTALL_ONLY } -> Action.INSTALL
+            set.any { it in CANCEL_BUTTONS } || progress(texts) != null ||
+                all.any { t -> PENDING.any { t.startsWith(it) } } -> Action.INSTALLING
+            set.any { it in OPEN_BUTTONS } -> Action.INSTALLED
+            else -> Action.UNKNOWN
+        }
+    }
+
+    /** אחוז ההורדה שמוצג ב-Play ("45%"), אם יש. טהור. */
+    fun progress(texts: List<String>): Int? = texts.firstNotNullOfOrNull { t ->
+        PERCENT.find(norm(t))?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 0..100 }
+    }
+
+    /** הטקסטים של הכפתור שעליו FilterPhone לוחץ (לפי המצב). */
+    fun buttonTexts(action: Action): Set<String> = when (action) {
+        Action.UPDATE -> UPDATE_BUTTONS
+        Action.INSTALL -> INSTALL_ONLY
+        Action.INSTALLING -> CANCEL_BUTTONS
+        Action.INSTALLED -> OPEN_BUTTONS
+        Action.UNKNOWN -> emptySet()
+    }
+
+    fun matches(text: String?, set: Set<String>): Boolean = text != null && norm(text) in set
 
     fun end() {
         session = null
@@ -84,40 +152,14 @@ object PlayLock {
         }
     }
 
-    // ------------------------------------------------------------ "דף לבן" מתחת לכפתור ההתקנה
-
-    /** רכיב טקסט במסך עם המיקום האנכי שלו (פיקסלים במסך). */
-    data class Box(val text: String, val top: Int, val bottom: Int)
-
-    /**
-     * איפה מתחיל ה"דף הלבן" בעמוד האפליקציה: מתחת לשורת הכפתור הראשי (התקנה / עדכון / פתיחה / ביטול).
-     * מכאן ומטה — צילומי מסך, "אפליקציות דומות", מודעות — מכוסה, כך שאי אפשר לראות או לגלול לאפליקציות
-     * אחרות. null = לא נמצאה שורת כפתורים במקום סביר (עמוד בטעינה / גלול / חלון ביניים) — בלי דף.
-     * [screenH] — גובה המסך; [marginPx] — רווח קטן מתחת לכפתור (שהמסגרת שלו לא תיחתך).
-     */
-    fun curtainTop(boxes: List<Box>, screenH: Int, marginPx: Int): Int? {
-        if (screenH <= 0) return null
-        val buttons = boxes.filter {
-            norm(it.text) in ACTION_BUTTONS && it.bottom > it.top &&
-                it.top > screenH * 0.08 && it.bottom < screenH * 0.8      // לא בסרגל העליון, לא בתחתית המסך
-        }
-        val first = buttons.minByOrNull { it.top } ?: return null
-        // השורה הראשית: הכפתור העליון וכל מה שלצידו ("הסרת התקנה" + "פתיחה")
-        val rowBottom = buttons.filter { it.top < first.bottom }.maxOf { it.bottom }
-        return (rowBottom + marginPx).coerceAtMost(screenH)
-    }
-
-    /**
-     * איפה לשים את הדף הלבן כשלא זוהה כפתור (העמוד נטען / גלול / Play שינה את מבנה הרכיבים):
-     * קו בטוח מתחת לכותרת ולכפתור, כך שהדף תמיד מכסה את מה שמתחת. יחד עם גלילה-לראש-העמוד
-     * ב-GuardService הכפתור חוזר להיראות, ואז הקו המדויק (curtainTop) תופס את מקומו.
-     */
-    const val FALLBACK_TOP_FRACTION = 0.46
-    fun fallbackTop(screenH: Int): Int = (screenH * FALLBACK_TOP_FRACTION).toInt().coerceAtLeast(1)
-
-    /** הכפתורים בשורה הראשית של עמוד אפליקציה (כל המצבים: לא מותקנת, בהתקנה, מותקנת, עדכון). */
-    private val ACTION_BUTTONS = setOf("התקנה", "התקן", "עדכון", "עדכן", "פתיחה", "פתח", "ביטול", "הסרת התקנה",
-        "הסר התקנה", "הפעלה", "install", "update", "open", "cancel", "uninstall", "enable")
+    /** כפתורי עמוד אפליקציה ב-Play (עברית / אנגלית), לפי מצב. */
+    private val INSTALL_ONLY = setOf("התקנה", "התקן", "install")
+    private val UPDATE_BUTTONS = setOf("עדכון", "עדכן", "update")
+    private val CANCEL_BUTTONS = setOf("ביטול", "בטל", "cancel")
+    private val OPEN_BUTTONS = setOf("פתיחה", "פתח", "הפעלה", "open", "play", "enable")
+    private val PENDING = listOf("ממתין", "בהמתנה", "מוריד", "מתקין", "בהורדה", "pending", "waiting", "downloading",
+        "installing")
+    private val PERCENT = Regex("(\\d{1,3})\\s?%")
 
     /** הלשוניות בתחתית Play (עברית/אנגלית). שתיים יחד = לא עמוד של אפליקציה. */
     private val NAV_LABELS = setOf("משחקים", "אפליקציות", "ספרים", "חיפוש", "בשבילך", "מבצעים", "ילדים",

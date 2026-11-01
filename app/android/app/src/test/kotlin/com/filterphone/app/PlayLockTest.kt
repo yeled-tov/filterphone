@@ -2,8 +2,10 @@ package com.filterphone.app
 
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayLockTest {
@@ -83,33 +85,57 @@ class PlayLockTest {
     }
 
     @Test
-    fun curtainStartsBelowTheMainButtonRow() {
-        val h = 2400
-        val page = listOf(
-            PlayLock.Box("ניווט למעלה", 90, 200),
-            PlayLock.Box("Waze: ניווט ועדכוני תנועה", 300, 380),
-            PlayLock.Box("4.5 ★", 600, 650),
-            PlayLock.Box("התקנה", 760, 860),
-            PlayLock.Box("מוביט: ניווט ותכנון מסלולים", 1500, 1560),
-            PlayLock.Box("התקנה", 1600, 1680),                 // כפתור של אפליקציה דומה — נמוך יותר
-        )
-        assertEquals(890, PlayLock.curtainTop(page, h, 30))
-        // מותקנת: "הסרת התקנה" + "פתיחה" באותה שורה — מתחת לנמוך מביניהם
-        val installed = listOf(PlayLock.Box("הסרת התקנה", 760, 858), PlayLock.Box("פתיחה", 755, 862))
-        assertEquals(872, PlayLock.curtainTop(installed, h, 10))
-        // בזמן ההורדה: "ביטול"
-        assertEquals(870, PlayLock.curtainTop(listOf(PlayLock.Box("Cancel", 770, 860)), h, 10))
+    fun readsTheStateOfTheAppPageFromItsButtons() {
+        val head = listOf("Waze: ניווט ועדכוני תנועה", "4.5 ★", "מעל 100 מיליון התקנות")
+        assertEquals(PlayLock.Action.INSTALL, PlayLock.action(head + "התקנה"))
+        assertEquals(PlayLock.Action.UPDATE, PlayLock.action(head + listOf("הסרת התקנה", "עדכון")))
+        assertEquals(PlayLock.Action.INSTALLING, PlayLock.action(head + listOf("ממתין להורדה", "ביטול")))
+        assertEquals(PlayLock.Action.INSTALLING, PlayLock.action(head + listOf("45% מתוך 80MB")))
+        assertEquals(PlayLock.Action.INSTALLED, PlayLock.action(head + listOf("הסרת התקנה", "פתיחה")))
+        assertEquals(PlayLock.Action.INSTALL, PlayLock.action(listOf("Waze", "Install")))
+        // "מספר התקנות" / "עודכן ב-" — לא כפתורים
+        assertEquals(PlayLock.Action.UNKNOWN, PlayLock.action(listOf("מעל 100 מיליון התקנות", "עודכן ב-3 בנוב׳")))
     }
 
     @Test
-    fun noCurtainWithoutAButtonInASaneSpot() {
-        val h = 2400
-        assertNull(PlayLock.curtainTop(emptyList(), h, 10))
-        assertNull(PlayLock.curtainTop(listOf(PlayLock.Box("Waze", 300, 380)), h, 10))
-        // הכפתור נגלל אל מתחת לסרגל העליון / בתחתית המסך — לא מכסים לפיו
-        assertNull(PlayLock.curtainTop(listOf(PlayLock.Box("התקנה", 40, 150)), h, 10))
-        assertNull(PlayLock.curtainTop(listOf(PlayLock.Box("התקנה", 2100, 2200)), h, 10))
-        assertNull(PlayLock.curtainTop(listOf(PlayLock.Box("התקנה", 800, 900)), 0, 10))
+    fun readsTheDownloadPercentage() {
+        assertEquals(45, PlayLock.progress(listOf("Waze", "45% מתוך 80MB")))
+        assertEquals(7, PlayLock.progress(listOf("7 %")))
+        assertNull(PlayLock.progress(listOf("4.5 ★", "התקנה")))
+    }
+
+    @Test
+    fun clicksInstallAFewTimesAtMostAndNotTooFast() {
+        PlayLock.start("com.waze", waze, versionAtStart = null, now = 0)
+        val fresh = PlayLock.session!!
+        assertTrue(PlayLock.shouldClick(fresh, PlayLock.Action.INSTALL, now = 5_000))
+        assertFalse(PlayLock.shouldClick(fresh, PlayLock.Action.INSTALLING, now = 5_000))     // כבר מתקין
+        assertFalse(PlayLock.shouldClick(fresh, PlayLock.Action.INSTALLED, now = 5_000))
+        PlayLock.noteClick(5_000)
+        assertFalse(PlayLock.shouldClick(PlayLock.session!!, PlayLock.Action.INSTALL, now = 6_000))   // מוקדם מדי
+        assertTrue(PlayLock.shouldClick(PlayLock.session!!, PlayLock.Action.INSTALL, now = 9_000))
+        PlayLock.noteClick(9_000)
+        PlayLock.noteClick(13_000)
+        assertFalse(PlayLock.shouldClick(PlayLock.session!!, PlayLock.Action.UPDATE, now = 60_000))  // 3 פעמים — מספיק
+    }
+
+    @Test
+    fun installIsDoneWhenTheInstalledVersionChanges() {
+        PlayLock.start("com.waze", waze, versionAtStart = 10, now = 0)
+        val s = PlayLock.session!!
+        assertFalse(PlayLock.installedDuring(s, 10))
+        assertFalse(PlayLock.installedDuring(s, null))
+        assertTrue(PlayLock.installedDuring(s, 11))
+        assertEquals(waze.first(), s.label)
+    }
+
+    @Test
+    fun revealLetsTheUserTouchPlayForAShortWhile() {
+        PlayLock.start("com.waze", waze, versionAtStart = null, now = 0)
+        assertFalse(PlayLock.revealed(1_000))
+        PlayLock.reveal(1_000)
+        assertTrue(PlayLock.revealed(1_000 + PlayLock.REVEAL_MS - 1))
+        assertFalse(PlayLock.revealed(1_000 + PlayLock.REVEAL_MS))
     }
 
     @Test
@@ -124,12 +150,5 @@ class PlayLockTest {
     fun targetPageMatchesWhenPlayTitleIsShorterThanLabel() {
         // הכותרת ב-Play קצרה משם האפליקציה שבטלפון ("waze" מול "waze navigation")
         assertEquals(true, PlayLock.isTargetPage(listOf("waze"), listOf("waze navigation")))
-    }
-
-    @Test
-    fun fallbackTopCoversBelowHeaderWhenNoButton() {
-        // 46% מגובה המסך — מתחת לכותרת ולכפתור, כך שהדף הלבן תמיד מכסה גם כשלא זוהה כפתור
-        assertEquals(1104, PlayLock.fallbackTop(2400))
-        assertEquals(1, PlayLock.fallbackTop(0))
     }
 }

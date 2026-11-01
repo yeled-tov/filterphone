@@ -52,14 +52,14 @@ class GuardService : AccessibilityService() {
     private var settingsOpen = false                // ההגדרות בחזית — בודקים גם שינויי תוכן (דפים שנטענים לאט)
     private var lastSettingsScanAt = 0L
     private var launcherMenuPkg = ""                // מסך הבית שבו נלחץ ארוך הסמל שלנו
-    private val curtain by lazy { PlayCurtain(this) }
+    private val installOverlay by lazy { PlayInstallOverlay(this) { onInstallButton(it) } }
     private val avatarMask by lazy { AvatarMask(this) }   // תמונות פרופיל בוואטסאפ — לבן במקומן (WaAvatars)
     private var maskScrollUntil = 0L                // רשימה בוואטסאפ בגלילה — עד אז פסים במקום עיגולים
     private var lastMaskAt = 0L
     private val waImageIds = LinkedHashSet<String>()  // לכיול מרחוק: מזהי רכיבי תמונה ריבועיים שנראו
     private var waImageIdsSavedAt = 0L
-    private var curtainBase = -1                    // תחתית הכפתור כשעמוד ה-Play בראש — לזיהוי גלילה
-    private var lastPlayScrollBackAt = 0L
+    private var playGraceUntil = 0L                 // חזרנו מ-Play לפילטר פון — לא "לחסום" את Play בדרך
+    private var installFinishing = false
     private val debug by lazy { (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
 
     override fun onServiceConnected() {
@@ -173,7 +173,7 @@ class GuardService : AccessibilityService() {
             markAlive()
             trackSettings(pkg)
             if (AccountScreens.isAddAccount(pkg, event.className?.toString())) syncForAccountSetup()
-            if (pkg != PlayLock.PLAY && pkg != packageName && pkg != SYSTEM_UI) hideCurtain()
+            if (pkg != PlayLock.PLAY && pkg != packageName && pkg != SYSTEM_UI) hideInstallOverlay()
             // יצאו מוואטסאפ (לא מקלדת / שורת המצב / אנחנו) — בלי כיסוי
             if (avatarMask.isShown && !maskWanted(pkg, policy) && pkg != packageName && pkg != SYSTEM_UI && !isIme(pkg)) {
                 avatarMask.hide()
@@ -482,8 +482,8 @@ class GuardService : AccessibilityService() {
         if (pkg != PlayLock.PLAY || PlayLock.PLAY !in policy.apps) return false
         val now = SystemClock.elapsedRealtime()
         val s = PlayLock.active(now) ?: run {                  // אין חלון — החסימה הרגילה
-            hideCurtain()
-            return false
+            hideInstallOverlay()
+            return now < playGraceUntil                        // רגע אחרי החזרה לפילטר פון — לא חוסמים
         }
         if (fromContent && now - lastPlayScanAt < PLAY_SCAN_MS) {
             // רצף (גלילה) — בודקים שוב בסופו, שהדף הלבן יעמוד במקום הנכון
@@ -496,15 +496,12 @@ class GuardService : AccessibilityService() {
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return true
         try {
             if (root.packageName?.toString() != PlayLock.PLAY) return true
-            val boxes = ArrayList<PlayLock.Box>(64)
-            val (texts, search) = collectOrdered(root, boxes)
+            val (texts, search) = collectOrdered(root)
             if (PlayLock.verdict(texts, search, s.titles) == PlayLock.Verdict.RETURN) {
-                hideCurtain()
+                hideInstallOverlay()
                 returnToPlayTarget(s.pkg, now)
             } else {
-                // עמוד מותר (האפליקציה שנבחרה): מכסים מתחת לכפתור ההתקנה/עדכון אם הוא במסך — גם אם שם
-                // האפליקציה לא זוהה בראש (עברית / מבנה Play אחר). חלון ביניים בלי כפתור — בלי דף.
-                updateCurtain(root, boxes, PlayLock.isTargetPage(texts, s.titles), now)
+                updateInstallOverlay(root, texts, PlayLock.isTargetPage(texts, s.titles), s, now)
             }
         } catch (e: Exception) {
             Log.w(TAG, "play window check failed", e)
@@ -521,42 +518,156 @@ class GuardService : AccessibilityService() {
     }
 
     /**
-     * "דף לבן" מתחת לכפתור ההתקנה בעמוד של האפליקציה שנבחרה — אי אפשר לראות או לגלול ל"אפליקציות דומות".
-     * גללו בכל זאת (מהחלק העליון) — הדף עוקב אחרי הכפתור, והעמוד חוזר לראש.
+     * עמוד מותר בחלון ההתקנה: מסך FilterPhone מעל Play כולו (PlayInstallOverlay) — אי אפשר לגעת, לגלול או
+     * לנווט ב-Play. בעמוד של האפליקציה שנבחרה FilterPhone לוחץ בעצמו על "התקנה" / "עדכון" (המשתמש ביקש
+     * בחנות שלנו), מציג התקדמות, ובסיום חוזר לחנות של FilterPhone. חלון ביניים של Play (בחירת חשבון,
+     * אישור) — המסך יורד, והמשתמש מטפל בו; חלונות מערכת (אישורי התקנה / Play Protect) — לא נוגעים בהם.
      */
-    private fun updateCurtain(root: AccessibilityNodeInfo, boxes: List<PlayLock.Box>, isTarget: Boolean, now: Long) {
-        val screenH = curtain.screenHeight()
-        val buttonTop = PlayLock.curtainTop(boxes, screenH, curtain.marginPx())
-        // זוהה כפתור ראשי — הדף הלבן מתחתיו בדיוק (עובד בכל עמוד מותר, גם בלי זיהוי שם האפליקציה).
-        // לא זוהה כפתור אך זה עמוד האפליקציה שנבחרה (נטען / גלול) — קו ברירת מחדל בטוח + גלילה לראש.
-        // חלון ביניים (חשבון / אישורים) בלי כפתור — בלי דף.
-        val top: Int
-        if (buttonTop != null) {
-            if (buttonTop > curtainBase) curtainBase = buttonTop
-            if (buttonTop < curtainBase - curtain.marginPx() * 3) scrollPlayBack(root, now)
-            top = buttonTop
-        } else if (isTarget) {
-            scrollPlayBack(root, now)
-            top = PlayLock.fallbackTop(screenH)
-        } else {
-            hideCurtain()
+    private fun updateInstallOverlay(root: AccessibilityNodeInfo, texts: List<String>, isTarget: Boolean,
+                                     s: PlayLock.Session, now: Long) {
+        schedulePlayRecheck()
+        if (PlayLock.revealed(now)) {
+            installOverlay.hide()
             return
         }
-        curtain.show(top)
-        main.removeCallbacks(curtainCheck)
-        main.postDelayed(curtainCheck, CURTAIN_CHECK_MS)
+        val done = PlayLock.installedDuring(s, ManagedApps.installedVersion(this, s.pkg))
+        if (!done && !isTarget) {
+            installOverlay.hide()                 // חלון ביניים של Play — המשתמש מטפל, החלון עדיין שומר
+            return
+        }
+        val action = PlayLock.action(texts)
+        val state = when {
+            done -> {
+                finishInstallSoon()
+                overlayState(R.string.play_overlay_done, 100, busy = false,
+                    PlayInstallOverlay.Button.OPEN to R.string.play_overlay_open,
+                    PlayInstallOverlay.Button.BACK to R.string.play_overlay_back)
+            }
+            action == PlayLock.Action.INSTALLING -> {
+                val pct = PlayLock.progress(texts)
+                PlayInstallOverlay.State(
+                    if (pct != null) getString(R.string.play_overlay_installing_pct, pct) else getString(R.string.play_overlay_installing),
+                    pct, true, listOf(
+                        PlayInstallOverlay.Button.BACK to getString(R.string.play_overlay_back_continue),
+                        PlayInstallOverlay.Button.CANCEL to getString(R.string.play_overlay_cancel_install)))
+            }
+            action == PlayLock.Action.INSTALL || action == PlayLock.Action.UPDATE -> {
+                if (PlayLock.shouldClick(s, action, now) && clickPlayButton(root, PlayLock.buttonTexts(action))) {
+                    PlayLock.noteClick(now)
+                }
+                val cur = PlayLock.session ?: s
+                if (cur.clicks >= PlayLock.MAX_CLICKS && now - cur.lastClickAt >= PlayLock.CLICK_RETRY_MS) {
+                    // לא הצליח אוטומטית — כפתור משלנו (הלחיצה עוברת לכפתור ב-Play), או לאישור בחנות
+                    overlayState(R.string.play_overlay_manual, null, busy = false,
+                        PlayInstallOverlay.Button.INSTALL to R.string.play_overlay_install,
+                        PlayInstallOverlay.Button.REVEAL to R.string.play_overlay_reveal,
+                        PlayInstallOverlay.Button.BACK to R.string.play_overlay_back)
+                } else {
+                    overlayState(if (action == PlayLock.Action.UPDATE) R.string.play_overlay_starting_update
+                        else R.string.play_overlay_starting, null, busy = true,
+                        PlayInstallOverlay.Button.BACK to R.string.play_overlay_cancel)
+                }
+            }
+            action == PlayLock.Action.INSTALLED -> overlayState(R.string.play_overlay_already, null, busy = false,
+                PlayInstallOverlay.Button.OPEN to R.string.play_overlay_open,
+                PlayInstallOverlay.Button.BACK to R.string.play_overlay_back)
+            else -> overlayState(R.string.play_overlay_loading, null, busy = true,
+                PlayInstallOverlay.Button.BACK to R.string.play_overlay_cancel)
+        }
+        installOverlay.show(s.label, state)
     }
 
-    private fun hideCurtain() {
-        if (!curtain.isShown && curtainBase < 0) return
-        curtain.hide()
-        curtainBase = -1
-        main.removeCallbacks(curtainCheck)
+    private fun overlayState(status: Int, progress: Int?, busy: Boolean,
+                             vararg buttons: Pair<PlayInstallOverlay.Button, Int>) =
+        PlayInstallOverlay.State(getString(status), progress, busy, buttons.map { (b, t) -> b to getString(t) })
+
+    /** כל עוד חלון ההתקנה פתוח ו-Play בחזית — בודקים שוב (אחוזים, סיום) גם בלי אירוע. */
+    private fun schedulePlayRecheck() {
+        main.removeCallbacks(playRecheck)
+        main.postDelayed(playRecheck, OVERLAY_CHECK_MS)
     }
 
-    /** גלילה אחת לאחור ברשימה הראשית של העמוד (לא יותר מפעם ב-400ms). */
-    private fun scrollPlayBack(root: AccessibilityNodeInfo, now: Long) {
-        if (now - lastPlayScrollBackAt < 400) return
+    private fun hideInstallOverlay() {
+        installOverlay.hide()
+        main.removeCallbacks(playRecheck)
+    }
+
+    /** כפתור במסך ההתקנה. */
+    private fun onInstallButton(b: PlayInstallOverlay.Button) {
+        safely("play-overlay") {
+            val s = PlayLock.session ?: run { hideInstallOverlay(); return@safely }
+            val now = SystemClock.elapsedRealtime()
+            when (b) {
+                PlayInstallOverlay.Button.INSTALL -> {
+                    val root = runCatching { rootInActiveWindow }.getOrNull() ?: return@safely
+                    try {
+                        if (root.packageName?.toString() == PlayLock.PLAY &&
+                            clickPlayButton(root, PlayLock.buttonTexts(PlayLock.Action.INSTALL) +
+                                PlayLock.buttonTexts(PlayLock.Action.UPDATE))) PlayLock.noteClick(now)
+                    } finally {
+                        recycle(root)
+                    }
+                    playRecheck.run()
+                }
+                PlayInstallOverlay.Button.CANCEL -> {
+                    val root = runCatching { rootInActiveWindow }.getOrNull()
+                    try {
+                        if (root?.packageName?.toString() == PlayLock.PLAY) {
+                            clickPlayButton(root, PlayLock.buttonTexts(PlayLock.Action.INSTALLING))
+                        }
+                    } finally {
+                        root?.let { recycle(it) }
+                    }
+                    backToFilterPhone()
+                }
+                PlayInstallOverlay.Button.BACK -> backToFilterPhone()
+                PlayInstallOverlay.Button.OPEN -> {
+                    val launch = packageManager.getLaunchIntentForPackage(s.pkg)
+                    endPlaySession()
+                    if (launch == null || runCatching { startActivity(launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isFailure) {
+                        backToFilterPhone()
+                    }
+                }
+                PlayInstallOverlay.Button.REVEAL -> {
+                    PlayLock.reveal(now)
+                    installOverlay.hide()
+                    schedulePlayRecheck()
+                }
+            }
+        }
+    }
+
+    /** ההתקנה הסתיימה — רגע להראות "הותקן", וחזרה לחנות של FilterPhone. */
+    private fun finishInstallSoon() {
+        if (installFinishing) return
+        installFinishing = true
+        main.postDelayed({ safely("play-finish") { if (PlayLock.session != null) backToFilterPhone() } }, FINISH_SHOW_MS)
+    }
+
+    private fun endPlaySession() {
+        PlayLock.end()
+        installFinishing = false
+        hideInstallOverlay()
+        playReturns.clear()
+        playGraceUntil = SystemClock.elapsedRealtime() + 2_500
+        reconfigure()
+    }
+
+    /** סוגרים את חלון ההתקנה וחוזרים לפילטר פון (Play חוזר להיות חסום; הורדה שהתחילה ממשיכה ברקע). */
+    private fun backToFilterPhone() {
+        endPlaySession()
+        val home = android.content.Intent(this, MainActivity::class.java).addFlags(
+            android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        runCatching { startActivity(home) }.onFailure { performGlobalAction(GLOBAL_ACTION_HOME) }
+    }
+
+    /**
+     * לוחץ על הכפתור ב-Play שהטקסט שלו באחת מהמילים [labels] (התקנה / עדכון / ביטול) — רק רכיב גלוי ופעיל,
+     * דרך ACTION_CLICK שלו או של ההורה הלחיץ הקרוב. true אם נלחץ.
+     */
+    private fun clickPlayButton(root: AccessibilityNodeInfo, labels: Set<String>): Boolean {
+        if (labels.isEmpty()) return false
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         val seen = ArrayList<AccessibilityNodeInfo>()
         queue.add(root)
@@ -566,33 +677,23 @@ class GuardService : AccessibilityService() {
                 val n = queue.removeFirst()
                 if (n !== root) seen += n
                 visited++
-                if (n.isScrollable) {
-                    lastPlayScrollBackAt = now
-                    n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
-                    return
+                val label = n.text?.toString() ?: n.contentDescription?.toString()
+                if (n.isVisibleToUser && n.isEnabled && PlayLock.matches(label, labels)) {
+                    var target: AccessibilityNodeInfo? = n
+                    var depth = 0
+                    while (target != null && !target.isClickable && depth < 5) {
+                        target = target.parent?.also { seen += it }
+                        depth++
+                    }
+                    if (target != null && target.isClickable && target.isEnabled &&
+                        target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
                 }
                 for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
             }
+            return false
         } finally {
             seen.forEach { recycle(it) }
             queue.forEach { if (it !== root) recycle(it) }
-        }
-    }
-
-    /** כל עוד הדף מוצג: יצאו מ-Play / החלון נגמר / השהיה מאושרת — הדף יורד (גם בלי אירוע). */
-    private val curtainCheck: Runnable = Runnable {
-        safely("curtain-check") {
-            if (!curtain.isShown) return@safely
-            val now = SystemClock.elapsedRealtime()
-            val root = runCatching { rootInActiveWindow }.getOrNull()
-            val p = root?.packageName?.toString()
-            root?.let { recycle(it) }
-            if (AdminState.isPaused(this) || PlayLock.active(now) == null ||
-                (p != null && p != PlayLock.PLAY && p != packageName)) {
-                hideCurtain()
-            } else {
-                main.postDelayed(curtainCheck, CURTAIN_CHECK_MS)
-            }
         }
     }
 
@@ -604,7 +705,7 @@ class GuardService : AccessibilityService() {
         while (playReturns.isNotEmpty() && now - playReturns.first() > 30_000) playReturns.removeFirst()
         if (playReturns.size > 4) {
             PlayLock.end()
-            hideCurtain()
+            hideInstallOverlay()
             playReturns.clear()
             reconfigure()
             block(PlayLock.PLAY, GLOBAL_ACTION_HOME, R.string.guard_play_window_closed, minGapMs = 0)
@@ -627,22 +728,19 @@ class GuardService : AccessibilityService() {
         if (pkg == s.pkg || pkg == packageName || pkg in PlayLock.COMPANIONS) return
         if (pkg in GuardPolicy.untouchable(this) && !isLauncher(pkg)) return     // מקלדת וכו'
         PlayLock.end()
-        hideCurtain()
+        installFinishing = false
+        hideInstallOverlay()
         playReturns.clear()
         reconfigure()
     }
 
-    /**
-     * הטקסטים בחלון לפי סדר הרכיבים (מלמעלה למטה), ויש בו שדה הקלדה? — ל-PlayLock. אם [boxes] ניתן —
-     * גם המיקום במסך של כל טקסט גלוי (לדף הלבן).
-     */
-    private fun collectOrdered(root: AccessibilityNodeInfo, boxes: MutableList<PlayLock.Box>? = null): Pair<List<String>, Boolean> {
+    /** הטקסטים בחלון לפי סדר הרכיבים (מלמעלה למטה), ויש בו שדה הקלדה? — ל-PlayLock. */
+    private fun collectOrdered(root: AccessibilityNodeInfo): Pair<List<String>, Boolean> {
         val out = ArrayList<String>(64)
         var editable = false
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.addLast(root)
         var seen = 0
-        val rect = Rect()
         while (stack.isNotEmpty() && seen < MAX_NODES) {
             val node = stack.removeLast()
             seen++
@@ -651,11 +749,6 @@ class GuardService : AccessibilityService() {
             val desc = node.contentDescription?.toString()?.takeIf { it.isNotBlank() }
             text?.let { out.add(it) }
             desc?.let { out.add(it) }
-            if (boxes != null && (text != null || desc != null) && node.isVisibleToUser) {
-                node.getBoundsInScreen(rect)
-                text?.let { boxes.add(PlayLock.Box(it, rect.top, rect.bottom)) }
-                desc?.let { boxes.add(PlayLock.Box(it, rect.top, rect.bottom)) }
-            }
             for (i in node.childCount - 1 downTo 0) {
                 runCatching { node.getChild(i) }.getOrNull()?.let { stack.addLast(it) }
             }
@@ -1195,7 +1288,7 @@ class GuardService : AccessibilityService() {
 
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         instance = null
-        runCatching { curtain.hide() }
+        runCatching { installOverlay.hide() }
         runCatching { avatarMask.hide() }
         Recovery.syncSoon(this)            // המגן כובה — לדווח לשרת
         // כובה בהגדרות? עם ההרשאה (הקמה) — מדליקים מחדש מיד (לא בהשהיה שהמנהל אישר)
@@ -1210,7 +1303,7 @@ class GuardService : AccessibilityService() {
     override fun onDestroy() {
         instance = null
         main.removeCallbacksAndMessages(null)
-        runCatching { curtain.hide() }
+        runCatching { installOverlay.hide() }
         runCatching { avatarMask.hide() }
         super.onDestroy()
     }
@@ -1238,7 +1331,8 @@ class GuardService : AccessibilityService() {
         val isRunning: Boolean get() = instance != null
 
         private const val PLAY_SCAN_MS = 300L
-        private const val CURTAIN_CHECK_MS = 1_500L
+        private const val OVERLAY_CHECK_MS = 800L
+        private const val FINISH_SHOW_MS = 1_500L
         private const val SYSTEM_UI = "com.android.systemui"
         private const val SERVER_CHECK_GAP_MS = 30_000L
         private val io = Executors.newSingleThreadExecutor { r -> Thread(r, "fp-guard-io").apply { isDaemon = true } }

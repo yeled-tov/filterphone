@@ -179,6 +179,8 @@ try:
                 continue
             filtered = '"IsFiltered":true' in line.replace(" ", "")
             wa_dns[(mi.group(1), mh.group(1).lower().rstrip("."), "blocked" if filtered else "ok")] += 1
+except FileNotFoundError:
+    pass            # יומן השאילתות של AdGuard לא נשמר לקובץ — בלי השורה הזו
 except Exception as e:
     print("wa dns:", e)
 db = sqlite3.connect("file:/var/lib/filterphone/filterphone.db?mode=ro", uri=True)
