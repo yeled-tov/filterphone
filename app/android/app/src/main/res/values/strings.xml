@@ -27,7 +27,7 @@
     <!-- מסך ההתקנה מעל Google Play (PlayInstallOverlay) -->
     <string name="play_overlay_title">%1$s</string>
     <string name="play_overlay_app">האפליקציה</string>
-    <string name="play_overlay_note">החנות של Google נעולה בזמן ההתקנה — FilterPhone עושה הכול לבד.</string>
+    <string name="play_overlay_note">FilterPhone מתקין בשבילך — אין צורך לגעת בכלום.</string>
     <string name="play_overlay_loading">פותח את החנות…</string>
     <string name="play_overlay_starting">מתחיל התקנה…</string>
     <string name="play_overlay_starting_update">מתחיל עדכון…</string>
@@ -37,7 +37,8 @@
     <string name="play_overlay_already">האפליקציה כבר מותקנת ומעודכנת</string>
     <string name="play_overlay_manual">ההתקנה לא התחילה לבד. לחצו כאן על "התקנה".</string>
     <string name="play_overlay_install">התקנה</string>
-    <string name="play_overlay_reveal">יש בחנות חלון שצריך לאשר</string>
+    <string name="play_overlay_stuck">החנות לא מגיבה כרגע. נסו שוב — ואם זה חוזר, פנו לתמיכה.</string>
+    <string name="play_overlay_retry">נסה שוב</string>
     <string name="play_overlay_open">פתיחת האפליקציה</string>
     <string name="play_overlay_back">חזרה לפילטר פון</string>
     <string name="play_overlay_back_continue">חזרה לפילטר פון (ההתקנה תמשיך)</string>

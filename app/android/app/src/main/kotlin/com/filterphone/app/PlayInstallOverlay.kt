@@ -29,7 +29,7 @@ class PlayInstallOverlay(
     private val service: AccessibilityService,
     private val onAction: (Button) -> Unit,
 ) {
-    enum class Button { INSTALL, CANCEL, BACK, OPEN, REVEAL }
+    enum class Button { INSTALL, CANCEL, BACK, OPEN, RETRY }
 
     /** מה מוצג: כותרת, שורת מצב, אחוז (null = בלי פס / פס לא קבוע), והכפתורים. */
     data class State(val status: String, val progress: Int?, val busy: Boolean, val buttons: List<Pair<Button, String>>)

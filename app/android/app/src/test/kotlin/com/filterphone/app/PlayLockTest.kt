@@ -130,12 +130,18 @@ class PlayLockTest {
     }
 
     @Test
-    fun revealLetsTheUserTouchPlayForAShortWhile() {
-        PlayLock.start("com.waze", waze, versionAtStart = null, now = 0)
-        assertFalse(PlayLock.revealed(1_000))
-        PlayLock.reveal(1_000)
-        assertTrue(PlayLock.revealed(1_000 + PlayLock.REVEAL_MS - 1))
-        assertFalse(PlayLock.revealed(1_000 + PlayLock.REVEAL_MS))
+    fun stuckWhenNothingHappensForAWhileAndRetryStartsOver() {
+        PlayLock.start("com.waze", waze, versionAtStart = null, now = 1_000)
+        val s = PlayLock.session!!
+        assertFalse(PlayLock.stuck(s, lastProgressAt = 0, now = 1_000 + PlayLock.STUCK_MS - 1))
+        assertTrue(PlayLock.stuck(s, lastProgressAt = 0, now = 1_000 + PlayLock.STUCK_MS))
+        assertFalse(PlayLock.stuck(s, lastProgressAt = 30_000, now = 50_000))        // הורדה התקדמה לא מזמן
+        PlayLock.noteClick(10_000); PlayLock.noteClick(20_000); PlayLock.noteClick(30_000)
+        PlayLock.retry(100_000)
+        val r = PlayLock.session!!
+        assertEquals(0, r.clicks)
+        assertFalse(PlayLock.stuck(r, lastProgressAt = 0, now = 100_000 + PlayLock.STUCK_MS - 1))
+        assertTrue(PlayLock.active(100_000 + PlayLock.WINDOW_MS / 2 - 1) != null)
     }
 
     @Test

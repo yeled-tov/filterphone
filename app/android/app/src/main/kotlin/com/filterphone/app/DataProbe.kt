@@ -2,12 +2,15 @@ package com.filterphone.app
 
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import kotlin.random.Random
 
 /**
  * בדיקה שתעבורה באמת עוברת במנהרה — לא רק handshake טרי.
@@ -62,6 +65,53 @@ object DataProbe {
             "connect"
         }
     }
+
+    /**
+     * התעבורה של הטלפון באמת עוברת במנהרה? שאילתת DNS לשרת ה-DNS של המנהרה (10.8.0.1 — כתובת פנימית
+     * שמגיעים אליה רק דרך ה-VPN). תשובה = במנהרה. אין תשובה בזמן שבדיקת ה-HTTP (run) עברה = התעבורה
+     * עוקפת את ה-VPN: המנהרה "מחוברת" ו-handshake טרי, אבל אנדרואיד לא מנתב דרכה (קרה אחרי עדכון,
+     * כשה-VPN לא נועל — ואז האינטרנט עובד בלי סינון ואף בדיקה אחרת לא מרגישה).
+     * null = אי אפשר לבדוק (אין כתובת DNS פנימית בהגדרה).
+     */
+    fun viaTunnel(dnsIp: String?): Boolean? {
+        val ip = dnsIp?.trim()?.takeIf { IPV4.matches(it) } ?: return null
+        val addr = runCatching { InetAddress.getByName(ip) }.getOrNull() ?: return null   // כתובת מספרית — בלי DNS
+        if (!addr.isSiteLocalAddress) return null          // שרת ציבורי — מגיעים אליו גם בלי המנהרה
+        repeat(2) {
+            try {
+                DatagramSocket().use { s ->
+                    s.soTimeout = 2_500
+                    val id = Random.nextInt(1, 0xFFFF)
+                    val q = dnsQuery(id, "filterphone.com")
+                    s.send(DatagramPacket(q, q.size, addr, 53))
+                    val buf = ByteArray(512)
+                    val p = DatagramPacket(buf, buf.size)
+                    s.receive(p)
+                    if (answerId(buf, p.length) == id) return true
+                }
+            } catch (_: SocketTimeoutException) {
+                // ננסה שוב פעם אחת
+            } catch (_: Exception) {
+                return false                                // אין מסלול לכתובת הפנימית — לא דרך המנהרה
+            }
+        }
+        return false
+    }
+
+    private val IPV4 = Regex("^\\d{1,3}(\\.\\d{1,3}){3}$")
+
+    /** שאילתת DNS מסוג A (טהור — נבדק ביחידה). */
+    fun dnsQuery(id: Int, host: String): ByteArray {
+        val name = host.trimEnd('.').split('.').flatMap { label ->
+            listOf(label.length.toByte()) + label.toByteArray(Charsets.US_ASCII).toList()
+        }
+        val header = byteArrayOf((id shr 8).toByte(), id.toByte(), 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0)
+        return header + name.toByteArray() + byteArrayOf(0, 0, 1, 0, 1)
+    }
+
+    /** מזהה התשובה (שני הבתים הראשונים), -1 אם קצרה מדי. טהור. */
+    fun answerId(buf: ByteArray, length: Int): Int =
+        if (length < 12) -1 else ((buf[0].toInt() and 0xff) shl 8) or (buf[1].toInt() and 0xff)
 
     fun request(host: String): String =
         "GET /generate_204 HTTP/1.1\r\nHost: $host\r\nUser-Agent: FilterPhone-probe\r\nConnection: close\r\n\r\n"

@@ -52,6 +52,8 @@ object TunnelManager {
     private const val CONNECT_TIMEOUT_S = 25L
     private const val DATA_CHECK_EVERY_MS = 60_000L    // בדיקת תעבורה — לכל היותר פעם בדקה (סוללה)
     private const val DATA_FAILS_TO_RECONNECT = 2      // כשל בודד יכול להיות רגעי — לא מחברים מחדש עליו
+    /** כשל תעבורה: יש אינטרנט, אבל לא דרך המנהרה (בלי סינון) — DataProbe.viaTunnel. */
+    const val BYPASS = "bypass"
     private const val K_UPDATE_PAUSE = "vpn_update_pause_until"
     private const val UPDATE_PAUSE_MS = 2 * 60_000L     // לכל היותר — אחר כך מתחברים גם אם לא הגיע אישור
     private const val URGENT_MAX_WAIT_MS = 30_000L      // בלי מנהרה + lockdown = בלי אינטרנט: לא מחכים יותר
@@ -145,6 +147,21 @@ object TunnelManager {
             return VpnConfigFactory.build(JSONObject(json), privateKey, excluded, useFallback)
         }
         return store.get(K_CONFIG)?.let { VpnConfigFactory.buildLegacy(it, excluded) }
+    }
+
+    /** שרת ה-DNS של המנהרה (10.8.0.1) — לבדיקה שהתעבורה באמת עוברת במנהרה (DataProbe.viaTunnel). */
+    private fun tunnelDns(): String? = runCatching {
+        store.get(K_VPN_JSON)?.let { JSONObject(it).optJSONArray("dns")?.optString(0) }
+            ?: store.get(K_CONFIG)?.let { Regex("(?im)^\\s*DNS\\s*=\\s*([0-9.]+)").find(it)?.groupValues?.get(1) }
+    }.getOrNull()?.takeIf { it.isNotBlank() }
+
+    /**
+     * בדיקת תעבורה מלאה: HTTP אמיתי (DataProbe.run) ושהיא באמת עוברת במנהרה ולא עוקפת אותה
+     * ("bypass" — המנהרה מחוברת, האינטרנט עובד, אבל בלי VPN ובלי סינון). null = תקין.
+     */
+    private fun trafficFailure(): String? {
+        DataProbe.run()?.let { return it }
+        return if (DataProbe.viaTunnel(tunnelDns()) == false) BYPASS else null
     }
 
     private fun hasFallback(): Boolean =
@@ -409,7 +426,7 @@ object TunnelManager {
             ensureConnected("verify")
             return
         }
-        val failure = DataProbe.run()
+        val failure = trafficFailure()
         ProtectionState.mark(appContext, ProtectionState.VPN_DATA_CHECKED)
         if (failure == null) {
             verifyFails = 0
@@ -497,7 +514,7 @@ object TunnelManager {
         val every = if (inRecoveryWindow()) RECOVERY_DATA_EVERY_MS else DATA_CHECK_EVERY_MS
         if (lastDataCheck != 0L && now - lastDataCheck < every) return dataFailsInRow == 0
         lastDataCheck = now
-        val failure = DataProbe.run()
+        val failure = trafficFailure()
         ProtectionState.mark(appContext, ProtectionState.VPN_DATA_CHECKED)
         if (failure == null) {
             if (dataFailsInRow > 0) Log.i(TAG, "tunnel traffic flows again after $dataFailsInRow failed checks")
@@ -515,8 +532,9 @@ object TunnelManager {
         ProtectionState.inc(appContext, ProtectionState.VPN_DATA_FAILS)
         if (!DeviceOwnerManager.isDeviceOwner(appContext)) UpdateBugNotice.maybeShow(appContext)
         if (dataFailsInRow < DATA_FAILS_TO_RECONNECT) return false
-        // חיבור מחדש רגיל כבר נוסה ולא עזר (או שזה מיד אחרי עדכון) — משחררים (באג אנדרואיד 16)
-        if (inRecoveryWindow() || dataFailsInRow >= DATA_FAILS_TO_RECONNECT * 2) {
+        // חיבור מחדש רגיל כבר נוסה ולא עזר (או שזה מיד אחרי עדכון) — משחררים (באג אנדרואיד 16).
+        // תעבורה שעוקפת את המנהרה — ישר לשחרור: חיבור מחדש רגיל לא מחזיר את הניתוב של אנדרואיד.
+        if (failure == BYPASS || inRecoveryWindow() || dataFailsInRow >= DATA_FAILS_TO_RECONNECT * 2) {
             if (unstickLeft()) return unstick("no traffic: $failure")
             UpdateBugNotice.maybeShow(appContext)
         }

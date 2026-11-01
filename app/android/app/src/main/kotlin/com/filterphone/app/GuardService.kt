@@ -60,6 +60,7 @@ class GuardService : AccessibilityService() {
     private var waImageIdsSavedAt = 0L
     private var playGraceUntil = 0L                 // חזרנו מ-Play לפילטר פון — לא "לחסום" את Play בדרך
     private var installFinishing = false
+    private var playLastProgressAt = 0L             // הפעם האחרונה שההתקנה התקדמה (ל"החנות לא מגיבה")
     private val debug by lazy { (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0 }
 
     override fun onServiceConnected() {
@@ -495,7 +496,11 @@ class GuardService : AccessibilityService() {
         PlayLock.onVersion(ManagedApps.installedVersion(this, s.pkg), now)
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return true
         try {
-            if (root.packageName?.toString() != PlayLock.PLAY) return true
+            if (root.packageName?.toString() != PlayLock.PLAY) {
+                // Play עוד לא בחזית (נפתח מאחורי המסך) — המסך נשאר ומתעדכן
+                if (installOverlay.isShown) updateInstallOverlay(null, emptyList(), isTarget = false, s = s, now = now)
+                return true
+            }
             val (texts, search) = collectOrdered(root)
             if (PlayLock.verdict(texts, search, s.titles) == PlayLock.Verdict.RETURN) {
                 hideInstallOverlay()
@@ -518,24 +523,18 @@ class GuardService : AccessibilityService() {
     }
 
     /**
-     * עמוד מותר בחלון ההתקנה: מסך FilterPhone מעל Play כולו (PlayInstallOverlay) — אי אפשר לגעת, לגלול או
-     * לנווט ב-Play. בעמוד של האפליקציה שנבחרה FilterPhone לוחץ בעצמו על "התקנה" / "עדכון" (המשתמש ביקש
-     * בחנות שלנו), מציג התקדמות, ובסיום חוזר לחנות של FilterPhone. חלון ביניים של Play (בחירת חשבון,
-     * אישור) — המסך יורד, והמשתמש מטפל בו; חלונות מערכת (אישורי התקנה / Play Protect) — לא נוגעים בהם.
+     * חלון ההתקנה: מסך FilterPhone מעל Play כולו (PlayInstallOverlay) — עולה עוד לפני ש-Play נפתח
+     * (onPlaySession) ונשאר עד הסוף, כך שהלקוח לא רואה את Play בכלל ולא יכול לגעת בו. מאחורי המסך:
+     * בעמוד של האפליקציה שנבחרה FilterPhone לוחץ "התקנה" / "עדכון" (המשתמש ביקש בחנות שלנו), מציג
+     * התקדמות, ובסיום חוזר לחנות של FilterPhone. Play תקוע / מבקש משהו (חשבון, אישור) — "נסה שוב" או
+     * חזרה; חלונות מערכת (אישורי התקנה / Play Protect) — לא נוגעים בהם.
      */
-    private fun updateInstallOverlay(root: AccessibilityNodeInfo, texts: List<String>, isTarget: Boolean,
+    private fun updateInstallOverlay(root: AccessibilityNodeInfo?, texts: List<String>, isTarget: Boolean,
                                      s: PlayLock.Session, now: Long) {
         schedulePlayRecheck()
-        if (PlayLock.revealed(now)) {
-            installOverlay.hide()
-            return
-        }
         val done = PlayLock.installedDuring(s, ManagedApps.installedVersion(this, s.pkg))
-        if (!done && !isTarget) {
-            installOverlay.hide()                 // חלון ביניים של Play — המשתמש מטפל, החלון עדיין שומר
-            return
-        }
-        val action = PlayLock.action(texts)
+        val action = if (isTarget) PlayLock.action(texts) else PlayLock.Action.UNKNOWN
+        if (done || action == PlayLock.Action.INSTALLING) playLastProgressAt = now
         val state = when {
             done -> {
                 finishInstallSoon()
@@ -551,16 +550,22 @@ class GuardService : AccessibilityService() {
                         PlayInstallOverlay.Button.BACK to getString(R.string.play_overlay_back_continue),
                         PlayInstallOverlay.Button.CANCEL to getString(R.string.play_overlay_cancel_install)))
             }
+            action == PlayLock.Action.INSTALLED -> overlayState(R.string.play_overlay_already, null, busy = false,
+                PlayInstallOverlay.Button.OPEN to R.string.play_overlay_open,
+                PlayInstallOverlay.Button.BACK to R.string.play_overlay_back)
+            PlayLock.stuck(PlayLock.session ?: s, playLastProgressAt, now) -> overlayState(R.string.play_overlay_stuck, null,
+                busy = false,
+                PlayInstallOverlay.Button.RETRY to R.string.play_overlay_retry,
+                PlayInstallOverlay.Button.BACK to R.string.play_overlay_back)
             action == PlayLock.Action.INSTALL || action == PlayLock.Action.UPDATE -> {
-                if (PlayLock.shouldClick(s, action, now) && clickPlayButton(root, PlayLock.buttonTexts(action))) {
+                if (root != null && PlayLock.shouldClick(s, action, now) && clickPlayButton(root, PlayLock.buttonTexts(action))) {
                     PlayLock.noteClick(now)
                 }
                 val cur = PlayLock.session ?: s
                 if (cur.clicks >= PlayLock.MAX_CLICKS && now - cur.lastClickAt >= PlayLock.CLICK_RETRY_MS) {
-                    // לא הצליח אוטומטית — כפתור משלנו (הלחיצה עוברת לכפתור ב-Play), או לאישור בחנות
+                    // לא התחיל אוטומטית — כפתור משלנו (הלחיצה עוברת לכפתור ב-Play, מאחורי המסך)
                     overlayState(R.string.play_overlay_manual, null, busy = false,
                         PlayInstallOverlay.Button.INSTALL to R.string.play_overlay_install,
-                        PlayInstallOverlay.Button.REVEAL to R.string.play_overlay_reveal,
                         PlayInstallOverlay.Button.BACK to R.string.play_overlay_back)
                 } else {
                     overlayState(if (action == PlayLock.Action.UPDATE) R.string.play_overlay_starting_update
@@ -568,13 +573,20 @@ class GuardService : AccessibilityService() {
                         PlayInstallOverlay.Button.BACK to R.string.play_overlay_cancel)
                 }
             }
-            action == PlayLock.Action.INSTALLED -> overlayState(R.string.play_overlay_already, null, busy = false,
-                PlayInstallOverlay.Button.OPEN to R.string.play_overlay_open,
-                PlayInstallOverlay.Button.BACK to R.string.play_overlay_back)
-            else -> overlayState(R.string.play_overlay_loading, null, busy = true,
+            else -> overlayState(R.string.play_overlay_loading, null, busy = true,      // נפתח / חלון ביניים
                 PlayInstallOverlay.Button.BACK to R.string.play_overlay_cancel)
         }
         installOverlay.show(s.label, state)
+    }
+
+    /** החנות שלנו פתחה חלון התקנה: המסך עולה מיד — עוד לפני ש-Play נפתח מאחוריו. */
+    private fun showInstallOverlayNow() {
+        val now = SystemClock.elapsedRealtime()
+        val s = PlayLock.active(now) ?: return
+        if (PlayLock.PLAY !in GuardPolicy.get(this).apps || AdminState.isPaused(this)) return   // Play פתוח — בלי מסך
+        installFinishing = false
+        playLastProgressAt = now
+        updateInstallOverlay(null, emptyList(), isTarget = false, s = s, now = now)
     }
 
     private fun overlayState(status: Int, progress: Int?, busy: Boolean,
@@ -628,10 +640,14 @@ class GuardService : AccessibilityService() {
                         backToFilterPhone()
                     }
                 }
-                PlayInstallOverlay.Button.REVEAL -> {
-                    PlayLock.reveal(now)
-                    installOverlay.hide()
-                    schedulePlayRecheck()
+                PlayInstallOverlay.Button.RETRY -> {
+                    PlayLock.retry(now)
+                    playLastProgressAt = now
+                    val market = android.content.Intent(android.content.Intent.ACTION_VIEW,
+                        android.net.Uri.parse("market://details?id=${s.pkg}")).setPackage(PlayLock.PLAY)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                    runCatching { startActivity(market) }
+                    playRecheck.run()
                 }
             }
         }
@@ -1340,7 +1356,10 @@ class GuardService : AccessibilityService() {
         /** החנות פתחה חלון התקנה ב-Play — שינויי תוכן ב-Play נחוצים מעכשיו (מכל חוט). */
         fun onPlaySession() {
             val s = instance ?: return
-            s.main.post { s.reconfigure() }
+            s.main.post {
+                s.reconfigure()
+                s.safely("play-overlay-now") { s.showInstallOverlayNow() }
+            }
         }
 
         /** נקרא אחרי שמירת מדיניות חדשה (מכל חוט). */

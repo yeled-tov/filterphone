@@ -11,7 +11,8 @@ package com.filterphone.app
  * אחרי שהאפליקציה הותקנה/עודכנה (או כשהזמן נגמר, או כשיוצאים מ-Play) — Play חוזר להיות חסום.
  * בעמוד האפליקציה עצמה — מסך של FilterPhone מכסה את Play כולו (PlayInstallOverlay): אי אפשר לגעת, לגלול
  * או לנווט ב-Play. FilterPhone לוחץ בעצמו על "התקנה" / "עדכון" (רק בעמוד של האפליקציה שנבחרה), מציג
- * התקדמות, ובסיום חוזר לחנות של FilterPhone. חלון ביניים של Play (חשבון / אישור) — המסך יורד והמשתמש מטפל.
+ * התקדמות, ובסיום חוזר לחנות של FilterPhone. המסך עולה עוד לפני ש-Play נפתח ונשאר עד הסוף — הלקוח לא רואה
+ * את Play בכלל. Play תקוע / מבקש משהו שאי אפשר לעשות אוטומטית — "נסה שוב" או חזרה.
  *
  * כאן רק ההחלטה (טהור, נבדק ביחידה) ומצב החלון; הביצוע ב-GuardService.
  */
@@ -39,8 +40,8 @@ object PlayLock {
         /** כמה פעמים FilterPhone לחץ "התקנה" / "עדכון" ב-Play, ומתי בפעם האחרונה. */
         val clicks: Int = 0,
         val lastClickAt: Long = 0,
-        /** "לאישור בחנות": המסך יורד עד הזמן הזה (חלון של Play שצריך לגעת בו). */
-        val revealUntil: Long = 0,
+        /** מתי החלון נפתח. */
+        val startedAt: Long = 0,
     )
 
     /** מצב עמוד האפליקציה ב-Play, לפי הכפתורים בו. */
@@ -48,7 +49,8 @@ object PlayLock {
 
     const val MAX_CLICKS = 3
     const val CLICK_RETRY_MS = 4_000L
-    const val REVEAL_MS = 20_000L
+    /** בלי התקדמות כמה זמן (לא התחילה הורדה) — "החנות לא מגיבה", עם "נסה שוב". */
+    const val STUCK_MS = 45_000L
 
     enum class Verdict { ALLOW, RETURN }
 
@@ -58,7 +60,7 @@ object PlayLock {
     fun start(pkg: String, titles: List<String>, versionAtStart: Long?, now: Long) {
         val clean = titles.map(::norm).filter { it.length >= 2 }.distinct()
         val label = titles.firstOrNull { it.isNotBlank() }?.trim().orEmpty()
-        session = Session(pkg, clean, now + WINDOW_MS, versionAtStart, label = label)
+        session = Session(pkg, clean, now + WINDOW_MS, versionAtStart, label = label, startedAt = now)
     }
 
     /** FilterPhone לחץ על הכפתור ב-Play. */
@@ -66,12 +68,14 @@ object PlayLock {
         session = session?.let { it.copy(clicks = it.clicks + 1, lastClickAt = now) }
     }
 
-    /** "לאישור בחנות" — מורידים את המסך לזמן קצר. */
-    fun reveal(now: Long) {
-        session = session?.copy(revealUntil = now + REVEAL_MS)
+    /** "נסה שוב": מתחילים את הספירה מחדש (עוד 3 לחיצות, עוד זמן עד "לא מגיבה"). */
+    fun retry(now: Long) {
+        session = session?.copy(clicks = 0, lastClickAt = 0, startedAt = now, until = maxOf(session!!.until, now + WINDOW_MS / 2))
     }
 
-    fun revealed(now: Long): Boolean = (session?.revealUntil ?: 0) > now
+    /** תקוע: לא התחילה הורדה כבר STUCK_MS מאז הפתיחה / הלחיצה האחרונה / "נסה שוב". טהור. */
+    fun stuck(s: Session, lastProgressAt: Long, now: Long): Boolean =
+        now - maxOf(s.startedAt, s.lastClickAt, lastProgressAt) >= STUCK_MS
 
     /** ללחוץ עכשיו על "התקנה" / "עדכון"? עד MAX_CLICKS פעמים, בהפרש של CLICK_RETRY_MS. טהור. */
     fun shouldClick(s: Session, action: Action, now: Long): Boolean =
