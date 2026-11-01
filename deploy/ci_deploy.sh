@@ -213,6 +213,17 @@ for d in rows:
           f"vpn_ip={'yes' if d['vpn_ip'] else 'no'} policy={d.get('policy_version')}/{d.get('device_policy_version')} "
           f"pause={'yes' if (d.get('pause_until') or 0) > now else 'no'} unmanage={'yes' if d.get('unmanage_at') else 'no'}")
     print("    hb:", json.dumps(keep, ensure_ascii=False)[:1600])
+    # אפליקציות שחוזרות לבד (Temu וכו'): האם הן אפליקציות מערכת שהגיעו עם הטלפון, ומה ההגדרות שקובעות התקנה
+    try:
+        apps = json.loads(d.get("apps") or "[]")
+        sus = [a for a in apps if re.search(r"temu|einnovation|aliexpress|shein|tiktok|facebook\.katana", a.get("package", ""))]
+        pol = json.loads(d.get("policy") or "{}")
+        inst = {k: v for k, v in (pol.get("dpc") or {}).items()
+                if k in ("disallow_install_apps", "approved_apps_only", "hide_blocked_apps", "suspend_blocked_apps")}
+        playopts = [o for o in (pol.get("options") or []) if o.startswith("play") or o in ("shopping", "temu")]
+        print(f"    apps={len(apps)} suspicious={json.dumps(sus, ensure_ascii=False)} install_dpc={inst} play={playopts}")
+    except Exception as e:
+        print("    apps:", e)
     if d.get("vpn_ip"):
         # שרתי Google שהפרוקסי למד לא לפתוח למכשיר (אפליקציה שלא סומכת על התעודה עברה דרך ה-VPN) — שמות ציבוריים
         try:
