@@ -2022,7 +2022,7 @@ function botDetails(site) {
 async function viewWeb(arg, query) {
   catalog = catalog || await api("/v1/admin/catalog");
   const tab = arg || "reviews";
-  const tabs = el("div", { class: "row gap" }, [["reviews", "בקשות בדיקה"], ["sites", "אתרים שנבדקו"], ["levels", "הרמות והקבוצות"]]
+  const tabs = el("div", { class: "row gap" }, [["reviews", "בקשות ודיווחים"], ["sites", "אתרים שנבדקו"], ["levels", "הרמות והקבוצות"]]
     .map(([k, t]) => el("a", { href: `#/web/${k}` }, el("button", { class: k === tab ? "primary small" : "ghost small" }, t))));
   if (tab === "sites") return [tabs, ...await webSitesView(query)];
   if (tab === "levels") return [tabs, ...webLevelsView()];
@@ -2034,34 +2034,51 @@ async function webReviewsView(query) {
   const { reviews } = await api(`/v1/admin/web/reviews?status=${encodeURIComponent(status)}`);
   const filters = el("div", { class: "row gap" }, [["pending", "ממתינות"], ["approved", "אושרו"], ["rejected", "נדחו"], ["", "הכול"]]
     .map(([k, t]) => el("a", { href: `#/web/reviews?status=${k}` }, el("button", { class: k === status ? "primary small" : "ghost small" }, t))));
+  const decide = (r, body, ok) => async () => {
+    await attempt(() => api(`/v1/admin/web/reviews/${r.id}`, { method: "POST", body }), ok);
+    render();
+  };
+  const btn = (cls, text, r, body, ok) => el("button", { class: `${cls} small`, onclick: decide(r, body, ok) }, text);
   const rows = reviews.map((r) => {
-    const sel = verdictSelect(r.site?.verdict && r.site.verdict !== "error" ? r.site.verdict : "auto_clean");
-    const actions = r.status === "pending" ? el("div", { class: "row gap wrap" },
-      sel,
-      el("button", { class: "primary small", onclick: async () => {
-        await attempt(() => api(`/v1/admin/web/reviews/${r.id}`, { method: "POST", body: { action: "global", verdict: sel.value } }),
-          "נשמר לכל הלקוחות");
-        render();
-      } }, "קביעה לכולם"),
-      el("button", { class: "ghost small", onclick: async () => {
-        await attempt(() => api(`/v1/admin/web/reviews/${r.id}`, { method: "POST", body: { action: "device" } }), "נפתח למכשיר הזה");
-        render();
-      } }, "לפתוח רק למכשיר הזה"),
-      el("button", { class: "danger small", onclick: async () => {
-        await attempt(() => api(`/v1/admin/web/reviews/${r.id}`, { method: "POST", body: { action: "reject" } }), "נדחה");
-        render();
-      } }, "דחייה"))
-      : el("span", { class: "muted small" }, `${r.status === "approved" ? "אושר" : "נדחה"} · ${r.decision === "auto" ? "אוטומטית (הבוט)" : r.decided_by || ""} ${ago(r.decided_at)}`);
+    const kind = r.kind || "site";
+    const report = r.intent === "report";
+    let actions;
+    if (r.status !== "pending") {
+      actions = el("span", { class: "muted small" }, `${r.status === "approved" ? "אושר" : "נדחה"} · ${String(r.decision).startsWith("auto") ? "אוטומטית (לפי הרמה)" : r.decided_by || ""} ${ago(r.decided_at)}`);
+    } else if (kind === "image" && report) {
+      actions = el("div", { class: "row gap wrap" },
+        btn("danger", "לחסום את התמונה לכולם", r, { action: "block_all" }, "נחסמה לכל הלקוחות"),
+        btn("ghost", "רק למכשיר הזה (כבר מוסתרת אצלו)", r, { action: "block_device" }, "נשאר חסום למכשיר"),
+        btn("ghost", "התמונה תקינה — לדחות", r, { action: "reject" }, "נדחה — התמונה חוזרת לסינון הרגיל"));
+    } else if (kind === "image") {
+      actions = el("div", { class: "row gap wrap" },
+        btn("primary", "לפתוח רק למכשיר הזה", r, { action: "allow_device" }, "נפתחה למכשיר"),
+        btn("ghost", "תקינה — לפתוח לכולם", r, { action: "allow_all" }, "נפתחה לכל הלקוחות"),
+        btn("danger", "דחייה", r, { action: "reject" }, "נדחה"));
+    } else {
+      const sel = verdictSelect(report ? "adult" : (r.site?.verdict && r.site.verdict !== "error" ? r.site.verdict : "auto_clean"));
+      actions = el("div", { class: "row gap wrap" }, sel,
+        el("button", { class: "primary small", onclick: async () => decide(r, { action: "global", verdict: sel.value }, "נשמר לכל הלקוחות")() }, "קביעה לכולם"),
+        report ? btn("ghost", "לחסום רק למכשיר הזה", r, { action: "device_block" }, "נחסם למכשיר הזה")
+          : btn("ghost", "לפתוח רק למכשיר הזה", r, { action: "device" }, "נפתח למכשיר הזה"),
+        btn("danger", report ? "הדיווח לא נכון — לדחות" : "דחייה", r, { action: "reject" }, "נדחה"));
+    }
+    const tag = report ? chip(kind === "image" ? "🚩 דיווח על תמונה" : "🚩 דיווח על אתר", "bad")
+      : chip(kind === "image" ? "🔍 בקשה לפתוח תמונה" : "🔍 בקשה לפתוח אתר", "accent");
     return el("div", { class: "card" },
       el("div", { class: "row between wrap" },
-        el("div", {}, el("b", { dir: "ltr" }, r.host), " ", verdictChip(r.site?.verdict || r.auto_verdict),
+        el("div", {}, tag, " ", el("b", { dir: "ltr" }, r.host), " ", kind === "site" ? verdictChip(r.site?.verdict || r.auto_verdict) : null,
           el("div", { class: "muted small" }, r.device_id ? el("a", { href: `#/devices/${r.device_id}` }, `${r.customer || ""} · ${r.device_name || ""}`) : "—",
             ` · ${ago(r.created_at)}`)),
-        r.url ? el("a", { href: r.url, target: "_blank", rel: "noopener noreferrer", class: "small", dir: "ltr" }, "הקישור ↗") : null),
+        el("div", { class: "row gap" },
+          r.page_url ? el("a", { href: r.page_url, target: "_blank", rel: "noopener noreferrer", class: "small" }, "הדף ↗") : null,
+          r.url ? el("a", { href: r.url, target: "_blank", rel: "noopener noreferrer", class: "small" },
+            kind === "image" ? (report ? "התמונה ↗ (דווחה כלא ראויה)" : "התמונה ↗") : "הקישור ↗") : null)),
       r.note ? el("p", {}, `"${r.note}"`) : null,
-      botDetails(r.site), actions);
+      r.ai_reason ? el("p", { class: "muted small" }, `🤖 ${r.ai_reason}`) : null,
+      kind === "site" ? botDetails(r.site) : null, actions);
   });
-  return [card("בקשות 'שליחה לבדיקה'", "לקוח שנכנס לאתר שלא ברמת הגלישה שלו יכול לשלוח אותו לבדיקה. הבוט בודק מיד — ואם האתר מתאים לרמה של הלקוח, הוא נפתח לבד. כאן מה שנשאר להחלטה שלך.",
+  return [card("בקשות ודיווחים", "מכרום בטלפון (הכפתור הצף / לחיצה ארוכה) ומדף החסימה: בקשה לפתוח אתר או תמונה — נבדקת מיד לפי הרמה של הלקוח, ומה שמתאים נפתח לבד; דיווח על אתר או תמונה לא ראויים — תמונה מוסתרת אצל הלקוח מיד. כאן מה שנשאר להחלטה שלך — וההחלטה מכוונת את הסינון לכולם.",
     filters), ...(rows.length ? rows : [el("p", { class: "muted" }, "אין בקשות.")])];
 }
 

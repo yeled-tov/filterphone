@@ -20,6 +20,8 @@ MAX_EVENTS = 20
 TEXT_LIMIT = 160
 
 KIND_TITLES = {"join": "בקשת הצטרפות חדשה", "change": "בקשת שינוי חסימות"}
+WEB_TITLES = {("site", "open"): "בקשה לבדיקת אתר", ("site", "report"): "דיווח על אתר לא ראוי",
+              ("image", "open"): "בקשה לפתוח תמונה", ("image", "report"): "דיווח על תמונה לא ראויה"}
 
 
 def parse_cursor(value: str | None) -> tuple[int, int, int] | None:
@@ -90,13 +92,13 @@ def _events(svc, after: str | None) -> dict:
                            "title": f"הודעה מ{chat['who']}" if chat["who"] else "הודעה חדשה בתמיכה",
                            "text": text, "route": f"#/support/{device_id}"})
         for w in c.execute(
-                "SELECT w.id, w.host, w.created_at, w.device_id, d.name AS device FROM web_reviews w"
+                "SELECT w.id, w.host, w.created_at, w.device_id, w.kind, w.intent, d.name AS device FROM web_reviews w"
                 " LEFT JOIN devices d ON d.id = w.device_id"
                 " WHERE w.id > ? AND w.id <= ? AND w.status = 'pending' ORDER BY w.id LIMIT ?",
                 (w0, top[2], MAX_EVENTS)):
             host = security.clean_text(w["host"], 80)
             dev = security.clean_text(w["device"], 60)
             events.append({"kind": "web", "key": f"w{w['id']}", "ts": w["created_at"],
-                           "title": "בקשה לבדיקת אתר", "text": f"{host} · {dev}" if dev else host,
-                           "route": "#/web"})
+                           "title": WEB_TITLES.get((w["kind"], w["intent"]), "בקשה לבדיקת אתר"),
+                           "text": f"{host} · {dev}" if dev else host, "route": "#/web"})
     return {"cursor": cursor, "events": events, "counts": counts}

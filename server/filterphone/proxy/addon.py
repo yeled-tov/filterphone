@@ -35,7 +35,7 @@ from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
 from .hosts import HostPolicy, is_chromium_hello, load_lists
 from .policy import DevicePolicy, PolicyTable
-from .web import CHECK_WAIT_S, WebState
+from .web import CHECK_WAIT_S, IMAGE_OVERRIDE_KEY, WebState, image_key_of
 
 log = logging.getLogger("filterphone.proxy")
 
@@ -146,6 +146,8 @@ class FilterPhone:
         self.terms = serp.TermMatcher(resolve_keywords({})["terms"])
         self._background: set[asyncio.Task] = set()
         self._host_events: dict[tuple[str, str], float] = {}
+        # החלטות על תמונות מסוימות (דיווחים מכרום — המנהל / בדיקה לפי הרמה): מפתח → block / pass
+        self.image_overrides: dict[str, str] = {}
         m = self.metrics = metrics.Registry("fp_proxy")
         self.m_images = m.counter("images_total", "תמונות שנבדקו, לפי תוצאה")
         self.m_engine_errors = m.counter("engine_errors_total", "כשלים בפנייה למנוע, לפי סוג")
@@ -178,6 +180,7 @@ class FilterPhone:
         self._spawn(self.policies.run())
         self._spawn(self.web.run())
         self._spawn(self._reload_learned_forever())
+        self._spawn(self._reload_image_overrides_forever())
         self._spawn(self._publish_metrics_forever())
         log.info("FilterPhone proxy ready (%d learned passthrough hosts)", self.hosts.learned_count())
 
@@ -209,6 +212,24 @@ class FilterPhone:
                 await self.redis.hdel(PASSTHROUGH_KEY, *expired)
         except Exception as e:
             log.warning("could not load learned passthrough list: %s", e)
+
+    async def _load_image_overrides(self) -> None:
+        try:
+            self.image_overrides = await self.redis.hgetall(IMAGE_OVERRIDE_KEY)
+        except Exception as e:
+            log.warning("could not load image overrides: %s", e)
+
+    async def _reload_image_overrides_forever(self) -> None:
+        while True:
+            await self._load_image_overrides()
+            await asyncio.sleep(5)
+
+    def image_override(self, ip: str, url: str) -> str | None:
+        """החלטה על התמונה הזו: קודם למכשיר הזה, אחר כך לכולם. None = אין — המנוע מחליט."""
+        if not self.image_overrides:
+            return None
+        key = image_key_of(url)
+        return self.image_overrides.get(f"{ip}|{key}") or self.image_overrides.get(key)
 
     async def _reload_learned_forever(self) -> None:
         while True:
@@ -537,6 +558,14 @@ class FilterPhone:
                 self._spawn(self._record(ip, host, "block", "unverifiable: body", "image", _short_path(flow.request)))
             return
         if len(body) < self.cfg.min_image_bytes:
+            return
+        # דיווח / בדיקה מכרום: המנהל (או הבדיקה לפי הרמה) כבר החליט על התמונה הזו
+        override = self.image_override(ip, flow.request.pretty_url) if pol.images != "block" else None
+        if override == "pass":
+            return
+        if override == "block":
+            self._replace(flow.response, PLACEHOLDER_PNG, "image/png", "block")
+            self._spawn(self._record(ip, host, "block", "reported", "image", _short_path(flow.request)))
             return
         action, reason, out, ct = await self._judge(body, pol, host, ip)
         self._spawn(self._count(ip, "scanned"))

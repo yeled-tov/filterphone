@@ -699,8 +699,18 @@ class WebCheckIn(BaseModel):
 
 
 class WebReviewIn(BaseModel):
-    action: str = Field(min_length=1, max_length=20)      # global / device / reject
+    # אתר: global / device / device_block / reject. תמונה: block_all / block_device / allow_device / allow_all / reject
+    action: str = Field(min_length=1, max_length=20)
     verdict: str = Field(default="", max_length=40)
+
+
+class WebReportIn(BaseModel):
+    """מכרום בטלפון (הכפתור הצף / לחיצה ארוכה): אתר / קישור / תמונה — לבדיקה (לפתוח) או דיווח (לא ראוי)."""
+    kind: Literal["site", "image"]
+    intent: Literal["open", "report"]
+    url: str = Field(min_length=4, max_length=1000)
+    page_url: str = Field(default="", max_length=1000)
+    note: str = Field(default="", max_length=300)
 
 
 class PauseIn(BaseModel):
@@ -856,6 +866,17 @@ def _routes(app: FastAPI) -> None:
     def device_request(body: ChangeIn, svc: SvcDep, row: DeviceRow):
         _limit(device_limiter, f"req:{row['id']}")
         return svc.device_request_change(row, body.level, body.options, body.note)
+
+    @app.post("/v1/device/web/report")
+    def device_web_report(body: WebReportIn, request: Request, row: DeviceRow):
+        """הכפתור הצף בכרום / לחיצה ארוכה על קישור או תמונה. בודק לפי הרמה של הלקוח ומחזיר תשובה מיד
+        (אתר חדש — עד כמה שניות של בדיקה); מה שלא מתאים / דיווח — מחכה למנהל בדשבורד."""
+        _limit(device_limiter, f"web:{row['id']}")
+        try:
+            return request.app.state.web.device_request(row, body.kind, body.intent, body.url, body.page_url,
+                                                        body.note)
+        except ValueError as e:
+            raise ApiError(400, str(e)) from e
 
     @app.post("/v1/device/report")
     def device_report(body: ReportIn, svc: SvcDep, row: DeviceRow):

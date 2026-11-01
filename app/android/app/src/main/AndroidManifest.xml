@@ -110,6 +110,14 @@
 
         <!-- Google Play מנוהל: "חסום להתקנה — בקשת אישור" (חלון קטן מעל Play) -->
         <activity
+            android:name=".WebReportActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.filterphone.app.webreport"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".AppRequestActivity"
             android:exported="false"
             android:excludeFromRecents="true"

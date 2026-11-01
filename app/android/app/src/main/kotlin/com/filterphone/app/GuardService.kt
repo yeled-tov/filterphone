@@ -55,6 +55,12 @@ class GuardService : AccessibilityService() {
     private val installOverlay by lazy { PlayInstallOverlay(this) { onInstallButton(it) } }
     private val playBadges by lazy { PlayRequestBadges(this) { title -> onPlayBadgeTap(title) } }   // Play מנוהל
     private var lastManagedScanAt = 0L
+    /** כרום: הכפתור הצף ⋮ (דיווח / בדיקה) והתווית ליד תפריט הלחיצה הארוכה — ChromeBubble. */
+    private val chromeBubble by lazy { ChromeBubble(this, { onChromeBubble() }, { onChromeChip() }) }
+    private var chromePageUrl: String? = null
+    private var chromeMenu: Pair<ChromeReport.Kind, String?>? = null
+    private val chromeMenuCheck = Runnable { safely("chrome-menu") { checkChromeMenu() } }
+    private val chromeChipHide = Runnable { chromeBubble.hideChip(); chromeMenu = null }
     /** Play מנוהל — מתי יצאו מעמוד האפליקציה המאושרת (0 = עדיין בו / השער סגור), ועד מתי לא לפתוח שוב. */
     private var gateLeftAt = 0L
     private var gateQuietUntil = 0L
@@ -244,6 +250,7 @@ class GuardService : AccessibilityService() {
                 playBadges.hide()
                 gateLeft()
             }
+            onChromeWindow(pkg)
             // יצאו מוואטסאפ (לא מקלדת / שורת המצב / אנחנו) — בלי כיסוי
             if (avatarMask.isShown && !maskWanted(pkg, policy) && pkg != packageName && pkg != SYSTEM_UI && !isIme(pkg)) {
                 avatarMask.hide()
@@ -793,6 +800,74 @@ class GuardService : AccessibilityService() {
         }
         stack.forEach { if (it !== root) recycle(it) }
         return editable
+    }
+
+    // ------------------------------------------------------------ כרום: דיווח / שליחה לבדיקה
+
+    /** חלון חדש: בכרום — הכפתור הצף (ובדיקה אם נפתח תפריט לחיצה ארוכה); באפליקציה אחרת — בלי כפתור. */
+    private fun onChromeWindow(pkg: String) {
+        if (pkg == ChromeReport.CHROME && guardWanted() && !AdminState.isPaused(this)) {
+            chromeBubble.show()
+            main.removeCallbacks(chromeMenuCheck)
+            main.postDelayed(chromeMenuCheck, 250)
+            main.postDelayed(chromeMenuCheck, 700)
+        } else if (pkg != SYSTEM_UI && !isIme(pkg)) {
+            chromeBubble.hide()
+            chromeMenu = null
+        }
+    }
+
+    /** תפריט הלחיצה הארוכה של כרום (קישור / תמונה) — התווית "דיווח / בדיקה"; אחרת — כתובת הדף. */
+    private fun checkChromeMenu() {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
+        try {
+            if (root.packageName?.toString() != ChromeReport.CHROME) return
+            val bar = runCatching { root.findAccessibilityNodeInfosByViewId(ChromeReport.URL_BAR_ID) }.getOrNull().orEmpty()
+            bar.firstOrNull()?.text?.toString()?.let { t -> ChromeReport.pageUrl(t)?.let { chromePageUrl = it } }
+            bar.forEach { recycle(it) }
+            val texts = collectTexts(root)
+            val kind = ChromeReport.contextMenu(texts)
+            if (kind == null) {
+                if (chromeBubble.chipShown) { chromeBubble.hideChip(); chromeMenu = null }
+                return
+            }
+            chromeMenu = kind to ChromeReport.menuUrl(texts)
+            chromeBubble.showChip(getString(if (kind == ChromeReport.Kind.IMAGE) R.string.web_report_chip_image
+                else R.string.web_report_chip_link))
+            main.removeCallbacks(chromeChipHide)
+            main.postDelayed(chromeChipHide, 12_000)
+        } finally {
+            recycle(root)
+        }
+    }
+
+    /** הכפתור הצף: דיווח / בדיקה על הדף הנוכחי. */
+    private fun onChromeBubble() {
+        safely("chrome-bubble") {
+            val root = runCatching { rootInActiveWindow }.getOrNull()
+            try {
+                if (root?.packageName?.toString() == ChromeReport.CHROME) {
+                    val bar = runCatching { root.findAccessibilityNodeInfosByViewId(ChromeReport.URL_BAR_ID) }.getOrNull().orEmpty()
+                    bar.firstOrNull()?.text?.toString()?.let { t -> ChromeReport.pageUrl(t)?.let { chromePageUrl = it } }
+                    bar.forEach { recycle(it) }
+                }
+            } finally {
+                root?.let { recycle(it) }
+            }
+            WebReportActivity.open(this, ChromeReport.Kind.SITE, chromePageUrl, chromePageUrl)
+        }
+    }
+
+    /** התווית ליד תפריט הלחיצה הארוכה: דיווח / בדיקה על הקישור / התמונה שנבחרו. */
+    private fun onChromeChip() {
+        safely("chrome-chip") {
+            val (kind, url) = chromeMenu ?: return@safely
+            chromeBubble.hideChip()
+            performGlobalAction(GLOBAL_ACTION_BACK)              // סוגר את התפריט של כרום
+            WebReportActivity.open(this, kind, url ?: chromePageUrl.takeIf { kind == ChromeReport.Kind.LINK },
+                chromePageUrl)
+            chromeMenu = null
+        }
     }
 
     private fun onPlayBadgeTap(title: String) {
@@ -1507,6 +1582,7 @@ class GuardService : AccessibilityService() {
         instance = null
         runCatching { installOverlay.hide() }
         runCatching { playBadges.hide() }
+        runCatching { chromeBubble.hide() }
         runCatching { avatarMask.hide() }
         Recovery.syncSoon(this)            // המגן כובה — לדווח לשרת
         // כובה בהגדרות? עם ההרשאה (הקמה) — מדליקים מחדש מיד (לא בהשהיה שהמנהל אישר)
@@ -1525,6 +1601,7 @@ class GuardService : AccessibilityService() {
         runCatching { PlayGate.close(this, "guard stopped") }
         runCatching { installOverlay.hide() }
         runCatching { playBadges.hide() }
+        runCatching { chromeBubble.hide() }
         runCatching { avatarMask.hide() }
         super.onDestroy()
     }

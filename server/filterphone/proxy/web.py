@@ -11,6 +11,7 @@ Redis (ה-API כותב, הפרוקסי קורא):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import time
@@ -25,6 +26,18 @@ VERDICT_KEY = "fp:web:verdict"
 CHANGES_KEY = "fp:web:changes"
 CHECK_KEY = "fp:web:check"
 REVIEWS_KEY = "fp:web:reviews"
+# החלטות על תמונות מסוימות (דיווחים מכרום): "<מפתח>" — לכולם, "<ip>|<מפתח>" — למכשיר אחד → block / pass
+IMAGE_OVERRIDE_KEY = "fp:img:override"
+
+
+def image_key_of(url: str) -> str:
+    """מפתח לתמונה לפי הכתובת שלה (בלי #): אותה תמונה מהטלפון (דיווח) ומהפרוקסי (סינון)."""
+    u = (url or "").split("#", 1)[0].strip()
+    if "://" in u:
+        _scheme, rest = u.split("://", 1)
+        host, _, path = rest.partition("/")
+        u = f"{host.lower()}/{path}"
+    return hashlib.sha1(u.encode("utf-8", "replace")).hexdigest()[:20]
 CHECK_WAIT_S = 45.0         # אתר שהבוט לא סיים לבדוק תוך זמן כזה — נחסם (עם "שליחה לבדיקה")
 REQUEUE_S = 120.0           # לא דוחפים לתור שוב את אותו אתר בתוך זמן כזה
 FULL_RELOAD_S = 900.0

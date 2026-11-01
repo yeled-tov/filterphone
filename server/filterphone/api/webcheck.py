@@ -29,10 +29,18 @@ from urllib.parse import urljoin, urlsplit
 
 from .. import protocol, websites
 from ..proxy import serp
-from ..proxy.web import CHANGES_KEY, CHECK_KEY, REVIEWS_KEY, VERDICT_KEY, load_domain_list
+from ..proxy.web import (
+    CHANGES_KEY,
+    CHECK_KEY,
+    IMAGE_OVERRIDE_KEY,
+    REVIEWS_KEY,
+    VERDICT_KEY,
+    image_key_of,
+    load_domain_list,
+)
 from ..websites import WebPolicy, group_of, lookup, no_auto, norm_host
 from . import db
-from .catalog import OPTIONS, DeviceSettings, clean_host, resolve_keywords
+from .catalog import OPTIONS, DeviceSettings, clean_host, compile_settings, resolve_keywords
 from .fetch import FetchError, fetch, fetch_image, fetch_page
 
 log = logging.getLogger("filterphone.webcheck")
@@ -472,6 +480,123 @@ class WebDesk:
                        db.now() if allowed else None, "bot" if allowed else "", rid))
         return True
 
+    # ------------------------------------------------------------ דיווחים מכרום (הטלפון)
+
+    def device_request(self, dev: sqlite3.Row, kind: str, intent: str, url: str, page_url: str = "",
+                       note: str = "") -> dict:
+        """הכפתור הצף / לחיצה ארוכה בכרום. kind: site / image. intent: open (שליחה לבדיקה — רוצים לפתוח) /
+        report (דיווח — לא ראוי). → {"result", "title", "reason", "can_request", "review_id"} לטלפון:
+          allowed      — מתאים לרמה של הלקוח: נפתח (לרענן את הדף)
+          not_in_level — לא מתאים לרמה (למה); אפשר לבקש לעבור רמה / לבקש לפתוח בכל זאת (מחכה למנהל)
+          blocked      — ממש לא ראוי (למבוגרים): חסום בכל הרמות, בלי אפשרות לבקש
+          pending      — לא הצלחנו לבדוק לבד — מחכה למנהל
+          reported     — הדיווח נשלח למנהל (תמונה — הוסתרה אצלך כבר עכשיו)"""
+        if kind not in ("site", "image") or intent not in ("open", "report"):
+            raise ValueError("סוג בקשה לא מוכר")
+        url = (url or "").strip()[:1000]
+        host = norm_host(clean_host(urlsplit(url).hostname or url) or "")
+        if not host:
+            raise ValueError("כתובת לא תקינה")
+        if kind == "image" and not url.lower().startswith(("http://", "https://")):
+            raise ValueError("כתובת התמונה לא תקינה")
+        with self.svc.db() as c, db.transaction(c):
+            dup = c.execute("SELECT id FROM web_reviews WHERE device_id = ? AND kind = ? AND intent = ? AND"
+                            " status = 'pending' AND (url = ? OR (kind = 'site' AND host = ?))",
+                            (dev["id"], kind, intent, url, host)).fetchone()
+            rid = dup["id"] if dup else c.execute(
+                "INSERT INTO web_reviews (device_id, host, url, note, created_at, kind, intent, page_url)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (dev["id"], host, url, (note or "")[:300], db.now(), kind, intent, (page_url or "")[:500])).lastrowid
+            self.svc.log_device(c, dev["id"], f"web_{intent}", f"{kind}:{host}")
+        if kind == "image":
+            return self._image_request(dev, rid, url, intent)
+        if intent == "report":
+            return {"result": "reported", "review_id": rid, "title": host,
+                    "reason": "הדיווח נשלח לבדיקה. תודה — כך הסינון משתפר."}
+        return self._site_open(dev, rid, host)
+
+    def _site_open(self, dev: sqlite3.Row, rid: int, host: str) -> dict:
+        settings = DeviceSettings.load(dev["policy"])
+        # חסום במסלול של הלקוח (רשתות חברתיות, וידאו…) — לא עניין של רמת הגלישה
+        comp = compile_settings(dev["level"], settings)
+        blocked_by = _blocked_by_option(host, comp.hosts)
+        site = self.check(host, force=self.site(host).get("verdict") == "error")
+        verdict = site.get("verdict", "")
+        title = websites.VERDICT_TITLES.get(verdict, verdict) if verdict else ""
+        self._set_auto(rid, verdict)
+        if verdict == "adult":
+            self._close(rid, "rejected", "auto:adult", "bot")
+            return {"result": "blocked", "review_id": rid, "title": title,
+                    "reason": "האתר מסווג כתוכן למבוגרים — חסום בכל הרמות.", "can_request": False}
+        if blocked_by:
+            return {"result": "not_in_level", "review_id": rid, "title": blocked_by, "can_request": True,
+                    "reason": f"האתר חסום במסלול שלך ({blocked_by}). אפשר לבקש לפתוח אותו או לשנות את המסלול."}
+        if verdict in ("", "error"):
+            return {"result": "pending", "review_id": rid, "title": host, "can_request": True,
+                    "reason": "לא הצלחנו לבדוק את האתר אוטומטית — הבקשה נשלחה לבדיקה ידנית."}
+        if self._device_policy(dev).decide(host, verdict) == "allow":
+            self._close(rid, "approved", "auto", "bot")
+            return {"result": "allowed", "review_id": rid, "title": title,
+                    "reason": "האתר מתאים לרמה שלך — רעננו את הדף."}
+        level = websites.WEB_LEVELS.get(settings.web_level, {}).get("title", "")
+        return {"result": "not_in_level", "review_id": rid, "title": title, "can_request": True,
+                "reason": f"האתר מסווג כ\"{title}\" — ברמת הגלישה שלך ({level}) הוא חסום."}
+
+    def _image_request(self, dev: sqlite3.Row, rid: int, url: str, intent: str) -> dict:
+        ip = dev["vpn_ip"] or ""
+        key = image_key_of(url)
+        if intent == "report":
+            # הלקוח אמר שזה לא ראוי — מוסתר אצלו כבר עכשיו; המנהל מחליט לכולם
+            if ip:
+                self.redis.hset(IMAGE_OVERRIDE_KEY, f"{ip}|{key}", "block")
+            reason = self._image_ai_reason(url, 3)
+            self._set_auto(rid, "", reason)
+            return {"result": "reported", "review_id": rid, "title": "תמונה",
+                    "reason": "התמונה הוסתרה אצלך (רעננו את הדף) והדיווח נשלח לבדיקה. תודה!"}
+        level = int(dev["level"] or 0)
+        try:
+            data, _ = self._fetch_image(url)
+            header = self._classify_at(data, max(1, level))
+        except (FetchError, OSError, protocol.ProtocolError, ValueError) as e:
+            self._set_auto(rid, "error", str(e)[:120])
+            return {"result": "pending", "review_id": rid, "title": "תמונה", "can_request": True,
+                    "reason": "לא הצלחנו לבדוק את התמונה אוטומטית — הבקשה נשלחה לבדיקה ידנית."}
+        action, why = str(header.get("action", "pass")), str(header.get("reason", ""))
+        self._set_auto(rid, action, why)
+        if action == "pass":
+            if ip:
+                self.redis.hset(IMAGE_OVERRIDE_KEY, f"{ip}|{key}", "pass")
+            self._close(rid, "approved", "auto", "bot")
+            return {"result": "allowed", "review_id": rid, "title": "תמונה",
+                    "reason": "התמונה מתאימה לרמה שלך — רעננו את הדף."}
+        if "nsfw" in why or "explicit" in why:
+            self._close(rid, "rejected", "auto:adult", "bot")
+            return {"result": "blocked", "review_id": rid, "title": "תמונה", "can_request": False,
+                    "reason": "התמונה לא ראויה — חסומה בכל הרמות."}
+        return {"result": "not_in_level", "review_id": rid, "title": "תמונה", "can_request": True,
+                "reason": "בתמונה יש דמות שברמת הסינון שלך מוסתרת. אפשר לבקש לפתוח אותה או לעבור רמה."}
+
+    def _classify_at(self, data: bytes, level: int) -> dict:
+        if self._classify is not self._engine_classify:
+            return self._classify(data)             # בדיקות
+        header, _ = protocol.call_sync(self.cfg.engine_socket, {"op": "classify", "level": level, "budget_ms": 8000},
+                                       data, timeout=12)
+        return header
+
+    def _image_ai_reason(self, url: str, level: int) -> str:
+        """מה המנוע חושב על תמונה שדווחה (למנהל) — בלי להציג אותה."""
+        try:
+            data, _ = self._fetch_image(url)
+            h = self._classify_at(data, level)
+        except (FetchError, OSError, protocol.ProtocolError, ValueError) as e:
+            return f"לא נבדקה: {str(e)[:80]}"
+        return "המנוע: תקינה" if h.get("action") == "pass" else f"המנוע: {h.get('reason', '')}"[:120]
+
+    def _set_auto(self, rid: int, verdict: str, reason: str = "") -> None:
+        with self.svc.db() as c, db.transaction(c):
+            c.execute("UPDATE web_reviews SET auto_verdict = ?, ai_reason = ? WHERE id = ?",
+                      (verdict[:40], reason[:200], rid))
+
     def reviews(self, status: str = "pending", limit: int = 200) -> list[dict]:
         sql = ("SELECT r.*, d.name AS device_name, cu.name AS customer FROM web_reviews r"
                " LEFT JOIN devices d ON d.id = r.device_id LEFT JOIN customers cu ON cu.id = d.customer_id")
@@ -501,6 +626,20 @@ class WebDesk:
         if r is None:
             raise LookupError("בקשה לא נמצאה")
         host = r["host"]
+        kind = r["kind"] if "kind" in r.keys() else "site"
+        if kind == "image":
+            return self._decide_image(r, action, by)
+        if action == "device_block":
+            # דיווח על אתר: לחסום אותו למכשיר הזה (האתרים הידניים של המכשיר)
+            if r["device_id"] is None:
+                raise LookupError("המכשיר כבר לא קיים")
+            with self.svc.db() as c:
+                dev = c.execute("SELECT policy FROM devices WHERE id = ?", (r["device_id"],)).fetchone()
+            custom = DeviceSettings.load(dev["policy"]).custom_hosts if dev else []
+            self.svc.update_device(r["device_id"], {"custom_hosts": sorted({*custom, host})}, by)
+            self._close(review_id, "approved", "device_block", by)
+            with self.svc.db() as c:
+                return dict(c.execute("SELECT * FROM web_reviews WHERE id = ?", (review_id,)).fetchone())
         if action == "global":
             self.set_verdict(host, verdict, "human", by)
             # כל הבקשות הממתינות לאתר הזה (מכל המכשירים) — לפי הרמה של כל אחד
@@ -525,10 +664,60 @@ class WebDesk:
         with self.svc.db() as c:
             return dict(c.execute("SELECT * FROM web_reviews WHERE id = ?", (review_id,)).fetchone())
 
+    def _decide_image(self, r: sqlite3.Row, action: str, by: str) -> dict:
+        """תמונה מכרום: block_all / block_device / allow_device / allow_all / reject."""
+        key = image_key_of(r["url"])
+        ip = ""
+        if r["device_id"] is not None:
+            with self.svc.db() as c:
+                d = c.execute("SELECT vpn_ip FROM devices WHERE id = ?", (r["device_id"],)).fetchone()
+            ip = (d["vpn_ip"] if d else "") or ""
+        if action in ("block_device", "allow_device") and not ip:
+            raise LookupError("המכשיר כבר לא קיים")
+        if action == "block_all":
+            self.redis.hset(IMAGE_OVERRIDE_KEY, key, "block")
+            if ip:
+                self.redis.hdel(IMAGE_OVERRIDE_KEY, f"{ip}|{key}")
+            status = "approved" if r["intent"] == "report" else "rejected"
+        elif action == "block_device":
+            self.redis.hset(IMAGE_OVERRIDE_KEY, f"{ip}|{key}", "block")
+            status = "approved" if r["intent"] == "report" else "rejected"
+        elif action == "allow_device":
+            self.redis.hset(IMAGE_OVERRIDE_KEY, f"{ip}|{key}", "pass")
+            status = "approved" if r["intent"] == "open" else "rejected"
+        elif action == "allow_all":
+            self.redis.hset(IMAGE_OVERRIDE_KEY, key, "pass")
+            if ip:
+                self.redis.hdel(IMAGE_OVERRIDE_KEY, f"{ip}|{key}")
+            status = "approved" if r["intent"] == "open" else "rejected"
+        elif action == "reject":
+            if r["intent"] == "report" and ip:
+                self.redis.hdel(IMAGE_OVERRIDE_KEY, f"{ip}|{key}")     # הדיווח נדחה — התמונה חוזרת למנוע
+            status = "rejected"
+        else:
+            raise ValueError("פעולה לא מוכרת")
+        self._close(r["id"], status, action, by)
+        with self.svc.db() as c, db.transaction(c):
+            self.svc.audit(by or "admin", "image_decision", key, action, c)
+        with self.svc.db() as c:
+            return dict(c.execute("SELECT * FROM web_reviews WHERE id = ?", (r["id"],)).fetchone())
+
     def _close(self, review_id: int, status: str, decision: str, by: str) -> None:
         with self.svc.db() as c, db.transaction(c):
             c.execute("UPDATE web_reviews SET status = ?, decision = ?, decided_at = ?, decided_by = ? WHERE id = ?",
                       (status, decision, db.now(), by[:60], review_id))
+
+
+def _blocked_by_option(host: str, hosts) -> str:
+    """האתר חסום באחת מהאפשרויות של המכשיר (רשתות, וידאו…) — השם של האפשרות, או ""."""
+    parts = host.split(".")
+    blocked = set(hosts)
+    if not any(".".join(parts[i:]) in blocked for i in range(len(parts) - 1)):
+        return ""
+    for o in OPTIONS:
+        if any(host == h or host.endswith("." + h) for h in o.hosts if "*" not in h):
+            return o.title
+    return "חסימה ידנית"
 
 
 def _site_row(r: sqlite3.Row) -> dict:

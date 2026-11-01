@@ -351,8 +351,17 @@ _V18 = """
 ALTER TABLE admins ADD COLUMN perms TEXT;
 """
 
+_V19 = """
+-- דיווחים מכרום (הכפתור הצף / לחיצה ארוכה בטלפון): גם תמונות, וגם "לא ראוי" (דיווח) ולא רק "לפתוח".
+-- kind: site / image. intent: open (שליחה לבדיקה — רוצים לפתוח) / report (דיווח — לא ראוי, לחסום).
+ALTER TABLE web_reviews ADD COLUMN kind TEXT NOT NULL DEFAULT 'site';
+ALTER TABLE web_reviews ADD COLUMN intent TEXT NOT NULL DEFAULT 'open';
+ALTER TABLE web_reviews ADD COLUMN page_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE web_reviews ADD COLUMN ai_reason TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16,
-                         _V17, _V18]
+                         _V17, _V18, _V19]
 VERSION = len(MIGRATIONS)
 
 

@@ -447,3 +447,74 @@ def test_adult_list_is_loaded_for_the_bot(env, tmp_path):
 
 def test_http_response_type_for_block(fp):
     assert isinstance(fp._page(b"x"), http.Response)
+
+
+def test_chrome_reports_check_by_the_customers_level(env):
+    """הכפתור הצף בכרום: אתר לבדיקה — לפי הרמה של הלקוח (נפתח / למה לא / חסום לגמרי); דיווח — למנהל."""
+    svc, client = env
+    did, ip, h = enroll_clean(svc, client)
+    woman = b"W" * 5000
+    desk = desk_for(svc, {"clean.example": "<title>טופס</title>", "pics.example": "<img src='/w.jpg'>"},
+                    {"https://pics.example/w.jpg": woman}, women=(woman,))
+    client.app.state.web = desk
+    dev = svc.device_row(did)
+
+    ok = desk.device_request(dev, "site", "open", "https://clean.example/page")
+    assert ok["result"] == "allowed"
+    no = desk.device_request(dev, "site", "open", "https://pics.example/")
+    assert no["result"] == "not_in_level" and no["can_request"] and "נקי לגמרי" in no["reason"]
+    fb = desk.device_request(dev, "site", "open", "https://www.instagram.com/x")
+    assert fb["result"] == "not_in_level"                       # מסווג כרשת חברתית — לא ברמה
+    import os
+    os.makedirs(os.path.dirname(svc.cfg.adult_list_file), exist_ok=True)
+    with open(svc.cfg.adult_list_file, "w") as f:
+        f.write("bad-adult.example\n")
+    desk.reload_adult_list()
+    bad = desk.device_request(dev, "site", "open", "https://bad-adult.example/")
+    assert bad["result"] == "blocked" and bad["can_request"] is False
+    rep = desk.device_request(dev, "site", "report", "https://clean.example/bad-page", note="תמונה לא צנועה")
+    assert rep["result"] == "reported"
+    pending = {(r["kind"], r["intent"], r["host"]) for r in desk.reviews("pending")}
+    assert ("site", "open", "pics.example") in pending and ("site", "report", "clean.example") in pending
+    assert not any(r["host"] == "bad-adult.example" for r in desk.reviews("pending"))
+    # המנהל: לחסום את האתר שדווח רק למכשיר הזה
+    rid = next(r["id"] for r in desk.reviews("pending") if r["intent"] == "report")
+    assert client.post(f"/v1/admin/web/reviews/{rid}", headers=h, json={"action": "device_block"}).json()["status"] == "approved"
+    assert "clean.example" in client.get(f"/v1/admin/devices/{did}", headers=h).json()["settings"]["custom_hosts"]
+
+
+def test_chrome_image_reports_and_checks(env):
+    """תמונה: דיווח — מוסתרת אצל הלקוח מיד, המנהל מחליט לכולם; בדיקה — לפי הרמה (מתאימה = נפתחת)."""
+    from filterphone.proxy.web import IMAGE_OVERRIDE_KEY, image_key_of
+    svc, client = env
+    did, ip, h = enroll_clean(svc, client)
+    woman, clean = b"W" * 5000, b"C" * 5000
+    desk = desk_for(svc, {}, {"https://cdn.example/w.jpg": woman, "https://cdn.example/c.jpg": clean}, women=(woman,))
+    client.app.state.web = desk
+    dev = svc.device_row(did)
+    kw, kc = image_key_of("https://cdn.example/w.jpg"), image_key_of("https://cdn.example/c.jpg")
+
+    rep = desk.device_request(dev, "image", "report", "https://cdn.example/c.jpg", "https://page.example/")
+    assert rep["result"] == "reported"
+    assert svc.redis.hget(IMAGE_OVERRIDE_KEY, f"{ip}|{kc}") == "block"          # מוסתרת אצלו כבר עכשיו
+    ok = desk.device_request(dev, "image", "open", "https://cdn.example/c.jpg")
+    assert ok["result"] == "allowed"
+    no = desk.device_request(dev, "image", "open", "https://cdn.example/w.jpg")
+    assert no["result"] == "not_in_level" and no["can_request"]
+    assert svc.redis.hget(IMAGE_OVERRIDE_KEY, f"{ip}|{kw}") is None
+    # המנהל: התמונה שדווחה — לחסום לכולם
+    rid = next(r["id"] for r in desk.reviews("pending") if r["intent"] == "report")
+    client.post(f"/v1/admin/web/reviews/{rid}", headers=h, json={"action": "block_all"})
+    assert svc.redis.hget(IMAGE_OVERRIDE_KEY, kc) == "block"
+    # הבקשה לפתוח — רק למכשיר הזה
+    rid = next(r["id"] for r in desk.reviews("pending") if r["intent"] == "open")
+    assert client.post(f"/v1/admin/web/reviews/{rid}", headers=h,
+                       json={"action": "allow_device"}).json()["status"] == "approved"
+    assert svc.redis.hget(IMAGE_OVERRIDE_KEY, f"{ip}|{kw}") == "pass"
+    assert client.post(f"/v1/admin/web/reviews/{rid}", headers=h, json={"action": "nope"}).status_code in (400, 200)
+
+
+def test_image_key_ignores_scheme_and_fragment():
+    from filterphone.proxy.web import image_key_of
+    assert image_key_of("https://CDN.example/a.jpg?w=1#x") == image_key_of("http://cdn.example/a.jpg?w=1")
+    assert image_key_of("https://cdn.example/a.jpg?w=1") != image_key_of("https://cdn.example/a.jpg?w=2")
