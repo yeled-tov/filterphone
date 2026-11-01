@@ -463,3 +463,27 @@ html.in-app { -webkit-tap-highlight-color: transparent; }
   .kv dd { margin-bottom: 10px; }
   .row > select, .row > input:not([type="checkbox"]):not([type="radio"]) { flex: 1 1 140px; width: auto; }
 }
+
+/* ---------------------------------------------------------------- רשימת מכשירים: שורה אחת לכל מכשיר */
+.card.flush { padding: 0; overflow: hidden; }
+.dev-list { display: flex; flex-direction: column; }
+.dev-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; min-height: 48px;
+  border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none;
+}
+.dev-row:last-child { border-bottom: 0; }
+.dev-row:hover, .dev-row:focus-visible { background: var(--surface-2); }
+.dev-name { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; overflow: hidden; }
+.dev-name b, .dev-name small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev-name b { flex: 0 1 auto; min-width: 0; }
+.dev-name small { flex: 0 1 auto; min-width: 0; color: var(--muted); }
+.dev-flags { display: flex; gap: 4px; flex: none; }
+.dev-flags .chip { padding: 1px 8px; font-size: 12px; }
+.dev-seen { flex: none; color: var(--muted); white-space: nowrap; }
+@media (max-width: 600px) {
+  .dev-row { gap: 8px; padding: 9px 12px; }
+  .dev-name { flex-direction: column; align-items: flex-start; gap: 0; }
+  .dev-name b, .dev-name small { max-width: 100%; }
+  .dev-flags { max-width: 46%; overflow: hidden; }
+  .dev-seen { display: none; }
+}

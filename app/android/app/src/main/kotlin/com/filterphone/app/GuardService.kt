@@ -53,9 +53,38 @@ class GuardService : AccessibilityService() {
     private var lastSettingsScanAt = 0L
     private var launcherMenuPkg = ""                // מסך הבית שבו נלחץ ארוך הסמל שלנו
     private val installOverlay by lazy { PlayInstallOverlay(this) { onInstallButton(it) } }
-    private val playBadges by lazy { PlayRequestBadges(this) { onPlayBadgeTap() } }   // Play מנוהל
-    private var playBadgeTitle = ""
+    private val playBadges by lazy { PlayRequestBadges(this) { title -> onPlayBadgeTap(title) } }   // Play מנוהל
     private var lastManagedScanAt = 0L
+    /** Play מנוהל — מתי יצאו מעמוד האפליקציה המאושרת (0 = עדיין בו / השער סגור), ועד מתי לא לפתוח שוב. */
+    private var gateLeftAt = 0L
+    private var gateQuietUntil = 0L
+    private val gateClose = Runnable {
+        safely("play-gate") {
+            gateLeftAt = 0L
+            PlayGate.close(this, "left the approved app page")
+        }
+    }
+    /** התקנה של אפליקציה מאושרת התחילה (נוצר session) — סוגרים את השער מיד; ההתקנה ממשיכה עד הסוף. */
+    private val gateSessions = object : android.content.pm.PackageInstaller.SessionCallback() {
+        override fun onCreated(sessionId: Int) {
+            safely("play-gate-session") {
+                if (!PlayGate.isOpen(this@GuardService)) return@safely
+                val pkg = runCatching { packageManager.packageInstaller.getSessionInfo(sessionId)?.appPackageName }.getOrNull()
+                val approved = pkg != null && pkg in GuardPolicy.get(this@GuardService).allowed
+                Log.i(TAG, "play gate: install session for $pkg (approved=$approved)")
+                if (approved) {
+                    gateQuietUntil = SystemClock.elapsedRealtime() + GATE_QUIET_MS
+                    main.removeCallbacks(gateClose)
+                    gateLeftAt = 0L
+                    PlayGate.close(this@GuardService, "install of $pkg started")
+                }
+            }
+        }
+        override fun onBadgingChanged(sessionId: Int) = Unit
+        override fun onActiveChanged(sessionId: Int, active: Boolean) = Unit
+        override fun onProgressChanged(sessionId: Int, progress: Float) = Unit
+        override fun onFinished(sessionId: Int, success: Boolean) = Unit
+    }
     private val avatarMask by lazy { AvatarMask(this) }   // תמונות פרופיל בוואטסאפ — לבן במקומן (WaAvatars)
     private var maskScrollUntil = 0L                // רשימה בוואטסאפ בגלילה — עד אז פסים במקום עיגולים
     private var lastMaskAt = 0L
@@ -69,6 +98,7 @@ class GuardService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        runCatching { packageManager.packageInstaller.registerSessionCallback(gateSessions, main) }
         safely("connect") {
             markAlive(force = true)
             reconfigure()
@@ -180,6 +210,7 @@ class GuardService : AccessibilityService() {
             if (pkg != PlayLock.PLAY && pkg != packageName && pkg != SYSTEM_UI) {
                 hideInstallOverlay()
                 playBadges.hide()
+                gateLeft()
             }
             // יצאו מוואטסאפ (לא מקלדת / שורת המצב / אנחנו) — בלי כיסוי
             if (avatarMask.isShown && !maskWanted(pkg, policy) && pkg != packageName && pkg != SYSTEM_UI && !isIme(pkg)) {
@@ -634,22 +665,42 @@ class GuardService : AccessibilityService() {
         try {
             if (root.packageName?.toString() != PlayLock.PLAY) {
                 playBadges.hide()
+                gateLeft()
                 return
             }
             val texts = ArrayList<String>(64)
-            val buttons = ArrayList<Rect>(4)
+            val buttons = ArrayList<Pair<Rect, Boolean>>(4)
             collectInstallButtons(root, texts, buttons)
-            if (buttons.isEmpty() || PlayManaged.pageApproved(texts, policy.approvedTitles)) {
-                playBadges.hide()
-            } else {
-                playBadgeTitle = PlayManaged.guessTitle(texts)
-                playBadges.show(buttons)
-            }
+            val approved = PlayManaged.pageApproved(texts, policy.approvedTitles)
+            // שער ההתקנות (מנהל מכשיר): פתוח רק בעמוד של אפליקציה מאושרת שהכפתור הראשי שלה "התקנה" / "עדכון"
+            val action = if (approved) PlayLock.action(texts) else PlayLock.Action.UNKNOWN
+            if (action == PlayLock.Action.INSTALL || action == PlayLock.Action.UPDATE) gateApproved(now) else gateLeft()
+            // תוויות "חסום להתקנה": כל כפתור התקנה — חוץ מהכפתור הראשי של אפליקציה מאושרת. גם בעמוד מאושר
+            // יש פרסומות והמלצות עם "התקנה" משלהן; הן לא מאושרות.
+            val title = PlayManaged.guessTitle(texts)
+            val badges = buttons.filterNot { (_, primary) -> primary && approved }
+                .map { (r, primary) -> r to if (primary) title else "" }
+            if (badges.isEmpty()) playBadges.hide() else playBadges.show(badges)
         } catch (e: Exception) {
             Log.w(TAG, "managed play check failed", e)
         } finally {
             recycle(root)
         }
+    }
+
+    /** בעמוד של אפליקציה מאושרת (עם "התקנה" / "עדכון") — השער פתוח. */
+    private fun gateApproved(now: Long) {
+        main.removeCallbacks(gateClose)
+        gateLeftAt = 0L
+        if (now < gateQuietUntil) return              // ההתקנה כבר התחילה — לא פותחים שוב באותו רגע
+        PlayGate.open(this)
+    }
+
+    /** לא בעמוד מאושר: השער נסגר אחרי השהיה קצרה (הלחיצה על "התקנה" לפעמים מקדימה את הסריקה). */
+    private fun gateLeft() {
+        if (gateLeftAt != 0L || !PlayGate.isOpen(this)) return
+        gateLeftAt = SystemClock.elapsedRealtime()
+        main.postDelayed(gateClose, PlayGate.LEAVE_GRACE_MS)
     }
 
     private val managedRecheck = Runnable {
@@ -659,10 +710,15 @@ class GuardService : AccessibilityService() {
         }
     }
 
-    /** הטקסטים בסדר הרכיבים, ומיקום כל כפתור התקנה גלוי. */
-    private fun collectInstallButtons(root: AccessibilityNodeInfo, texts: MutableList<String>, buttons: MutableList<Rect>) {
+    /**
+     * הטקסטים בסדר הרכיבים, ומיקום כל כפתור התקנה גלוי — עם סימון אם הוא הכפתור הראשי של העמוד
+     * (PlayLock.primaryIndex) או כפתור של פרסומת / המלצה בהמשך.
+     */
+    private fun collectInstallButtons(root: AccessibilityNodeInfo, texts: MutableList<String>,
+                                      buttons: MutableList<Pair<Rect, Boolean>>) {
         val stack = ArrayDeque<AccessibilityNodeInfo>()
         stack.addLast(root)
+        val primaryLabels = ArrayList<String?>()
         var seen = 0
         while (stack.isNotEmpty() && seen < MAX_NODES) {
             val node = stack.removeLast()
@@ -671,7 +727,10 @@ class GuardService : AccessibilityService() {
             val desc = node.contentDescription?.toString()?.takeIf { it.isNotBlank() }
             text?.let(texts::add)
             desc?.let(texts::add)
-            if (node.isVisibleToUser && (PlayManaged.isInstallButton(text) || PlayManaged.isInstallButton(desc))) {
+            val label = text ?: desc
+            val install = PlayManaged.isInstallButton(text) || PlayManaged.isInstallButton(desc)
+            if (install || PlayLock.isPrimaryLabel(label)) primaryLabels += if (install) "install" else label
+            if (node.isVisibleToUser && install) {
                 // הכפתור הלחיץ עצמו (הטקסט לפעמים ברכיב פנימי) — המלבן שלו
                 var target: AccessibilityNodeInfo? = node
                 var depth = 0
@@ -682,7 +741,9 @@ class GuardService : AccessibilityService() {
                 }
                 val r = Rect()
                 (target ?: node).getBoundsInScreen(r)
-                if (r.width() > 0 && r.height() > 0 && buttons.none { it == r }) buttons += r
+                // הכפתור הראשי של העמוד (לא "התקנה" של פרסומת אחריו)
+                val primary = PlayLock.primaryIndex(primaryLabels, PRIMARY_INSTALL) == primaryLabels.lastIndex
+                if (r.width() > 0 && r.height() > 0 && buttons.none { it.first == r }) buttons += r to primary
                 parents.forEach { recycle(it) }
             }
             for (i in node.childCount - 1 downTo 0) {
@@ -693,8 +754,8 @@ class GuardService : AccessibilityService() {
         stack.forEach { if (it !== root) recycle(it) }
     }
 
-    private fun onPlayBadgeTap() {
-        PlayManaged.openRequest(this, playBadgeTitle)
+    private fun onPlayBadgeTap(title: String) {
+        PlayManaged.openRequest(this, title)
     }
 
     /** כפתור במסך ההתקנה. */
@@ -775,34 +836,40 @@ class GuardService : AccessibilityService() {
      * לוחץ על הכפתור ב-Play שהטקסט שלו באחת מהמילים [labels] (התקנה / עדכון / ביטול) — רק רכיב גלוי ופעיל,
      * דרך ACTION_CLICK שלו או של ההורה הלחיץ הקרוב. true אם נלחץ.
      */
+    /**
+     * לוחץ על הכפתור הראשי של עמוד האפליקציה ב-Play, אם הכיתוב שלו ב-[labels]. רכיבים בסדר המסך (מלמעלה
+     * למטה), ורק בין הכפתורים הראשיים (PlayLock.primaryIndex) — אף פעם לא "התקנה" / "עדכון" של פרסומת או
+     * המלצה בהמשך העמוד.
+     */
     private fun clickPlayButton(root: AccessibilityNodeInfo, labels: Set<String>): Boolean {
         if (labels.isEmpty()) return false
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
         val seen = ArrayList<AccessibilityNodeInfo>()
-        queue.add(root)
+        val primary = ArrayList<Pair<String, AccessibilityNodeInfo>>()     // הכפתורים הראשיים, בסדר המסך
+        stack.addLast(root)
         try {
             var visited = 0
-            while (queue.isNotEmpty() && visited < MAX_NODES) {
-                val n = queue.removeFirst()
+            while (stack.isNotEmpty() && visited < MAX_NODES && !PlayLock.primaryDecided(primary.map { it.first })) {
+                val n = stack.removeLast()
                 if (n !== root) seen += n
                 visited++
                 val label = n.text?.toString() ?: n.contentDescription?.toString()
-                if (n.isVisibleToUser && n.isEnabled && PlayLock.matches(label, labels)) {
-                    var target: AccessibilityNodeInfo? = n
-                    var depth = 0
-                    while (target != null && !target.isClickable && depth < 5) {
-                        target = target.parent?.also { seen += it }
-                        depth++
-                    }
-                    if (target != null && target.isClickable && target.isEnabled &&
-                        target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
-                }
-                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+                if (label != null && PlayLock.isPrimaryLabel(label)) primary += label to n
+                for (i in n.childCount - 1 downTo 0) runCatching { n.getChild(i) }.getOrNull()?.let { stack.addLast(it) }
             }
-            return false
+            val n = PlayLock.primaryIndex(primary.map { it.first }, labels)?.let { primary[it].second } ?: return false
+            if (!n.isVisibleToUser || !n.isEnabled) return false
+            var target: AccessibilityNodeInfo? = n
+            var depth = 0
+            while (target != null && !target.isClickable && depth < 5) {
+                target = target.parent?.also { seen += it }
+                depth++
+            }
+            return target != null && target.isClickable && target.isEnabled &&
+                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
         } finally {
             seen.forEach { recycle(it) }
-            queue.forEach { if (it !== root) recycle(it) }
+            stack.forEach { if (it !== root) recycle(it) }
         }
     }
 
@@ -1413,6 +1480,8 @@ class GuardService : AccessibilityService() {
     override fun onDestroy() {
         instance = null
         main.removeCallbacksAndMessages(null)
+        runCatching { packageManager.packageInstaller.unregisterSessionCallback(gateSessions) }
+        runCatching { PlayGate.close(this, "guard stopped") }
         runCatching { installOverlay.hide() }
         runCatching { playBadges.hide() }
         runCatching { avatarMask.hide() }
@@ -1422,6 +1491,9 @@ class GuardService : AccessibilityService() {
     companion object {
         private const val TAG = "FilterPhone"
         private const val SCAN_EVERY_MS = 250L
+        /** אחרי שהתקנה מאושרת התחילה — לא פותחים את השער שוב מיד (העמוד עוד מציג "התקנה" לרגע). */
+        private const val GATE_QUIET_MS = 8_000L
+        private val PRIMARY_INSTALL = setOf("install")
         /** ל-block(): כבר טיפלנו בעצמנו (למשל לחצנו על טאב) — רק ההודעה, בלי פעולה גלובלית. */
         private const val NO_GLOBAL_ACTION = 0
         private const val MAX_NODES = 300

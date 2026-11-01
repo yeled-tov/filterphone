@@ -152,9 +152,16 @@ object DeviceOwnerManager {
     enum class VpnLock { LOCKDOWN, OPEN, OFF }
 
     /** ההגדרות שצריכות להיות עכשיו: המדיניות, השהיה (PAUSED) ופתיחה זמנית (למשל נקודה חמה ל-10 דקות). */
-    private fun desired(context: Context, policy: GuardPolicy.Policy): Map<String, Boolean> =
-        if (AdminState.isPaused(context)) PAUSED else effective(policy.dpc) +
-            GuardPolicy.activeTempDpc(policy).filter { it in DEFAULTS }.associateWith { false }
+    private fun desired(context: Context, policy: GuardPolicy.Policy): Map<String, Boolean> {
+        if (AdminState.isPaused(context)) return PAUSED
+        val out = effective(policy.dpc) + GuardPolicy.activeTempDpc(policy).filter { it in DEFAULTS }.associateWith { false }
+        // Google Play מנוהל: התקנות חסומות כברירת מחדל — השער נפתח רק לאפליקציה מאושרת (PlayGate)
+        return if (PlayGate.wantsRestriction(context, policy)) out + ("disallow_install_apps" to true) else out
+    }
+
+    /** האם חסימת ההתקנות צריכה להיות פעילה עכשיו (מהמדיניות או משער Play המנוהל). */
+    fun installRestrictionWanted(context: Context): Boolean =
+        desired(context, GuardPolicy.get(context))["disallow_install_apps"] == true
 
     private fun vpnLock(context: Context, want: Map<String, Boolean>): VpnLock = when {
         // ברשת כשרה (נטפרי): כבוי רק בזמן שבה — חוזר ביציאה (KosherNet)
@@ -280,8 +287,9 @@ object DeviceOwnerManager {
             if (lock != VpnLock.OFF) TunnelManager.kickIfDown("device owner")
         }
         // התקנה שקטה באמצע (עדכון עצמי / חנות): חסימת ההתקנות חוזרת כשהיא מסתיימת, לא עכשיו
-        val installWindow = runCatching { SelfUpdate.installWindowOpen(context) || ManagedApps.installWindowOpen(context) }
-            .getOrDefault(false)
+        val installWindow = runCatching {
+            SelfUpdate.installWindowOpen(context) || ManagedApps.installWindowOpen(context) || PlayGate.isOpen(context)
+        }.getOrDefault(false)
         for ((key, restrictions) in RESTRICTIONS) {
             if (key == "disallow_install_apps" && want[key] == true && installWindow) {
                 pending += key

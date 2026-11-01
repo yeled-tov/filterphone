@@ -19,22 +19,25 @@ import android.widget.TextView
  * בקשת אישור" באותו מקום ובאותו גודל. הלחיצה עליה פותחת את חלון הבקשה; הכפתור של Play מתחתיה לא נלחץ.
  * שכבה של שירות הנגישות (TYPE_ACCESSIBILITY_OVERLAY). כל תקלה — בלי תווית (ההסרה אחרי ההתקנה עדיין שומרת).
  */
-class PlayRequestBadges(private val service: AccessibilityService, private val onTap: () -> Unit) {
+class PlayRequestBadges(private val service: AccessibilityService, private val onTap: (String) -> Unit) {
     private val wm by lazy { service.getSystemService(Context.WINDOW_SERVICE) as WindowManager }
-    private val views = ArrayList<Pair<View, Rect>>()
+    private val views = ArrayList<Pair<View, Pair<Rect, String>>>()
 
     val isShown: Boolean get() = views.isNotEmpty()
 
-    /** מציג תווית מעל כל אחד מהמלבנים (במסך), ומסיר את מה שכבר לא צריך. */
-    fun show(rects: List<Rect>) {
-        val want = rects.filter { it.width() > 0 && it.height() > 0 }.take(MAX)
+    /**
+     * מציג תווית מעל כל אחד מהמלבנים (במסך), ומסיר את מה שכבר לא צריך. לכל תווית — שם האפליקציה לבקשה
+     * ("" = לא ידוע, למשל פרסומת; הלקוח ממלא בחלון הבקשה).
+     */
+    fun show(badges: List<Pair<Rect, String>>) {
+        val want = badges.filter { (r, _) -> r.width() > 0 && r.height() > 0 }.take(MAX)
         if (want == views.map { it.second }) return
         hide()
-        for (r in want) {
+        for ((r, title) in want) {
             try {
-                val v = build()
+                val v = build(title)
                 wm.addView(v, params(r))
-                views += v to Rect(r)
+                views += v to (Rect(r) to title)
             } catch (e: Exception) {
                 Log.w(TAG, "play badge failed", e)
             }
@@ -63,7 +66,7 @@ class PlayRequestBadges(private val service: AccessibilityService, private val o
         }
     }
 
-    private fun build(): View = TextView(service).apply {
+    private fun build(title: String): View = TextView(service).apply {
         setText(R.string.play_badge_blocked)
         setTextColor(Color.WHITE)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
@@ -74,7 +77,7 @@ class PlayRequestBadges(private val service: AccessibilityService, private val o
             setColor(Color.rgb(0xC6, 0x28, 0x28))
         }
         isClickable = true
-        setOnClickListener { onTap() }
+        setOnClickListener { onTap(title) }
     }
 
     private companion object {

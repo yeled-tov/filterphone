@@ -85,20 +85,56 @@ object PlayLock {
     fun installedDuring(s: Session, installed: Long?): Boolean = installed != null && installed != s.versionAtStart
 
     /**
-     * מצב העמוד לפי הכפתורים (התאמה מדויקת — "מספר התקנות" או "עודכן ב-" לא נחשבים). טהור.
-     * עדכון / התקנה — לפני הכול (עוד לא התחיל); ביטול / אחוזים / "ממתין" — בהתקנה; פתיחה — מותקנת.
+     * מצב העמוד לפי הכפתור הראשי — הראשון בסדר הרכיבים (התאמה מדויקת — "מספר התקנות" או "עודכן ב-" לא
+     * נחשבים). טהור. רק הכפתור הראשי: מתחתיו יש פרסומות ("ממומן", "אולי תאהבו") עם "התקנה" / "עדכון"
+     * משלהן — הן לא קובעות את המצב, אחרת FilterPhone לוחץ על אפליקציה אחרת (Temu התעדכנה בכל התקנה).
+     * "הסרת התקנה" ראשון = מותקנת; הכפתור שאחריו קובע: עדכון / פתיחה / ביטול.
      */
     fun action(texts: List<String>): Action {
         val all = texts.map(::norm).filter { it.isNotEmpty() }
-        val set = all.toSet()
-        return when {
-            set.any { it in UPDATE_BUTTONS } -> Action.UPDATE
-            set.any { it in INSTALL_ONLY } -> Action.INSTALL
-            set.any { it in CANCEL_BUTTONS } || progress(texts) != null ||
-                all.any { t -> PENDING.any { t.startsWith(it) } } -> Action.INSTALLING
-            set.any { it in OPEN_BUTTONS } -> Action.INSTALLED
-            else -> Action.UNKNOWN
+        for ((i, t) in all.withIndex()) {
+            when {
+                t in UPDATE_BUTTONS -> return Action.UPDATE
+                t in INSTALL_ONLY -> return Action.INSTALL
+                t in CANCEL_BUTTONS || PERCENT.containsMatchIn(t) || PENDING.any { t.startsWith(it) } ->
+                    return Action.INSTALLING
+                t in OPEN_BUTTONS -> return Action.INSTALLED
+                t in UNINSTALL_BUTTONS -> {
+                    val next = all.subList(i + 1, minOf(all.size, i + 1 + AFTER_UNINSTALL))
+                        .firstOrNull { it in UPDATE_BUTTONS || it in OPEN_BUTTONS || it in CANCEL_BUTTONS }
+                    return when (next) {
+                        in UPDATE_BUTTONS -> Action.UPDATE
+                        in CANCEL_BUTTONS -> Action.INSTALLING
+                        else -> Action.INSTALLED
+                    }
+                }
+            }
         }
+        return Action.UNKNOWN
+    }
+
+    /** כפתור שיכול להיות הכפתור הראשי של עמוד אפליקציה (התקנה / עדכון / ביטול / פתיחה / הסרה). */
+    fun isPrimaryLabel(text: String?): Boolean = text != null && norm(text) in PRIMARY_LABELS
+
+    /**
+     * על איזה כפתור ללחוץ: [labels] — הכיתובים של הרכיבים בסדר שלהם (null = בלי כיתוב). רק הכפתור הראשי
+     * של העמוד: הכפתור הראשון, או — כשהראשון הוא "הסרת התקנה" — הכפתור שאחריו (עדכון / פתיחה / ביטול).
+     * אף פעם לא "התקנה" / "עדכון" של פרסומת או המלצה בהמשך העמוד. null = הכפתור הראשי אינו ב-[wanted]. טהור.
+     */
+    fun primaryIndex(labels: List<String?>, wanted: Set<String>): Int? {
+        val idx = labels.indices.filter { i -> labels[i]?.let(::norm)?.let { it in PRIMARY_LABELS } == true }
+        val first = idx.firstOrNull() ?: return null
+        val f = norm(labels[first]!!)
+        if (f in wanted) return first
+        if (f !in UNINSTALL_BUTTONS) return null
+        val second = idx.firstOrNull { norm(labels[it]!!) !in UNINSTALL_BUTTONS } ?: return null
+        return second.takeIf { norm(labels[it]!!) in wanted }
+    }
+
+    /** כבר ידוע מהו הכפתור הראשי (מכאן — פרסומות והמלצות; אפשר להפסיק לסרוק). טהור. */
+    fun primaryDecided(labels: List<String?>): Boolean {
+        val p = labels.mapNotNull { l -> l?.let(::norm)?.takeIf { it in PRIMARY_LABELS } }
+        return p.isNotEmpty() && (p[0] !in UNINSTALL_BUTTONS || p.any { it !in UNINSTALL_BUTTONS })
     }
 
     /** אחוז ההורדה שמוצג ב-Play ("45%"), אם יש. טהור. */
@@ -161,6 +197,9 @@ object PlayLock {
     private val UPDATE_BUTTONS = setOf("עדכון", "עדכן", "update")
     private val CANCEL_BUTTONS = setOf("ביטול", "בטל", "cancel")
     private val OPEN_BUTTONS = setOf("פתיחה", "פתח", "הפעלה", "open", "play", "enable")
+    private val UNINSTALL_BUTTONS = setOf("הסרת התקנה", "הסר התקנה", "uninstall")
+    private val PRIMARY_LABELS = INSTALL_ONLY + UPDATE_BUTTONS + CANCEL_BUTTONS + OPEN_BUTTONS + UNINSTALL_BUTTONS
+    private const val AFTER_UNINSTALL = 4
     private val PENDING = listOf("ממתין", "בהמתנה", "מוריד", "מתקין", "בהורדה", "pending", "waiting", "downloading",
         "installing")
     private val PERCENT = Regex("(\\d{1,3})\\s?%")

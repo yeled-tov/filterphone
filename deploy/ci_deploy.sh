@@ -222,6 +222,10 @@ for d in rows:
                 if k in ("disallow_install_apps", "approved_apps_only", "hide_blocked_apps", "suspend_blocked_apps")}
         playopts = [o for o in (pol.get("options") or []) if o.startswith("play") or o in ("shopping", "temu")]
         print(f"    apps={len(apps)} suspicious={json.dumps(sus, ensure_ascii=False)} install_dpc={inst} play={playopts}")
+        if hb.get("pkg_log"):
+            print("    pkg_log:", " | ".join(f"{ago(e.get('t'))} {e.get('a')} {e.get('pkg')} by={e.get('by') or '-'}"
+                                             f"{' sys' if e.get('sys') else ''}{' gate' if e.get('gate') else ''}"
+                                             for e in hb["pkg_log"][-15:]))
     except Exception as e:
         print("    apps:", e)
     if d.get("vpn_ip"):

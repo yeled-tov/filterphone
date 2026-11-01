@@ -153,6 +153,39 @@ class PlayLockTest {
     }
 
     @Test
+    fun adsBelowTheMainButtonDoNotDecideTheState() {
+        // מתחת לכפתור הראשי — פרסומות ("ממומן") עם "עדכון" / "התקנה" משלהן (Temu התעדכנה בכל התקנה מהחנות)
+        val head = listOf("Waze: ניווט ועדכוני תנועה", "4.5 ★")
+        val ad = listOf("ממומן", "Temu: Shop Like a Billionaire", "4.6 ★")
+        assertEquals(PlayLock.Action.INSTALLED, PlayLock.action(head + listOf("הסרת התקנה", "פתיחה") + ad + "עדכון"))
+        assertEquals(PlayLock.Action.INSTALLING, PlayLock.action(head + listOf("ביטול", "פתיחה") + ad + "התקנה"))
+        assertEquals(PlayLock.Action.INSTALLING, PlayLock.action(head + listOf("45% מתוך 80MB", "ביטול") + ad + "התקנה"))
+        assertEquals(PlayLock.Action.INSTALL, PlayLock.action(head + "התקנה" + ad + "עדכון"))
+        assertEquals(PlayLock.Action.UPDATE, PlayLock.action(head + listOf("הסרת התקנה", "עדכון") + ad + "התקנה"))
+    }
+
+    @Test
+    fun clicksOnlyTheMainButtonNeverAnAd() {
+        val install = setOf("התקנה", "install")
+        val update = setOf("עדכון", "update")
+        // הכפתור הראשי הוא "התקנה" — לוחצים עליו, לא על זה של הפרסומת
+        assertEquals(0, PlayLock.primaryIndex(listOf("התקנה", "התקנה"), install))
+        // כבר מותקנת / בהתקנה — "התקנה" של פרסומת בהמשך לא נלחצת
+        assertNull(PlayLock.primaryIndex(listOf("הסרת התקנה", "פתיחה", "התקנה"), install))
+        assertNull(PlayLock.primaryIndex(listOf("ביטול", "פתיחה", "התקנה"), install))
+        assertNull(PlayLock.primaryIndex(listOf("הסרת התקנה", "פתיחה", "עדכון"), update))
+        // עדכון של האפליקציה עצמה — הכפתור שליד "הסרת התקנה"
+        assertEquals(1, PlayLock.primaryIndex(listOf("הסרת התקנה", "עדכון", "התקנה"), update))
+        // טקסט + תיאור של אותו כפתור (פעמיים ברצף) נספרים פעם אחת
+        assertEquals(2, PlayLock.primaryIndex(listOf("הסרת התקנה", "הסרת התקנה", "עדכון"), update))
+        // בהורדה ("ביטול" בלבד) — "התקנה" של פרסומת מיד אחריו לא נלחצת
+        assertNull(PlayLock.primaryIndex(listOf("ביטול", "התקנה"), install))
+        assertFalse(PlayLock.primaryDecided(listOf("Waze", "הסרת התקנה", "הסרת התקנה")))
+        assertTrue(PlayLock.primaryDecided(listOf("הסרת התקנה", "עדכון")))
+        assertTrue(PlayLock.primaryDecided(listOf("4.5 ★", "התקנה")))
+    }
+
+    @Test
     fun targetPageMatchesWhenPlayTitleIsShorterThanLabel() {
         // הכותרת ב-Play קצרה משם האפליקציה שבטלפון ("waze" מול "waze navigation")
         assertEquals(true, PlayLock.isTargetPage(listOf("waze"), listOf("waze navigation")))

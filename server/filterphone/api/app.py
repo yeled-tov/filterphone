@@ -23,6 +23,7 @@ import asyncio
 import base64
 import binascii
 import hashlib
+import json
 import logging
 import os
 import re
@@ -190,6 +191,18 @@ async def lifespan(app: FastAPI):
     app.state.svc.pool.close()
 
 
+def _build_id() -> str:
+    """טביעת אצבע של הדשבורד והקטלוג — משתנה בכל עדכון שמשנה את מה שהדשבורד מציג."""
+    h = hashlib.sha256()
+    for name in ("admin.js", "admin.css", "admin.html"):
+        try:
+            h.update((STATIC / name).read_bytes())
+        except OSError:
+            pass
+    h.update(json.dumps(admin_catalog(), sort_keys=True, ensure_ascii=False, default=str).encode())
+    return h.hexdigest()[:16]
+
+
 def create_app(svc: Services | None = None) -> FastAPI:
     logs.setup(os.environ.get("FP_LOG_LEVEL", "INFO"))
     app = FastAPI(title="FilterPhone API", version="2.2", lifespan=lifespan,
@@ -241,9 +254,14 @@ def create_app(svc: Services | None = None) -> FastAPI:
         log.error("wireguard: %s", e)
         return JSONResponse({"error": "שגיאת VPN בשרת"}, status_code=500)
 
+    build = _build_id()
+
     @app.middleware("http")
     async def _security_headers(request: Request, call_next):
         resp = await call_next(request)
+        if request.url.path.startswith("/v1/admin"):
+            # גרסת הדשבורד: הדשבורד (גם בתוך CRM FilterPhone) משווה לגרסה שבה נטען — ומתרענן לבד אחרי עדכון
+            resp.headers["X-FP-Build"] = build
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Referrer-Policy"] = "no-referrer"
         resp.headers.setdefault("Cache-Control", "no-store")

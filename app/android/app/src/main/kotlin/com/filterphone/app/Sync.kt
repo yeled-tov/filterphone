@@ -100,6 +100,7 @@ object Sync {
                 DeviceOwnerManager.lockdownConflict(context, decision.excluded)))
         }
         SelfUpdate.report(context)?.let { o.put("update", it) }
+        runCatching { PackageWatch.log(context).takeIf { it.length() > 0 }?.let { o.put("pkg_log", it) } }
         runCatching {
             val caps = Preflight.capabilities(context)
             o.put("capabilities", JSONObject(caps.toMap()))

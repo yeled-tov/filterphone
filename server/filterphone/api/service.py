@@ -207,6 +207,24 @@ def sanitize_heartbeat(hb: dict) -> dict:
                 out[section] = sec
     if (bypass := _clean_bypass_report(hb.get("vpn_bypass"))) is not None:
         out["vpn_bypass"] = bypass
+    if (log := _clean_pkg_log(hb.get("pkg_log"))) is not None:
+        out["pkg_log"] = log
+    return out
+
+
+def _clean_pkg_log(raw) -> list | None:
+    """יומן ההתקנות האחרונות בטלפון (PackageWatch): מתי, איזו חבילה, מה קרה, מי התקין, אפליקציית מערכת,
+    והאם שער Play המנוהל היה פתוח — כדי לדעת למה אפליקציה "חוזרת לבד"."""
+    if not isinstance(raw, list):
+        return None
+    out = []
+    for e in raw[-15:]:
+        if not isinstance(e, dict) or not (pkg := clean_package(str(e.get("pkg", "")))):
+            continue
+        out.append({"t": _clip(e.get("t"), int) or 0, "pkg": pkg,
+                    "a": security.clean_text(str(e.get("a", "")), 16),
+                    "by": clean_package(str(e.get("by") or "")) or "",
+                    "sys": e.get("sys") is True, "gate": e.get("gate") is True})
     return out
 
 
@@ -298,6 +316,16 @@ class ApiError(Exception):
         self.status = status
         self.message = message
         self.extra = extra or {}       # שדות נוספים בתשובה (למשל need=parent_code — הממשק מבקש את הקוד)
+
+
+def _model_of(hb: dict) -> str:
+    """דגם הטלפון מהדיווח ("Samsung SM-S911B"); ריק אם לא ידוע."""
+    caps = hb.get("capabilities") if isinstance(hb.get("capabilities"), dict) else {}
+    maker = str(caps.get("manufacturer") or "").strip()
+    model = str(caps.get("model") or "").strip()
+    if maker and model.lower().startswith(maker.lower()):
+        maker = ""
+    return " ".join(x for x in (maker.capitalize() if maker.islower() else maker, model) if x)[:60]
 
 
 def _json_list(raw: str | None) -> list:
@@ -1643,6 +1671,10 @@ class Services:
             "blocks": summary(settings), "app_images": settings.app_images,
             "guard": guard, "guard_at": r["guard_at"],
             "avatar_at": avatars.get(r["id"]) if avatars is not None else self.avatar_times([r["id"]]).get(r["id"]),
+            # לשורה המקוצרת ברשימת המכשירים: דגם, ומצבים דחופים
+            "model": _model_of(hb),
+            "paused": self.is_paused(r, t),
+            "unmanaging": bool(r["unmanage_at"]) if "unmanage_at" in r.keys() else False,
         }
 
     def list_devices(self) -> list[dict]:

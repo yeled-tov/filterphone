@@ -180,6 +180,7 @@ async function api(path, opts = {}) {
       ...(code ? { "X-Parent-Code": code } : {}) },
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
   });
+  noteBuild(res.headers.get("X-FP-Build"));
   if (res.status === 401 && !path.endsWith("/login")) { showLogin(); throw new Error("נדרשת התחברות"); }
   if (res.status === 204) {
     if (key && code) parentCodes.set(key, { code, until: Date.now() + PARENT_CODE_KEEP_MS });
@@ -198,6 +199,26 @@ async function api(path, opts = {}) {
   }
   if (key && code) parentCodes.set(key, { code, until: Date.now() + PARENT_CODE_KEEP_MS });
   return data;
+}
+
+// --- עדכון הדשבורד: השרת מחזיר את גרסת הדשבורד בכל תשובה. גרסה חדשה (אחרי עדכון) — הדף נטען מחדש לבד,
+// כך שגם CRM FilterPhone (אותו דשבורד, פתוח שעות) רואה מיד כל שינוי. לא באמצע הקלדה — אחרי שיוצאים מהשדה.
+let loadedBuild = null;
+let reloadPending = false;
+function noteBuild(b) {
+  if (!b) return;
+  if (loadedBuild === null) { loadedBuild = b; return; }
+  if (b !== loadedBuild && !reloadPending) { reloadPending = true; reloadWhenIdle(); }
+}
+function typing() {
+  const a = document.activeElement;
+  return Boolean(a && (a.tagName === "TEXTAREA" || a.isContentEditable
+    || (a.tagName === "INPUT" && !["checkbox", "radio", "button", "submit"].includes(a.type))))
+    || Boolean(document.querySelector("dialog[open]"));
+}
+function reloadWhenIdle() {
+  if (!typing()) { location.reload(); return; }
+  setTimeout(reloadWhenIdle, 3000);
 }
 
 async function askParentCode(note) {
@@ -765,28 +786,17 @@ async function viewDevices(arg, query) {
     catalog.levels.map((l) => el("option", { value: l.level }, `${l.level} · ${l.name}`)));
   const health = el("select", { "aria-label": "מצב הגנה" }, Object.entries(DEVICE_FILTERS).map(([k, t]) =>
     el("option", { value: k, selected: k === (query.get("state") || "") }, t)));
-  const body = el("tbody");
+  const body = el("div", { class: "dev-list" });
   const rank = { red: 0, yellow: 1, green: 2, inactive: 3 };
   const draw = () => {
     const q = search.value.trim().toLowerCase();
     const rows = list.filter((d) => (!customerFilter || String(d.customer_id) === customerFilter)
       && (!status.value || d.status === status.value) && (!level.value || String(d.level) === level.value)
       && matchesFilter(d, health.value)
-      && (!q || [d.name, d.label, d.vpn_ip, d.customer?.name, d.customer?.phone].some((x) => (x || "").toLowerCase().includes(q))))
+      && (!q || [d.name, d.label, d.model, d.vpn_ip, d.customer?.name, d.customer?.phone].some((x) => (x || "").toLowerCase().includes(q))))
       .sort((a, b) => (rank[a.compliance?.state] ?? 9) - (rank[b.compliance?.state] ?? 9));
-    body.replaceChildren(...rows.map((d) => el("tr", { class: "click", onclick: () => { location.hash = `#/devices/${d.id}`; } },
-      el("td", {}, el("b", {}, d.name), el("small", {}, [d.customer?.name, d.customer?.phone, d.vpn_ip].filter(Boolean).join(" · "))),
-      el("td", {}, d.status === "active" ? el("div", { class: "stack tight" }, complianceChip(d.compliance),
-        el("small", {}, [d.compliance.online ? "מחובר" : "לא מחובר",
-          d.compliance.issues.length ? d.compliance.issues[0].text : null].filter(Boolean).join(" · ")))
-        : statusChip(d.status)),
-      el("td", {}, levelBadge(d.level)),
-      el("td", {}, d.blocks.length ? el("div", { class: "chips" }, d.blocks.slice(0, 4).map((b) => chip(b.title)),
-        d.blocks.length > 4 ? chip(`+${d.blocks.length - 4}`) : null) : el("span", { class: "muted" }, "—")),
-      el("td", { class: "nowrap" }, `${num(d.today.block)} / ${num(d.today.replace)}`, el("small", {}, "נחסמו / נצבעו")),
-      el("td", { class: "nowrap" }, ago(d.last_handshake || d.last_seen_at)),
-      el("td", {}, d.customer ? paymentChip(d.customer.payment) : null))));
-    if (!rows.length) body.replaceChildren(el("tr", {}, el("td", { colspan: 7 }, empty("לא נמצאו מכשירים."))));
+    body.replaceChildren(...rows.map(deviceLine));
+    if (!rows.length) body.replaceChildren(empty("לא נמצאו מכשירים."));
   };
   [search, status, level, health].forEach((x) => x.addEventListener("input", draw));
   draw();
@@ -803,10 +813,42 @@ async function viewDevices(arg, query) {
     }, complianceChip({ state: k }), ` ${counts[k] || 0}`))),
     el("div", { class: "row gap" }, el("div", { class: "grow" }, search), health, status, level,
       customerFilter ? el("a", { href: "#/devices" }, el("button", { class: "ghost small" }, "הצג את כל הלקוחות")) : null),
-    el("section", { class: "card" }, el("div", { class: "table-wrap" }, el("table", {},
-      el("thead", {}, el("tr", {}, el("th", {}, "מכשיר"), el("th", {}, "הגנה"), el("th", {}, "רמה"), el("th", {}, "חסימות"),
-        el("th", {}, "היום"), el("th", {}, "נראה לאחרונה"), el("th", {}, "תשלום"))), body))),
+    el("section", { class: "card flush" }, body),
   ];
+}
+
+// קיצור לכל בעיה (השורה ברשימה) — הפירוט המלא בדף המכשיר
+const ISSUE_SHORT = {
+  vpn_off: "VPN כבוי", accessibility_off: "המגן כבוי", management_removed: "הניהול הוסר", ca_missing: "בלי תעודה",
+  lost: "אין קשר", accessibility_stale: "המגן נעצר", policy_error: "שגיאת מדיניות", private_dns: "DNS פרטי",
+  lockdown_off: "בלי חסימת חיבורים", always_on_off: "VPN לא תמיד", debugging: "ADB פעיל", no_heartbeat: "גרסה ישנה",
+};
+
+/**
+ * מכשיר בשורה אחת: מצב (נקודה), שם הלקוח, דגם, ורק מה שדחוף לדעת (ממתין לאישור / בהשהיה / בהסרה /
+ * ההגנה לא פועלת / לא שולם / לא מחובר). לחיצה — דף המכשיר עם כל המידע.
+ */
+function deviceLine(d) {
+  const c = d.compliance || {};
+  const dot = { green: "on", yellow: "wait", red: "off" }[c.state] || "";
+  const title = d.customer?.name || d.label || d.name;
+  const model = d.model && d.model !== title ? d.model : (d.name !== title ? d.name : "");
+  const urgent = [];
+  if (d.status !== "active") urgent.push(chip(STATUS[d.status]?.[1] || d.status, d.status === "pending" ? "warn" : ""));
+  if (d.paused) urgent.push(chip("בהשהיה", "violet"));
+  if (d.unmanaging) urgent.push(chip("בהסרה", "bad"));
+  if (d.status === "active") {
+    const red = (c.issues || []).filter((i) => i.severity === "red" && i.code !== "lost");
+    if (red.length) urgent.push(chip(ISSUE_SHORT[red[0].code] || "ההגנה לא פועלת", "bad"));
+    if (red.length > 1) urgent.push(chip(`עוד ${red.length - 1}`, "bad"));
+    if (!c.online) urgent.push(chip((c.issues || []).some((i) => i.code === "lost") ? "אין קשר יומיים+" : "לא מחובר", "warn"));
+  }
+  if (d.customer?.payment === "unpaid") urgent.push(chip("לא שולם", "bad"));
+  return el("a", { class: "dev-row", href: `#/devices/${d.id}` },
+    el("span", { class: `dot ${dot}`, title: COMPLIANCE[c.state]?.[1] || "" }),
+    el("span", { class: "dev-name" }, el("b", {}, title), model ? el("small", {}, model) : null),
+    el("span", { class: "dev-flags" }, urgent),
+    el("small", { class: "dev-seen" }, ago(d.last_handshake || d.last_seen_at)));
 }
 
 async function viewDevice(id, query = new URLSearchParams()) {
