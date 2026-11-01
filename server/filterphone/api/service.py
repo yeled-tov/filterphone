@@ -318,6 +318,29 @@ class ApiError(Exception):
         self.extra = extra or {}       # שדות נוספים בתשובה (למשל need=parent_code — הממשק מבקש את הקוד)
 
 
+def change_outcome(before, after, old_level, new_level, approved: bool, note: str = "") -> str:
+    """מה הוחלט על בקשת שינוי — במילים, ללקוח: מה נפתח, מה נחסם, הרמה."""
+    if not approved:
+        return "הבקשה שלך לא אושרה." + (f"\n{note}" if note else "")
+    lines = ["✅ הבקשה שלך אושרה."]
+    if before is not None and after is not None:
+        opened = [CATALOG[o].title for o in before.options if o not in after.options and o in CATALOG]
+        blocked = [CATALOG[o].title for o in after.options if o not in before.options and o in CATALOG]
+        if opened:
+            lines.append("נפתח: " + ", ".join(opened))
+        if blocked:
+            lines.append("נחסם: " + ", ".join(blocked))
+        if (before.web_level or "") != (after.web_level or ""):
+            lines.append("רמת הגלישה השתנתה.")
+    if new_level is not None and old_level is not None and new_level != old_level:
+        lines.append(f"רמת הסינון: {LEVEL_NAMES.get(new_level, new_level)}")
+    if len(lines) > 1:
+        lines.append("השינוי מגיע לטלפון תוך דקה (מיד אם פותחים את FilterPhone).")
+    if note:
+        lines.append(note)
+    return "\n".join(lines)
+
+
 def _model_of(hb: dict) -> str:
     """דגם הטלפון מהדיווח ("Samsung SM-S911B"); ריק אם לא ידוע."""
     caps = hb.get("capabilities") if isinstance(hb.get("capabilities"), dict) else {}
@@ -1426,9 +1449,12 @@ class Services:
             if level not in LEVEL_NAMES:
                 raise ApiError(400, "רמה לא חוקית")
             settings = DeviceSettings.load(dev["policy"])
+            before = DeviceSettings.load(dev["policy"])
             if decision.get("options") is None:
-                decision = {**decision, "options": _json_list(req["options"])
-                            if req["kind"] == "join" else settings.options}
+                # מה שהלקוח (או הבוט בשמו) ביקש — אישור בלי שינוי מבצע את הבקשה. בקשת שינוי בלי חסימות
+                # (רק הערה) — החסימות הנוכחיות נשארות
+                asked = _json_list(req["options"])
+                decision = {**decision, "options": asked if req["kind"] == "join" or asked else settings.options}
             errors = settings.update(decision)
             if errors:
                 raise ApiError(400, "; ".join(errors))
@@ -1444,8 +1470,14 @@ class Services:
             else:
                 c.execute("UPDATE devices SET level = ?, policy = ? WHERE id = ?",
                           (level, settings.dump(), dev["id"]))
-            c.execute("UPDATE requests SET status = 'approved', resolved_at = ?, admin_note = ? WHERE id = ?",
-                      (t, security.clean_text(decision.get("admin_note") or "", 500), request_id))
+            admin_note = security.clean_text(decision.get("admin_note") or "", 500)
+            outcome = ""
+            if req["kind"] == "change":
+                # מה השתנה בפועל — ללקוח (באפליקציה, ובוואטסאפ אם הבקשה הגיעה מהבוט)
+                outcome = change_outcome(before, settings, dev["level"], level, True, admin_note)
+                self._tell_device(c, dev["id"], outcome)
+            c.execute("UPDATE requests SET status = 'approved', resolved_at = ?, admin_note = ?, outcome = ?"
+                      " WHERE id = ?", (t, admin_note, outcome, request_id))
             if req["customer_id"]:
                 self._update_customer(c, req["customer_id"], decision)
             version = self.bump_policy(c, dev["id"])
@@ -1467,12 +1499,26 @@ class Services:
                 raise ApiError(404, "בקשה לא נמצאה")
             if req["status"] != "pending":
                 raise ApiError(409, "הבקשה כבר טופלה")
-            c.execute("UPDATE requests SET status = 'rejected', resolved_at = ?, admin_note = ? WHERE id = ?",
-                      (db.now(), security.clean_text(note, 500), request_id))
+            clean_note = security.clean_text(note, 500)
+            outcome = ""
+            if req["kind"] == "change":
+                outcome = change_outcome(None, None, None, None, False, clean_note)
+                if req["device_id"]:
+                    self._tell_device(c, req["device_id"], outcome)
+            c.execute("UPDATE requests SET status = 'rejected', resolved_at = ?, admin_note = ?, outcome = ?"
+                      " WHERE id = ?", (db.now(), clean_note, outcome, request_id))
             if req["kind"] == "join":
                 c.execute("UPDATE devices SET status = 'rejected' WHERE id = ? AND status = 'pending'",
                           (req["device_id"],))
             self.audit(admin, "reject", f"request:{request_id}", note[:200], c)
+
+    @staticmethod
+    def _tell_device(c: sqlite3.Connection, device_id: int, text: str) -> None:
+        """הודעה ללקוח בצ'אט התמיכה באפליקציה (מהמערכת — בלי לסמן את הפניות שלו כמטופלות)."""
+        if not text:
+            return
+        c.execute("INSERT INTO support_messages (device_id, sender, via, author, body, ts, wa_id)"
+                  " VALUES (?, 'support', 'system', 'system', ?, ?, '')", (device_id, text[:2000], db.now()))
 
     # ------------------------------------------------------------ לקוחות
 

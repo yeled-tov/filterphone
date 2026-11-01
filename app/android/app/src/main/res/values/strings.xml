@@ -44,8 +44,8 @@
     <string name="web_report_what_image">התמונה</string>
     <string name="web_report_title">דיווח / בדיקה — %1$s</string>
     <string name="web_report_note_hint">הערה (לא חובה) — מה הבעיה / למה צריך</string>
-    <string name="web_report_bad">🚩 לא ראוי — דיווח</string>
-    <string name="web_report_bad_sub">%1$s לא מתאים לדעתך? הדיווח מגיע לבדיקה, וההחלטה משפרת את הסינון לכולם.</string>
+    <string name="web_report_bad">🚩 לא מתאים לי — לחסום אצלי ולדווח</string>
+    <string name="web_report_bad_sub">%1$s ייחסם אצלך מיד, והדיווח יגיע לבדיקה — כך הסינון משתפר לכולם.</string>
     <string name="web_report_check">🔍 חסום אצלי ולדעתי תקין — לבדיקה</string>
     <string name="web_report_check_sub">נבדק מיד לפי רמת הסינון שלך: מתאים — נפתח; לא מתאים — תקבל הסבר ואפשרויות.</string>
     <string name="web_report_close">סגירה</string>
@@ -102,6 +102,11 @@
     <string name="watchdog_vpn">חיבור הסינון (VPN) בוטל</string>
     <string name="watchdog_guard">מגן FilterPhone כבוי</string>
     <string name="watchdog_battery">אנדרואיד מגביל את FilterPhone ברקע</string>
+    <string name="watchdog_battery_xiaomi">שיאומי מגביל את FilterPhone — בחיסכון בסוללה צריך לבחור \"ללא הגבלות\"</string>
+    <string name="watchdog_guard_stale">המערכת עצרה את מגן FilterPhone — כבו והדליקו אותו בנגישות</string>
+    <string name="watchdog_guard_stale_xiaomi">שיאומי עצר את מגן FilterPhone — הפעילו \"הפעלה אוטומטית\" ל-FilterPhone, ובסוללה \"ללא הגבלות\"</string>
+    <string name="watchdog_autostart">בשיאומי צריך להפעיל ל-FilterPhone \"הפעלה אוטומטית\" — אחרת המגן נעצר ברקע</string>
+    <string name="watchdog_bypass_blocked">\"חסימת חיבורים ללא VPN\" מופעלת — האפליקציות שהוחרגו מהסינון (FilterTube וכו\') בלי אינטרנט. כבו אותה בהגדרות ה-VPN של FilterPhone</string>
     <string name="watchdog_tap">לחצו כאן — FilterPhone ייפתח ישר על מה שצריך לאשר.</string>
     <string name="update_bug_title">צריך להפעיל מחדש את הטלפון</string>
     <string name="update_bug_text">באנדרואיד 16, אחרי עדכון של FilterPhone, באג של אנדרואיד חוסם את האינטרנט. הפעלה מחדש של הטלפון מתקנת את זה.</string>

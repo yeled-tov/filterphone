@@ -27,6 +27,8 @@ ISSUES: dict[str, tuple[str, str]] = {
     "battery_restricted": (YELLOW, "אופטימיזציית סוללה פעילה — המערכת עלולה לעצור את ההגנה ברקע"),
     "always_on_off": (YELLOW, "'VPN תמיד מופעל' כבוי — אחרי ניתוק הסינון לא חוזר לבד"),
     "lockdown_off": (YELLOW, "'חסימת חיבורים ללא VPN' כבויה — כשה-VPN נופל יש גלישה בלי סינון"),
+    "bypass_blocked": (YELLOW, "'חסימת חיבורים ללא VPN' מופעלת בלי מנהל מכשיר — האפליקציות שהוחרגו מה-VPN "
+                               "(FilterTube וכו') בלי אינטרנט. לכבות אותה בטלפון, או להקים מנהל מכשיר"),
     "private_dns": (YELLOW, "DNS פרטי מוגדר בטלפון — עוקף את הסינון ושובר את הגלישה"),
     "accessibility_stale": (YELLOW, "מגן FilterPhone מופעל בהגדרות אבל לא רץ (המערכת עצרה אותו)"),
     "no_heartbeat": (YELLOW, "גרסת אפליקציה ישנה — אין דיווח מהרקע, המצב לא ידוע"),
@@ -145,11 +147,16 @@ def evaluate(row, hb: dict, guard: dict, handshake: int, needs_device_block: boo
     if hb.get("battery_unrestricted", guard.get("battery_unrestricted")) is False:
         issues.append("battery_restricted")
     always_on = vpn_hb.get("always_on", guard.get("always_on"))
+    bypass = hb.get("vpn_bypass") if isinstance(hb.get("vpn_bypass"), dict) else {}
+    # בלי מנהל מכשיר, עם אפליקציות מחוץ ל-VPN: lockdown היה משאיר אותן בלי רשת — כבוי הוא הנכון
+    bypass_without_owner = bool(bypass.get("applied")) and hb.get("device_owner") is False
+    if bypass.get("lockdown_conflict") is True:
+        issues.append("bypass_blocked")
     if vpn == "kosher":
         pass                    # "תמיד מופעל" כבוי בכוונה בזמן שברשת הכשרה, וחוזר ביציאה ממנה
     elif always_on is False:
         issues.append("always_on_off")
-    elif always_on is True and vpn_hb.get("lockdown", guard.get("lockdown")) is False:
+    elif always_on is True and vpn_hb.get("lockdown", guard.get("lockdown")) is False and not bypass_without_owner:
         issues.append("lockdown_off")
     if hb.get("private_dns", guard.get("private_dns")) == "hostname":
         issues.append("private_dns")

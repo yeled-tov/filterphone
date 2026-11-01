@@ -33,7 +33,11 @@ function client(api, token, fetchImpl = fetch) {
     open: (deviceId, item, minutes, parentCode) => call('POST', '/v1/bot/open',
       { device_id: deviceId, item, minutes, ...(parentCode ? { parent_code: parentCode } : {}) }),
     close: (deviceId, item) => call('POST', '/v1/bot/close', { device_id: deviceId, item }),
-    escalate: (deviceId, note) => call('POST', '/v1/bot/escalate', { device_id: deviceId, note }),
+    // לאישור המנהל: open — מה לפתוח (מזהים; האישור בדשבורד מבצע), chat — לעדכן את הלקוח כשהוחלט
+    escalate: (deviceId, note, { open = null, chat = '' } = {}) => call('POST', '/v1/bot/escalate',
+      { device_id: deviceId, note, ...(open?.length ? { open } : {}), ...(chat ? { chat } : {}) }),
+    decisions: () => call('GET', '/v1/bot/decisions'),
+    decisionsAck: (ids) => call('POST', '/v1/bot/decisions/ack', { ids }),
     // מצב לימוד: מה שהבוט למד ממך (שאלות ותשובות, עובדות)
     knowledge: () => call('GET', '/v1/bot/knowledge'),
     learn: (item) => call('POST', '/v1/bot/knowledge', item),

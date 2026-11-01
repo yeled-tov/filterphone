@@ -112,10 +112,18 @@ object DeviceOwnerManager {
         setAlwaysOn(dpm, admin, context.packageName, lockdown = true, packages)
     }
 
-    /** אנדרואיד 9 ומטה: lockdown בלי רשימת היתר — אפליקציה שמחוץ ל-VPN נשארת בלי רשת (מדווח לשרת). */
-    fun lockdownConflict(context: Context, excluded: Set<String>): Boolean =
-        excluded.isNotEmpty() && Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && isDeviceOwner(context) &&
-            effective(GuardPolicy.get(context).dpc).getValue("always_on_vpn") && !AdminState.isPaused(context)
+    /**
+     * אפליקציות שמחוץ ל-VPN (FilterTube…) נשארות בלי רשת: "חסימת חיבורים ללא VPN" (lockdown) בלי רשימת
+     * היתר. במנהל מכשיר — רק באנדרואיד 9 ומטה (מ-10 יש רשימת היתר). בלי מנהל מכשיר — כשהמשתמש הפעיל את
+     * החסימה בהגדרות: רק מנהל מכשיר יכול לתת להן רשת, אז צריך לכבות אותה (Watchdog מתריע, השרת מציג).
+     */
+    fun lockdownConflict(context: Context, excluded: Set<String>): Boolean {
+        if (excluded.isEmpty() || AdminState.isPaused(context)) return false
+        if (isDeviceOwner(context)) {
+            return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && effective(GuardPolicy.get(context).dpc).getValue("always_on_vpn")
+        }
+        return TunnelManager.isInitialized && TunnelManager.lockdown() == true
+    }
 
     /** VPN תמיד מופעל; עם רשימת היתר (10+). חבילה שהוסרה ברגע זה — מנסים שוב בלי הרשימה (לא נכשלים). */
     private fun setAlwaysOn(dpm: DevicePolicyManager, admin: android.content.ComponentName, pkg: String,

@@ -511,9 +511,22 @@ class WebDesk:
         if kind == "image":
             return self._image_request(dev, rid, url, intent)
         if intent == "report":
-            return {"result": "reported", "review_id": rid, "title": host,
-                    "reason": "הדיווח נשלח לבדיקה. תודה — כך הסינון משתפר."}
+            return self._site_report(dev, rid, host)
         return self._site_open(dev, rid, host)
+
+    def _site_report(self, dev: sqlite3.Row, rid: int, host: str) -> dict:
+        """דיווח על אתר: נחסם אצל הלקוח מיד (האתרים הידניים שלו — חסימה, לא פתיחה, אז בלי קוד הורים),
+        והמנהל מחליט לכולם. אתר חיוני (חיפוש, שירותי Google, בנקים, ממשלה…) — לא נחסם, רק מדווח."""
+        if _essential(host):
+            return {"result": "reported", "review_id": rid, "title": host,
+                    "reason": "הדיווח נשלח לבדיקה. האתר הזה חיוני (חיפוש / שירותים), אז הוא לא נחסם אצלך — "
+                              "אם יש בו משהו לא ראוי, המנהל יטפל."}
+        settings = DeviceSettings.load(dev["policy"])
+        if host not in settings.custom_hosts:
+            self.svc.update_device(dev["id"], {"custom_hosts": sorted({*settings.custom_hosts, host})},
+                                   f"device:{dev['id']}")
+        return {"result": "reported", "review_id": rid, "title": host,
+                "reason": "האתר נחסם אצלך (רעננו את הדף בעוד כמה שניות), והדיווח נשלח לבדיקה. תודה!"}
 
     def _site_open(self, dev: sqlite3.Row, rid: int, host: str) -> dict:
         settings = DeviceSettings.load(dev["policy"])
@@ -691,9 +704,7 @@ class WebDesk:
                 self.redis.hdel(IMAGE_OVERRIDE_KEY, f"{ip}|{key}")
             status = "approved" if r["intent"] == "open" else "rejected"
         elif action == "reject":
-            if r["intent"] == "report" and ip:
-                self.redis.hdel(IMAGE_OVERRIDE_KEY, f"{ip}|{key}")     # הדיווח נדחה — התמונה חוזרת למנוע
-            status = "rejected"
+            status = "rejected"         # דיווח שנדחה — לכולם לא נחסם; אצל הלקוח שדיווח נשאר מוסתר (הבחירה שלו)
         else:
             raise ValueError("פעולה לא מוכרת")
         self._close(r["id"], status, action, by)
@@ -706,6 +717,19 @@ class WebDesk:
         with self.svc.db() as c, db.transaction(c):
             c.execute("UPDATE web_reviews SET status = ?, decision = ?, decided_at = ?, decided_by = ? WHERE id = ?",
                       (status, decision, db.now(), by[:60], review_id))
+
+
+# אתרים שלא חוסמים אצל לקוח בגלל דיווח (חסימה כזו שוברת חיפוש / שירותים / את FilterPhone עצמו)
+_NEVER_SELF_BLOCK = ("google.com", "google.co.il", "gstatic.com", "googleapis.com", "googleusercontent.com",
+                     "bing.com", "filterphone.com", "apple.com", "icloud.com", "microsoft.com", "live.com",
+                     "whatsapp.com", "whatsapp.net", "android.com", "gov.il")
+
+
+def _essential(host: str) -> bool:
+    if any(host == h or host.endswith("." + h) for h in _NEVER_SELF_BLOCK):
+        return True
+    g = websites.GROUP_BY_ID.get(group_of(host) or "")
+    return bool(g and (g.infra or "essential" in g.levels))
 
 
 def _blocked_by_option(host: str, hosts) -> str:

@@ -540,3 +540,15 @@ test('the app chat and WhatsApp share context: the other channel goes into the p
   const p = ai.systemPrompt({ businessInfo: 'x', inHours: true, otherChannel: sec });
   assert.match(p, /הוואטסאפ לא עובד/);
 });
+
+test('escalate with the id of something blocked → the request carries the change (approval executes it)', () => {
+  const { parseEscalate } = require('../lib/actions');
+  const crm = { selected: 7, devices: [{ device_id: 7, blocked: [{ id: 'whatsapp_profile_cover', title: 'כיסוי לבן על תמונות פרופיל בוואטסאפ' }] }] };
+  assert.deepEqual(parseEscalate('whatsapp_profile_cover|הלקוח רוצה לראות תמונות פרופיל', crm),
+    { open: ['whatsapp_profile_cover'], note: 'הלקוח רוצה לראות תמונות פרופיל' });
+  assert.deepEqual(parseEscalate('whatsapp_profile_cover', crm),
+    { open: ['whatsapp_profile_cover'], note: 'כיסוי לבן על תמונות פרופיל בוואטסאפ' });
+  // מזהה שלא חסום / טקסט חופשי — בקשה בטקסט (המנהל מחליט מה לשנות)
+  assert.deepEqual(parseEscalate('להשהות את הסינון לשבוע', crm), { open: [], note: 'להשהות את הסינון לשבוע' });
+  assert.deepEqual(parseEscalate('youtube|לפתוח', crm), { open: [], note: 'youtube|לפתוח' });
+});

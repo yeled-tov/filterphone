@@ -806,7 +806,8 @@ class GuardService : AccessibilityService() {
 
     /** חלון חדש: בכרום — הכפתור הצף (ובדיקה אם נפתח תפריט לחיצה ארוכה); באפליקציה אחרת — בלי כפתור. */
     private fun onChromeWindow(pkg: String) {
-        if (pkg == ChromeReport.CHROME && guardWanted() && !AdminState.isPaused(this)) {
+        // בכל רמות הסינון והגלישה (גם "פתוח") — כל אחד יכול לחסום לעצמו / לדווח / לשלוח לבדיקה
+        if (pkg == ChromeReport.CHROME && !AdminState.isPaused(this)) {
             chromeBubble.show()
             main.removeCallbacks(chromeMenuCheck)
             main.postDelayed(chromeMenuCheck, 250)

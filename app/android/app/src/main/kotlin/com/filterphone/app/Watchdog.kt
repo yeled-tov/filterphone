@@ -5,7 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 
 /**
@@ -34,6 +36,11 @@ object Watchdog {
     const val VPN = "vpn"
     const val GUARD = "guard"
     const val BATTERY = "battery"
+    const val GUARD_STALE = "guard_stale"
+    const val AUTOSTART = "autostart"
+    const val BYPASS_BLOCKED = "bypass_blocked"
+    private const val STALE_MS = 3 * 60_000L
+    private const val K_STALE_SINCE = "guard_stale_since"
 
     /**
      * המגן נדרש: מסכים / הגנות בוואטסאפ / מילות חיפוש / רשימה לבנה — תמיד; חסימת אפליקציות — רק בלי
@@ -45,13 +52,25 @@ object Watchdog {
             policy.allowlistOnly || (policy.apps.isNotEmpty() && !DeviceOwnerManager.isDeviceOwner(context))
     }
 
-    /** טהור: מה חסר, לפי המצב. נבדק ביחידה. */
-    fun missing(vpnPermission: Boolean, guardNeeded: Boolean, guardOn: Boolean, batteryOk: Boolean?): List<String> =
+    /**
+     * טהור: מה חסר, לפי המצב. נבדק ביחידה.
+     * guardStale — המגן מופעל בהגדרות אבל המערכת עצרה אותו (שיאומי!) כבר כמה דקות.
+     * autostartOk — שיאומי: "הפעלה אוטומטית" (null = לא שיאומי / לא ידוע).
+     * bypassBlocked — "חסימת חיבורים ללא VPN" בלי מנהל מכשיר: האפליקציות שמחוץ ל-VPN בלי רשת.
+     */
+    fun missing(vpnPermission: Boolean, guardNeeded: Boolean, guardOn: Boolean, batteryOk: Boolean?,
+                guardStale: Boolean = false, autostartOk: Boolean? = null, bypassBlocked: Boolean = false): List<String> =
         buildList {
             if (!vpnPermission) add(VPN)
             if (guardNeeded && !guardOn) add(GUARD)
+            if (guardNeeded && guardOn && guardStale) add(GUARD_STALE)
+            if (autostartOk == false) add(AUTOSTART)
             if (batteryOk == false) add(BATTERY)
+            if (bypassBlocked) add(BYPASS_BLOCKED)
         }
+
+    /** טהור: המגן "תקוע" (מופעל ולא רץ) מספיק זמן כדי להתריע — לא רגע אחרי הפעלה / עדכון. */
+    fun staleLongEnough(since: Long, now: Long): Boolean = since > 0 && now - since >= STALE_MS
 
     /** טהור: להציג התראה עכשיו? כשמשהו חדש חסר, או אותו דבר עדיין חסר אחרי 6 שעות. */
     fun shouldAlert(missing: List<String>, alerted: String, alertedAt: Long, now: Long): Boolean =
@@ -73,11 +92,25 @@ object Watchdog {
                 .onFailure { Log.w(TAG, "watchdog: device owner re-apply failed", it) }
         }
         val power = app.getSystemService(PowerManager::class.java)
+        val guardOn = GuardPolicy.isServiceEnabled(app)
+        // המגן מופעל בהגדרות אבל לא רץ (המערכת עצרה אותו) — כמה דקות ברצף, לא רגע אחרי הפעלה
+        val staleSince = if (guardOn && !GuardService.isRunning) {
+            p.getLong(K_STALE_SINCE, 0L).takeIf { it > 0 } ?: now.also { p.edit().putLong(K_STALE_SINCE, it).apply() }
+        } else {
+            if (p.contains(K_STALE_SINCE)) p.edit().remove(K_STALE_SINCE).apply()
+            0L
+        }
+        val bypassBlocked = runCatching {
+            DeviceOwnerManager.lockdownConflict(app, VpnBypass.current(app).excluded)
+        }.getOrDefault(false)
         val gone = missing(
             vpnPermission = !TunnelManager.isInitialized || TunnelManager.isPermissionGranted(),
             guardNeeded = guardRequired(app),
-            guardOn = GuardPolicy.isServiceEnabled(app),
+            guardOn = guardOn,
             batteryOk = power?.isIgnoringBatteryOptimizations(app.packageName),
+            guardStale = staleLongEnough(staleSince, now),
+            autostartOk = Xiaomi.autostartAllowed(app),
+            bypassBlocked = bypassBlocked,
         )
         if (gone.isEmpty()) {
             if (!p.getBoolean(K_WAS_OK, false)) p.edit().putBoolean(K_WAS_OK, true).apply()
@@ -98,14 +131,20 @@ object Watchdog {
             nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, context.getString(R.string.alerts_channel),
                 NotificationManager.IMPORTANCE_HIGH))
         }
+        val xiaomi = Xiaomi.isDevice
         val what = gone.joinToString(" · ") {
             context.getString(when (it) {
                 VPN -> R.string.watchdog_vpn
                 GUARD -> R.string.watchdog_guard
-                else -> R.string.watchdog_battery
+                GUARD_STALE -> if (xiaomi) R.string.watchdog_guard_stale_xiaomi else R.string.watchdog_guard_stale
+                AUTOSTART -> R.string.watchdog_autostart
+                BYPASS_BLOCKED -> R.string.watchdog_bypass_blocked
+                else -> if (xiaomi) R.string.watchdog_battery_xiaomi else R.string.watchdog_battery
             })
         }
-        val open = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+        // לחיצה — ישר למסך שצריך: שיאומי (הפעלה אוטומטית / סוללה), נגישות, הגדרות ה-VPN; אחרת — האפליקציה
+        val open = targetIntent(context, gone, xiaomi)
+            ?: context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
         val pi = PendingIntent.getActivity(context, NOTIFICATION_ID, open,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         runCatching {
@@ -120,6 +159,19 @@ object Watchdog {
                 .setContentIntent(pi)
                 .build())
         }
+    }
+
+    private fun targetIntent(context: Context, gone: List<String>, xiaomi: Boolean): Intent? {
+        val first = gone.firstOrNull { it != VPN && it != GUARD } ?: return null
+        if (VPN in gone || GUARD in gone) return null                 // האפליקציה מובילה את ההרשאות האלה
+        return when (first) {
+            AUTOSTART -> Xiaomi.firstAvailable(context, Xiaomi.autostartIntents())
+            GUARD_STALE -> if (xiaomi) Xiaomi.firstAvailable(context, Xiaomi.autostartIntents())
+                else Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            BATTERY -> if (xiaomi) Xiaomi.firstAvailable(context, Xiaomi.batteryIntents(context)) else null
+            BYPASS_BLOCKED -> Intent(Settings.ACTION_VPN_SETTINGS)
+            else -> null
+        }?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     private fun clearAlert(context: Context) {

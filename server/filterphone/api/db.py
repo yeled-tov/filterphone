@@ -360,8 +360,15 @@ ALTER TABLE web_reviews ADD COLUMN page_url TEXT NOT NULL DEFAULT '';
 ALTER TABLE web_reviews ADD COLUMN ai_reason TEXT NOT NULL DEFAULT '';
 """
 
+_V20 = """
+-- בקשות מהבוט: לאן לעדכן את הלקוח כשהמנהל מחליט (wa:<צ'אט>), מתי עודכן, ומה הוחלט בפועל (טקסט ללקוח).
+ALTER TABLE requests ADD COLUMN notify TEXT NOT NULL DEFAULT '';
+ALTER TABLE requests ADD COLUMN notified_at INTEGER;
+ALTER TABLE requests ADD COLUMN outcome TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16,
-                         _V17, _V18, _V19]
+                         _V17, _V18, _V19, _V20]
 VERSION = len(MIGRATIONS)
 
 

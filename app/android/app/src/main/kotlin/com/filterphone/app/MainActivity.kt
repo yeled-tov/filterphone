@@ -420,6 +420,12 @@ class MainActivity : FlutterActivity() {
                 startSettings(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
                 return "app_details"
             }
+            // שיאומי: גם כשאנדרואיד כבר מאשר — "הפעלה אוטומטית" ו"ללא הגבלות" בחיסכון בסוללה של MIUI
+            if (Xiaomi.isDevice) {
+                launchingChild = true
+                if (Xiaomi.autostartAllowed(this) != true && Xiaomi.open(this, Xiaomi.autostartIntents())) return "miui_autostart"
+                if (Xiaomi.open(this, Xiaomi.batteryIntents(this))) return "miui_battery"
+            }
             return "already"
         }
         @Suppress("BatteryLife")

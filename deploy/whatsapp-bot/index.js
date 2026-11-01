@@ -486,9 +486,31 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ------------------------------------------------------------------ פניות מהאפליקציה → אליך
 
+/**
+ * המנהל החליט על בקשה שהבוט העביר לאישור — מעדכנים את הלקוח בשיחה בוואטסאפ (מה נפתח / לא אושר),
+ * והבוט זוכר את זה בהמשך השיחה.
+ */
+async function pollDecisions() {
+  const { decisions } = await srv.decisions();
+  if (!decisions?.length) return;
+  const done = [];
+  for (const d of decisions) {
+    try {
+      const text = d.text || (d.status === 'approved' ? '✅ הבקשה אושרה.' : 'הבקשה לא אושרה.');
+      await sendAi(d.chat, text);
+      state.remember(d.chat, 'assistant', text);
+      done.push(d.id);
+    } catch (e) {
+      console.warn('decision notice:', e.message);
+    }
+  }
+  if (done.length) await srv.decisionsAck(done);
+}
+
 async function pollOutbox() {
   try {
     if (client && status.state === 'ready') {
+      await pollDecisions().catch((e) => console.warn('decisions:', e.message));
       const { messages } = await srv.outbox(lastOutboxId);
       if (messages?.length) {
         const done = [];
@@ -519,7 +541,7 @@ function rememberAppThread(sent, deviceId, question, phone) {
  * שהלקוח יקבל אישור אמיתי (עם השעה) ולא הבטחה. השרת אוכף את הגבולות (מה מותר, עד שעה); מה שנדחה —
  * עובר לאישורך. מחזיר שורות אישור ללקוח, ומה בוצע (בשבילך).
  */
-async function runActions(deviceId, crm, tags, parentCode = null) {
+async function runActions(deviceId, crm, tags, parentCode = null, chat = '') {
   const confirms = [];
   const done = [];
   const needCode = [];          // קוד הורים: הפעולות שהשרת דחה בלי קוד / עם קוד שגוי — ממתינות להקלדה
@@ -555,8 +577,9 @@ async function runActions(deviceId, crm, tags, parentCode = null) {
       console.warn(`action ${t.kind}:${t.arg}:`, e.message);
       confirms.push('⚠️ את זה אני לא יכול לבצע לבד — העברתי לאישור המנהל.');
       done.push(`⚠️ לא בוצע (${t.kind} ${t.arg}): ${e.message} — נשלח לאישורך`);
-      await srv.escalate(deviceId, `${t.kind === 'OPEN' ? 'פתיחה' : t.kind === 'BLOCK' ? 'חסימה' : 'סגירה'}: ${t.arg}`)
-        .catch(() => {});
+      const item = t.kind === 'OPEN' ? acts.parseOpen(t.arg).item : '';
+      await srv.escalate(deviceId, `${t.kind === 'OPEN' ? 'פתיחה' : t.kind === 'BLOCK' ? 'חסימה' : 'סגירה'}: ${t.arg}`,
+        { open: item ? [item] : null, chat }).catch(() => {});
     }
   }
   if (codeErrors.length) confirms.push(pcode.message(codeErrors));
@@ -645,8 +668,9 @@ async function handleAppSupport(m, waIds) {
   if (ran.done.length) await toAdmin(`🤖 *הבוט ביצע* · מכשיר #${deviceOps}${m.phone ? ' · ' + m.phone : ''}\n${ran.done.join('\n')}`);
   for (const t of res.tags) {
     if (t.kind === 'ESCALATE') {
-      await srv.escalate(deviceOps, t.arg || m.text).catch((e) => console.warn('escalate:', e.message));
-      await toAdmin(`🔐 *בקשה לאישורך* · מכשיר #${deviceOps}${m.phone ? ' · ' + m.phone : ''}\n${t.arg || m.text}\n(בדשבורד → בקשות)`);
+      const esc = acts.parseEscalate(t.arg || m.text, crm);
+      await srv.escalate(deviceOps, esc.note, { open: esc.open }).catch((e) => console.warn('escalate:', e.message));
+      await toAdmin(`🔐 *בקשה לאישורך* · מכשיר #${deviceOps}${m.phone ? ' · ' + m.phone : ''}\n${esc.note}\n(בדשבורד → בקשות — האישור מבצע, והלקוח מקבל עדכון)`);
     }
   }
 
@@ -1218,7 +1242,7 @@ async function replyNow(msg, chatId, phone, text, open, current = () => true) {
   if (!current()) return;
   // פעולות במכשיר (חסימה / פתיחה זמנית) — מבוצעות לפני השליחה, והלקוח מקבל אישור אמיתי עם השעה
   const deviceId = crm?.selected || null;
-  const ran = await runActions(deviceId, crm, res.tags);
+  const ran = await runActions(deviceId, crm, res.tags, null, chatId);
   if (ran.needCode.length && !ran.locked) parentCodes.set(chatId, { deviceId, crm, tags: ran.needCode });
   if (ran.done.length) {
     toAdmin(`🤖 *הבוט ביצע* · ${phone} · מכשיר #${deviceId}\n${ran.done.join('\n')}\n🔗 https://wa.me/${phone}`).catch(() => {});
@@ -1246,8 +1270,9 @@ async function replyNow(msg, chatId, phone, text, open, current = () => true) {
       const back = botLabel ? `בשיחה: הכפתור למעלה → "${botLabel.name}"` : '"בוט" → 5';
       await toAdmin(`🙋 *לקוח מבקש נציג* · ${phone}\n🔗 https://wa.me/${phone}\n\n${sum}\n\n_להחזרת הבוט ללקוח: ${back}_`);
     } else if (t.kind === 'ESCALATE' && deviceId) {
-      await srv.escalate(deviceId, t.arg || text).catch((e) => console.warn('escalate:', e.message));
-      await toAdmin(`🔐 *בקשה לאישורך* · ${phone} · מכשיר #${deviceId}\n${t.arg || text}\n(בדשבורד → בקשות)`);
+      const esc = acts.parseEscalate(t.arg || text, crm);
+      await srv.escalate(deviceId, esc.note, { open: esc.open, chat: chatId }).catch((e) => console.warn('escalate:', e.message));
+      await toAdmin(`🔐 *בקשה לאישורך* · ${phone} · מכשיר #${deviceId}\n${esc.note}\n(בדשבורד → בקשות — האישור מבצע, והלקוח מקבל עדכון כאן)`);
     } else if (t.kind === 'ASK' && !res.tags.some((x) => x.kind === 'HUMAN')) {
       await askOwner(chatId, phone, state.chat(chatId).q?.text || text, t.arg);
     }

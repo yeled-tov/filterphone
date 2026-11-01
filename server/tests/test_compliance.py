@@ -356,7 +356,7 @@ def test_device_log_is_removed_with_device(env):
     assert client.delete(f"/v1/admin/devices/{did}", headers=h).status_code == 204
     with svc.db() as c:
         assert c.execute("SELECT count(*) FROM device_log").fetchone()[0] == 0
-    assert db.VERSION == 19
+    assert db.VERSION == 20
 
 
 def test_rekey_keeps_address_and_policy_and_swaps_wireguard_peer(env):
@@ -976,3 +976,20 @@ def test_a_site_certificate_is_not_accepted_as_a_kosher_root(env, tmp_path):
     r = client.post("/v1/admin/kosher-certs", headers=h,
                     json={"provider": "rimon", "cert": leaf.public_bytes(serialization.Encoding.PEM).decode()})
     assert r.status_code == 400 and "CA" in r.json()["error"]
+
+
+def test_lockdown_with_bypass_apps_and_no_device_owner(env):
+    """בלי מנהל מכשיר, עם אפליקציות מחוץ ל-VPN: lockdown כבוי הוא הנכון (לא מתריעים), ודלוק — מתריעים."""
+    svc, client = env
+    h = admin_headers(client)
+    did, dh, _ = enroll(svc, client)
+    base = {"policy_version": 1, "device_owner": False, "vpn": {"state": "UP", "always_on": True, "lockdown": False},
+            "vpn_bypass": {"applied": ["com.filtertube.app"], "lockdown_conflict": False}}
+    client.post("/v1/device/heartbeat", headers=dh, json=base)
+    codes = [i["code"] for i in client.get(f"/v1/admin/devices/{did}", headers=h).json()["compliance"]["issues"]]
+    assert "lockdown_off" not in codes and "bypass_blocked" not in codes
+    client.post("/v1/device/heartbeat", headers=dh, json={**base, "vpn": {**base["vpn"], "lockdown": True},
+                                                         "vpn_bypass": {"applied": ["com.filtertube.app"],
+                                                                        "lockdown_conflict": True}})
+    codes = [i["code"] for i in client.get(f"/v1/admin/devices/{did}", headers=h).json()["compliance"]["issues"]]
+    assert "bypass_blocked" in codes

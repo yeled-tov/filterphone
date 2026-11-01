@@ -210,6 +210,15 @@
         <package android:name="com.filtertube.filtertube" />
         <!-- חנות: עמוד האפליקציה ב-Google Play, והתקדמות ההתקנות שלה (טאב העדכונים) -->
         <package android:name="com.android.vending" />
+        <!-- שיאומי: מסכי "הפעלה אוטומטית" ו"חיסכון בסוללה" של MIUI (Xiaomi.kt) -->
+        <package android:name="com.miui.securitycenter" />
+        <package android:name="com.miui.powerkeeper" />
+        <intent>
+            <action android:name="miui.intent.action.HIDDEN_APPS_CONFIG_ACTIVITY" />
+        </intent>
+        <intent>
+            <action android:name="miui.intent.action.OP_AUTO_START" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />

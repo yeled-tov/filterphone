@@ -96,8 +96,11 @@ class BotDesk:
     def _device_summary(self, d) -> dict:
         from .catalog import DeviceSettings, summary
         settings = DeviceSettings.load(d["policy"])
+        blocks = summary(settings)
         return {"device_id": d["id"], "name": d["name"], "level": d["level"], "status": d["status"],
-                "blocks": [b["id"] for b in summary(settings)], "temp_open": self.svc.temp_opens(d)}
+                "blocks": [b["id"] for b in blocks], "temp_open": self.svc.temp_opens(d),
+                # מה חסום עכשיו (מזהה + שם) — הבוט מבקש לפתוח לצמיתות בדיוק את זה (ESCALATE:מזהה), והאישור מבצע
+                "blocked": [{"id": b["id"], "title": b["title"]} for b in blocks if b["id"] in CATALOG]}
 
     def actions(self, row) -> dict:
         """מה הבוט יכול לעשות עכשיו במכשיר הזה — נשלח ל-AI כרשימה סגורה (מזהה + שם)."""
@@ -182,8 +185,40 @@ class BotDesk:
         return self.svc.temp_close(device_id, item, "whatsapp-bot")
 
     def escalate(self, device_id: int, note: str, level: int | None = None,
-                 options: list[str] | None = None) -> dict:
-        """פעולה קריטית (השהיה / פתיחה / הורדת רמה): נרשמת כבקשה לאישור המנהל — הבוט לא מבצע לבד."""
+                 options: list[str] | None = None, open_items: list[str] | None = None,
+                 chat: str = "") -> dict:
+        """פעולה קריטית (השהיה / פתיחה קבועה / הורדת רמה): נרשמת כבקשה לאישור המנהל — הבוט לא מבצע לבד.
+        open_items — מה לפתוח (מזהים מהקטלוג): הבקשה נושאת את החסימות החדשות, כך שאישור בדשבורד באמת מבצע.
+        chat — הצ'אט בוואטסאפ: כשהמנהל מחליט, הבוט מעדכן את הלקוח שם (decisions)."""
+        from .catalog import DeviceSettings
         row = self.svc.device_row(device_id)
         text = security.clean_text(note, 1500, multiline=True) or "בקשה מהבוט (וואטסאפ)"
-        return self.svc.device_request_change(row, level, options, f"[בוט וואטסאפ] {text}")
+        items = {temp_item(i) for i in (open_items or [])}
+        if options is None and items:
+            current = DeviceSettings.load(row["policy"]).options
+            wanted = [o for o in current if o not in items]
+            if len(wanted) != len(current):
+                options = wanted
+                titles = ", ".join(CATALOG[o].title for o in sorted(items) if o in CATALOG)
+                text = f"{text}\nלפתוח: {titles}" if titles else text
+        out = self.svc.device_request_change(row, level, options, f"[בוט וואטסאפ] {text}")
+        if chat:
+            with self.svc.db() as c, db.transaction(c):
+                c.execute("UPDATE requests SET notify = ?, notified_at = NULL WHERE id = ?",
+                          (f"wa:{security.clean_text(chat, 120)}", out["request_id"]))
+        return out
+
+    def decisions(self, limit: int = 20) -> list[dict]:
+        """בקשות מהבוט שהמנהל כבר החליט עליהן ועוד לא עודכנו ללקוח בוואטסאפ."""
+        with self.svc.db() as c:
+            rows = c.execute("SELECT id, device_id, status, outcome, admin_note, notify FROM requests"
+                             " WHERE notify LIKE 'wa:%' AND status IN ('approved', 'rejected') AND notified_at IS NULL"
+                             " ORDER BY id LIMIT ?", (limit,)).fetchall()
+        return [{"id": r["id"], "device_id": r["device_id"], "chat": r["notify"][3:], "status": r["status"],
+                 "text": r["outcome"] or ("✅ הבקשה אושרה." if r["status"] == "approved" else "הבקשה לא אושרה."),
+                 "note": r["admin_note"] or ""} for r in rows]
+
+    def decisions_ack(self, ids: list[int]) -> int:
+        with self.svc.db() as c, db.transaction(c):
+            return sum(c.execute("UPDATE requests SET notified_at = ? WHERE id = ? AND notified_at IS NULL",
+                                 (db.now(), int(i))).rowcount for i in ids if isinstance(i, int))

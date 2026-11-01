@@ -25,4 +25,23 @@ class WatchdogTest {
         assertTrue(Watchdog.shouldAlert(listOf("guard"), alerted = "guard", alertedAt = now - 7 * 3600_000L, now = now))
         assertFalse(Watchdog.shouldAlert(emptyList(), alerted = "", alertedAt = 0, now = now))
     }
+
+    @Test
+    fun xiaomiStoppedGuardAndBlockedBypassAreReported() {
+        // המגן מופעל אבל נעצר (שיאומי) — רק אחרי כמה דקות, לא רגע אחרי הפעלה
+        assertEquals(listOf(Watchdog.GUARD_STALE),
+            Watchdog.missing(true, guardNeeded = true, guardOn = true, batteryOk = true, guardStale = true))
+        assertEquals(false, Watchdog.staleLongEnough(since = 1_000L, now = 1_000L + 60_000L))
+        assertEquals(true, Watchdog.staleLongEnough(since = 1_000L, now = 1_000L + 4 * 60_000L))
+        assertEquals(false, Watchdog.staleLongEnough(since = 0L, now = 10_000_000L))
+        // שיאומי: "הפעלה אוטומטית" כבויה
+        assertEquals(listOf(Watchdog.AUTOSTART),
+            Watchdog.missing(true, guardNeeded = true, guardOn = true, batteryOk = true, autostartOk = false))
+        // lockdown בלי מנהל מכשיר — FilterTube בלי רשת
+        assertEquals(listOf(Watchdog.BYPASS_BLOCKED),
+            Watchdog.missing(true, guardNeeded = false, guardOn = false, batteryOk = true, bypassBlocked = true))
+        assertEquals(true, Xiaomi.isXiaomi("Xiaomi", "Redmi"))
+        assertEquals(true, Xiaomi.isXiaomi("Xiaomi", "POCO"))
+        assertEquals(false, Xiaomi.isXiaomi("samsung", "samsung"))
+    }
 }

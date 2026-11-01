@@ -518,3 +518,17 @@ def test_image_key_ignores_scheme_and_fragment():
     from filterphone.proxy.web import image_key_of
     assert image_key_of("https://CDN.example/a.jpg?w=1#x") == image_key_of("http://cdn.example/a.jpg?w=1")
     assert image_key_of("https://cdn.example/a.jpg?w=1") != image_key_of("https://cdn.example/a.jpg?w=2")
+
+
+def test_site_report_blocks_it_for_the_reporter_but_not_essential_sites(env):
+    """דיווח על אתר מכרום — נחסם אצל המדווח מיד (גם ברמה פתוחה); אתר חיוני (Google) — רק דיווח."""
+    svc, client = env
+    did, ip, h = enroll_clean(svc, client)
+    desk = desk_for(svc, {})
+    client.app.state.web = desk
+    r = desk.device_request(svc.device_row(did), "site", "report", "https://bad-news.example/x")
+    assert r["result"] == "reported" and "נחסם אצלך" in r["reason"]
+    assert "bad-news.example" in client.get(f"/v1/admin/devices/{did}", headers=h).json()["settings"]["custom_hosts"]
+    g = desk.device_request(svc.device_row(did), "site", "report", "https://www.google.com/search?q=x")
+    assert "לא נחסם" in g["reason"]
+    assert "www.google.com" not in client.get(f"/v1/admin/devices/{did}", headers=h).json()["settings"]["custom_hosts"]

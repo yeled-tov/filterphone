@@ -169,3 +169,45 @@ def test_bot_blocks_hotspot_permanently_and_identifies_by_device_and_android_id(
     j = client.get(q + f"&aid={aid}", headers=auth(BOT)).json()
     assert j["selected"] == did and j["customer"]["name"] == "משה"
     assert all(b["id"] != "dpc:disallow_tethering" for b in j["actions"]["block"])   # כבר חסום
+
+
+def test_bot_escalation_carries_the_change_and_the_customer_hears_back(env):
+    """הלקוח ביקש מהבוט לפתוח לצמיתות — האישור בדשבורד באמת פותח, והלקוח מקבל עדכון (וואטסאפ + אפליקציה)."""
+    svc, client = env
+    set_bot(client)
+    did, token = active_customer(svc, client)
+    h = admin_headers(client)
+    client.post("/v1/bot/block", headers=auth(BOT), json={"device_id": did, "options": ["whatsapp_profile_cover"]})
+    crm = client.get("/v1/bot/customer", headers=auth(BOT), params={"phone": "0501234567"}).json()
+    assert {"id": "whatsapp_profile_cover", "title": "כיסוי לבן על תמונות פרופיל בוואטסאפ"} in crm["devices"][0]["blocked"]
+    e = client.post("/v1/bot/escalate", headers=auth(BOT), json={
+        "device_id": did, "note": "רוצה לראות תמונות פרופיל", "open": ["whatsapp_profile_cover"],
+        "chat": "972501234567@c.us"})
+    assert e.status_code == 201
+    req = next(r for r in client.get("/v1/admin/requests", headers=h).json() if r["id"] == e.json()["request_id"])
+    assert "whatsapp_profile_cover" not in [o["id"] for o in req["options"]]       # הבקשה נושאת את השינוי
+    assert client.get("/v1/bot/decisions", headers=auth(BOT)).json()["decisions"] == []   # עוד לא הוחלט
+    # המנהל מאשר (בלי לשנות כלום) — וזה באמת נפתח
+    assert client.post(f"/v1/admin/requests/{req['id']}/approve", headers=h, json={}).status_code == 200
+    dev = client.get(f"/v1/admin/devices/{did}", headers=h).json()
+    assert "whatsapp_profile_cover" not in dev["settings"]["options"]
+    d = client.get("/v1/bot/decisions", headers=auth(BOT)).json()["decisions"]
+    assert len(d) == 1 and d[0]["chat"] == "972501234567@c.us" and d[0]["status"] == "approved"
+    assert "כיסוי לבן על תמונות פרופיל" in d[0]["text"] and d[0]["text"].startswith("✅")
+    # גם באפליקציה
+    chat = client.get("/v1/device/support", headers=auth(token)).json()["messages"]
+    assert chat[-1]["text"] == d[0]["text"]
+    assert client.post("/v1/bot/decisions/ack", headers=auth(BOT), json={"ids": [d[0]["id"]]}).json()["acked"] == 1
+    assert client.get("/v1/bot/decisions", headers=auth(BOT)).json()["decisions"] == []
+
+
+def test_rejected_bot_request_is_reported_back(env):
+    svc, client = env
+    set_bot(client)
+    did, token = active_customer(svc, client)
+    h = admin_headers(client)
+    e = client.post("/v1/bot/escalate", headers=auth(BOT),
+                    json={"device_id": did, "note": "להשהות לשבוע", "chat": "972501234567@c.us"}).json()
+    client.post(f"/v1/admin/requests/{e['request_id']}/reject", headers=h, json={"admin_note": "לא בשבוע הזה"})
+    d = client.get("/v1/bot/decisions", headers=auth(BOT)).json()["decisions"]
+    assert d[0]["status"] == "rejected" and "לא אושרה" in d[0]["text"] and "לא בשבוע הזה" in d[0]["text"]

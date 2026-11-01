@@ -537,6 +537,12 @@ class BotEscalateIn(BaseModel):
     note: str = Field(default="", max_length=1500)
     level: int | None = None
     options: list[str] | None = Field(default=None, max_length=100)
+    open: list[str] | None = Field(default=None, max_length=20)     # מה לפתוח (מזהים) — האישור מבצע
+    chat: str = Field(default="", max_length=120)                   # הצ'אט בוואטסאפ — לעדכן כשהוחלט
+
+
+class BotAckIn(BaseModel):
+    ids: list[int] = Field(max_length=100)
 
 
 class WhatsAppIn(BaseModel):
@@ -1225,7 +1231,16 @@ def _routes(app: FastAPI) -> None:
 
     @app.post("/v1/bot/escalate", status_code=201)
     def bot_escalate(body: BotEscalateIn, bot: BotDep):
-        return bot.escalate(body.device_id, body.note, body.level, body.options)
+        return bot.escalate(body.device_id, body.note, body.level, body.options, body.open, body.chat)
+
+    @app.get("/v1/bot/decisions")
+    def bot_decisions(bot: BotDep):
+        """בקשות מהבוט שהמנהל אישר / דחה — הבוט מעדכן את הלקוח בוואטסאפ ומסמן (ack)."""
+        return {"decisions": bot.decisions()}
+
+    @app.post("/v1/bot/decisions/ack")
+    def bot_decisions_ack(body: BotAckIn, bot: BotDep):
+        return {"acked": bot.decisions_ack(body.ids)}
 
     @app.get("/v1/whatsapp/webhook")
     def whatsapp_verify(request: Request, desk: DeskDep):

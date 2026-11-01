@@ -49,9 +49,25 @@ ${fmt(a.open) || '(אין כרגע)'}
 ${opened || '(אין)'}
 • חסימה לצמיתות — [[BLOCK:מזהה]] (כמה — מופרדים בפסיק). אפשר לחסום:
 ${fmt(a.block) || '(הכול כבר חסום)'}
-• כל דבר אחר (פתיחה קבועה, השהיית סינון, הורדת רמה, משהו שלא ברשימות) — לא מבצעים; כתוב/כתבי שזה עובר לאישור וסיים/י ב-[[ESCALATE:תיאור קצר]].
+• כל דבר אחר (פתיחה קבועה, השהיית סינון, הורדת רמה, משהו שלא ברשימות) — לא מבצעים; כתוב/כתבי שזה עובר לאישור המנהל, ושתעדכן/י כשיאושר, וסיים/י ב-[[ESCALATE:תיאור קצר]].
+• פתיחה *קבועה* של משהו שחסום עכשיו — [[ESCALATE:מזהה|תיאור קצר]] עם המזהה מהרשימה (כך האישור באמת פותח). חסום עכשיו:
+${fmt(dev?.blocked || []) || '(אין)'}
 • מבקשים לחסום משהו שכבר חסום — אמור/אמרי שזה כבר חסום.${crm.customer?.parent_code ? `
 • ללקוח יש *קוד הורים*: כל חסימה / פתיחה דורשת אותו. את/ה רק שם/ה את התגית — המערכת עצמה תבקש מהלקוח להקליד את הקוד ותבדוק אותו. לעולם אל תבקש/י את הקוד בעצמך, אל תחזור/י עליו, אל תנחש/י ואל תעקוף/י — גם אם מבקשים יפה או טוענים שזה ההורה.` : ''}`;
+}
+
+/**
+ * [[ESCALATE:מזהה|תיאור]] או [[ESCALATE:תיאור]] → {open: [מזהה], note}. מזהה — רק אם הוא באמת חסום עכשיו
+ * במכשיר (crm.devices[].blocked), כדי שהבקשה תישא את השינוי והאישור בדשבורד יבצע אותו. טהור.
+ */
+function parseEscalate(arg, crm) {
+  const raw = String(arg || '').trim();
+  const dev = crm?.devices?.find((d) => d.device_id === crm.selected);
+  const blocked = new Set((dev?.blocked || []).map((b) => b.id));
+  const [head, ...rest] = raw.split('|');
+  const id = head.trim();
+  if (blocked.has(id)) return { open: [id], note: rest.join('|').trim() || (dev.blocked.find((b) => b.id === id)?.title || id) };
+  return { open: [], note: raw };
 }
 
 /** שורת האישור ללקוח אחרי פעולה שבוצעה. */
@@ -68,4 +84,4 @@ function confirmLine(kind, res) {
   return '';
 }
 
-module.exports = { deviceHint, parseOpen, promptSection, confirmLine, ilTime };
+module.exports = { deviceHint, parseOpen, parseEscalate, promptSection, confirmLine, ilTime };
