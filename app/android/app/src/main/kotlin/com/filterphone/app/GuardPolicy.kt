@@ -98,9 +98,13 @@ object GuardPolicy {
         val safeBrowser: String = SafeSites.FULL,
         /** כלי Root: חוסם גם את חלון בקשת הרשאת-העל (su) — לא רק את האפליקציה (RootGuard). */
         val blockRootPrompt: Boolean = false,
+        /** Google Play פתוח ומנוהל: גלישה חופשית, התקנה רק של המאושרות (PlayManaged). */
+        val playManaged: Boolean = false,
+        /** השמות של האפליקציות המאושרות ב-Play — לזיהוי עמוד של אפליקציה מאושרת. */
+        val approvedTitles: List<String> = emptyList(),
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty() &&
-            !allowlistOnly && !blockRootPrompt
+            !allowlistOnly && !blockRootPrompt && !playManaged
         /** טאב "עדכונים" בוואטסאפ חסום (סטטוסים + ערוצים). */
         val blocksWaUpdates get() = "updates" in waScreens
     }
@@ -218,6 +222,10 @@ object GuardPolicy {
             safeBrowser = o.optString("safe_browser", SafeSites.FULL)
                 .takeIf { it in setOf(SafeSites.FULL, SafeSites.ESSENTIAL, SafeSites.OFF) } ?: SafeSites.OFF,
             blockRootPrompt = o.optBoolean("block_root_prompt", false),
+            playManaged = (protections as? JSONObject)?.has("play_managed") == true,
+            approvedTitles = o.optJSONObject("allowlist")?.optJSONArray("titles")
+                ?.let { a -> (0 until a.length()).map { a.optString(it).trim().lowercase() }.filter { it.length >= 2 } }
+                ?: emptyList(),
         )
     }
 
@@ -300,6 +308,7 @@ object GuardPolicy {
             if (pkg in untouchable(context)) return null
             return if (app) Block.APP else Block.SCREEN
         }
+        if (policy.playManaged && pkg !in policy.allowed && PlayManaged.isBlockedInstall(context, pkg)) return Block.APP
         if (policy.allowlistOnly) {
             refreshLaunchers(context)
             if (allowlistBlocks(pkg, policy.allowed, launcherPkgs, untouchable(context) + basicPkgs)) return Block.APP

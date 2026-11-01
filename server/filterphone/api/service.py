@@ -541,7 +541,20 @@ class Services:
     def _allowlist(self, comp: Compiled) -> dict:
         # מסלול (ניווט בלבד / בלי אינטרנט) — הרשימה שלו; אחרת הקטלוג + Chrome
         apps = list(comp.allowlist_apps) if comp.allowlist_apps is not None else self._approved_packages()
-        return {"enabled": bool(comp.dpc.get("approved_apps_only", False)), "apps": apps}
+        out = {"enabled": bool(comp.dpc.get("approved_apps_only", False)), "apps": apps}
+        if "play_managed" in comp.protections:
+            out["titles"] = self._approved_titles(set(apps))      # לזיהוי עמוד של אפליקציה מאושרת ב-Play
+        return out
+
+    def _approved_titles(self, packages: set[str]) -> list[str]:
+        """השמות שבהם האפליקציות המאושרות מופיעות ב-Google Play (עברית / אנגלית) + השם בחנות שלנו."""
+        titles = _play_titles()
+        out: list[str] = []
+        for a in self.managed_apps(enabled_only=True):
+            if a["package"] not in packages:
+                continue
+            out += [t for t in [a["label"], *titles.get(a["package"], [])] if t]
+        return sorted({t.strip() for t in out if 2 <= len(t.strip()) <= 80})
 
     # ------------------------------------------------------------ יומן מכשיר
 

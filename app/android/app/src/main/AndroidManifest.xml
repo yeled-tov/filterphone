@@ -108,6 +108,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Google Play מנוהל: "חסום להתקנה — בקשת אישור" (חלון קטן מעל Play) -->
+        <activity
+            android:name=".AppRequestActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.filterphone.app.request"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- חיבור מחדש של ה-VPN אחרי אתחול / עדכון -->
         <receiver
             android:name=".BootReceiver"

@@ -11,6 +11,7 @@ import android.util.Log
  * התקנה / הסרה / עדכון של אפליקציה — בזמן אמת (רישום דינמי; מאנדרואיד 8 אי אפשר דרך המניפסט):
  *   - אפליקציה מרשימת "מחוץ ל-VPN" (FilterTube) — בונים את המנהרה מחדש, כדי שתעבוד מיד.
  *   - אפליקציה חסומה הותקנה במנהל מכשיר — מחילים שוב (אפור / מוסתרת) לפני שמספיקים להשתמש בה.
+ *   - Google Play מנוהל: התקנה חדשה מ-Play שלא אושרה — מוסרת מיד (PlayManaged).
  * רשת הביטחון: בדיקת התקינות התקופתית של המנהרה והסנכרון כל 15 דקות עושים את אותו הדבר.
  */
 object PackageWatch {
@@ -24,7 +25,8 @@ object PackageWatch {
                 val pkg = intent.data?.schemeSpecificPart ?: return
                 if (pkg == ctx.packageName) return
                 val app = ctx.applicationContext
-                Recovery.runAsync(app) { onChanged(app, pkg, intent.action ?: "") }
+                val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+                Recovery.runAsync(app) { onChanged(app, pkg, intent.action ?: "", replacing) }
             }
         }
         val filter = IntentFilter().apply {
@@ -51,7 +53,12 @@ object PackageWatch {
         runCatching { context.applicationContext.unregisterReceiver(r) }
     }
 
-    private fun onChanged(context: Context, pkg: String, action: String) {
+    private fun onChanged(context: Context, pkg: String, action: String, replacing: Boolean) {
+        // Google Play מנוהל: אפליקציה חדשה מ-Play שלא אושרה — מוסרת / נחסמת, וחלון הבקשה נפתח
+        if (action == Intent.ACTION_PACKAGE_ADDED) {
+            runCatching { PlayManaged.onPackageAdded(context, pkg, replacing) }
+                .onFailure { Log.w(TAG, "play managed check failed", it) }
+        }
         if (VpnBypass.listed(context, pkg)) {
             Log.i(TAG, "bypass app changed ($action) — refreshing the tunnel")
             TunnelManager.refreshBypass("package")

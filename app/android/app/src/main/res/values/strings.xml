@@ -24,6 +24,21 @@
     <string name="guard_keyword_blocked">החיפוש הזה חסום בטלפון הזה (FilterPhone)</string>
     <string name="guard_play_only_selected">בחלון הזה אפשר להתקין רק את האפליקציה שנבחרה בחנות FilterPhone</string>
     <string name="guard_play_window_closed">חלון ההתקנה נסגר. להתקנת אפליקציה — דרך חנות FilterPhone</string>
+    <!-- Google Play מנוהל (PlayManaged) -->
+    <string name="play_badge_blocked">🔒 חסום להתקנה · בקשת אישור</string>
+    <string name="app_request_title">%1$s — חסומה להתקנה</string>
+    <string name="app_request_removed_title">%1$s לא מאושרת — ההתקנה בוטלה</string>
+    <string name="app_request_sub">אפשר להתקין רק אפליקציות שהמנהל אישר. רוצה את האפליקציה הזו? שלחו בקשה — המנהל יבדוק ויעדכן.</string>
+    <string name="app_request_name">שם האפליקציה</string>
+    <string name="app_request_name_hint">למשל: מוביט</string>
+    <string name="app_request_why">למה צריך אותה? למה היא משמשת?</string>
+    <string name="app_request_why_hint">כמה מילים — זה עוזר לאשר מהר</string>
+    <string name="app_request_send">שליחת בקשה</string>
+    <string name="app_request_close">סגירה</string>
+    <string name="app_request_name_needed">כתבו את שם האפליקציה</string>
+    <string name="app_request_why_needed">כתבו בקצרה למה צריך אותה</string>
+    <string name="app_request_sent">הבקשה נשלחה למנהל. כשתאושר — האפליקציה תופיע בחנות FilterPhone.</string>
+    <string name="app_request_failed">לא הצלחנו לשלוח עכשיו — בדקו את החיבור ונסו שוב.</string>
     <!-- מסך ההתקנה מעל Google Play (PlayInstallOverlay) -->
     <string name="play_overlay_title">%1$s</string>
     <string name="play_overlay_app">האפליקציה</string>

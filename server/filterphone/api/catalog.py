@@ -212,6 +212,13 @@ OPTIONS: tuple[Option, ...] = (
            "אי אפשר להיכנס לחנות ולהתקין ממנה ישירות. אפליקציות מאושרות מותקנות ומתעדכנות דרך חנות FilterPhone.",
            apps=("com.android.vending",), popular=True, needs_guard=True,
            warn="נאכף ע\"י מגן FilterPhone (נגישות). מומלץ לחסום יחד גם 'אתרי הורדת APK'."),
+    Option("play_managed", "google", "Google Play פתוח — התקנה רק של אפליקציות מאושרות",
+           "אפשר להיכנס לחנות, לגלוש ולחפש. מתקינים רק את מה שאישרת בחנות FilterPhone: באפליקציה אחרת כפתור "
+           "ההתקנה מוחלף ב'חסום להתקנה — בקשת אישור' (הבקשה מגיעה לבקשות), ואם הותקנה בכל זאת — מוסרת מיד. "
+           "התמונות בחנות (אייקונים, צילומי מסך) חסומות — Google לא מאפשרת לסנן אותן אחת-אחת. "
+           "במקום 'כניסה לחנות Google Play' (המסך הנעול).",
+           hosts=("play-lh.googleusercontent.com",), protections=("play_managed",), needs_guard=True,
+           warn="ההסרה האוטומטית — רק בטלפון שהוקם כמנהל מכשיר. בלי מנהל מכשיר: האפליקציה הלא מאושרת נחסמת לפתיחה."),
     Option("play_store_full", "google", "Google Play — חסימה מלאה",
            "החנות חסומה גם ברשת ומוסתרת: אין התקנות ואין עדכוני אפליקציות בכלל.",
            hosts=("play.google.com", "play.googleapis.com", "play-fe.googleapis.com",
@@ -401,8 +408,15 @@ assert all(o in CATALOG for o in BASELINE_OPTIONS), "unknown baseline option"
 
 
 def effective_options(options: list[str]) -> list[str]:
-    """האפשרויות שבאמת נאכפות: מה שנבחר + הבסיס לכולם (בלי כפילויות, בסדר יציב)."""
-    return list(dict.fromkeys([*options, *BASELINE_OPTIONS]))
+    """האפשרויות שבאמת נאכפות: מה שנבחר + הבסיס לכולם (בלי כפילויות, בסדר יציב).
+    "Google Play פתוח ומנוהל" (play_managed) מחליף את חסימת הכניסה לחנות (play_store) — אבל לא את החסימה
+    המלאה (play_store_full), שגוברת."""
+    out = list(dict.fromkeys([*options, *BASELINE_OPTIONS]))
+    if "play_managed" in out and "play_store_full" not in out:
+        out = [o for o in out if o != "play_store"]
+    elif "play_store_full" in out:
+        out = [o for o in out if o != "play_managed"]
+    return out
 
 
 # ---------------------------------------------------------------- מסלולי סינון
@@ -523,6 +537,8 @@ PROTECTIONS: dict[str, dict] = {
     },
     # סימון בלבד: "כיסוי לבן" — מדליק את mask בתוך wa_profile_photo (Compiled.device_json)
     "wa_profile_mask": {},
+    # Google Play פתוח ומנוהל: התקנה רק של המאושרות (allowlist.apps / allowlist.titles במדיניות)
+    "play_managed": {"package": "com.android.vending"},
 }
 
 # מנהל מכשיר (Device Owner) — מה נאכף כשהאפליקציה מוגדרת כמנהלת המכשיר. רק יכולות רשמיות

@@ -53,6 +53,9 @@ class GuardService : AccessibilityService() {
     private var lastSettingsScanAt = 0L
     private var launcherMenuPkg = ""                // מסך הבית שבו נלחץ ארוך הסמל שלנו
     private val installOverlay by lazy { PlayInstallOverlay(this) { onInstallButton(it) } }
+    private val playBadges by lazy { PlayRequestBadges(this) { onPlayBadgeTap() } }   // Play מנוהל
+    private var playBadgeTitle = ""
+    private var lastManagedScanAt = 0L
     private val avatarMask by lazy { AvatarMask(this) }   // תמונות פרופיל בוואטסאפ — לבן במקומן (WaAvatars)
     private var maskScrollUntil = 0L                // רשימה בוואטסאפ בגלילה — עד אז פסים במקום עיגולים
     private var lastMaskAt = 0L
@@ -174,7 +177,10 @@ class GuardService : AccessibilityService() {
             markAlive()
             trackSettings(pkg)
             if (AccountScreens.isAddAccount(pkg, event.className?.toString())) syncForAccountSetup()
-            if (pkg != PlayLock.PLAY && pkg != packageName && pkg != SYSTEM_UI) hideInstallOverlay()
+            if (pkg != PlayLock.PLAY && pkg != packageName && pkg != SYSTEM_UI) {
+                hideInstallOverlay()
+                playBadges.hide()
+            }
             // יצאו מוואטסאפ (לא מקלדת / שורת המצב / אנחנו) — בלי כיסוי
             if (avatarMask.isShown && !maskWanted(pkg, policy) && pkg != packageName && pkg != SYSTEM_UI && !isIme(pkg)) {
                 avatarMask.hide()
@@ -471,7 +477,8 @@ class GuardService : AccessibilityService() {
     private fun wantsContent(pkg: String?, policy: GuardPolicy.Policy): Boolean =
         policy.waProfile?.packages?.contains(pkg) == true ||
             (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES) ||
-            (pkg == PlayLock.PLAY && PlayLock.active(SystemClock.elapsedRealtime()) != null)
+            (pkg == PlayLock.PLAY && PlayLock.active(SystemClock.elapsedRealtime()) != null) ||
+            (pkg == PlayLock.PLAY && policy.playManaged && PlayLock.PLAY !in policy.apps)
 
     // ------------------------------------------------------------ שלב א': חלון Play לאפליקציה אחת
 
@@ -480,6 +487,10 @@ class GuardService : AccessibilityService() {
      * (וחלונות הביניים של ההתקנה). ניווט החוצה — חוזרים לעמוד שלה. true = טופל (לא לחסום כרגיל).
      */
     private fun guardPlay(pkg: String, policy: GuardPolicy.Policy, fromContent: Boolean): Boolean {
+        if (pkg == PlayLock.PLAY && policy.playManaged && PlayLock.PLAY !in policy.apps) {
+            guardManagedPlay(policy, fromContent)      // Play פתוח ומנוהל — בלי חלון ובלי מסך
+            return true
+        }
         if (pkg != PlayLock.PLAY || PlayLock.PLAY !in policy.apps) return false
         val now = SystemClock.elapsedRealtime()
         val s = PlayLock.active(now) ?: run {                  // אין חלון — החסימה הרגילה
@@ -602,6 +613,88 @@ class GuardService : AccessibilityService() {
     private fun hideInstallOverlay() {
         installOverlay.hide()
         main.removeCallbacks(playRecheck)
+    }
+
+    // ------------------------------------------------------------ Google Play פתוח ומנוהל (PlayManaged)
+
+    /**
+     * Play פתוח: גולשים ומחפשים כרגיל. בעמוד של אפליקציה שאינה מאושרת (השם שלה לא ברשימת המאושרות) — כל
+     * כפתור "התקנה" מכוסה בתווית "חסום להתקנה · בקשת אישור" (PlayRequestBadges). אפליקציה מאושרת — כרגיל.
+     * ההבטחה עצמה אחרי ההתקנה (PlayManaged.onPackageAdded): לא מאושרת — מוסרת מיד.
+     */
+    private fun guardManagedPlay(policy: GuardPolicy.Policy, fromContent: Boolean) {
+        val now = SystemClock.elapsedRealtime()
+        if (fromContent && now - lastManagedScanAt < PLAY_SCAN_MS) {
+            main.removeCallbacks(managedRecheck)
+            main.postDelayed(managedRecheck, PLAY_SCAN_MS)
+            return
+        }
+        lastManagedScanAt = now
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
+        try {
+            if (root.packageName?.toString() != PlayLock.PLAY) {
+                playBadges.hide()
+                return
+            }
+            val texts = ArrayList<String>(64)
+            val buttons = ArrayList<Rect>(4)
+            collectInstallButtons(root, texts, buttons)
+            if (buttons.isEmpty() || PlayManaged.pageApproved(texts, policy.approvedTitles)) {
+                playBadges.hide()
+            } else {
+                playBadgeTitle = PlayManaged.guessTitle(texts)
+                playBadges.show(buttons)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "managed play check failed", e)
+        } finally {
+            recycle(root)
+        }
+    }
+
+    private val managedRecheck = Runnable {
+        safely("managed-play") {
+            val policy = GuardPolicy.get(this)
+            if (!AdminState.isPaused(this) && policy.playManaged) guardManagedPlay(policy, fromContent = false)
+        }
+    }
+
+    /** הטקסטים בסדר הרכיבים, ומיקום כל כפתור התקנה גלוי. */
+    private fun collectInstallButtons(root: AccessibilityNodeInfo, texts: MutableList<String>, buttons: MutableList<Rect>) {
+        val stack = ArrayDeque<AccessibilityNodeInfo>()
+        stack.addLast(root)
+        var seen = 0
+        while (stack.isNotEmpty() && seen < MAX_NODES) {
+            val node = stack.removeLast()
+            seen++
+            val text = node.text?.toString()?.takeIf { it.isNotBlank() }
+            val desc = node.contentDescription?.toString()?.takeIf { it.isNotBlank() }
+            text?.let(texts::add)
+            desc?.let(texts::add)
+            if (node.isVisibleToUser && (PlayManaged.isInstallButton(text) || PlayManaged.isInstallButton(desc))) {
+                // הכפתור הלחיץ עצמו (הטקסט לפעמים ברכיב פנימי) — המלבן שלו
+                var target: AccessibilityNodeInfo? = node
+                var depth = 0
+                val parents = ArrayList<AccessibilityNodeInfo>()
+                while (target != null && !target.isClickable && depth < 3) {
+                    target = target.parent?.also { parents += it }
+                    depth++
+                }
+                val r = Rect()
+                (target ?: node).getBoundsInScreen(r)
+                if (r.width() > 0 && r.height() > 0 && buttons.none { it == r }) buttons += r
+                parents.forEach { recycle(it) }
+            }
+            for (i in node.childCount - 1 downTo 0) {
+                runCatching { node.getChild(i) }.getOrNull()?.let { stack.addLast(it) }
+            }
+            if (node !== root) recycle(node)
+        }
+        stack.forEach { if (it !== root) recycle(it) }
+    }
+
+    private fun onPlayBadgeTap() {
+        PlayManaged.openRequest(this, playBadgeTitle)
     }
 
     /** כפתור במסך ההתקנה. */
@@ -1305,6 +1398,7 @@ class GuardService : AccessibilityService() {
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         instance = null
         runCatching { installOverlay.hide() }
+        runCatching { playBadges.hide() }
         runCatching { avatarMask.hide() }
         Recovery.syncSoon(this)            // המגן כובה — לדווח לשרת
         // כובה בהגדרות? עם ההרשאה (הקמה) — מדליקים מחדש מיד (לא בהשהיה שהמנהל אישר)
@@ -1320,6 +1414,7 @@ class GuardService : AccessibilityService() {
         instance = null
         main.removeCallbacksAndMessages(null)
         runCatching { installOverlay.hide() }
+        runCatching { playBadges.hide() }
         runCatching { avatarMask.hide() }
         super.onDestroy()
     }
