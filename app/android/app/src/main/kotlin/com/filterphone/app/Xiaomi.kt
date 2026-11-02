@@ -26,16 +26,33 @@ object Xiaomi {
 
     val isDevice: Boolean get() = isXiaomi(Build.MANUFACTURER.orEmpty(), Build.BRAND.orEmpty())
 
+    /** "הצגת חלונות קופצים בזמן ריצה ברקע" — בלעדיה MIUI לא נותנת למגן לפתוח חלון (בחירת קישור, דיווח). */
+    private const val OP_BACKGROUND_START_ACTIVITY = 10021
+
     /** "הפעלה אוטומטית" מופעלת? null = לא ידוע (גרסה שלא חושפת). */
-    fun autostartAllowed(context: Context): Boolean? {
+    fun autostartAllowed(context: Context): Boolean? = opAllowed(context, OP_AUTO_START)
+
+    /** "חלונות קופצים ברקע" מותרים? null = לא ידוע. */
+    fun popupsAllowed(context: Context): Boolean? = opAllowed(context, OP_BACKGROUND_START_ACTIVITY)
+
+    private fun opAllowed(context: Context, op: Int): Boolean? {
         if (!isDevice) return null
         return runCatching {
             val ops = context.getSystemService(AppOpsManager::class.java)
             val m = AppOpsManager::class.java.getMethod("checkOpNoThrow", Int::class.javaPrimitiveType,
                 Int::class.javaPrimitiveType, String::class.java)
-            (m.invoke(ops, OP_AUTO_START, Process.myUid(), context.packageName) as Int) == AppOpsManager.MODE_ALLOWED
+            (m.invoke(ops, op, Process.myUid(), context.packageName) as Int) == AppOpsManager.MODE_ALLOWED
         }.getOrNull()
     }
+
+    /** "הרשאות נוספות" של FilterPhone (שם: "הצגת חלונות קופצים בזמן ריצה ברקע", "הצגה במסך הנעילה"). */
+    fun permissionIntents(context: Context): List<Intent> = listOf(
+        Intent("miui.intent.action.APP_PERM_EDITOR").setClassName("com.miui.securitycenter",
+            "com.miui.permcenter.permissions.PermissionsEditorActivity").putExtra("extra_pkgname", context.packageName),
+        Intent("miui.intent.action.APP_PERM_EDITOR").setClassName("com.miui.securitycenter",
+            "com.miui.permcenter.permissions.AppPermissionsEditorActivity").putExtra("extra_pkgname", context.packageName),
+        Intent("miui.intent.action.APP_PERM_EDITOR").putExtra("extra_pkgname", context.packageName),
+    )
 
     /** מסך "הפעלה אוטומטית" (רשימת האפליקציות). */
     fun autostartIntents(): List<Intent> = listOf(
@@ -69,5 +86,6 @@ object Xiaomi {
 
     /** מה עוד צריך לאשר בשיאומי (לדיווח ולמסך): autostart / battery. */
     fun report(context: Context): Map<String, Any?> =
-        if (!isDevice) emptyMap() else mapOf("xiaomi" to true, "autostart" to autostartAllowed(context))
+        if (!isDevice) emptyMap() else mapOf("xiaomi" to true, "autostart" to autostartAllowed(context),
+            "popups" to popupsAllowed(context))
 }

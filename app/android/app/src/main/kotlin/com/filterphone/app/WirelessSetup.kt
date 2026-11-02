@@ -111,25 +111,39 @@ object WirelessSetup {
 
     private fun runProvision(context: Context, mgr: AbsAdbConnectionManager): RootProvisioner.Outcome {
         val pkg = context.packageName
-        // ניסיון ישיר; אם נחסם בגלל חשבונות — הטריק (השבתת אפליקציות החשבון זמנית).
+        val xiaomi = Xiaomi.isDevice
+        // שיאומי: בלי "ניפוי באגים ב-USB (הגדרות אבטחה)" המעטפת לא יכולה לנהל — רושמים לאבחון
+        val securityAdb = if (xiaomi) run(mgr, "getprop persist.security.adbinput").trim() else ""
+        // ניסיון ישיר; אם נחסם בגלל חשבונות — הטריק (השבתת אפליקציות החשבון לרגע, והחזרה).
         var out = run(mgr, AdbCommands.setDeviceOwner(pkg))
+        var accountDump = ""
+        var notDisabled = emptyList<String>()
         if (!DeviceOwnerManager.isDeviceOwner(context) && AdbCommands.blockedByAccounts(out)) {
-            val accountPkgs = accountPackages(context)
-            Log.i(TAG, "device owner blocked by accounts — disabling ${accountPkgs.size} authenticator apps temporarily")
+            accountDump = run(mgr, "dumpsys account 2>/dev/null")
+            val accountPkgs = trickPackages(context, accountDump)
+            Log.i(TAG, "device owner blocked by accounts — disabling ${accountPkgs.size} account apps for a moment")
             out = run(mgr, AdbCommands.accountTrick(pkg, accountPkgs))
+            // רשת ביטחון: מדליקים שוב את מה שהושבת (בטוח לחזור על זה)
+            AdbCommands.reenable(AdbCommands.disabledBy(out))?.let { run(mgr, it) }
+            notDisabled = AdbCommands.disableFailures(out)
         }
         if (!DeviceOwnerManager.isDeviceOwner(context)) {
-            val reason = RootProvisioner.classifyDpmFailure(out)
+            var reason = RootProvisioner.classifyDpmFailure(out)
+            // שיאומי שלא הצליח להשבית / לנהל, וההגדרה כבויה — זו הסיבה (ולא "חשבונות")
+            if (xiaomi && securityAdb != "1" && (reason == "dpm_failed" ||
+                    (reason == "accounts_present" && notDisabled.isNotEmpty()))) reason = "adb_security_blocked"
             // מה בדיוק חוסם — כדי שהמסך יסביר מה להסיר (חשבון סמסונג, תיקייה מאובטחת…). רק סוגים, בלי שמות.
             val blockers = when (reason) {
-                "accounts_present" -> AdbCommands.accountTypes(run(mgr, "dumpsys account 2>/dev/null"))
+                "accounts_present" -> accountBlockers(accountDump.ifBlank { run(mgr, "dumpsys account 2>/dev/null") },
+                    notDisabled)
                 "multiple_users" -> AdbCommands.extraUsers(run(mgr, "pm list users 2>&1")).map { "user:$it" }
                 else -> emptyList()
             }
-            return RootProvisioner.Outcome(false, "ENROLL-WIFI-008", reason, out.take(300), blockers)
+            val technical = (if (xiaomi) "miui_security_adb=${securityAdb.ifBlank { "?" }}; " else "") + out
+            return RootProvisioner.Outcome(false, "ENROLL-WIFI-008", reason, technical.take(300), blockers)
         }
-        // הצלחה: הרשאות ושאר הצעדים
-        for (cmd in AdbCommands.followups(pkg, Build.VERSION.SDK_INT, owner = true)) run(mgr, cmd)
+        // הצלחה: הרשאות ושאר הצעדים (בשיאומי — גם ההרשאות של MIUI: הפעלה אוטומטית, חלונות ברקע)
+        for (cmd in AdbCommands.followups(pkg, Build.VERSION.SDK_INT, owner = true, xiaomi = xiaomi)) run(mgr, cmd)
         val granted = context.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) ==
             PackageManager.PERMISSION_GRANTED
         runCatching { DeviceOwnerManager.applyBaseline(context) }
@@ -151,6 +165,20 @@ object WirelessSetup {
             "exec_error: ${err(e)}"
         }
     }
+
+    /**
+     * מה להשבית לרגע בטריק: האפליקציות שבאמת מחזיקות חשבון (לפי dumpsys account). אם לא הצלחנו לקרוא —
+     * כל מנהלי החשבונות שהאפליקציה רואה (השבתה של מי שאין לו חשבון לא מזיקה — מוחזר מיד).
+     */
+    fun trickPackages(context: Context, accountDump: String): List<String> =
+        AdbCommands.authenticatorsWithAccounts(accountDump, context.packageName).ifEmpty { accountPackages(context) }
+
+    /**
+     * החשבונות שנשארו חוסמים, להסבר במסך: אם ידוע מה המערכת סירבה להשבית — רק הסוגים שלהם; אחרת —
+     * כל סוגי החשבונות שבמכשיר.
+     */
+    fun accountBlockers(accountDump: String, notDisabled: List<String>): List<String> =
+        AdbCommands.typesOf(accountDump, notDisabled).ifEmpty { AdbCommands.accountTypes(accountDump) }
 
     /**
      * אפליקציות החשבון שאפשר להשבית זמנית (לטריק). נגזר מרשימת ה-authenticators — בלי הרשאת

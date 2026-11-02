@@ -57,10 +57,16 @@ object RootProvisioner {
         val dpm = runSu("dpm set-device-owner $ADMIN", 30)
         var combined = (dpm.out + "\n" + dpm.err).trim()
         // חשבונות במכשיר — כמו בניפוי האלחוטי: משביתים זמנית את אפליקציות החשבון ומדליקים מיד בחזרה
+        var accountDump = ""
+        var notDisabled = emptyList<String>()
         if (!Preflight.capabilities(context).deviceOwner && AdbCommands.blockedByAccounts(combined)) {
+            accountDump = runSu("dumpsys account", 20).out
             val trick = runSu(AdbCommands.accountTrick(context.packageName,
-                WirelessSetup.accountPackages(context)), 60)
+                WirelessSetup.trickPackages(context, accountDump)), 90)
             combined = (trick.out + "\n" + trick.err).trim()
+            // רשת ביטחון: מדליקים שוב את מה שהושבת (גם אם הפקודה נקטעה)
+            AdbCommands.reenable(AdbCommands.disabledBy(combined))?.let { runSu(it, 30) }
+            notDisabled = AdbCommands.disableFailures(combined)
         }
         // לוודא בפועל (גם אם ה-exit code לא אמין בחלק מה-ROMים)
         if (Preflight.capabilities(context).deviceOwner) {
@@ -87,7 +93,8 @@ object RootProvisioner {
         val reason = classifyDpmFailure(combined)
         Log.w(TAG, "root provision failed: $reason")
         val blockers = when (reason) {
-            "accounts_present" -> AdbCommands.accountTypes(runSu("dumpsys account", 20).out)
+            "accounts_present" -> WirelessSetup.accountBlockers(accountDump.ifBlank { runSu("dumpsys account", 20).out },
+                notDisabled)
             "multiple_users" -> AdbCommands.extraUsers(runSu("pm list users", 20).out).map { "user:$it" }
             else -> emptyList()
         }
@@ -100,10 +107,15 @@ object RootProvisioner {
         val o = output.lowercase()
         return when {
             "accounts on the device" in o || ("account" in o && "not allowed" in o) -> "accounts_present"
+            // שיאומי (MIUI / HyperOS) בלי "ניפוי באגים ב-USB (הגדרות אבטחה)", ו-OPPO / realme / OnePlus עם
+            // "ניטור הרשאות": המעטפת של ADB לא מורשית לנהל את מנהלי המכשיר
+            "manage_device_admins" in o || ("securityexception" in o && "user 2000" in o) -> "adb_security_blocked"
+            // לפני "already…" ו-"not allowed…" — ההודעה המלאה היא "Not allowed to set the device owner because
+            // there are already several users on the device"
+            "several users" in o || "multiple users" in o || "users on the device" in o -> "multiple_users"
             "already set up a device owner" in o ||
                 ("already" in o && "device owner" in o && "account" !in o) -> "already_has_device_owner"
             "not allowed to set the device owner" in o || "cannot set the device owner" in o -> "provisioning_blocked"
-            "several users" in o || "multiple users" in o || "users on the device" in o -> "multiple_users"
             "profile owner" in o -> "profile_or_user_present"
             "unknown admin" in o || "componentname" in o || "componentinfo" in o -> "admin_component_error"
             o.isBlank() -> "no_output"

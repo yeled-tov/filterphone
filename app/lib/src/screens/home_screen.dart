@@ -156,8 +156,11 @@ class OneTapCard extends StatelessWidget {
   static String _result(Map<String, Object?> r) {
     switch (r['device_owner_result']) {
       case 'accounts_present':
-        return 'כדי שהטלפון יהיה מנוהל לגמרי (צריבה) אנדרואיד דורש שלא יהיו חשבונות בטלפון. '
-            'אפשר להסיר זמנית את החשבונות (הגדרות ← חשבונות) וללחוץ שוב, או להקים אחרי איפוס עם קוד QR.';
+        return 'אנדרואיד דורש שלא יהיו חשבונות בזמן ההקמה. השבתנו לרגע את החשבונות שאפשר — אבל אחד נשאר. '
+            'במסך ההתקנה מופיע איזה חשבון להסיר זמנית (אחרי ההקמה מוסיפים אותו בחזרה).';
+      case 'adb_security_blocked':
+        return 'היצרן חוסם את ההקמה: בשיאומי — להדליק "ניפוי באגים ב-USB (הגדרות אבטחה)" באפשרויות המפתחים; '
+            'ב-OPPO / realme / OnePlus — "השבתת ניטור הרשאות". ואז לנסות שוב.';
       case 'already_has_device_owner':
         return 'בטלפון כבר מוגדרת אפליקציית ניהול אחרת — FilterPhone לא מחליף אותה.';
       case 'requires_factory_reset':

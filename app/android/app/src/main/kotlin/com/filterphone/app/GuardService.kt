@@ -55,6 +55,9 @@ class GuardService : AccessibilityService() {
     private val installOverlay by lazy { PlayInstallOverlay(this) { onInstallButton(it) } }
     private val playBadges by lazy { PlayRequestBadges(this) { title -> onPlayBadgeTap(title) } }   // Play מנוהל
     private var lastManagedScanAt = 0L
+    /** הקישורים בהודעה שנלחצה בוואטסאפ (לפני שהדפדפן הפנימי נפתח) — לכרום עובר הקישור האמיתי, לא w.meta.me. */
+    private var waClickLinks: List<String> = emptyList()
+    private var waClickAt = 0L
     /** כרום: הכפתור הצף ⋮ (דיווח / בדיקה) והתווית ליד תפריט הלחיצה הארוכה — ChromeBubble. */
     private val chromeBubble by lazy { ChromeBubble(this, { onChromeBubble() }, { onChromeChip() }) }
     private var chromePageUrl: String? = null
@@ -208,6 +211,7 @@ class GuardService : AccessibilityService() {
         if (serviceInfo == null) return
         val info = serviceInfo
         info.eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_VIEW_LONG_CLICKED or
+            AccessibilityEvent.TYPE_VIEW_CLICKED or                     // הקישור שנלחץ בשיחה בוואטסאפ
             (if (wantContent) AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED else 0) or
             (if (scanKeywords) AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED else 0)
         info.flags = info.flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
@@ -238,7 +242,13 @@ class GuardService : AccessibilityService() {
             return
         }
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED) {
+            if (pkg == ChromeReport.CHROME) ensureChromeBubble()
             onLongClick(pkg, event)
+            return
+        }
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) {
+            if (pkg in WaScreens.PACKAGES) noteWaClick(event)
+            else if (pkg == ChromeReport.CHROME) ensureChromeBubble()
             return
         }
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
@@ -804,17 +814,42 @@ class GuardService : AccessibilityService() {
 
     // ------------------------------------------------------------ כרום: דיווח / שליחה לבדיקה
 
-    /** חלון חדש: בכרום — הכפתור הצף (ובדיקה אם נפתח תפריט לחיצה ארוכה); באפליקציה אחרת — בלי כפתור. */
+    /**
+     * חלון חדש: בכרום — הכפתור הצף (ובדיקה אם נפתח תפריט לחיצה ארוכה); באפליקציה אחרת — בלי כפתור.
+     * הכפתור יורד רק כשבאמת יצאו מכרום: חלון של FilterPhone עצמה (גם הכפתור עצמו — הוספת השכבה שולחת אירוע
+     * בשם FilterPhone, וזה מה שהעלים אותו אחרי שנייה), מקלדת, שורת המערכת, או אירוע מאוחר של אפליקציה אחרת
+     * (וואטסאפ אחרי "אחורה", חלונית של Google) — לא מורידים; בודקים אחרי רגע מה באמת בחזית.
+     */
     private fun onChromeWindow(pkg: String) {
         // בכל רמות הסינון והגלישה (גם "פתוח") — כל אחד יכול לחסום לעצמו / לדווח / לשלוח לבדיקה
         if (pkg == ChromeReport.CHROME && !AdminState.isPaused(this)) {
+            main.removeCallbacks(chromeLeftCheck)
             chromeBubble.show()
             main.removeCallbacks(chromeMenuCheck)
             main.postDelayed(chromeMenuCheck, 250)
             main.postDelayed(chromeMenuCheck, 700)
-        } else if (pkg != SYSTEM_UI && !isIme(pkg)) {
-            chromeBubble.hide()
-            chromeMenu = null
+        } else if (chromeBubble.isShown && pkg != packageName && pkg != SYSTEM_UI && !isIme(pkg)) {
+            main.removeCallbacks(chromeLeftCheck)
+            main.postDelayed(chromeLeftCheck, CHROME_LEFT_CHECK_MS)
+        }
+    }
+
+    /** אירוע של אפליקציה אחרת בזמן שהכפתור מוצג: יורד רק אם כרום כבר לא בחזית. */
+    private val chromeLeftCheck = Runnable {
+        safely("chrome-left") {
+            val front = withActiveRoot { it.packageName?.toString() }
+            if (front != ChromeReport.CHROME && front != SYSTEM_UI && !(front != null && isIme(front))) {
+                chromeBubble.hide()
+                chromeMenu = null
+            }
+        }
+    }
+
+    /** לחיצה בתוך כרום והכפתור לא מוצג (נפל / לא עלה) — מעלים אותו שוב. */
+    private fun ensureChromeBubble() {
+        if (!chromeBubble.isShown && !AdminState.isPaused(this)) {
+            main.removeCallbacks(chromeLeftCheck)
+            chromeBubble.show()
         }
     }
 
@@ -1378,7 +1413,64 @@ class GuardService : AccessibilityService() {
             return
         }
         waBrowserBusy = true
+        // נלחץ קישור בהודעה רגע לפני — הוא הכתובת האמיתית: סוגרים את הדפדפן הפנימי ופותחים אותו ב-Chrome
+        val clicked = waClickLinks.takeIf { now - waClickAt < WA_CLICK_FRESH_MS }.orEmpty()
+        waClickLinks = emptyList()
+        if (clicked.isNotEmpty()) {
+            main.postDelayed({
+                waStep(pkg) {
+                    performGlobalAction(GLOBAL_ACTION_BACK)
+                    openWaLinks(clicked)
+                    waBrowserDone(pkg, "ok:clicked", ok = true)
+                }
+            }, WA_STEP_MS)
+            return
+        }
         main.postDelayed({ waBrowserFindMenu(pkg, attempt = 0) }, WA_STEP_MS)
+    }
+
+    /** הקישורים מההודעה שנלחצה בוואטסאפ (הטקסט של הרכיב שנלחץ). */
+    private fun noteWaClick(event: AccessibilityEvent) {
+        val texts = ArrayList<String>(4)
+        event.text?.forEach { t -> t?.toString()?.let(texts::add) }
+        event.contentDescription?.toString()?.let(texts::add)
+        runCatching { event.source }.getOrNull()?.let { src ->
+            src.text?.toString()?.let(texts::add)
+            src.contentDescription?.toString()?.let(texts::add)
+            recycle(src)
+        }
+        val links = WaBrowser.linksIn(texts)
+        if (links.isNotEmpty()) {
+            waClickLinks = links
+            waClickAt = SystemClock.elapsedRealtime()
+        }
+    }
+
+    /** קישור אחד — ישר ל-Chrome; כמה — "איזה קישור לפתוח?". */
+    private fun openWaLinks(links: List<String>) {
+        if (links.size == 1) LinkRelayActivity.openInChrome(this, links[0]) else LinkChooserActivity.open(this, links)
+    }
+
+    /**
+     * הדפדפן הפנימי הראה רק את המעטפת w.meta.me (לא עובדת בכרום) — סוגרים אותו וקוראים את הקישורים מהשיחה
+     * שמאחוריו (ההודעה שנלחצה עדיין על המסך). אין קישור בהודעה — הסבר.
+     */
+    private fun waOpenFromChat(pkg: String) {
+        performGlobalAction(GLOBAL_ACTION_BACK)
+        main.postDelayed({
+            waStep(pkg) {
+                val links = withActiveRoot { root ->
+                    if (root.packageName?.toString() == pkg) WaBrowser.linksIn(collectTexts(root)) else emptyList()
+                }.orEmpty()
+                if (links.isEmpty()) {
+                    waBrowserDone(pkg, "fail:shim", ok = false, toast = false)
+                    Toast.makeText(this, R.string.wa_link_not_found, Toast.LENGTH_LONG).show()
+                } else {
+                    openWaLinks(links.takeLast(8).reversed())          // האחרונים בשיחה — למעלה
+                    waBrowserDone(pkg, "ok:chat", ok = true)
+                }
+            }
+        }, 600)
     }
 
     /** שלב 1–2: הסרגל של הדפדפן הפנימי — כפתור ישיר, או ⋮. עד ~3 שניות (הסרגל עולה אחרי האירוע). */
@@ -1387,12 +1479,16 @@ class GuardService : AccessibilityService() {
         val step = withActiveRoot { root ->
             when {
                 root.packageName?.toString() != pkg || hasComposer(root) -> -1         // עוד לא עלה (או שיצאו ממנו)
+                // עדיין על המעטפת w.meta.me — מחכים להפניה לאתר האמיתי (אחרת "פתיחה בדפדפן" תעביר את המעטפת)
+                collectTexts(root).any { WaBrowser.isShim(it) } -> if (attempt < WA_SHIM_TRIES) -2 else -3
                 clickFirst(root) { t, d -> WaBrowser.isOpenExternal(t, d) } -> 2      // כפתור ישיר בסרגל
                 clickFirst(root) { t, d -> WaBrowser.isMoreMenu(t, d) } -> 1          // ⋮ נפתח
                 else -> { collectLabels(root, labels); 0 }
             }
         } ?: -1
         when {
+            step == -2 -> main.postDelayed({ waBrowserFindMenu(pkg, attempt + 1) }, WA_STEP_MS)
+            step == -3 -> waOpenFromChat(pkg)
             step == 2 -> waBrowserDone(pkg, "ok:direct", ok = true)
             step == 1 -> main.postDelayed({ waBrowserPickItem(pkg, attempt = 0) }, WA_STEP_MS)
             attempt < WA_MENU_TRIES -> main.postDelayed({ waBrowserFindMenu(pkg, attempt + 1) }, WA_STEP_MS)
@@ -1612,6 +1708,12 @@ class GuardService : AccessibilityService() {
         private const val SCAN_EVERY_MS = 250L
         /** אחרי שהתקנה מאושרת התחילה — לא פותחים את השער שוב מיד (העמוד עוד מציג "התקנה" לרגע). */
         private const val GATE_QUIET_MS = 8_000L
+        /** לחיצה על קישור בוואטסאפ — טרייה כל עוד הדפדפן הפנימי נפתח בתוך הזמן הזה. */
+        private const val WA_CLICK_FRESH_MS = 10_000L
+        /** כמה פעמים (כל WA_STEP_MS) מחכים שהמעטפת w.meta.me תפנה לאתר האמיתי. */
+        private const val WA_SHIM_TRIES = 6
+        /** אירוע של אפליקציה אחרת כשהכפתור הצף בכרום מוצג: כמה לחכות לפני שבודקים מה באמת בחזית. */
+        private const val CHROME_LEFT_CHECK_MS = 450L
         private val PRIMARY_INSTALL = setOf("install")
         /** ל-block(): כבר טיפלנו בעצמנו (למשל לחצנו על טאב) — רק ההודעה, בלי פעולה גלובלית. */
         private const val NO_GLOBAL_ACTION = 0

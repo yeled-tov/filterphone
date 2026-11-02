@@ -424,6 +424,8 @@ class MainActivity : FlutterActivity() {
             if (Xiaomi.isDevice) {
                 launchingChild = true
                 if (Xiaomi.autostartAllowed(this) != true && Xiaomi.open(this, Xiaomi.autostartIntents())) return "miui_autostart"
+                // חלונות קופצים ברקע — בלעדיהם בחירת הקישור מוואטסאפ / הדיווח מכרום לא נפתחים
+                if (Xiaomi.popupsAllowed(this) == false && Xiaomi.open(this, Xiaomi.permissionIntents(this))) return "miui_popups"
                 if (Xiaomi.open(this, Xiaomi.batteryIntents(this))) return "miui_battery"
             }
             return "already"

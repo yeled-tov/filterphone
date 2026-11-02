@@ -73,4 +73,39 @@ class WaBrowserTest {
         assertEquals("רענון|שיתוף", WaBrowser.summary(listOf("רענון", "שיתוף", "רענון", long, " ")))
         assertTrue(WaBrowser.summary(List(20) { "תווית $it" }).length <= 70)
     }
+
+    @Test
+    fun theWhatsAppShimIsRecognised() {
+        assertTrue(WaBrowser.isShim("w.meta.me"))
+        assertTrue(WaBrowser.isShim("https://w.meta.me/s/AbC123"))
+        assertTrue(WaBrowser.isShim("\u200ew.meta.me/s/x"))
+        assertFalse(WaBrowser.isShim("www.meta.me.example.com"))
+        assertFalse(WaBrowser.isShim("ynet.co.il"))
+        assertFalse(WaBrowser.isShim(null))
+    }
+
+    @Test
+    fun realLinksAreReadFromTheChatWithoutWhatsAppLinks() {
+        val chat = listOf(
+            "תסתכל כאן https://www.ynet.co.il/news/article/abc.",
+            "או בלי https: kikar.co.il/123456 ותגיד לי",
+            "www.gov.il",
+            "https://wa.me/972500000000",
+            "https://w.meta.me/s/AbC",
+            "https://chat.whatsapp.com/Invite",
+            "שוב https://www.ynet.co.il/news/article/abc",
+            "שלחתי למייל moshe@gmail.com",
+            "קובץ: doc.pdf",
+        )
+        assertEquals(
+            listOf("https://www.ynet.co.il/news/article/abc", "https://kikar.co.il/123456", "https://www.gov.il"),
+            WaBrowser.linksIn(chat),
+        )
+    }
+
+    @Test
+    fun aDomainInsideAnotherLinksPathIsNotASecondLink() {
+        assertEquals(listOf("https://x.co/r/foo.bar/baz"), WaBrowser.linksIn(listOf("https://x.co/r/foo.bar/baz")))
+        assertTrue(WaBrowser.linksIn(listOf("בלי קישורים בכלל", "")).isEmpty())
+    }
 }

@@ -57,6 +57,38 @@ object WaBrowser {
         return m.value.trimEnd('.', ',', ')', ']', '}', '!', '?', ';', ':', '״', '"').takeIf { it.length > 10 }
     }
 
+    /**
+     * כתובת המעטפת של וואטסאפ (w.meta.me/s/…): עובדת רק בתוך וואטסאפ — בכרום היא נכשלת ("החיבור נסגר").
+     * לכרום מעבירים רק את הקישור האמיתי (מההודעה / אחרי ההפניה).
+     */
+    fun isShim(text: String?): Boolean =
+        text != null && SHIM.containsMatchIn(text.replace(Regex("[\\u200e\\u200f\\u202a-\\u202e]"), ""))
+
+    private val SHIM = Regex("(^|//|\\s)w\\.meta\\.me(/|$|\\s)", RegexOption.IGNORE_CASE)
+    /** "example.com/path" או "www.example.com" — בלי https (וואטסאפ הופך גם אותם לקישור). */
+    private val BARE = Regex("(?<![@\\w./-])((?:www\\.(?:[a-z0-9-]+\\.)+[a-z]{2,}(?:/[^\\s<>\"']*)?)|" +
+        "(?:(?:[a-z0-9-]+\\.)+[a-z]{2,}/[^\\s<>\"']+))", RegexOption.IGNORE_CASE)
+
+    /**
+     * הקישורים בטקסטים של שיחה בוואטסאפ, לפי הסדר, בלי כפילויות: http/https, וגם "example.com/path" בלי
+     * https. בלי קישורים לוואטסאפ עצמו (wa.me, w.meta.me — נפתחים בוואטסאפ / לא עובדים בכרום). טהור.
+     */
+    fun linksIn(texts: List<String>): List<String> {
+        val out = LinkedHashSet<String>()
+        for (t in texts) {
+            URL.findAll(t).forEach { m -> clean(m.value)?.let(out::add) }
+            // בלי https — רק במה שנשאר אחרי שהוצאנו את הקישורים המלאים (לא חלק מנתיב של קישור אחר)
+            BARE.findAll(URL.replace(t, " ")).forEach { m -> clean("https://${m.value}")?.let(out::add) }
+        }
+        return out.filter { link ->
+            val host = link.substringAfter("://").substringBefore('/').lowercase()
+            host != "wa.me" && !host.endsWith(".wa.me") && host != "w.meta.me" && !host.endsWith("whatsapp.com")
+        }
+    }
+
+    private fun clean(s: String): String? =
+        s.trimEnd('.', ',', ')', ']', '}', '!', '?', ';', ':', '״', '"', '\'').takeIf { it.length > 10 }
+
     /** תוויות קצרות (מה שנמצא במסך / בתפריט) לאבחון כשלא הצלחנו — בלי תוכן ארוך, עד 70 תווים. */
     fun summary(labels: List<String>): String =
         labels.asSequence().map { it.trim().replace('\n', ' ') }.filter { it.isNotEmpty() && it.length <= 40 }

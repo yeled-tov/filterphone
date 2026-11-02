@@ -135,16 +135,34 @@ String developerOptionsPath(String vendor) => switch (vendor) {
   if (n.contains('secure folder') || n.contains('knox')) {
     return ('תיקייה מאובטחת', 'הגדרות ← אבטחה ופרטיות ← תיקייה מאובטחת ← הגדרות נוספות ← הסרת התקנה.');
   }
+  // שיאומי: "אפליקציות כפולות" הן משתמש בשם XSpace (מספר 999)
+  if (n.contains('xspace') || n.contains('999')) {
+    return ('אפליקציות כפולות (שיאומי)', 'הגדרות ← אפליקציות ← אפליקציות כפולות ← לכבות את כל האפליקציות הכפולות '
+        '(שימו לב: הנתונים של העותק הכפול, למשל וואטסאפ שני, נמחקים — לגבות לפני).');
+  }
   if (n.contains('dual') || n.contains('clone') || n.contains('parallel')) {
     return ('אפליקציות כפולות', 'הגדרות ← תכונות מתקדמות ← Dual Messenger / אפליקציות כפולות ← לכבות לכל האפליקציות.');
   }
-  if (n.contains('xspace') || n.contains('second')) return ('מרחב שני', 'הגדרות ← מרחב שני ← מחיקת המרחב.');
+  if (n.contains('second')) return ('מרחב שני', 'הגדרות ← מרחב שני ← מחיקת המרחב.');
   if (n.contains('work')) return ('פרופיל עבודה', 'הגדרות ← חשבונות ← פרופיל עבודה ← הסרה.');
   return ('משתמש "$name"', 'הגדרות ← משתמשים (או "משתמשים מרובים") ← המשתמש ← מחיקה.');
 }
 
+/// שיאומי / OPPO / realme / OnePlus: ההגדרה הנוספת באפשרויות המפתחים, שבלעדיה ההקמה לא מורשית.
+String securityAdbFix(String vendor) => switch (vendor) {
+      'xiaomi' => 'בשיאומי צריך להדליק עוד הגדרה אחת: ${developerOptionsPath('xiaomi')} ← "ניפוי באגים ב-USB '
+          '(הגדרות אבטחה)" / "USB debugging (Security settings)" ← מאשרים את האזהרות. שיאומי מבקשת להתחבר לחשבון Mi '
+          '(ולפעמים כרטיס SIM בטלפון) — זה בסדר: בזמן ההתקנה חשבון ה-Mi מושבת לרגע ומוחזר לבד. אם עדיין נכשל — '
+          'הפעילו את הטלפון מחדש ונסו שוב.',
+      'oneplus' => 'ב-OPPO / realme / OnePlus: ${developerOptionsPath('oneplus')} ← מדליקים "השבתת ניטור הרשאות" '
+          '(Disable permission monitoring), ונסו שוב.',
+      _ => 'היצרן חוסם את ההקמה דרך ניפוי באגים. חפשו באפשרויות המפתחים הגדרה בשם "הגדרות אבטחה" / '
+          '"ניטור הרשאות", הדליקו אותה ונסו שוב.',
+    };
+
 /// מה לעשות אחרי כישלון — טקסט ראשי לפי הסיבה.
-String failureText(String reason) => switch (reason) {
+String failureText(String reason, [String vendor = 'other']) => switch (reason) {
+      'adb_security_blocked' => securityAdbFix(vendor),
       'accounts_present' => 'אנדרואיד לא מאפשר להפוך למנהל מכשיר כשיש בטלפון חשבונות. ניסינו להשבית אותם זמנית — '
           'מה שנשאר צריך להסיר ידנית (אחרי ההתקנה אפשר להוסיף בחזרה):',
       'multiple_users' => 'יש בטלפון משתמש נוסף — אנדרואיד לא מאפשר ניהול מכשיר כשהוא קיים. צריך להסיר:',
@@ -247,7 +265,7 @@ class _ReportCard extends StatelessWidget {
             Text('הניסיון האחרון לא הושלם', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
           ]),
           const SizedBox(height: 6),
-          Text(failureText(reason)),
+          Text(failureText(reason, controller.setupInfo?.vendor ?? 'other')),
           for (final (title, how) in items)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -336,6 +354,7 @@ class _WirelessCard extends StatefulWidget {
 class _WirelessCardState extends State<_WirelessCard> {
   bool _codePosted = false;     // התראת הקוד הוצגה
   bool _wirelessOpened = false;  // המשתמש פתח את מסך "ניפוי באגים אלחוטי" (אנדרואיד לא תמיד מגלה אם הוא דלוק)
+  bool _securityOpened = false;  // שיאומי / OPPO: נפתחו אפשרויות המפתחים בשביל "הגדרות אבטחה" / "ניטור הרשאות"
   bool _manual = false;
   bool _working = false;
   final _code = TextEditingController();
@@ -389,6 +408,24 @@ class _WirelessCardState extends State<_WirelessCard> {
           '${buildNumberHint(vendor)} אם מתבקשים — מקלידים את קוד הנעילה של הטלפון. כשמופיע "אתה מפתח עכשיו" — '
           'חוזרים לכאן.',
           dev ? null : ('פתיחת "אודות הטלפון"', () => c.openSetupPage('about'))),
+      if (vendor == 'xiaomi')
+        _Step('שיאומי: "ניפוי באגים ב-USB (הגדרות אבטחה)"', info?.securityAdb ?? (_securityOpened && dev),
+            'בלי ההגדרה הזו שיאומי חוסמת את ההקמה. במסך שנפתח: מדליקים "ניפוי באגים ב-USB", ואז מתחתיו '
+            '"ניפוי באגים ב-USB (הגדרות אבטחה)" / "USB debugging (Security settings)" ← מאשרים את האזהרות (יש ספירה '
+            'לאחור — מחכים ולוחצים "אישור"). שיאומי מבקשת להתחבר לחשבון Mi ולפעמים כרטיס SIM — זה בסדר: בזמן '
+            'ההתקנה חשבון ה-Mi מושבת לרגע ומוחזר לבד. לא נפתח? ${developerOptionsPath(vendor)}.',
+            ('פתיחת אפשרויות מפתחים', () async {
+              setState(() => _securityOpened = true);
+              await c.openSetupPage('developer');
+            })),
+      if (vendor == 'oneplus')
+        _Step('OPPO / realme / OnePlus: "השבתת ניטור הרשאות"', _securityOpened && dev,
+            'אם באפשרויות המפתחים יש "השבתת ניטור הרשאות" (Disable permission monitoring) — מדליקים אותה, כדי '
+            'שההתקנה תוכל לתת ל-FilterPhone את כל ההרשאות לבד. אין כזו? ממשיכים.',
+            ('פתיחת אפשרויות מפתחים', () async {
+              setState(() => _securityOpened = true);
+              await c.openSetupPage('developer');
+            })),
       _Step('הדלקת "ניפוי באגים אלחוטי"', wireless || _wirelessOpened && dev,
           'במסך שנפתח גוללים ל"ניפוי באגים אלחוטי" (Wireless debugging) ← לוחצים על השורה עצמה ← מדליקים את המתג '
           'למעלה ← בחלון "לאפשר ניפוי באגים אלחוטי ברשת הזו?" מסמנים "אפשר תמיד ברשת זו" ולוחצים "אישור". '
@@ -515,9 +552,13 @@ class _ComputerCard extends StatelessWidget {
     ('פטור מחיסכון סוללה', 'adb shell dumpsys deviceidle whitelist +$pkg'),
     ('עבודה ברקע', 'adb shell cmd appops set $pkg RUN_ANY_IN_BACKGROUND allow'),
   ];
+  /// שירותי Google, חשבון Xiaomi, חשבון Samsung, וואטסאפ — מושבתים לרגע, ההקמה, ומוחזרים (חבילה שלא קיימת —
+  /// פשוט נכשלת בלי נזק). ההמתנה: אנדרואיד מעדכן את רשימת החשבונות ברקע אחרי ההשבתה.
+  static const _accountApps =
+      'com.google.android.gms com.xiaomi.account com.osp.app.signin com.whatsapp com.whatsapp.w4b';
   static const accountsFix =
-      'adb shell "pm disable-user --user 0 com.google.android.gms; dpm set-device-owner $pkg/.DeviceAdmin; '
-      'pm enable com.google.android.gms"';
+      'adb shell "for p in $_accountApps; do pm disable-user --user 0 \$p; done; sleep 3; '
+      'dpm set-device-owner $pkg/.DeviceAdmin; for p in $_accountApps; do pm enable \$p; done"';
 
   @override
   Widget build(BuildContext context) {
@@ -558,6 +599,7 @@ class _ComputerCard extends StatelessWidget {
     final steps = [
       'בטלפון: מדליקים "אפשרויות מפתחים" — ${buildNumberHint(vendor).replaceFirst('במסך שנפתח', 'הגדרות ←')}',
       'בטלפון: ${developerOptionsPath(vendor)} ← מדליקים "ניפוי באגים ב-USB" (USB debugging).',
+      if (vendor == 'xiaomi' || vendor == 'oneplus') 'בטלפון: ${securityAdbFix(vendor)}',
       'במחשב: מורידים את "Android SDK Platform-Tools" מהאתר developer.android.com/tools/releases/platform-tools, '
           'פותחים את התיקייה, ופותחים בה חלון פקודות (Windows: כותבים cmd בשורת הכתובת של התיקייה ולוחצים Enter).',
       'מחברים את הטלפון בכבל. בטלפון קופץ "לאפשר ניפוי באגים ב-USB?" — מסמנים "אפשר תמיד מהמחשב הזה" ← "אישור".',
@@ -592,9 +634,9 @@ class _ComputerCard extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text('מופיעה שגיאה על "accounts" (חשבונות)?', style: theme.textTheme.titleSmall),
-            const Text('אנדרואיד לא מאפשר ניהול מכשיר כשיש חשבון. הפקודה הזו משביתה את שירותי Google לשנייה, '
-                'מגדירה את FilterPhone ומדליקה אותם בחזרה. חשבון Samsung / Xiaomi — צריך להסיר ידנית בהגדרות '
-                '(ואפשר להוסיף בחזרה אחרי).'),
+            const Text('אנדרואיד לא מאפשר ניהול מכשיר כשיש חשבון. הפקודה הזו משביתה לכמה שניות את אפליקציות '
+                'החשבונות (Google, Xiaomi, Samsung, וואטסאפ), מגדירה את FilterPhone ומדליקה אותן בחזרה — החשבונות '
+                'לא נמחקים. אם עדיין יש שגיאה — החשבון שנשאר צריך להסיר ידנית בהגדרות (ואפשר להוסיף בחזרה אחרי).'),
             cmd('במקום הפקודה השנייה', accountsFix),
             const SizedBox(height: 8),
             const Text('בסוף — חוזרים ל-FilterPhone. המסך הזה יזהה לבד שההתקנה הושלמה.'),

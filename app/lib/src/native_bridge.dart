@@ -17,6 +17,7 @@ class SetupStatus {
     this.notifications = false,
     this.deviceOwner = false,
     this.wirelessSupported = false,
+    this.securityAdb,
   });
 
   factory SetupStatus.fromMap(Map<Object?, Object?> m) => SetupStatus(
@@ -31,6 +32,7 @@ class SetupStatus {
         notifications: m['notifications'] == true,
         deviceOwner: m['device_owner'] == true,
         wirelessSupported: m['wireless_supported'] == true,
+        securityAdb: m['security_adb'] as bool?,
       );
 
   final int sdk;
@@ -44,6 +46,7 @@ class SetupStatus {
   final bool notifications;
   final bool deviceOwner;
   final bool wirelessSupported;   // אנדרואיד 11 ומעלה
+  final bool? securityAdb;        // שיאומי: "ניפוי באגים ב-USB (הגדרות אבטחה)" דלוק (null = לא ידוע / לא שיאומי)
 
   /// "Android 14" לפי ה-SDK.
   String get androidVersion => switch (sdk) {

@@ -54,6 +54,8 @@ object OneTapSetup {
             privileged("dumpsys deviceidle whitelist +$pkg; cmd appops set $pkg RUN_IN_BACKGROUND allow; " +
                 "cmd appops set $pkg RUN_ANY_IN_BACKGROUND allow", 20)
             if (!owner) privileged("appops set $pkg ACTIVATE_VPN allow", 15)
+            // שיאומי: ההרשאות של MIUI (הפעלה אוטומטית, חלונות קופצים ברקע, מסך נעילה) — בלי לשלוח את המשתמש להגדרות
+            if (Xiaomi.isDevice) privileged(AdbCommands.xiaomiGrants(pkg).joinToString("; "), 20)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 privileged("pm grant $pkg android.permission.POST_NOTIFICATIONS", 15)
             }

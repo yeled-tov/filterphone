@@ -5,6 +5,14 @@ import org.junit.Test
 
 class SetupGuideTest {
     @Test
+    fun xiaomiSecurityDebuggingPropertyIsOnOffOrUnknown() {
+        assertEquals(true, SetupGuide.securityAdb("1"))
+        assertEquals(false, SetupGuide.securityAdb("0"))
+        assertEquals(null, SetupGuide.securityAdb(""))          // המערכת לא נותנת לקרוא
+        assertEquals(null, SetupGuide.securityAdb(null))
+    }
+
+    @Test
     fun vendorFamiliesForTheBuildNumberHint() {
         assertEquals("samsung", SetupGuide.vendor("samsung", "samsung"))
         assertEquals("xiaomi", SetupGuide.vendor("Xiaomi", "Redmi"))

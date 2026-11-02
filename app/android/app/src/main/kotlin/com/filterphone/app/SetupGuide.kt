@@ -54,8 +54,19 @@ object SetupGuide {
             "notifications" to (context.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true),
             "device_owner" to DeviceOwnerManager.isDeviceOwner(context),
             "wireless_supported" to WirelessSetup.isSupported(),
+            // שיאומי: "ניפוי באגים ב-USB (הגדרות אבטחה)" — בלעדיו ההקמה נכשלת. null = לא ניתן לדעת
+            "security_adb" to if (vendor(Build.MANUFACTURER.orEmpty(), Build.BRAND.orEmpty()) == "xiaomi")
+                securityAdb(sysProp("persist.security.adbinput")) else null,
         )
     }
+
+    /** ערך המאפיין של שיאומי ← דלוק / כבוי / לא ידוע (ריק = המערכת לא נותנת לקרוא). טהור. */
+    fun securityAdb(prop: String?): Boolean? = prop?.trim()?.takeIf { it.isNotEmpty() }?.let { it == "1" }
+
+    @android.annotation.SuppressLint("PrivateApi")        // מאפיין מערכת של שיאומי — אין API רשמי; נכשל → null
+    private fun sysProp(name: String): String? = runCatching {
+        Class.forName("android.os.SystemProperties").getMethod("get", String::class.java).invoke(null, name) as? String
+    }.getOrNull()
 
     @Suppress("DEPRECATION")        // allNetworks: גם רשת ה-VPN שלנו פעילה — מחפשים Wi-Fi מתחתיה
     private fun wifiConnected(context: Context): Boolean {

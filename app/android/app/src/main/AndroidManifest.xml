@@ -108,7 +108,7 @@
             </intent-filter>
         </activity>
 
-        <!-- Google Play מנוהל: "חסום להתקנה — בקשת אישור" (חלון קטן מעל Play) -->
+        <!-- דיווח / בדיקה מכרום (הכפתור הצף) -->
         <activity
             android:name=".WebReportActivity"
             android:exported="false"
@@ -116,7 +116,14 @@
             android:taskAffinity="com.filterphone.app.webreport"
             android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar"
             android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".LinkChooserActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="com.filterphone.app.linkchooser"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.NoActionBar" />
 
+        <!-- Google Play מנוהל: "חסום להתקנה — בקשת אישור" (חלון קטן מעל Play) -->
         <activity
             android:name=".AppRequestActivity"
             android:exported="false"
@@ -218,6 +225,9 @@
         </intent>
         <intent>
             <action android:name="miui.intent.action.OP_AUTO_START" />
+        </intent>
+        <intent>
+            <action android:name="miui.intent.action.APP_PERM_EDITOR" />
         </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
