@@ -52,6 +52,10 @@ object RootProvisioner {
             }
         }
 
+        // שיאומי עם root: פותחים את שער "הגדרות אבטחה" של MIUI דרך מאפייני המערכת — כך הצריבה עוברת
+        // בלי חשבון Mi ובלי SIM. רק root יכול לכתוב את המאפיינים האלה (במעטפת ADB זה חסום בכוונה).
+        if (Xiaomi.isDevice) runSu(AdbCommands.xiaomiSecurityProps(), 15)
+
         // Attempt the official command even if the framework preflight says no. This does not bypass
         // Android restrictions: dpm itself validates provisioning state and returns the actual reason.
         val dpm = runSu("dpm set-device-owner $ADMIN", 30)

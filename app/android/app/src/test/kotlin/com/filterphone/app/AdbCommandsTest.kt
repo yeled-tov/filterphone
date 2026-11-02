@@ -112,6 +112,14 @@ class AdbCommandsTest {
     }
 
     @Test
+    fun xiaomiSecurityPropsOpenTheGateWithoutAMiAccount() {
+        // ניפוי באגים ב-USB (הגדרות אבטחה) דרך מאפייני המערכת — root בלבד, בלי חשבון Mi
+        val cmd = AdbCommands.xiaomiSecurityProps()
+        assertTrue(cmd.contains("setprop persist.security.adbinput 1"))
+        assertTrue(cmd.contains("setprop persist.security.adbinstall 1"))
+    }
+
+    @Test
     fun accountTypesReadOnlyTheOwnerTypesWithoutNames() {
         val dumpsys = """
             User UserInfo{0:Owner:c13}:

@@ -140,6 +140,15 @@ object AdbCommands {
     fun xiaomiGrants(pkg: String): List<String> =
         listOf(10008, 10021, 10020).map { "appops set $pkg $it allow 2>&1" }
 
+    /**
+     * שיאומי (MIUI / HyperOS) עם **root בלבד**: פותח את "ניפוי באגים ב-USB (הגדרות אבטחה)" דרך מאפייני
+     * המערכת, כדי שאפשר יהיה לצרוב מנהל מכשיר **בלי חשבון Mi ובלי SIM**. המאפיינים האלה מוגנים
+     * (`persist.security.*`) — רק root יכול לכתוב אותם; המעטפת של ADB (ניפוי אלחוטי) לא. לכן זה עוזר רק
+     * במכשיר מושרש. בגרסה שלא מכירה אותם — הפקודה פשוט לא משנה כלום (בלי נזק). טהור.
+     */
+    fun xiaomiSecurityProps(): String =
+        "setprop persist.security.adbinput 1 2>&1; setprop persist.security.adbinstall 1 2>&1"
+
     /** האם הכישלון הוא בגלל חשבונות במכשיר (ואז מנסים את הטריק). */
     fun blockedByAccounts(output: String): Boolean =
         RootProvisioner.classifyDpmFailure(output) == "accounts_present"
