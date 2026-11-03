@@ -299,6 +299,12 @@ OPTIONS: tuple[Option, ...] = (
            hosts=("ynet.co.il", "walla.co.il", "mako.co.il", "n12.co.il", "maariv.co.il", "haaretz.co.il",
                   "israelhayom.co.il", "themarker.com", "calcalist.co.il", "globes.co.il", "kan.org.il",
                   "13tv.co.il", "reshet.tv", "i24news.tv", "0404.co.il", "ice.co.il")),
+    Option("news_haredi", "news", "אתרי חדשות חרדיים",
+           "בחדרי חרדים, כיכר השבת, JDN, המודיע, יתד, קול ברמה, כל רגע ועוד.",
+           hosts=websites._NEWS_HAREDI),
+    Option("news_all", "news", "בלי חדשות בכלל",
+           "כל אתרי החדשות נחסמים — כלליים וגם חרדיים.",
+           hosts=websites._NEWS_GENERAL + websites._NEWS_HAREDI),
     Option("news_sport", "news", "אתרי ספורט", "ספורט 5, ONE, ספורט 1 ועוד.",
            hosts=("sport5.co.il", "one.co.il", "sport1.maariv.co.il", "vsport.co.il")),
 

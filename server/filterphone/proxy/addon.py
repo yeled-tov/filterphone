@@ -29,7 +29,7 @@ from ..engine.imaging import PLACEHOLDER_PNG
 from ..engine.policy import Action, on_failure
 from ..settings import get_settings
 from ..websites import BLOCKED_VERDICTS, WEB_LEVELS
-from . import inline, rewrite, serp
+from . import inline, rewrite, serp, textscan
 from .blockpage import REVIEW_PATH, block_page, checking_page, review_sent_page
 from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
@@ -499,16 +499,26 @@ class FilterPhone:
                 and (size is None or size <= MAX_SERP_BYTES):
             flow.metadata["fp_kind"] = "serp"
             return
+        # סינון טקסט: כל ניווט לדף HTML (בכל רמה) — דף מלא בתוכן לא ראוי נחסם כולו
+        text_nav = _ctype(resp) == "text/html" and resp.status_code == 200 and _is_navigation(flow.request) \
+            and (size is None or size <= MAX_INLINE_BYTES) and not textscan.exempt(flow.request.pretty_host)
+        if text_nav:
+            flow.metadata["fp_text"] = True
         if (pol.level > 0 or pol.images == "block") \
                 and inline.should_scan(_ctype(resp), flow.request.pretty_host) \
                 and (size is None or size <= MAX_INLINE_BYTES):
             flow.metadata["fp_kind"] = "inline"
+            return
+        if text_nav:
+            flow.metadata["fp_kind"] = "text"
             return
         resp.stream = True
 
     async def response(self, flow: http.HTTPFlow) -> None:
         kind = flow.metadata.get("fp_kind")
         if kind is None or flow.metadata.get("fp_handled") or flow.response.stream:
+            return
+        if flow.metadata.get("fp_text") and self._filter_text(flow):
             return
         if kind == "image":
             await self._filter_image(flow)
@@ -519,6 +529,21 @@ class FilterPhone:
             pol = self.policies.get(_client_ip(flow))
             if pol.level > 0 or pol.images == "block":
                 await self._filter_inline(flow)     # התמונות המוטמעות בדף התוצאות
+
+    # ------------------------------------------------------------ טקסט
+
+    def _filter_text(self, flow: http.HTTPFlow) -> bool:
+        """דף שהטקסט שלו מלא בתוכן לא ראוי → דף חסימה (עם "שליחה לבדיקה"). True = נחסם."""
+        body = bounded_content(flow.response, MAX_INLINE_BYTES)
+        if not body or not textscan.is_bad(textscan.visible_text(body), self.terms):
+            return False
+        host = flow.request.pretty_host
+        flow.response = http.Response.make(403, block_page(host, "בדף יש הרבה תוכן לא ראוי.", review=True,
+                                                           url=flow.request.pretty_url[:1000]), {
+            "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-filterphone": "blocked-text"})
+        flow.metadata["fp_handled"] = True
+        self._spawn(self._record(_client_ip(flow), host, "block", "text", "page", _short_path(flow.request)))
+        return True
 
     # ------------------------------------------------------------ תמונות
 

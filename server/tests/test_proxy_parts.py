@@ -101,3 +101,25 @@ def test_content_hosts_and_thumbnail_servers(policy):
         assert policy.is_content_host(host), host
     assert not policy.is_content_host("api.bank.example")
     assert not policy.learn("10.8.0.14", "encrypted-vtbn0.gstatic.com", strict_images=True)
+
+
+# ---------------------------------------------------------------- סינון טקסט בדפים
+
+def test_textscan_blocks_only_dense_bad_pages():
+    from filterphone.proxy import serp, textscan
+    terms = serp.TermMatcher(["badterm", "מילהרעה"])
+    clean = "<html><body><p>" + "שלום עולם זה דף רגיל לגמרי. " * 200 + "badterm</p></body></html>"
+    dense = "<html><body>" + "<p>badterm מילהרעה text here</p>" * 20 + "</body></html>"
+    hidden = "<html><script>" + "badterm " * 50 + "</script><body>דף נקי</body></html>"
+    assert not textscan.is_bad(textscan.visible_text(clean.encode()), terms)      # מילה אחת בכתבה — עובר
+    assert textscan.is_bad(textscan.visible_text(dense.encode()), terms)          # מלא — נחסם
+    assert not textscan.is_bad(textscan.visible_text(hidden.encode()), terms)     # בתוך סקריפט — לא נספר
+    assert textscan.exempt("www.health.gov.il") and not textscan.exempt("example.com")
+
+
+def test_news_all_option_blocks_haredi_and_general_news():
+    from filterphone.api.catalog import OPTIONS
+    opt = {o.id: o for o in OPTIONS}
+    assert "news_haredi" in opt and "news_all" in opt
+    assert "ynet.co.il" in opt["news_all"].hosts and "kikar.co.il" in opt["news_all"].hosts or \
+        any("kikar" in h for h in opt["news_all"].hosts)
