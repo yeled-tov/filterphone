@@ -1429,11 +1429,15 @@ void main() {
       await c.start();
       await tester.pumpWidget(rtl(InstallScreen(controller: c)));
       await tester.pumpAndSettle();
-      expect(find.text('התקנה אוטומטית'), findsOneWidget);
-      expect(find.text('התקנה ידנית'), findsOneWidget);
+      // קודם בוחרים דרך — ורק אז מופיעים הצעדים שלה (בלי שקופצים אישורים של מסלול אחר)
+      expect(find.text('איך רוצים להתקין?'), findsOneWidget);
+      expect(find.text('ידני'), findsOneWidget);
       expect(find.textContaining('samsung SM-A546 · Android 14'), findsOneWidget);
       expect(c.installScreenOpen, isTrue);
       expect(c.attentionNeeded, isEmpty);                       // חלון "חסרה הרשאה" לא קופץ מעל המסך
+      await tester.tap(find.text('אוטומטי — בלי מחשב'));
+      await tester.pumpAndSettle();
+      expect(find.text('התקנה אוטומטית (בלי מחשב)'), findsOneWidget);
       // צעד 2 (Wi-Fi) הוא הנוכחי
       await tester.tap(find.text('הגדרות Wi-Fi'));
       await tester.pump();
@@ -1478,6 +1482,8 @@ void main() {
       expect(find.text('הניסיון האחרון לא הושלם'), findsOneWidget);
       expect(find.textContaining('חשבון Samsung: '), findsOneWidget);
       expect(find.textContaining('תיקייה מאובטחת: '), findsOneWidget);
+      await tester.tap(find.text('ידני'));                       // בוחרים דרך ידנית → מופיע כרטיס המחשב
+      await tester.pumpAndSettle();
       await tester.tap(find.text('עם מחשב (כבל USB)'));
       await tester.pumpAndSettle();
       expect(find.text('adb shell dpm set-device-owner com.filterphone.app/.DeviceAdmin'), findsOneWidget);
