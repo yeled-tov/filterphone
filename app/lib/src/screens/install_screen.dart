@@ -18,8 +18,12 @@ class InstallScreen extends StatefulWidget {
   State<InstallScreen> createState() => _InstallScreenState();
 }
 
+/// דרך ההתקנה שהלקוח בחר. null = עוד לא בחר (מוצג מסך הבחירה).
+enum _Method { auto, root, manual }
+
 class _InstallScreenState extends State<InstallScreen> with WidgetsBindingObserver {
   AppController get c => widget.controller;
+  _Method? _method;
 
   @override
   void initState() {
@@ -65,21 +69,14 @@ class _InstallScreenState extends State<InstallScreen> with WidgetsBindingObserv
                 Text('${info.manufacturer} ${info.model} · ${info.androidVersion}',
                     style: theme.textTheme.bodySmall, textAlign: TextAlign.center),
               const SizedBox(height: 8),
-              if (done) _DoneCard(controller: c) else ...[
+              if (done) _DoneCard(controller: c)
+              else if (_method == null) ...[
                 _ReportCard(controller: c),
-                _SectionTitle('התקנה אוטומטית', 'מומלץ — FilterPhone מקבל ניהול מלא של הטלפון (אי אפשר להסיר אותו או לעקוף אותו).'),
-                _RootCard(controller: c),
-                const SizedBox(height: 12),
-                if (info == null || info.wirelessSupported)
-                  _WirelessCard(controller: c, info: info)
-                else
-                  const _InfoCard(icon: Icons.wifi_off_rounded,
-                      text: 'ניפוי באגים אלחוטי קיים רק מאנדרואיד 11. בטלפון הזה — Root, מחשב, או צעד-צעד.'),
-                const SizedBox(height: 20),
-                const _SectionTitle('התקנה ידנית', 'כשהאוטומטית לא מתאימה.'),
-                _ComputerCard(info: info),
-                const SizedBox(height: 12),
-                _StepByStepCard(controller: c),
+                _MethodChooser(onPick: (m) => setState(() => _method = m)),
+              ] else ...[
+                _ReportCard(controller: c),
+                _BackToChoice(onBack: () => setState(() => _method = null)),
+                ..._methodCards(info),
               ],
             ],
           ),
@@ -87,6 +84,105 @@ class _InstallScreenState extends State<InstallScreen> with WidgetsBindingObserv
       },
     );
   }
+
+  /// הכרטיסים של הדרך שנבחרה בלבד — כך שלא קופצים אישורים של דרך אחרת לפני שבחרו.
+  List<Widget> _methodCards(SetupStatus? info) {
+    switch (_method!) {
+      case _Method.auto:
+        return [
+          const _SectionTitle('התקנה אוטומטית (בלי מחשב)',
+              'מומלץ — FilterPhone מקבל ניהול מלא של הטלפון (אי אפשר להסיר אותו או לעקוף אותו).'),
+          if (info == null || info.wirelessSupported)
+            _WirelessCard(controller: c, info: info)
+          else
+            const _InfoCard(icon: Icons.wifi_off_rounded,
+                text: 'ניפוי באגים אלחוטי קיים רק מאנדרואיד 11. בטלפון הזה בחרו "רוט" או "ידני".'),
+        ];
+      case _Method.root:
+        return [
+          const _SectionTitle('התקנה עם Root', 'הכי מהיר — אם יש Root בטלפון.'),
+          _RootCard(controller: c),
+        ];
+      case _Method.manual:
+        return [
+          const _SectionTitle('התקנה ידנית', 'עם מחשב, או צעד-צעד בלי ניהול מכשיר.'),
+          _ComputerCard(info: info),
+          const SizedBox(height: 12),
+          _StepByStepCard(controller: c),
+        ];
+    }
+  }
+}
+
+/// מסך הבחירה: קודם בוחרים דרך, ורק אז מופיע התהליך המתאים (בלי שקופצים אישורים מראש).
+class _MethodChooser extends StatelessWidget {
+  const _MethodChooser({required this.onPick});
+  final void Function(_Method) onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    Widget tile(_Method m, IconData icon, String title, String body, {bool recommended = false}) => Card(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => onPick(m),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(children: [
+                Icon(icon, color: theme.colorScheme.primary, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                      if (recommended) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                              color: StatusColors.ok(context).withValues(alpha: .18),
+                              borderRadius: BorderRadius.circular(20)),
+                          child: Text('מומלץ',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                  color: StatusColors.ok(context), fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ]),
+                    const SizedBox(height: 3),
+                    Text(body, style: theme.textTheme.bodySmall),
+                  ]),
+                ),
+                const Icon(Icons.chevron_left_rounded),
+              ]),
+            ),
+          ),
+        );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const _SectionTitle('איך רוצים להתקין?', 'בוחרים דרך אחת, ומקבלים בדיוק את הצעדים שלה.'),
+      tile(_Method.auto, Icons.wifi_tethering_rounded, 'אוטומטי — בלי מחשב',
+          'ניפוי באגים אלחוטי מתוך הטלפון. FilterPhone מוביל צעד אחרי צעד. מתאים לרוב הטלפונים (אנדרואיד 11+).',
+          recommended: true),
+      tile(_Method.root, Icons.verified_user_rounded, 'יש Root בטלפון',
+          'לחיצה אחת ואישור בקשת ה-Root — כל השאר אוטומטי.'),
+      tile(_Method.manual, Icons.build_rounded, 'ידני',
+          'עם מחשב (כבל USB) — הדרך הבטוחה ביותר כשיש מחשב; או צעד-צעד בלי ניהול מכשיר.'),
+    ]);
+  }
+}
+
+class _BackToChoice extends StatelessWidget {
+  const _BackToChoice({required this.onBack});
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) => Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          onPressed: onBack,
+          icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+          label: const Text('בחירת דרך אחרת'),
+        ),
+      );
 }
 
 // ------------------------------------------------------------------ הסברים לפי יצרן

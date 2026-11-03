@@ -58,6 +58,14 @@ class GuardService : AccessibilityService() {
     /** הקישורים בהודעה שנלחצה בוואטסאפ (לפני שהדפדפן הפנימי נפתח) — לכרום עובר הקישור האמיתי, לא w.meta.me. */
     private var waClickLinks: List<String> = emptyList()
     private var waClickAt = 0L
+    /**
+     * הקישורים שנראים בשיחה הפתוחה בוואטסאפ, מתעדכנים כל עוד השיחה בחזית. לחיצה על קישור בהודעה היא
+     * ClickableSpan ולא "לחיצה על View" — ולכן לרוב לא נשלח TYPE_VIEW_CLICKED בכלל. לכן קוראים את הקישור
+     * האמיתי מתוך השיחה מראש, וכשהדפדפן הפנימי (w.meta.me) נפתח — פותחים אותו ב-Chrome.
+     */
+    private var waChatLinks: List<String> = emptyList()
+    private var waChatLinksAt = 0L
+    private var waChatSnapAt = 0L
     /** כרום: הכפתור הצף ⋮ (דיווח / בדיקה) והתווית ליד תפריט הלחיצה הארוכה — ChromeBubble. */
     private val chromeBubble by lazy { ChromeBubble(this, { onChromeBubble() }, { onChromeChip() }) }
     private var chromePageUrl: String? = null
@@ -261,6 +269,7 @@ class GuardService : AccessibilityService() {
                 gateLeft()
             }
             onChromeWindow(pkg)
+            maybeSnapshotWaChat(pkg, event.className?.toString())
             // יצאו מוואטסאפ (לא מקלדת / שורת המצב / אנחנו) — בלי כיסוי
             if (avatarMask.isShown && !maskWanted(pkg, policy) && pkg != packageName && pkg != SYSTEM_UI && !isIme(pkg)) {
                 avatarMask.hide()
@@ -283,6 +292,7 @@ class GuardService : AccessibilityService() {
                 return
             }
             if (guardPlay(pkg, policy, fromContent = true)) return
+            maybeSnapshotWaChat(pkg, null)
             if (maskWanted(pkg, policy)) onMaskEvent(event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED)
             onContent(pkg, policy)
         }
@@ -1413,15 +1423,17 @@ class GuardService : AccessibilityService() {
             return
         }
         waBrowserBusy = true
-        // נלחץ קישור בהודעה רגע לפני — הוא הכתובת האמיתית: סוגרים את הדפדפן הפנימי ופותחים אותו ב-Chrome
+        // הקישור האמיתי: מההודעה שנלחצה (אם נשלח אירוע לחיצה), או מהשיחה שנקראה מראש. סוגרים את הדפדפן
+        // הפנימי (w.meta.me — לא עובד בכרום) ופותחים את הקישור האמיתי ב-Chrome.
         val clicked = waClickLinks.takeIf { now - waClickAt < WA_CLICK_FRESH_MS }.orEmpty()
+        val real = clicked.ifEmpty { waChatLinks.takeIf { now - waChatLinksAt < WA_CHAT_FRESH_MS }.orEmpty() }
         waClickLinks = emptyList()
-        if (clicked.isNotEmpty()) {
+        if (real.isNotEmpty()) {
             main.postDelayed({
                 waStep(pkg) {
                     performGlobalAction(GLOBAL_ACTION_BACK)
-                    openWaLinks(clicked)
-                    waBrowserDone(pkg, "ok:clicked", ok = true)
+                    openWaLinks(real)
+                    waBrowserDone(pkg, if (clicked.isNotEmpty()) "ok:clicked" else "ok:chat-cache", ok = true)
                 }
             }, WA_STEP_MS)
             return
@@ -1446,6 +1458,26 @@ class GuardService : AccessibilityService() {
         }
     }
 
+    /**
+     * שיחה פתוחה בוואטסאפ (יש שדה הקלדה) — זוכרים את הקישורים שרואים בה, כדי שכשייפתח הדפדפן הפנימי נדע
+     * מה הקישור האמיתי להעביר ל-Chrome (הלחיצה על הקישור עצמו לא תמיד נשלחת כאירוע). זול: רק כשזו שיחה.
+     */
+    private fun snapshotWaChat(root: AccessibilityNodeInfo) {
+        if (!hasComposer(root)) return
+        val links = WaBrowser.linksIn(collectTexts(root)).takeLast(8).reversed()  // האחרונים בשיחה — ראשונים
+        waChatLinks = links
+        waChatLinksAt = SystemClock.elapsedRealtime()
+    }
+
+    /** קורא את הקישורים מהשיחה הפתוחה — רק בוואטסאפ, לא על הדפדפן הפנימי, ובקצב מוגבל (לא בכל אירוע). */
+    private fun maybeSnapshotWaChat(pkg: String, cls: String?) {
+        if (pkg !in WaScreens.PACKAGES || (cls != null && WaBrowser.isBrowserScreen(cls))) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - waChatSnapAt < WA_CHAT_SNAP_MS) return
+        waChatSnapAt = now
+        withActiveRoot { root -> if (root.packageName?.toString() == pkg) snapshotWaChat(root) }
+    }
+
     /** קישור אחד — ישר ל-Chrome; כמה — "איזה קישור לפתוח?". */
     private fun openWaLinks(links: List<String>) {
         if (links.size == 1) LinkRelayActivity.openInChrome(this, links[0]) else LinkChooserActivity.open(this, links)
@@ -1456,17 +1488,20 @@ class GuardService : AccessibilityService() {
      * שמאחוריו (ההודעה שנלחצה עדיין על המסך). אין קישור בהודעה — הסבר.
      */
     private fun waOpenFromChat(pkg: String) {
+        // קודם מה שכבר קראנו מהשיחה (אמין — לפני שה-BACK עלול לקפוץ לרשימת הצ'אטים)
+        val cached = waChatLinks.takeIf { it.isNotEmpty() && SystemClock.elapsedRealtime() - waChatLinksAt < WA_CHAT_FRESH_MS }
         performGlobalAction(GLOBAL_ACTION_BACK)
         main.postDelayed({
             waStep(pkg) {
-                val links = withActiveRoot { root ->
-                    if (root.packageName?.toString() == pkg) WaBrowser.linksIn(collectTexts(root)) else emptyList()
+                val links = cached ?: withActiveRoot { root ->
+                    if (root.packageName?.toString() == pkg) WaBrowser.linksIn(collectTexts(root)).takeLast(8).reversed()
+                    else emptyList()
                 }.orEmpty()
                 if (links.isEmpty()) {
                     waBrowserDone(pkg, "fail:shim", ok = false, toast = false)
                     Toast.makeText(this, R.string.wa_link_not_found, Toast.LENGTH_LONG).show()
                 } else {
-                    openWaLinks(links.takeLast(8).reversed())          // האחרונים בשיחה — למעלה
+                    openWaLinks(links)
                     waBrowserDone(pkg, "ok:chat", ok = true)
                 }
             }
@@ -1721,6 +1756,9 @@ class GuardService : AccessibilityService() {
         private const val MAX_MASK_NODES = 600
         private const val MASK_EVERY_MS = 50L          // עדכון הכיסוי — לכל היותר 20 בשנייה
         private const val MASK_SCROLL_HOLD_MS = 650L   // אחרי אירוע הגלילה האחרון — עוד כמה זמן פסים
+        /** כמה זמן תקף הקישור שנקרא מהשיחה, וכמה לדגום לכל היותר (כדי לא לקרוא את העץ בכל אירוע). */
+        private const val WA_CHAT_FRESH_MS = 60_000L
+        private const val WA_CHAT_SNAP_MS = 400L
         private const val WA_STEP_MS = 250L           // הדפדפן הפנימי: בין ניסיון לניסיון
         private const val WA_MENU_TRIES = 12          // עד ~3 שניות עד שהסרגל שלו עולה
         private const val WA_ITEM_TRIES = 8           // עד ~2 שניות עד שהתפריט נפתח
