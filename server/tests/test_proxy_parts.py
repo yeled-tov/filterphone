@@ -123,3 +123,18 @@ def test_news_all_option_blocks_haredi_and_general_news():
     assert "news_haredi" in opt and "news_all" in opt
     assert "ynet.co.il" in opt["news_all"].hosts and "kikar.co.il" in opt["news_all"].hosts or \
         any("kikar" in h for h in opt["news_all"].hosts)
+
+
+def test_url_words_and_global_terms_reach_every_check():
+    from filterphone.api import catalog
+    from filterphone.proxy import serp, textscan
+    # כתובת של ערך בוויקיפדיה / חיפוש בתוך אתר — מפוענחת למילים
+    assert "badterm" in textscan.url_words("/wiki/Some_badterm_page")
+    assert "מילהרעה" in textscan.url_words("/w/index.php?search=%D7%9E%D7%99%D7%9C%D7%94%D7%A8%D7%A2%D7%94")
+    try:
+        catalog.set_global_terms(["globalterm"])
+        terms = catalog.resolve_keywords({})["terms"]
+        assert "globalterm" in terms                       # נכנס לרשימה של הטלפונים ושל הפרוקסי
+        assert serp.TermMatcher(terms).matches(textscan.url_words("/wiki/globalterm"))
+    finally:
+        catalog.set_global_terms([])

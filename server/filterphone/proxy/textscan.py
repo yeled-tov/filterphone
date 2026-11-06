@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote_plus
 
 MAX_TEXT_CHARS = 400_000     # מעבר לזה לא קוראים (דפים ענקיים) — מספיק כדי לזהות דף בעייתי
 MIN_HITS = 8                 # לפחות כך הרבה התאמות בדף
@@ -39,3 +40,11 @@ def exempt(host: str) -> bool:
     """אתרים חיוניים שלא נחסמים על טקסט (משרדי ממשלה — מידע רפואי / חוקי)."""
     h = host.lower()
     return h.endswith(".gov.il") or h == "gov.il"
+
+
+_URL_SEP = re.compile(r"[/_\-+.?=&#%:;,]+")
+
+
+def url_words(path: str) -> str:
+    """הנתיב והשאילתה של כתובת כטקסט (מפוענח, מפרידים → רווחים), כדי לבדוק מילים חסומות בכתובת."""
+    return _URL_SEP.sub(" ", unquote_plus(path or "")[:2000])

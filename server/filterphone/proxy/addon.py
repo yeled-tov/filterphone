@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -24,7 +25,7 @@ from mitmproxy import http, tls
 from mitmproxy.proxy import server_hooks
 
 from .. import metrics
-from ..api.catalog import resolve_keywords
+from ..api.catalog import GLOBAL_TERMS_KEY, resolve_keywords
 from ..engine.imaging import PLACEHOLDER_PNG
 from ..engine.policy import Action, on_failure
 from ..settings import get_settings
@@ -182,7 +183,22 @@ class FilterPhone:
         self._spawn(self._reload_learned_forever())
         self._spawn(self._reload_image_overrides_forever())
         self._spawn(self._publish_metrics_forever())
+        self._spawn(self._reload_terms_forever())
         log.info("FilterPhone proxy ready (%d learned passthrough hosts)", self.hosts.learned_count())
+
+    async def _reload_terms_forever(self) -> None:
+        """המילים שהמנהל הוסיף לכל המכשירים (fp:kw:global) — נכנסות לתוקף תוך דקה, בלי הפעלה מחדש."""
+        last = None
+        while True:
+            try:
+                raw = await self.redis.get(GLOBAL_TERMS_KEY)
+                if raw != last:
+                    extra = json.loads(raw) if raw else []
+                    self.terms = serp.TermMatcher(list(resolve_keywords({})["terms"]) + [str(t) for t in extra])
+                    last = raw
+            except Exception as e:
+                log.warning("global keywords reload failed: %s", e)
+            await asyncio.sleep(60)
 
     async def done(self) -> None:
         for t in list(self._background):
@@ -375,6 +391,12 @@ class FilterPhone:
                     return True
         if not nav:
             return False
+        # כתובת שיש בה מילה חסומה (למשל ערך בוויקיפדיה, חיפוש בתוך אתר) — חסומה בכל רמה
+        if not textscan.exempt(host) and self.terms.matches(textscan.url_words(req.path)):
+            self.m_search.inc(kind="url")
+            flow.response = self._page(block_page(host, "בכתובת יש מילה חסומה."))
+            self._spawn(self._record(ip, host, "block", "url term", "page", ""))
+            return True
         if self.web.is_adult(host):
             flow.response = self._page(block_page(host, "תוכן למבוגרים — חסום תמיד."))
             self._record_host_block(ip, host, req)

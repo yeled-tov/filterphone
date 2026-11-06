@@ -43,6 +43,7 @@ from .catalog import (
     DEFAULT_OPTIONS,
     DPC_DEFAULTS,
     DPC_ITEM_PREFIX,
+    GLOBAL_TERMS_KEY,
     KNOWN_APP_HOSTS,
     LEVELS,
     MAX_TEMP_OPEN,
@@ -55,6 +56,7 @@ from .catalog import (
     compile_settings,
     item_title,
     policy_checksum,
+    set_global_terms,
     store_allowed,
     summary,
     temp_item,
@@ -509,6 +511,39 @@ class Services:
                       " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (name,))
         self.audit(admin, "org_name", "branding", name)
         return name
+
+    # ------------------------------------------------------------ מילים חסומות לכל המכשירים
+
+    def global_terms(self) -> list[str]:
+        """מילים / ביטויים שהמנהל הוסיף לכל המכשירים (מעל רשימת ברירת המחדל)."""
+        with self.db() as c:
+            r = c.execute("SELECT value FROM meta WHERE key = 'keywords_global'").fetchone()
+        try:
+            items = json.loads(r["value"]) if r and r["value"] else []
+        except ValueError:
+            items = []
+        return [str(t) for t in items if str(t).strip()]
+
+    def load_global_terms(self) -> None:
+        """בהפעלה: למדיניות של הטלפונים (resolve_keywords) ולפרוקסי (Redis)."""
+        terms = set_global_terms(self.global_terms())
+        try:
+            self.redis.set(GLOBAL_TERMS_KEY, json.dumps(list(terms), ensure_ascii=False))
+        except Exception as e:
+            log.warning("could not publish global keywords: %s", e)
+
+    def save_global_terms(self, admin: str, text: str) -> list[str]:
+        """שורה / פסיק = מילה או ביטוי. חל על כל המכשירים: חיפוש, כתובות, טקסט בדפים, והקלדה בטלפון."""
+        raw = [t for t in re.split(r"[\n,]+", text or "") if t.strip()]
+        terms = list(set_global_terms(raw))
+        with self.db() as c, db.transaction(c):
+            c.execute("INSERT INTO meta (key, value) VALUES ('keywords_global', ?)"
+                      " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (json.dumps(terms, ensure_ascii=False),))
+            for row in c.execute("SELECT id FROM devices").fetchall():
+                self.bump_policy(c, row["id"])          # הטלפונים מקבלים את הרשימה בסנכרון הבא
+        self.load_global_terms()
+        self.audit(admin, "keywords_global", "keywords", f"{len(terms)} terms")
+        return terms
 
     # ------------------------------------------------------------ תעודות של רשתות כשרות
 

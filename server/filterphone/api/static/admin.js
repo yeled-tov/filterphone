@@ -2669,6 +2669,21 @@ function whatsappCard(wa) {
       el("button", { class: "primary", onclick: save }, "שמירה")));
 }
 
+/** מילים חסומות לכל המכשירים: חיפוש, כתובת של דף (גם בתוך אתר — ויקיפדיה וכו'), טקסט בדפים, והקלדה בטלפון. */
+function keywordsGlobalCard(k) {
+  if (!k) return null;
+  const text = el("textarea", { rows: 8, placeholder: "מילה או ביטוי בכל שורה" });
+  text.value = (k.terms || []).join("\n");
+  return card("מילים חסומות לכל המכשירים",
+    "מעל רשימת ברירת המחדל. כל מילה או ביטוי כאן נחסמים בכל המכשירים: בחיפוש (גוגל, בינג), בכתובת של דף (למשל ערך בוויקיפדיה או חיפוש בתוך אתר), דף שמלא בהן — נחסם כולו, ובהקלדה בטלפון. הפרוקסי מתעדכן תוך דקה; הטלפונים — בסנכרון הבא.",
+    text,
+    el("div", { class: "row end gap" }, el("span", { class: "muted small" }, `${(k.terms || []).length} מילים`),
+      el("button", { class: "primary", onclick: async () => {
+        await attempt(() => api("/v1/admin/keywords-global", { method: "PUT", body: { text: text.value } }), "נשמר");
+        render();
+      } }, "שמירה")));
+}
+
 function brandingCard(b) {
   if (!b) return null;
   const name = el("input", { value: b.org_name || "", maxlength: 60 });
@@ -3064,6 +3079,7 @@ async function viewSystem() {
   const wa = await api("/v1/admin/whatsapp").catch(() => null);
   const gpu = await api("/v1/admin/gpu").catch(() => null);
   const branding = await api("/v1/admin/branding").catch(() => null);
+  const kwGlobal = await api("/v1/admin/keywords-global").catch(() => null);
   const kosher = await api("/v1/admin/kosher-certs").catch(() => null);
   const ag = o.adguard;
   const CHECKS = { db: "מסד נתונים", redis: "Redis", engine: "מנוע תמונות", wireguard: "WireGuard", adguard: "AdGuard" };
@@ -3103,6 +3119,7 @@ async function viewSystem() {
       el("div", { class: "ltr mono small" }, [...x.apps, ...x.screens.map((s) => `${s.package}: ${s.match.join("/")}`)].join(" · "))) : "—")));
   return [
     healthCard,
+    keywordsGlobalCard(kwGlobal),
     brandingCard(branding),
     kosherCertsCard(kosher),
     gpuCard(gpu),

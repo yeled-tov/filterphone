@@ -41,10 +41,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from .. import logs, metrics
+from ..proxy import serp
 from ..settings import get_settings
 from . import db, gpu, notify, observe, perms, security
 from .bot import BotDesk
-from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog
+from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog, resolve_keywords
 from .fetch import FetchError, fetch_image
 from .playinfo import PlayCatalog, PlayError, PlayInfo
 from .security import RateLimiter
@@ -217,6 +218,10 @@ def create_app(svc: Services | None = None) -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     app.state.svc = svc or build_services()
+    try:
+        app.state.svc.load_global_terms()      # מילים חסומות לכל המכשירים — לפני שבונים את בודק האתרים
+    except Exception as e:                     # מסד נתונים לא זמין עכשיו — הרשימה תיטען בשמירה הבאה
+        logging.getLogger(__name__).warning("global keywords not loaded: %s", e)
     app.state.support = SupportDesk(app.state.svc)
     app.state.web = WebDesk(app.state.svc)
     app.state.web_worker = svc is None          # בבדיקות (svc מוזרק) — בלי לולאת רקע
@@ -1098,6 +1103,18 @@ def _routes(app: FastAPI) -> None:
         return desk.send_test()
 
     # --- שם הארגון שמוצג בטלפונים (מסך נעילה / פס ההתראות) ---
+
+    # --- מילים חסומות לכל המכשירים (חיפוש, כתובות, טקסט בדפים, הקלדה בטלפון) ---
+
+    @app.get("/v1/admin/keywords-global")
+    def keywords_global(svc: SvcDep, _: AdminRow):
+        return {"terms": svc.global_terms()}
+
+    @app.put("/v1/admin/keywords-global")
+    def keywords_global_save(body: dict, svc: SvcDep, admin: AdminRow):
+        terms = svc.save_global_terms(admin["username"], str(body.get("text") or "")[:100_000])
+        app.state.web.terms = serp.TermMatcher(resolve_keywords({})["terms"])   # בודק האתרים — מיד
+        return {"terms": terms}
 
     @app.get("/v1/admin/branding")
     def branding(svc: SvcDep, _: AdminRow):

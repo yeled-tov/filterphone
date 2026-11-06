@@ -614,7 +614,7 @@ DESKTOP_DEFAULTS: dict[str, bool] = {
     "block_web_search": False,   # חיפוש באינטרנט ותמונות מתפריט "התחל" מכובה
     "block_removable": False,    # חסימת דיסק און קי וכוננים חיצוניים (אחסון נשלף)
 }
-MAX_KEYWORD_TERMS = 1000
+MAX_KEYWORD_TERMS = 3000
 _TERM_STRIP = re.compile(r"\s+")
 
 APP_IMAGES = ("auto", "block", "allow")
@@ -694,6 +694,18 @@ def clean_term(raw: str) -> str | None:
     return t or None
 
 
+# מילים שהמנהל הוסיף לכל המכשירים (דשבורד ← הגדרות ← "מילים חסומות לכל המכשירים"). נטען מהשרת בהפעלה.
+_GLOBAL_TERMS: tuple[str, ...] = ()
+GLOBAL_TERMS_KEY = "fp:kw:global"     # ב-Redis — הפרוקסי קורא משם
+
+
+def set_global_terms(terms) -> tuple[str, ...]:
+    """מעדכן את המילים הגלובליות (חלות על כל המכשירים: חיפוש, כתובות, טקסט בדפים, ובטלפון)."""
+    global _GLOBAL_TERMS
+    _GLOBAL_TERMS = tuple(sorted({t for t in map(clean_term, terms or []) if t}))[:MAX_KEYWORD_TERMS]
+    return _GLOBAL_TERMS
+
+
 def resolve_keywords(cfg: dict | None) -> dict:
     """ההגדרה האפקטיבית שנשלחת לטלפון: {enabled, action, terms} — ברירת המחדל + תוספות המנהל
     פחות מה שהוסר. terms מנורמל וממוין (השוואה בטלפון היא מקומית, בלי לשמור טקסט)."""
@@ -701,7 +713,7 @@ def resolve_keywords(cfg: dict | None) -> dict:
     enabled = cfg.get("enabled", KEYWORD_DEFAULTS["enabled"])
     removed = {t for t in map(clean_term, cfg.get("removed") or []) if t}
     extra = {t for t in map(clean_term, cfg.get("extra") or []) if t}
-    base = {t for t in map(clean_term, _KEYWORD_SEED) if t}
+    base = {t for t in map(clean_term, _KEYWORD_SEED) if t} | set(_GLOBAL_TERMS)
     terms = sorted((base | extra) - removed)[:MAX_KEYWORD_TERMS]
     return {"enabled": bool(enabled), "action": "back", "terms": terms}
 
