@@ -37,4 +37,13 @@ class PlayGateTest {
         assertFalse(PlayGate.nightWindow(hour = 14, charging = true, interactive = false))
         assertFalse(PlayGate.nightWindow(hour = 5, charging = true, interactive = false))
     }
+
+    @Test
+    fun managedPlayHoldsInstallsOnlyInPlayAndShortlyAfter() {
+        val now = 10_000_000L
+        assertTrue(PlayGate.playActive(inPlay = true, playAt = 0L, now = now))                  // בתוך Play
+        assertTrue(PlayGate.playActive(inPlay = false, playAt = now - 60_000L, now = now))      // יצאו לפני דקה
+        assertFalse(PlayGate.playActive(inPlay = false, playAt = now - PlayGate.PLAY_HOLD_MS - 1, now = now))
+        assertFalse(PlayGate.playActive(inPlay = false, playAt = 0L, now = now))                // מחוץ ל-Play — APK פתוח
+    }
 }

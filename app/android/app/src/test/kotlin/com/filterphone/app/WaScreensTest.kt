@@ -34,4 +34,14 @@ class WaScreensTest {
         assertFalse(WaScreens.isChatsTab("שיחות", null))          // בעברית — שיחות קוליות
         assertFalse(WaScreens.isChatsTab("Calls", null))
     }
+
+    @Test
+    fun channelsAndStatusHeadersInTheUpdatesTab() {
+        assertTrue(WaScreens.isChannelsHeader("ערוצים"))
+        assertTrue(WaScreens.isChannelsHeader("Channels"))
+        assertFalse(WaScreens.isChannelsHeader("חיפוש ערוצים"))     // רק הכותרת עצמה
+        assertTrue(WaScreens.isStatusHeader("סטטוס"))
+        assertTrue(WaScreens.isStatusHeader("Status"))
+        assertFalse(WaScreens.isStatusHeader("ערוצים"))
+    }
 }
