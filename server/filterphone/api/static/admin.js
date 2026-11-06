@@ -1257,6 +1257,30 @@ function desktopControlsCard(d, patch) {
     })));
 }
 
+function pauseCard(d) {
+  const id = d.id;
+  const pause = d.pause;
+  const act = async (path, body) => {
+    await attempt(() => api(`/v1/admin/devices/${id}/${path}`, { method: "POST", body }));
+    render();
+  };
+  let body;
+  if (pause?.active) {
+    body = el("div", { class: "row gap wrap" },
+      chip(`מושהה עד ${dateTime(pause.until)}${pause.reason ? " · " + pause.reason : ""}`, "warn"),
+      el("button", { class: "primary small", onclick: () => act("resume", {}) }, "חזרה להגנה מלאה"));
+  } else {
+    const minutes = el("input", { type: "number", min: 1, max: 1440, value: 60, class: "narrow" });
+    const reason = el("input", { placeholder: "סיבה (למשל: התקנת תוכנה)" });
+    body = el("div", { class: "row gap wrap end" }, el("label", {}, "דקות", minutes), reason,
+      el("button", { class: "ghost small", onclick: () => act("pause", { minutes: Number(minutes.value) || 60, reason: reason.value }) },
+        "השהה הגנה"));
+  }
+  return card("השהיית הגנה (מצב תחזוקה)",
+    "השהיה זמנית מכבה את כל ההגנה במחשב — חיבור הסינון, חסימת הגלישה וכל ההגבלות — עד שהיא נגמרת לבד או שמחזירים אותה ידנית. שימושי להתקנת תוכנה.",
+    body);
+}
+
 /** קוד הסרה: בלי קוד מכאן אי אפשר להסיר את FilterPhone מהמחשב. */
 function removalCard(d) {
   const out = el("div", { class: "stack" });
@@ -1357,7 +1381,7 @@ async function viewComputer(id, query = new URLSearchParams(), loaded = null) {
   const tabs = [
     ["overview", "סקירה", [winStatusCard(d), el("div", { class: "grid two" }, customerCardOf(d), logCard)]],
     ["blocks", "חסימות", [levelCard, policyCard, customCard]],
-    ["control", "שליטה במחשב", [desktopControlsCard(d, patch), removalCard(d)]],
+    ["control", "שליטה במחשב", [desktopControlsCard(d, patch), pauseCard(d), removalCard(d)]],
     ["activity", "פעילות", [statsCard, eventsCard]],
   ];
   autoRefresh(async () => {

@@ -1297,6 +1297,10 @@ class Services:
         admin_cmd = self._admin_command(fresh, t)
         if admin_cmd:
             out["admin"] = admin_cmd
+        if fresh["status"] == "active" and self.is_paused(fresh, t):
+            # השהיית תחזוקה מהדשבורד: המחשב (Windows) עומד דום לגמרי עד התאריך הזה, וחוזר לבד בתומו.
+            # הטלפון מתעלם מהשדה (אצלו ההשהיה כבר מיושמת בפרוקסי כ-passthrough).
+            out["paused"] = {"until": fresh["pause_until"], "reason": fresh["pause_reason"] or ""}
         if fresh["status"] == "active" and (acked != fresh["policy_version"] or raw.get("want_policy")):
             out["policy"] = self.device_policy(fresh)
         if fresh["status"] == "active" and (release := self.app_release()):

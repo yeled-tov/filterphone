@@ -62,6 +62,20 @@ def test_heartbeat_answers_a_pc_with_its_controls_not_phone_data(env):
     assert "managed_apps" not in r and "removal_key" not in r["windows"]
 
 
+def test_a_dashboard_pause_tells_the_pc_to_stand_down_and_clears_on_resume(env):
+    svc, client = env
+    did, dh = enroll_pc(svc, client)
+    h = admin_headers(client)
+    assert "paused" not in client.post("/v1/device/heartbeat", headers=dh, json=report()).json()
+
+    client.post(f"/v1/admin/devices/{did}/pause", headers=h, json={"minutes": 30, "reason": "התקנת תוכנה"})
+    r = client.post("/v1/device/heartbeat", headers=dh, json=report()).json()
+    assert r["paused"]["until"] and r["paused"]["reason"] == "התקנת תוכנה"
+
+    client.post(f"/v1/admin/devices/{did}/resume", headers=h)
+    assert "paused" not in client.post("/v1/device/heartbeat", headers=dh, json=report()).json()
+
+
 def test_dashboard_controls_reach_the_pc_and_need_valid_values(env):
     svc, client = env
     h = admin_headers(client)
