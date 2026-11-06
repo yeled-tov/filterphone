@@ -34,7 +34,7 @@ from . import inline, rewrite, serp, textscan
 from .blockpage import REVIEW_PATH, block_page, checking_page, review_sent_page
 from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
-from .hosts import HostPolicy, is_chromium_hello, load_lists
+from .hosts import HostPolicy, hello_fingerprint, is_chromium_hello, load_lists
 from .policy import DevicePolicy, PolicyTable
 from .web import CHECK_WAIT_S, IMAGE_OVERRIDE_KEY, WebState, image_key_of
 
@@ -146,6 +146,11 @@ class FilterPhone:
         self.web = WebState(self.redis, self.cfg.adult_list_file)
         self.terms = serp.TermMatcher(resolve_keywords({})["terms"])
         self._hello_chromium: dict[tuple[str, str], bool] = {}
+        # Cronet (אפליקציות גוגל) נראה כמו כרום. טביעות של לקוח שלא סומך עלינו בשרת מסוים, ושל לקוחות שכן
+        # סומכים (כרום) — כדי לפתוח את השרת רק לאפליקציה שנכשלה ולא לכרום
+        self._hello_fp: dict[tuple[str, str], tuple] = {}
+        self._distrust_fp: dict[tuple[str, str], set] = {}
+        self._trusted_fp: dict[str, set] = {}
         self._background: set[asyncio.Task] = set()
         self._host_events: dict[tuple[str, str], float] = {}
         # החלטות על תמונות מסוימות (דיווחים מכרום — המנהל / בדיקה לפי הרמה): מפתח → block / pass
@@ -285,6 +290,9 @@ class FilterPhone:
             if len(self._hello_chromium) > 20_000:
                 self._hello_chromium.clear()
             self._hello_chromium[(ip, sni.lower())] = is_chromium_hello(data.client_hello)
+            if len(self._hello_fp) > 20_000:
+                self._hello_fp.clear()
+            self._hello_fp[(ip, sni.lower())] = hello_fingerprint(data.client_hello)
         if sni and _WA_HOST.search(sni.lower()):
             self._spawn(self._note_wa_sni(ip, sni.lower(), pol.blocks(sni)))
         if _dst_ip(data.context) == self.cfg.dns_sinkhole_ip:
@@ -299,8 +307,13 @@ class FilterPhone:
             # חנות): כרום סומך עלינו, ולכן נבדק כרגיל. כך הלמידה לא פותחת "חור" בדפדפן.
             if self.hosts.is_learned(ip, sni) and self.hosts.is_content_host(sni) \
                     and is_chromium_hello(data.client_hello):
-                self.m_learned_inspected.inc()
-                return
+                # אבל: אם זו בדיוק טביעת האפליקציה שנכשלה (Cronet של גוגל — חיפוש קולי / מיקרופון במקלדת)
+                # ולא של כרום שעבר בדיקה בהצלחה — עוקפים, אחרת היא נכשלת בכל פעם
+                fp = hello_fingerprint(data.client_hello)
+                if not (fp and fp in self._distrust_fp.get((ip, sni.lower()), ())
+                        and fp not in self._trusted_fp.get(ip, ())):
+                    self.m_learned_inspected.inc()
+                    return
             # רמת גלישה: כרום לאתר שלא פתוח ללקוח — נבדק (דף חסימה), גם אם אפליקציה "לימדה" אותו
             if pol.web.active and sni and is_chromium_hello(data.client_hello) \
                     and pol.web.decide(sni, self.web.verdict(sni)) != "allow":
@@ -326,9 +339,24 @@ class FilterPhone:
         log.info("tls distrust %s %s blocked=%d chromium=%s", ip, sni.lower(), int(pol.blocks(sni)), chrome)
         if pol.blocks(sni):
             return          # חסום בכוונה — לא "לומדים" לעקוף אותו
+        fp = self._hello_fp.get((ip, sni.lower()))
+        if chrome and fp:
+            self._distrust_fp.setdefault((ip, sni.lower()), set()).add(fp)
         expires = time.time() + self.cfg.passthrough_learn_days * 86400
         if self.hosts.learn(ip, sni, pol.app_images == "block", expires):
             self._spawn(self.redis.hset(PASSTHROUGH_KEY, f"{ip}|{sni.lower()}", expires))
+
+    def tls_established_client(self, data: tls.TlsData) -> None:
+        """לקוח שסומך עלינו (כרום עם התעודה) — הטביעה שלו "בטוחה": לעולם לא פותחים לה שרת תוכן."""
+        sni = data.conn.sni
+        if not sni:
+            return
+        ip = _client_ip(data.context)
+        fp = self._hello_fp.get((ip, sni.lower()))
+        if fp and self._hello_chromium.get((ip, sni.lower())):
+            fps = self._trusted_fp.setdefault(ip, set())
+            if len(fps) < 64:
+                fps.add(fp)
 
     # ------------------------------------------------------------ HTTP
 

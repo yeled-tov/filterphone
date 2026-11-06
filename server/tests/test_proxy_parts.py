@@ -138,3 +138,15 @@ def test_url_words_and_global_terms_reach_every_check():
         assert serp.TermMatcher(terms).matches(textscan.url_words("/wiki/globalterm"))
     finally:
         catalog.set_global_terms([])
+
+
+def test_hello_fingerprint_ignores_grease_and_order():
+    from types import SimpleNamespace
+
+    from filterphone.proxy.hosts import hello_fingerprint
+    chrome = SimpleNamespace(extensions=[(0x0A0A, b""), (43, b""), (0xFE0D, b""), (16, b"")], alpn_protocols=[b"h2"])
+    chrome2 = SimpleNamespace(extensions=[(16, b""), (0xFE0D, b""), (0x1A1A, b""), (43, b"")], alpn_protocols=[b"h2"])
+    cronet = SimpleNamespace(extensions=[(0x2A2A, b""), (43, b""), (16, b"")], alpn_protocols=[b"h2"])
+    assert hello_fingerprint(chrome) == hello_fingerprint(chrome2)      # סדר + GREASE לא משנים
+    assert hello_fingerprint(chrome) != hello_fingerprint(cronet)       # כרום ≠ Cronet (בלי ECH)
+    assert hello_fingerprint(object()) == (-1,)

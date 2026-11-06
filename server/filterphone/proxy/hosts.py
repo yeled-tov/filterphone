@@ -50,6 +50,17 @@ def is_chromium_hello(hello) -> bool:
         return False
 
 
+def hello_fingerprint(hello) -> tuple:
+    """טביעת אצבע של ClientHello (סוגי ההרחבות בלי GREASE, ממוינים, + ALPN): כרום ו-Cronet של אפליקציות
+    גוגל שניהם "Chromium", אבל שונים בהרחבות. בלי מידע — טאפל ריק."""
+    try:
+        exts = tuple(sorted(e[0] for e in (getattr(hello, "extensions", None) or ()) if not is_grease(e[0])))
+        alpn = tuple(getattr(hello, "alpn_protocols", None) or ())
+        return exts + (-1,) + tuple(a if isinstance(a, int) else hash(a) for a in alpn)
+    except Exception:
+        return ()
+
+
 def _glob(p: str) -> str:
     """'*.example.com' תופס גם את example.com עצמו וגם כל תת-דומיין. '*' בשאר המקומות = כל רצף."""
     p = p.lower()
