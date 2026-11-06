@@ -158,6 +158,7 @@ except Exception as e:
 ago = lambda t: "-" if not t else f"{(now - int(t)) // 60}m"
 # שאילתות DNS לשרתי וואטסאפ (3 ימים, מיומן AdGuard): האם וואטסאפ בכלל מחפש את שרת תמונות הפרופיל (pps)
 wa_dns = collections.Counter()
+dns_blocked = collections.Counter()      # (ip, host) → שאילתות שנחסמו ב-24 השעות האחרונות (אבחון: מה נחסם למכשיר)
 try:
     import calendar, os as _os
     qp = "/opt/AdGuardHome/data/querylog.json"
@@ -167,7 +168,8 @@ try:
             f.seek(size - 800_000_000)
             f.readline()
         for raw in f:
-            if b"whatsapp" not in raw and b"wa.me" not in raw:
+            is_blk = b'"IsFiltered":true' in raw
+            if b"whatsapp" not in raw and b"wa.me" not in raw and not is_blk:
                 continue
             line = raw.decode("utf-8", "replace")
             mh = re.search(r'"QH":\s*"([^"]+)"', line)
@@ -178,11 +180,19 @@ try:
             if calendar.timegm(tuple(int(x) for x in mt.groups())) < now - 3 * 86400:
                 continue
             filtered = '"IsFiltered":true' in line.replace(" ", "")
+            if filtered and calendar.timegm(tuple(int(x) for x in mt.groups())) >= now - 86400:
+                dns_blocked[(mi.group(1), mh.group(1).lower().rstrip("."))] += 1
+            if b"whatsapp" not in raw and b"wa.me" not in raw:
+                continue
             wa_dns[(mi.group(1), mh.group(1).lower().rstrip("."), "blocked" if filtered else "ok")] += 1
 except FileNotFoundError:
     pass            # יומן השאילתות של AdGuard לא נשמר לקובץ — בלי השורה הזו
 except Exception as e:
     print("wa dns:", e)
+try:
+    learned_pt = subprocess.run(["redis-cli", "--raw", "HKEYS", "fp:pt"], capture_output=True, text=True).stdout.split()
+except Exception:
+    learned_pt = []
 db = sqlite3.connect("file:/var/lib/filterphone/filterphone.db?mode=ro", uri=True)
 db.row_factory = sqlite3.Row
 rows = db.execute("SELECT * FROM devices WHERE status IN ('active','pending') OR last_seen_at > ? "
@@ -213,6 +223,13 @@ for d in rows:
           f"vpn_ip={'yes' if d['vpn_ip'] else 'no'} policy={d.get('policy_version')}/{d.get('device_policy_version')} "
           f"pause={'yes' if (d.get('pause_until') or 0) > now else 'no'} unmanage={'yes' if d.get('unmanage_at') else 'no'}")
     print("    hb:", json.dumps(keep, ensure_ascii=False)[:1600])
+    if d["vpn_ip"]:
+        blk = sorted(((n, h) for (ip, h), n in dns_blocked.items() if ip == d["vpn_ip"]), reverse=True)[:15]
+        if blk:
+            print("    dns_blocked_24h:", ", ".join(f"{h}×{n}" for n, h in blk))
+        lp = sorted(k.split("|", 1)[1] for k in learned_pt if k.startswith(f"{d['vpn_ip']}|"))[:40]
+        if lp:
+            print("    learned_passthrough:", ", ".join(lp))
     # אפליקציות שחוזרות לבד (Temu וכו'): האם הן אפליקציות מערכת שהגיעו עם הטלפון, ומה ההגדרות שקובעות התקנה
     try:
         apps = json.loads(d.get("apps") or "[]")
