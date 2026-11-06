@@ -167,6 +167,24 @@ object DeviceOwnerManager {
         return if (PlayGate.wantsRestriction(context, policy)) out + ("disallow_install_apps" to true) else out
     }
 
+    /**
+     * רק חסימת ההתקנות — מיד (כניסה ל-Play / יציאה ממנו / מתקין APK), בלי להחיל את כל ההגדרות מחדש.
+     */
+    fun syncInstallRestriction(context: Context) {
+        if (!isDeviceOwner(context)) return
+        val busy = runCatching {
+            SelfUpdate.installWindowOpen(context) || ManagedApps.installWindowOpen(context) || PlayGate.isOpen(context)
+        }.getOrDefault(false)
+        val want = installRestrictionWanted(context)
+        if (want && busy) return                    // התקנה שקטה / שער פתוח — היא תחזיר את החסימה בסופה
+        runCatching {
+            val dpm = dpm(context) ?: return
+            val admin = DeviceAdmin.component(context)
+            if (want) dpm.addUserRestriction(admin, UserManager.DISALLOW_INSTALL_APPS)
+            else dpm.clearUserRestriction(admin, UserManager.DISALLOW_INSTALL_APPS)
+        }.onFailure { Log.w(TAG, "install restriction sync failed", it) }
+    }
+
     /** האם חסימת ההתקנות צריכה להיות פעילה עכשיו (מהמדיניות או משער Play המנוהל). */
     fun installRestrictionWanted(context: Context): Boolean =
         desired(context, GuardPolicy.get(context))["disallow_install_apps"] == true

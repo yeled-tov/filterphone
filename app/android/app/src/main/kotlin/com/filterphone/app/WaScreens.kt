@@ -16,6 +16,16 @@ object WaScreens {
     /** הטאב שבו נמצאים הסטטוסים והערוצים — עברית/אנגלית, וגם "סטטוס" של גרסאות ישנות. */
     private val UPDATES = listOf("עדכונים", "updates", "סטטוס", "status")
 
+    /** כותרת אזור הערוצים בטאב העדכונים, וכותרת אזור הסטטוסים (מעליו). */
+    private val CHANNELS = listOf("ערוצים", "channels")
+    private val STATUS_HEADER = listOf("סטטוס", "status", "סטטוסים")
+
+    /** כותרת אזור הערוצים (טקסט מדויק — לא "חיפוש ערוצים" וכו'). טהור. */
+    fun isChannelsHeader(text: String?): Boolean = isLabel(text, CHANNELS)
+
+    /** כותרת אזור הסטטוסים. טהור. */
+    fun isStatusHeader(text: String?): Boolean = isLabel(text, STATUS_HEADER)
+
     /** הטאב "צ'אטים" (לשם מחזירים). לא "שיחות" — בעברית זה טאב השיחות הקוליות. */
     private val CHATS = listOf("צאטים", "chats")
 

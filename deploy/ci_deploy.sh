@@ -193,6 +193,18 @@ try:
     learned_pt = subprocess.run(["redis-cli", "--raw", "HKEYS", "fp:pt"], capture_output=True, text=True).stdout.split()
 except Exception:
     learned_pt = []
+# כשלי TLS לפי מכשיר ושרת (24 שעות, מיומן הפרוקסי): אפליקציה שלא סומכת על התעודה — מה נכשל שוב ושוב
+tls_fail = collections.Counter()
+try:
+    jl = subprocess.run(["journalctl", "-u", "fp-proxy", "--since", "-24h", "--no-pager", "-o", "cat"],
+                        capture_output=True, text=True, timeout=120).stdout
+    for line in jl.splitlines():
+        m = re.search(r"tls distrust (\S+) (\S+) blocked=(\d) chromium=(\S+)", line)
+        if m:
+            tag = m.group(2) + ("[blocked]" if m.group(3) == "1" else "") + ("[chromium]" if m.group(4) == "True" else "")
+            tls_fail[(m.group(1), tag)] += 1
+except Exception as e:
+    print("tls log:", e)
 db = sqlite3.connect("file:/var/lib/filterphone/filterphone.db?mode=ro", uri=True)
 db.row_factory = sqlite3.Row
 rows = db.execute("SELECT * FROM devices WHERE status IN ('active','pending') OR last_seen_at > ? "
@@ -227,7 +239,10 @@ for d in rows:
         blk = sorted(((n, h) for (ip, h), n in dns_blocked.items() if ip == d["vpn_ip"]), reverse=True)[:15]
         if blk:
             print("    dns_blocked_24h:", ", ".join(f"{h}×{n}" for n, h in blk))
-        lp = sorted(k.split("|", 1)[1] for k in learned_pt if k.startswith(f"{d['vpn_ip']}|"))[:40]
+        tf = sorted(((n, h) for (ip, h), n in tls_fail.items() if ip == d["vpn_ip"]), reverse=True)[:20]
+        if tf:
+            print("    tls_fail_24h:", ", ".join(f"{h}×{n}" for n, h in tf))
+        lp = sorted(k.split("|", 1)[1] for k in learned_pt if k.startswith(f"{d['vpn_ip']}|"))
         if lp:
             print("    learned_passthrough:", ", ".join(lp))
     # אפליקציות שחוזרות לבד (Temu וכו'): האם הן אפליקציות מערכת שהגיעו עם הטלפון, ומה ההגדרות שקובעות התקנה

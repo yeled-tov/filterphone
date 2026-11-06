@@ -68,6 +68,8 @@ class GuardService : AccessibilityService() {
     private var waChatSnapAt = 0L
     /** כרום: הכפתור הצף ⋮ (דיווח / בדיקה) והתווית ליד תפריט הלחיצה הארוכה — ChromeBubble. */
     private val chromeBubble by lazy { ChromeBubble(this, { onChromeBubble() }, { onChromeChip() }) }
+    /** רק ערוצים חסומים: כיסוי על אזור הערוצים בטאב העדכונים של וואטסאפ (הסטטוסים נשארים). */
+    private val channelMask by lazy { AvatarMask(this) }
     private var chromePageUrl: String? = null
     private var chromeMenu: Pair<ChromeReport.Kind, String?>? = null
     private val chromeMenuCheck = Runnable { safely("chrome-menu") { checkChromeMenu() } }
@@ -268,11 +270,15 @@ class GuardService : AccessibilityService() {
                 playBadges.hide()
                 gateLeft()
             }
+            trackPlayForInstalls(pkg, policy)
             onChromeWindow(pkg)
             maybeSnapshotWaChat(pkg, event.className?.toString())
             // יצאו מוואטסאפ (לא מקלדת / שורת המצב / אנחנו) — בלי כיסוי
             if (avatarMask.isShown && !maskWanted(pkg, policy) && pkg != packageName && pkg != SYSTEM_UI && !isIme(pkg)) {
                 avatarMask.hide()
+            }
+            if (channelMask.isShown && pkg !in WaScreens.PACKAGES && pkg != packageName && pkg != SYSTEM_UI && !isIme(pkg)) {
+                channelMask.hide()
             }
             if (guardSelf(pkg, event.className?.toString())) return
             if (guardCritical(pkg)) return
@@ -567,6 +573,7 @@ class GuardService : AccessibilityService() {
     private fun wantsContent(pkg: String?, policy: GuardPolicy.Policy): Boolean =
         policy.waProfile?.packages?.contains(pkg) == true ||
             (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES) ||
+            (policy.blocksWaChannels && pkg in WaScreens.PACKAGES) ||
             (pkg == PlayLock.PLAY && PlayLock.active(SystemClock.elapsedRealtime()) != null) ||
             (pkg == PlayLock.PLAY && policy.playManaged && PlayLock.PLAY !in policy.apps)
 
@@ -752,6 +759,27 @@ class GuardService : AccessibilityService() {
             recycle(root)
         }
     }
+
+    /**
+     * Play מנוהל חוסם התקנות רק כשנמצאים ב-Play (ועוד כמה דקות אחרי) — כדי שהתקנת קובץ APK מחוץ ל-Play תעבוד,
+     * אלא אם המנהל סימן גם "חסימת קבצי APK". כניסה ל-Play: החסימה מיד. מתקין APK: משחררים מיד.
+     */
+    private fun trackPlayForInstalls(pkg: String, policy: GuardPolicy.Policy) {
+        if (!policy.playManaged || pkg == packageName || pkg == SYSTEM_UI || isIme(pkg)) return
+        when {
+            pkg == PlayLock.PLAY -> if (PlayGate.notePlay(this, true)) DeviceOwnerManager.syncInstallRestriction(this)
+            pkg in APK_INSTALLERS -> {
+                PlayGate.releaseForApk(this)
+                DeviceOwnerManager.syncInstallRestriction(this)
+            }
+            pkg != "com.google.android.gms" -> if (PlayGate.notePlay(this, false)) {
+                main.removeCallbacks(installHoldEnd)
+                main.postDelayed(installHoldEnd, PlayGate.PLAY_HOLD_MS + 1_000L)
+            }
+        }
+    }
+
+    private val installHoldEnd = Runnable { safely("install-hold") { DeviceOwnerManager.syncInstallRestriction(this) } }
 
     /** בעמוד של אפליקציה מאושרת ("התקנה"), או עדכון של אפליקציה שבטלפון — השער פתוח. */
     private fun gateApproved(now: Long, mode: PlayGate.Mode) {
@@ -1125,6 +1153,8 @@ class GuardService : AccessibilityService() {
             null -> Unit
         }
         if (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES && guardWaUpdates(pkg, fromContent = false)) return
+        if (policy.blocksWaChannels && pkg in WaScreens.PACKAGES &&
+            guardWaUpdates(pkg, fromContent = false, channelsOnly = true)) return
         val wa = policy.waProfile ?: return
         val detector = WaProfileDetector(wa)
         if (!detector.watches(pkg)) return
@@ -1136,6 +1166,8 @@ class GuardService : AccessibilityService() {
 
     private fun onContent(pkg: String, policy: GuardPolicy.Policy) {
         if (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES && guardWaUpdates(pkg, fromContent = true)) return
+        if (policy.blocksWaChannels && pkg in WaScreens.PACKAGES &&
+            guardWaUpdates(pkg, fromContent = true, channelsOnly = true)) return
         val wa = policy.waProfile ?: return
         val detector = WaProfileDetector(wa)
         if (!detector.watches(pkg) || detector.excluded(lastWaWindow)) return
@@ -1149,7 +1181,7 @@ class GuardService : AccessibilityService() {
      * טאב "עדכונים" בוואטסאפ (סטטוסים + ערוצים) נבחר, והמנהל חסם אותו → לוחצים על הטאב "צ'אטים"
      * (ואם לא נמצא — "אחורה"). קורא רק את שמות הטאבים והסימון "נבחר" — לא הודעות. true = טופל.
      */
-    private fun guardWaUpdates(pkg: String, fromContent: Boolean): Boolean {
+    private fun guardWaUpdates(pkg: String, fromContent: Boolean, channelsOnly: Boolean = false): Boolean {
         val now = SystemClock.elapsedRealtime()
         if (fromContent && now - lastWaTabScanAt < SCAN_EVERY_MS) return false
         lastWaTabScanAt = now
@@ -1161,6 +1193,9 @@ class GuardService : AccessibilityService() {
             queue.add(root)
             var updates = false
             var chats: AccessibilityNodeInfo? = null
+            var channelsTop = -1                       // רק ערוצים: איפה מתחיל אזור הערוצים
+            var statusSeen = false
+            val b = android.graphics.Rect()
             var visited = 0
             while (queue.isNotEmpty() && visited < MAX_NODES) {
                 val n = queue.removeFirst()
@@ -1178,11 +1213,34 @@ class GuardService : AccessibilityService() {
                     }
                 }
                 if (chats == null && WaScreens.isChatsTab(text, desc)) chats = n
+                if (channelsOnly && n.isVisibleToUser) {
+                    if (channelsTop < 0 && WaScreens.isChannelsHeader(text)) { n.getBoundsInScreen(b); channelsTop = b.top }
+                    if (!statusSeen && WaScreens.isStatusHeader(text)) statusSeen = true
+                }
                 for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
             }
-            if (!updates) return false
+            if (!updates) {
+                if (channelsOnly) channelMask.hide()
+                return false
+            }
+            if (channelsOnly) {
+                if (channelsTop >= 0) {
+                    // הסטטוסים למעלה נשארים; מכותרת "ערוצים" ועד הטאבים בתחתית — כיסוי
+                    val navTop = chats?.let { c -> c.getBoundsInScreen(b); b.top }?.takeIf { it > channelsTop }
+                        ?: resources.displayMetrics.heightPixels
+                    channelMask.show(listOf(WaAvatars.Box(0, channelsTop - 8, resources.displayMetrics.widthPixels,
+                        navTop, round = false)))
+                    return false
+                }
+                if (statusSeen) {
+                    channelMask.hide()
+                    return false
+                }
+                channelMask.hide()                     // גללו לתוך רשימת הערוצים — יוצאים לצ'אטים
+            }
             val clicked = chats?.let { clickSelfOrParent(it) } ?: false
-            if (block(pkg, if (clicked) NO_GLOBAL_ACTION else GLOBAL_ACTION_BACK, R.string.guard_wa_updates_blocked,
+            if (block(pkg, if (clicked) NO_GLOBAL_ACTION else GLOBAL_ACTION_BACK,
+                    if (channelsOnly) R.string.guard_wa_channels_blocked else R.string.guard_wa_updates_blocked,
                     minGapMs = 700)) {
                 ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
             }
@@ -1715,6 +1773,7 @@ class GuardService : AccessibilityService() {
         runCatching { installOverlay.hide() }
         runCatching { playBadges.hide() }
         runCatching { chromeBubble.hide() }
+        runCatching { channelMask.hide() }
         runCatching { avatarMask.hide() }
         Recovery.syncSoon(this)            // המגן כובה — לדווח לשרת
         // כובה בהגדרות? עם ההרשאה (הקמה) — מדליקים מחדש מיד (לא בהשהיה שהמנהל אישר)
@@ -1734,6 +1793,7 @@ class GuardService : AccessibilityService() {
         runCatching { installOverlay.hide() }
         runCatching { playBadges.hide() }
         runCatching { chromeBubble.hide() }
+        runCatching { channelMask.hide() }
         runCatching { avatarMask.hide() }
         super.onDestroy()
     }
@@ -1749,6 +1809,9 @@ class GuardService : AccessibilityService() {
         private const val WA_SHIM_TRIES = 6
         /** אירוע של אפליקציה אחרת כשהכפתור הצף בכרום מוצג: כמה לחכות לפני שבודקים מה באמת בחזית. */
         private const val CHROME_LEFT_CHECK_MS = 450L
+        /** מתקיני החבילות של אנדרואיד (פתיחת קובץ APK). */
+        private val APK_INSTALLERS = setOf("com.google.android.packageinstaller", "com.android.packageinstaller",
+            "com.miui.packageinstaller", "com.samsung.android.packageinstaller")
         private val PRIMARY_INSTALL = setOf("install")
         /** ל-block(): כבר טיפלנו בעצמנו (למשל לחצנו על טאב) — רק ההודעה, בלי פעולה גלובלית. */
         private const val NO_GLOBAL_ACTION = 0

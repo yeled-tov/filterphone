@@ -107,6 +107,8 @@ object GuardPolicy {
             !allowlistOnly && !blockRootPrompt && !playManaged
         /** טאב "עדכונים" בוואטסאפ חסום (סטטוסים + ערוצים). */
         val blocksWaUpdates get() = "updates" in waScreens
+        /** רק הערוצים (הסטטוסים נשארים): כיסוי לבן על אזור הערוצים, ויציאה אם גוללים לתוכו. */
+        val blocksWaChannels get() = "channels" in waScreens && !blocksWaUpdates
     }
 
     enum class Block { APP, SCREEN }

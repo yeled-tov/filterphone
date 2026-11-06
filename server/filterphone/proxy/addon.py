@@ -145,6 +145,7 @@ class FilterPhone:
         self.policies = PolicyTable(self.redis, self.cfg.default_level)
         self.web = WebState(self.redis, self.cfg.adult_list_file)
         self.terms = serp.TermMatcher(resolve_keywords({})["terms"])
+        self._hello_chromium: dict[tuple[str, str], bool] = {}
         self._background: set[asyncio.Task] = set()
         self._host_events: dict[tuple[str, str], float] = {}
         # החלטות על תמונות מסוימות (דיווחים מכרום — המנהל / בדיקה לפי הרמה): מפתח → block / pass
@@ -280,6 +281,10 @@ class FilterPhone:
         ip = _client_ip(data.context)
         pol = self.policies.get(ip)
         sni = data.client_hello.sni
+        if sni:                                     # לאבחון כשל TLS: האם הלקוח נראה ככרום (או Cronet)
+            if len(self._hello_chromium) > 20_000:
+                self._hello_chromium.clear()
+            self._hello_chromium[(ip, sni.lower())] = is_chromium_hello(data.client_hello)
         if sni and _WA_HOST.search(sni.lower()):
             self._spawn(self._note_wa_sni(ip, sni.lower(), pol.blocks(sni)))
         if _dst_ip(data.context) == self.cfg.dns_sinkhole_ip:
@@ -317,6 +322,8 @@ class FilterPhone:
             return
         ip = _client_ip(data.context)
         pol = self.policies.get(ip)
+        chrome = self._hello_chromium.get((ip, sni.lower()))
+        log.info("tls distrust %s %s blocked=%d chromium=%s", ip, sni.lower(), int(pol.blocks(sni)), chrome)
         if pol.blocks(sni):
             return          # חסום בכוונה — לא "לומדים" לעקוף אותו
         expires = time.time() + self.cfg.passthrough_learn_days * 86400

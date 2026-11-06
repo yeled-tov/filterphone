@@ -30,6 +30,10 @@ object PlayGate {
     private const val PREFS = "fp_play_gate"
     private const val K_OPEN_AT = "open_at"
     private const val K_MODE = "mode"
+    private const val K_PLAY_FG = "play_fg"
+    private const val K_PLAY_AT = "play_at"
+    /** אחרי שיוצאים מ-Play — עוד כמה זמן החסימה נשארת (הורדה שכבר התחילה יוצרת את ההתקנה רגע אחרי). */
+    const val PLAY_HOLD_MS = 3 * 60_000L
     /** לכל היותר — אחר כך השער נחשב סגור (DeviceOwnerManager מחזיר את החסימה בבדיקה הבאה). */
     const val MAX_OPEN_MS = 5 * 60_000L
     /** עדכונים: לכל היותר מאז הפעילות האחרונה (עדכון שהתחיל / מתקדם / הסתיים). */
@@ -74,10 +78,36 @@ object PlayGate {
         if (isOpen(context)) prefs(context).edit().putLong(K_OPEN_AT, System.currentTimeMillis()).apply()
     }
 
-    /** האם DeviceOwnerManager צריך להחזיק עכשיו את חסימת ההתקנות בגלל Play מנוהל. */
+    /**
+     * האם DeviceOwnerManager צריך להחזיק עכשיו את חסימת ההתקנות בגלל Play מנוהל — רק כשנמצאים ב-Play (ועוד
+     * רגע אחרי שיוצאים, להורדה שכבר התחילה). מחוץ ל-Play החסימה לא חלה, כך שהתקנת קובץ APK עובדת — אלא אם
+     * המנהל סימן גם "חסימת קבצי APK" (disallow_unknown_sources) או "חסימת כל ההתקנות" (disallow_install_apps).
+     */
     fun wantsRestriction(context: Context, policy: GuardPolicy.Policy): Boolean =
         applies(policy.playManaged, DeviceOwnerManager.isDeviceOwner(context), AdminState.isPaused(context)) &&
-            !nightOpen(context)
+            !nightOpen(context) && playActive(context)
+
+    /** ב-Play עכשיו, או יצאו ממנו לפני פחות מ-[PLAY_HOLD_MS]. */
+    fun playActive(context: Context): Boolean = playActive(prefs(context).getBoolean(K_PLAY_FG, false),
+        prefs(context).getLong(K_PLAY_AT, 0L), System.currentTimeMillis())
+
+    /** טהור. */
+    fun playActive(inPlay: Boolean, playAt: Long, now: Long): Boolean =
+        inPlay || (playAt > 0 && now - playAt in 0 until PLAY_HOLD_MS)
+
+    /** GuardService: נכנסו ל-Play / יצאו ממנו. true = המצב השתנה (צריך לעדכן את החסימה). */
+    fun notePlay(context: Context, inPlay: Boolean): Boolean {
+        val p = prefs(context)
+        if (p.getBoolean(K_PLAY_FG, false) == inPlay && !inPlay) return false
+        val changed = p.getBoolean(K_PLAY_FG, false) != inPlay
+        p.edit().putBoolean(K_PLAY_FG, inPlay).putLong(K_PLAY_AT, System.currentTimeMillis()).apply()
+        return changed
+    }
+
+    /** מתקין החבילות (קובץ APK) נפתח מחוץ ל-Play — לא מחכים לסוף ההשהיה. */
+    fun releaseForApk(context: Context) {
+        prefs(context).edit().putBoolean(K_PLAY_FG, false).putLong(K_PLAY_AT, 0L).apply()
+    }
 
     private fun nightOpen(context: Context): Boolean = runCatching {
         val app = context.applicationContext
