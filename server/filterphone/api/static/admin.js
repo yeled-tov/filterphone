@@ -125,6 +125,7 @@ const DESKTOP_CONTROLS = {
   block_spotlight: ["חסימת תמונות במסך הנעילה", "התמונות המתחלפות במסך הנעילה (Windows Spotlight) — מכובות."],
   block_web_search: ["חסימת חיפוש באינטרנט מתפריט התחל", "חיפוש באינטרנט ותמונות מתפריט 'התחל' של Windows — מכובה."],
   block_removable: ["חסימת דיסק און קי וכוננים חיצוניים", "אי אפשר לפתוח אחסון נשלף (USB) — כדי שלא יעתיקו למחשב סרטים ותמונות מבחוץ."],
+  block_ads: ["חסימת פרסומות בכרום", "תוסף חוסם פרסומות (uBlock Origin Lite) שמנטרל את סקריפטי הפרסום, כך שרוב האתרים לא מזהים חסימה. אתר שבכל זאת חוסם — מוסיפים לרשימת ההחרגות למטה, או לוחצים על סמל התוסף בכרום. תמונות הפרסומות עוברות סינון תמונות גם כשהן מוצגות."],
 };
 const isPc = (d) => d.platform === "windows";
 /** EditionID של Windows → השם שאנשים מכירים (Core = Home). */
@@ -1257,6 +1258,18 @@ function desktopControlsCard(d, patch) {
     })));
 }
 
+function adSitesCard(d, patch) {
+  const sites = d.settings.ad_allow_sites || [];
+  const box = el("textarea", { rows: 4, placeholder: "example.co.il\nnews-site.com", dir: "ltr" }, sites.join("\n"));
+  return card("אתרים בלי חוסם פרסומות",
+    "אתר שמזהה חוסם פרסומות וחוסם את הגלישה — רשמו אותו כאן (אתר בכל שורה). בכרום של המחשב לא ייחסמו בו פרסומות; סינון התמונות ושאר החסימות ממשיכים כרגיל.",
+    box,
+    el("div", { class: "row end" }, el("button", { class: "primary small", onclick: async () => {
+      const list = box.value.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+      await patch({ ad_allow_sites: list }, list.length ? `נשמרו ${list.length} אתרים` : "הרשימה נוקתה");
+    } }, "שמירה")));
+}
+
 function pauseCard(d) {
   const id = d.id;
   const pause = d.pause;
@@ -1381,7 +1394,7 @@ async function viewComputer(id, query = new URLSearchParams(), loaded = null) {
   const tabs = [
     ["overview", "סקירה", [winStatusCard(d), el("div", { class: "grid two" }, customerCardOf(d), logCard)]],
     ["blocks", "חסימות", [levelCard, policyCard, customCard]],
-    ["control", "שליטה במחשב", [desktopControlsCard(d, patch), pauseCard(d), removalCard(d)]],
+    ["control", "שליטה במחשב", [desktopControlsCard(d, patch), adSitesCard(d, patch), pauseCard(d), removalCard(d)]],
     ["activity", "פעילות", [statsCard, eventsCard]],
   ];
   autoRefresh(async () => {

@@ -333,7 +333,7 @@ ParentCode = Annotated[str | None, Header(alias="X-Parent-Code")]
 # שדות במכשיר שהם "חסימות" — שינוי שלהם דורש את קוד ההורים (שם / תווית — לא)
 _GATED_DEVICE_KEYS = {"level", "status", "options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules",
                       "app_images", "dpc", "keywords", "vpn_bypass", "track", "allow_google_accounts",
-                      "safe_browser", "desktop", "web_level", "web_extras", "web_without"}
+                      "safe_browser", "desktop", "ad_allow_sites", "web_level", "web_extras", "web_without"}
 DeskDep = Annotated[SupportDesk, Depends(support_dep)]
 BotDep = Annotated[BotDesk, Depends(bot_dep)]
 DeviceRow = Annotated[Any, Depends(device_dep)]
@@ -696,6 +696,7 @@ class DevicePatch(BaseModel):
     allow_google_accounts: bool | None = None                 # מסך "הוספת חשבון Google" פתוח קבוע
     safe_browser: str | None = Field(default=None, max_length=12)  # הסייר המוגן: "" / essential / off
     desktop: dict | None = None                               # מחשבי Windows: {chrome_only, block_store}
+    ad_allow_sites: list[str] | None = Field(default=None, max_length=500)  # מחשבים: אתרים בלי חוסם פרסומות
     web_level: str | None = Field(default=None, max_length=12)     # רמת גלישה (websites.WEB_LEVELS)
     web_extras: list[str] | None = Field(default=None, max_length=30)
     web_without: list[str] | None = Field(default=None, max_length=30)

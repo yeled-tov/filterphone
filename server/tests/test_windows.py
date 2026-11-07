@@ -96,6 +96,38 @@ def test_dashboard_controls_reach_the_pc_and_need_valid_values(env):
     assert bad.status_code == 400
 
 
+def test_ad_blocking_on_a_pc_is_in_the_browser_with_per_site_exceptions(env):
+    svc, client = env
+    h = admin_headers(client)
+    did, dh = enroll_pc(svc, client)
+    r = client.post("/v1/device/heartbeat", headers=dh, json=report()).json()
+    assert r["windows"]["block_ads"] is True and "ad_allow_sites" not in r["windows"]
+
+    ok = client.patch(f"/v1/admin/devices/{did}", headers=h,
+                      json={"ad_allow_sites": ["https://News-Site.co.il/path", "*.example.com"]})
+    assert ok.status_code == 200
+    r = client.post("/v1/device/heartbeat", headers=dh, json=report()).json()
+    assert r["windows"]["ad_allow_sites"] == ["example.com", "news-site.co.il"]
+    bad = client.patch(f"/v1/admin/devices/{did}", headers=h, json={"ad_allow_sites": ["not a host!"]})
+    assert bad.status_code == 400
+
+    client.patch(f"/v1/admin/devices/{did}", headers=h, json={"desktop": {"block_ads": False}})
+    assert client.post("/v1/device/heartbeat", headers=dh, json=report()).json()["windows"]["block_ads"] is False
+
+
+def test_dns_lets_ad_networks_through_for_pcs_only(env):
+    svc, client = env
+    did, _ = enroll_pc(svc, client)
+    pc_ip = row(svc, did)["vpn_ip"]
+    phone_code = svc.create_code("phone", 2, 1, 1)["code"]
+    phone = client.post("/v1/enroll", json={"code": phone_code, "public_key": wg_key(9), "name": "טלפון"}).json()
+    phone_ip = row(svc, phone["device_id"])["vpn_ip"]
+    rules = svc.adguard_rules()
+    allow = [x for x in rules if x.startswith("@@||doubleclick.net^")]
+    assert allow == [f"@@||doubleclick.net^$client={pc_ip}"]
+    assert phone_ip not in allow[0]
+
+
 # ------------------------------------------------------------------ מצב תאימות
 
 def fake_pc(**kw):

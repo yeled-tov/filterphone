@@ -613,7 +613,20 @@ DESKTOP_DEFAULTS: dict[str, bool] = {
     "block_spotlight": False,    # התמונות המתחלפות במסך הנעילה (Windows Spotlight) מכובות
     "block_web_search": False,   # חיפוש באינטרנט ותמונות מתפריט "התחל" מכובה
     "block_removable": False,    # חסימת דיסק און קי וכוננים חיצוניים (אחסון נשלף)
+    # חסימת פרסומות בכרום (התוסף uBlock Origin Lite, מותקן במדיניות). חוסם בתוך הדפדפן ומנטרל את סקריפטי
+    # הפרסום, כך שרוב האתרים לא מזהים "חוסם פרסומות"; אתרים שברשימה ad_allow_sites — בלי חסימה.
+    "block_ads": True,
 }
+
+# מחשבי Windows: חסימת הפרסומות נעשית בדפדפן (block_ads), לא ב-DNS — אחרת אי אפשר להחריג אתר אחד, והאתרים
+# מזהים את החסימה. לכן ה-DNS לא חוסם למחשבים את רשתות הפרסום העיקריות (התמונות שלהן עדיין עוברות סינון תמונות).
+# הטלפונים לא מושפעים.
+PC_AD_DOMAINS: tuple[str, ...] = (
+    "doubleclick.net", "googlesyndication.com", "googletagservices.com", "googleadservices.com",
+    "adservice.google.com", "googletagmanager.com", "google-analytics.com", "imasdk.googleapis.com",
+    "2mdn.net", "amazon-adsystem.com", "adnxs.com", "criteo.com", "criteo.net", "taboola.com",
+    "outbrain.com", "pubmatic.com", "rubiconproject.com", "openx.net", "moatads.com", "adsafeprotected.com",
+)
 MAX_KEYWORD_TERMS = 3000
 _TERM_STRIP = re.compile(r"\s+")
 
@@ -794,6 +807,7 @@ class DeviceSettings:
     allow_google_accounts: bool = False         # מסך "הוספת חשבון Google" עובד: שירותי Google מחוץ ל-VPN (רק הם)
     safe_browser: str = ""                      # הסייר המוגן באפליקציה: "" אוטומטי / essential / off (SAFE_BROWSER)
     desktop: dict = field(default_factory=dict)  # מחשבי Windows: רק מה ששונה מ-DESKTOP_DEFAULTS
+    ad_allow_sites: list[str] = field(default_factory=list)  # מחשבי Windows: אתרים שבהם לא חוסמים פרסומות
     web_level: str = ""                         # רמת גלישה בכרום (websites.WEB_LEVELS): "" פתוח / essential / clean / shopping
     web_extras: list[str] = field(default_factory=list)    # קבוצות אתרים שנוספו מעל הרמה
     web_without: list[str] = field(default_factory=list)   # קבוצות שהורדו מהרמה
@@ -941,6 +955,7 @@ class DeviceSettings:
             allow_google_accounts=bool(d.get("allow_google_accounts", False)),
             safe_browser=d.get("safe_browser") if d.get("safe_browser") in SAFE_BROWSER else "",
             desktop=cls._load_desktop(d.get("desktop")),
+            ad_allow_sites=[h for h in map(clean_host, d.get("ad_allow_sites", [])) if h],
             web_level=d.get("web_level") if d.get("web_level") in websites.WEB_LEVELS else "",
             web_extras=websites.clean_list(d.get("web_extras"), websites.GROUP_BY_ID),
             web_without=websites.clean_list(d.get("web_without"), websites.GROUP_BY_ID),
@@ -962,6 +977,8 @@ class DeviceSettings:
             d["safe_browser"] = self.safe_browser
         if self.desktop:
             d["desktop"] = self.desktop
+        if self.ad_allow_sites:
+            d["ad_allow_sites"] = self.ad_allow_sites
         if self.web_level:
             d["web_level"] = self.web_level
         if self.web_extras:
@@ -994,7 +1011,8 @@ class DeviceSettings:
             if unknown:
                 errors.append(f"אפשרויות לא מוכרות: {', '.join(unknown)}")
             self.options = sorted({o for o in changes["options"] if o in CATALOG})
-        for key, cleaner, label in (("custom_hosts", clean_host, "אתר"), ("allow_hosts", clean_host, "אתר")):
+        for key, cleaner, label in (("custom_hosts", clean_host, "אתר"), ("allow_hosts", clean_host, "אתר"),
+                                    ("ad_allow_sites", clean_host, "אתר")):
             if key in changes and changes[key] is not None:
                 raw = [x for x in changes[key] if str(x).strip()]
                 good = [cleaner(str(x)) for x in raw]

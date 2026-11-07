@@ -47,6 +47,7 @@ from .catalog import (
     KNOWN_APP_HOSTS,
     LEVELS,
     MAX_TEMP_OPEN,
+    PC_AD_DOMAINS,
     TEMP_OPEN_DEFAULT_MIN,
     TEMP_OPEN_MAX_MIN,
     Compiled,
@@ -726,7 +727,14 @@ class Services:
         return True
 
     def adguard_rules(self) -> list[str]:
-        return build_rules((r["vpn_ip"], self.compiled(r).hosts) for r in self._active_devices())
+        active = self._active_devices()
+        rules = build_rules((r["vpn_ip"], self.compiled(r).hosts) for r in active)
+        pcs = sorted(r["vpn_ip"] for r in active if r["platform"] == "windows")
+        if pcs:
+            # מחשבי Windows: חוסם הפרסומות הוא תוסף בכרום (עם החרגה לפי אתר, ופחות מזוהה) — לכן ה-DNS
+            # לא חוסם להם את רשתות הפרסום העיקריות. כלל חריגה (@@) גובר על רשימות החסימה הרגילות.
+            rules += [f"@@||{d}^$client={'|'.join(pcs)}" for d in PC_AD_DOMAINS]
+        return rules
 
     def sync_adguard(self, force: bool = False) -> bool:
         assert self.adguard is not None
@@ -1318,7 +1326,10 @@ class Services:
     def windows_controls(self, row: sqlite3.Row, want_key: bool = False) -> dict:
         """מה שהמחשב מקבל בכל דיווח: ההגבלות שהמנהל קבע בדשבורד, ומפתח קודי ההסרה כשהמחשב מבקש
         אותו (בפעם הראשונה, או אחרי שהשמירה שלו אבדה). המפתח נשלח רק בתוך המנהרה."""
-        out: dict = dict(DeviceSettings.load(row["policy"]).desktop_effective)
+        settings = DeviceSettings.load(row["policy"])
+        out: dict = dict(settings.desktop_effective)
+        if settings.ad_allow_sites:     # אתרים שבהם חוסם הפרסומות בכרום לא פועל
+            out["ad_allow_sites"] = [h.removeprefix("*.") for h in settings.ad_allow_sites]
         if want_key:
             out["removal_key"] = self._ensure_removal_key(row["id"])
         return out
@@ -1847,6 +1858,7 @@ class Services:
             raise ApiError(400, "סטטוס לא חוקי")
         policy_keys = ("options", "custom_hosts", "allow_hosts", "custom_apps", "app_rules", "app_images", "dpc",
                        "keywords", "vpn_bypass", "track", "allow_google_accounts", "safe_browser", "desktop",
+                       "ad_allow_sites",
                        "web_level", "web_extras", "web_without")
         policy_changes = {k: changes[k] for k in policy_keys if changes.get(k) is not None}
         with self.db() as c, db.transaction(c):
