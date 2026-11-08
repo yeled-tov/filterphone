@@ -160,6 +160,12 @@ def test_api_hosts_skip_web_level():
     assert is_api_host("www.gstatic.com") and is_api_host("clients4.google.com")
     assert not is_api_host("www.google.com") and not is_api_host("play.google.com")
     assert not is_api_host("evilgoogleapis.com") and not is_api_host("") and not is_api_host(None)
+    # לפי השם: אצל ניתאי Cronet של שירותי גוגל נכשל שוב ושוב ב-android.apis.google.com (טביעה זהה לכרום)
+    for h in ("android.apis.google.com", "api.revenuecat.com", "api-production.8-lives-cat.io",
+              "ohttp-relay-safebrowsing-android.google.fastly-edge.com", "mobile-api.bank.co.il"):
+        assert is_api_host(h), h
+    for h in ("api.com", "www.apple.com", "shop.example.co.il", "apiary.example.com", "www.kikar.co.il"):
+        assert not is_api_host(h), h
 
 
 def test_problematic_words_in_an_article_are_covered_with_x():

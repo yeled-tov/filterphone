@@ -367,7 +367,7 @@ async def test_app_fingerprint_that_failed_passes_web_level_even_after_restart(f
     chrome = dict(cipher_suites=[0x3A3A], extensions=[(0x4A4A, b""), (0, b""), (43, b""), (65037, b"")],
                   alpn_protocols=[b"h2", b"http/1.1"])
     cronet = dict(cipher_suites=[0x3A3A], extensions=[(0x4A4A, b""), (0, b""), (43, b"")], alpn_protocols=[b"h2"])
-    sni = "app-api.unknown.example"
+    sni = "shop.unknown.example"
 
     def hello(kind):
         return SimpleNamespace(context=ctx, client_hello=SimpleNamespace(sni=sni, **kind), ignore_connection=False)

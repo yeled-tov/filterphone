@@ -69,13 +69,24 @@ def hello_fingerprint(hello) -> str:
 # עליהם: Cronet של אפליקציות גוגל (המיקרופון במקלדת → speechs3proto2-pa.googleapis.com, Play, מפות)
 # נראה כמו כרום, ויירוט שלהם רק שובר את האפליקציה בכל פעם מחדש.
 _API_HOST = re.compile(r"(?:^|\.)(?:googleapis\.com|googlevideo\.com|gvt[123]\.com|gstatic\.com|"
-                       r"firebaseio\.com|crashlytics\.com|app-measurement\.com|whatsapp\.net|"
-                       r"android\.clients\.google\.com|mtalk\.google\.com|clients\d*\.google\.com)$")
+                       r"firebaseio\.com|crashlytics\.com|app-measurement\.com|whatsapp\.net|apis\.google\.com|"
+                       r"android\.clients\.google\.com|mtalk\.google\.com|clients\d*\.google\.com|"
+                       r"fastly-edge\.com)$")
+# שם שרת שמעיד על API של אפליקציה (התווית הראשונה): api.x.com, api-production.x.io, android.apis.google.com.
+# Cronet של שירותי גוגל יכול להיות זהה בטביעה לכרום באותו טלפון — לכן גם לפי השם, לא רק לפי הטביעה.
+_API_LABEL = re.compile(r"^(?:api|apis|android|gateway|gw|push|mtalk|ota|sdkconfig|telemetry|analytics|metrics|"
+                        r"ingest|graphql|grpc|ws|wss)\d*$|^api[-_]|[-_]api\d*$")
 
 
 def is_api_host(host: str | None) -> bool:
     """שרת API של אפליקציות (לא אתר שגולשים אליו) — רמת הגלישה לא מיירטת אותו."""
-    return bool(host) and bool(_API_HOST.search(host.lower().rstrip(".")))
+    if not host:
+        return False
+    h = host.lower().rstrip(".")
+    if _API_HOST.search(h):
+        return True
+    labels = h.split(".")
+    return len(labels) >= 3 and bool(_API_LABEL.search(labels[0]))
 
 
 def _glob(p: str) -> str:
