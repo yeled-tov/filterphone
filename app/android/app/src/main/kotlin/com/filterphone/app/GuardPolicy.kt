@@ -104,6 +104,8 @@ object GuardPolicy {
         val approvedTitles: List<String> = emptyList(),
         /** כללי ממשק מהשרת: חסימת מסך/כפתור חדש בלי עדכון אפליקציה (UiRules). */
         val uiRules: List<UiRules.Rule> = emptyList(),
+        /** אפליקציות שבהן חוסמים את הדפדפן הפנימי (WebView) — Waze, Moovit וכו' (InAppBrowser). */
+        val inAppBrowserPkgs: Set<String> = emptySet(),
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty() &&
             !allowlistOnly && !blockRootPrompt && !playManaged && uiRules.isEmpty()
@@ -231,6 +233,9 @@ object GuardPolicy {
                 ?.let { a -> (0 until a.length()).map { a.optString(it).trim().lowercase() }.filter { it.length >= 2 } }
                 ?: emptyList(),
             uiRules = UiRules.parse(o.opt("ui_rules")),
+            inAppBrowserPkgs = o.optJSONArray("inapp_browser")
+                ?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }.toSet() }
+                ?: emptySet(),
         )
     }
 

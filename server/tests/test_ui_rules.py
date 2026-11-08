@@ -19,6 +19,13 @@ def test_meta_ai_option_compiles_to_ui_rules_for_the_phone():
 def test_policy_without_rules_has_no_ui_rules_field():
     dj = compile_settings(1, DeviceSettings(options=["whatsapp_status"])).device_json()
     assert "ui_rules" not in dj                                  # בייט-תואם: מדיניות ישנה לא משתנה
+    assert "inapp_browser" not in dj
+
+
+def test_inapp_browsers_option_sends_the_package_list_to_the_phone():
+    dj = compile_settings(1, DeviceSettings(options=["inapp_browsers"])).device_json()
+    assert "com.waze" in dj["inapp_browser"] and "com.tranzmate" in dj["inapp_browser"]
+    assert compile_settings(1, DeviceSettings(options=["inapp_browsers"])).needs_accessibility
 
 
 def test_ui_rules_registry_is_well_formed():

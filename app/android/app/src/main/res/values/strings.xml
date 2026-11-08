@@ -7,6 +7,7 @@
     <string name="guard_root_blocked">בקשת הרשאת-על נחסמה. כלי Root חסומים במכשיר הזה.</string>
     <string name="guard_wa_browser_chrome">הקישור נפתח ב-Chrome (מסונן)</string>
     <string name="guard_wa_channels_blocked">הערוצים בוואטסאפ חסומים בטלפון הזה</string>
+    <string name="guard_inapp_browser_blocked">הדפדפן הפנימי חסום — הקישור נפתח בדפדפן המסונן</string>
     <string name="wa_link_not_found">לא נמצא קישור בהודעה. אפשר להעתיק את הקישור (לחיצה ארוכה ← העתקה) ולהדביק אותו ב-Chrome.</string>
     <string name="link_chooser_title">איזה קישור לפתוח ב-Chrome?</string>
     <string name="guard_wa_browser_blocked">הדפדפן שבתוך וואטסאפ לא מסונן, ולא הצלחנו להעביר את הקישור ל-Chrome. אפשר להעתיק את הקישור (לחיצה ארוכה על ההודעה ← העתקה) ולהדביק ב-Chrome</string>

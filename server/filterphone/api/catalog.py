@@ -74,13 +74,14 @@ class Option:
     protections: tuple[str, ...] = ()           # מפתחות ב-PROTECTIONS — הגנות מיוחדות בטלפון
     wa_screens: tuple[str, ...] = ()            # מסכים בתוך וואטסאפ שנחסמים לפי תוכן (updates/channels/status)
     ui_rules: tuple[str, ...] = ()              # מפתחות ב-UI_RULES — כללי ממשק מהשרת (חסימת מסך/כפתור)
+    inapp_browser: tuple[str, ...] = ()         # אפליקציות שבהן חוסמים את הדפדפן הפנימי (WebView)
 
     @property
     def mechanisms(self) -> list[str]:
         m = []
         if self.hosts or self.paths:
             m.append("network")
-        if self.apps or self.screens or self.protections or self.wa_screens or self.ui_rules:
+        if self.apps or self.screens or self.protections or self.wa_screens or self.ui_rules or self.inapp_browser:
             m.append("device")
         if self.images or self.video:
             m.append("proxy")
@@ -101,7 +102,8 @@ class Option:
                 "screens": [{"package": p, "match": list(m)} for p, m in self.screens],
                 "mechanisms": self.mechanisms, "needs_guard": self.needs_guard,
                 "protections": list(self.protections), "wa_screens": list(self.wa_screens),
-                "ui_rules": list(self.ui_rules), "images": self.images, "video": self.video}
+                "ui_rules": list(self.ui_rules), "inapp_browser": list(self.inapp_browser),
+                "images": self.images, "video": self.video}
 
 
 WA = ("com.whatsapp", "com.whatsapp.w4b")
@@ -345,6 +347,12 @@ OPTIONS: tuple[Option, ...] = (
                  "com.pof.android", "com.ftw_and_co.happn")),
 
     # ------------------------------------------------------------ הגנה מפני עקיפה
+    Option("inapp_browsers", "protection", "דפדפנים פנימיים באפליקציות (Waze, Moovit ועוד)",
+           "הרבה אפליקציות מריצות 'דפדפן פנימי' (WebView) — שדרכו אפשר להגיע לאתרים בלי סינון התמונות. "
+           "מגן FilterPhone סוגר את הדפדפן הפנימי באפליקציות האלה, ואם יש כתובת — פותח אותה בכרום (מסונן). "
+           "הצ'אטים, הניווט והתוכן הרגיל באפליקציה ממשיכים כרגיל. נאכף בטלפון עצמו.",
+           inapp_browser=("com.waze", "com.tranzmate", "com.gettaxi.android"),
+           needs_guard=True),
     Option("apk_sites", "protection", "אתרי הורדת אפליקציות (APK)",
            "APKPure, APKMirror, Aptoide, Uptodown, F-Droid — כדי שלא יתקינו אפליקציות בעקיפת החנות.",
            hosts=("apkpure.com", "apkpure.net", "apkmirror.com", "aptoide.com", "uptodown.com", "apkcombo.com",
@@ -1177,6 +1185,7 @@ class Compiled:
     accessibility_only: tuple[str, ...] = ()    # חסומות בנגישות בלבד — לא מוסתרות במנהל המכשיר
     wa_screens: tuple[str, ...] = ()            # מסכים בוואטסאפ שנחסמים לפי תוכן (updates/channels/status)
     ui_rules: tuple[dict, ...] = ()             # כללי ממשק מהשרת (UI_RULES) — חסימת מסך/כפתור בלי עדכון
+    inapp_browser: tuple[str, ...] = ()         # אפליקציות שבהן חוסמים את הדפדפן הפנימי (WebView)
     temp_allow: tuple[dict, ...] = ()           # פתוח זמנית בטלפון: [{"package"|"dpc", "until"}]
     track: str = ""                             # מסלול הסינון (TRACKS)
     allowlist_apps: tuple[str, ...] | None = None   # רשימה לבנה של המסלול; None = הקטלוג + Chrome
@@ -1194,7 +1203,8 @@ class Compiled:
     @property
     def needs_accessibility(self) -> bool:
         """מסכים, הגנות, כללי ממשק וחסימת מילים — רק בנגישות. חסימת אפליקציות — גם מנהל מכשיר (הסתרה)."""
-        return bool(self.screens or self.protections or self.keywords.get("enabled") or self.ui_rules)
+        return bool(self.screens or self.protections or self.keywords.get("enabled") or self.ui_rules
+                    or self.inapp_browser)
 
     def _protections_json(self) -> dict:
         """ההגדרות של כל הגנה בטלפון. "כיסוי לבן" (wa_profile_mask) = mask בתוך wa_profile_photo."""
@@ -1220,6 +1230,7 @@ class Compiled:
             "wa_screens": list(self.wa_screens),
             # רק כשיש כללים — מדיניות בלי כללים נשארת זהה בבייט (בלי גרסה חדשה לכל המכשירים)
             **({"ui_rules": list(self.ui_rules)} if self.ui_rules else {}),
+            **({"inapp_browser": list(self.inapp_browser)} if self.inapp_browser else {}),
             **({"block_root_prompt": True} if "block_root_prompt" in self.protections else {}),
             # רק כשיש — כדי שמדיניות בלי פתיחה זמנית תישאר זהה (בלי גרסה חדשה לכל המכשירים)
             **({"temp_allow": list(self.temp_allow)} if self.temp_allow else {}),
@@ -1291,6 +1302,7 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
                                         if p in device_apps and full not in s.options)),
         wa_screens=tuple(sorted({k for o in opts for k in o.wa_screens})),
         ui_rules=tuple(r for k in dict.fromkeys(k for o in opts for k in o.ui_rules) for r in UI_RULES.get(k, ())),
+        inapp_browser=tuple(sorted({p for o in opts for p in o.inapp_browser})),
         temp_allow=_temp_allow(s, opts),
         track=s.track,
         allowlist_apps=None if track["allowlist"] is None else tuple(track["allowlist"]),

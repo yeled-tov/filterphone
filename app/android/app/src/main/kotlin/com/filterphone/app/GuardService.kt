@@ -75,6 +75,7 @@ class GuardService : AccessibilityService() {
     private val rulesMask by lazy { AvatarMask(this) }
     private var lastRuleScanAt = 0L
     private var lastRuleScanPkg: String? = null
+    private var lastInAppBrowserAt = 0L
     private var chromePageUrl: String? = null
     private var chromeMenu: Pair<ChromeReport.Kind, String?>? = null
     private val chromeMenuCheck = Runnable { safely("chrome-menu") { checkChromeMenu() } }
@@ -1143,6 +1144,7 @@ class GuardService : AccessibilityService() {
             !WaBrowser.isBrowserScreen(cls)) waBrowserReturnUntil = 0L     // חזרו לשיחה — הקישור הבא מועבר כרגיל
         if (policy.blockRootPrompt && guardRootPrompt(pkg, cls)) return    // חלון בקשת הרשאת-על — דחייה
         if (applyUiWindowRules(pkg, cls, policy)) return                   // כלל מסך מהשרת (UiRules)
+        if (pkg in policy.inAppBrowserPkgs && guardInAppBrowser(pkg)) return   // דפדפן פנימי (Waze/Moovit...)
         when (GuardPolicy.check(this, policy, pkg, cls)) {
             GuardPolicy.Block.APP -> {
                 block(pkg, GLOBAL_ACTION_HOME, R.string.guard_app_blocked)
@@ -1174,6 +1176,7 @@ class GuardService : AccessibilityService() {
     }
 
     private fun onContent(pkg: String, policy: GuardPolicy.Policy) {
+        if (pkg in policy.inAppBrowserPkgs && guardInAppBrowser(pkg)) return
         if (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES && guardWaUpdates(pkg, fromContent = true)) return
         if (policy.blocksWaChannels && pkg in WaScreens.PACKAGES &&
             guardWaUpdates(pkg, fromContent = true, channelsOnly = true)) return
@@ -1389,6 +1392,50 @@ class GuardService : AccessibilityService() {
             seen.forEach { recycle(it) }
             queue.forEach { recycle(it) }
         }
+    }
+
+    /**
+     * דפדפן פנימי (WebView) באפליקציה שהשרת ציין (Waze/Moovit...): סוגרים אותו, ואם יש כתובת בשורת
+     * הכתובת — פותחים אותה ב-Chrome (סינון מלא). רק באפליקציות האלה — לא בכל WebView (מייל/התחברות).
+     */
+    private fun guardInAppBrowser(pkg: String): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastInAppBrowserAt < SCAN_EVERY_MS) return false
+        lastInAppBrowserAt = now
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+        if (root.packageName?.toString() != pkg) { recycle(root); return false }
+        val nodes = ArrayList<InAppBrowser.Node>()
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        var visited = 0
+        queue.add(root)
+        try {
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                seen += n
+                visited++
+                if (n.isVisibleToUser) {
+                    nodes += InAppBrowser.Node(n.className?.toString(),
+                        n.text?.toString()?.takeIf { it.length <= 2048 })
+                }
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { recycle(it) }
+        }
+        val url = InAppBrowser.detect(nodes.asSequence()) ?: return false
+        performGlobalAction(GLOBAL_ACTION_BACK)                        // סוגרים את הדפדפן הפנימי
+        if (url.isNotEmpty() && chromeInstalled() &&
+            GuardPolicy.check(this, GuardPolicy.get(this), InAppBrowser.CHROME, null) == null) {
+            runCatching { LinkRelayActivity.openInChrome(this, url) }  // הכתובת האמיתית → Chrome (מסונן)
+        }
+        if (now - lastToastAt > 3_000) {
+            lastToastAt = now
+            Toast.makeText(this, R.string.guard_inapp_browser_blocked, Toast.LENGTH_SHORT).show()
+        }
+        ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+        return true
     }
 
     /** לחיצה על הרכיב, או על ההורה הלחיץ הקרוב (עד 4 רמות) — הטאב עצמו לפעמים לא "לחיץ" אלא העוטף שלו. */
@@ -1641,8 +1688,15 @@ class GuardService : AccessibilityService() {
         waBrowserBusy = true
         // הקישור האמיתי: מההודעה שנלחצה (אם נשלח אירוע לחיצה), או מהשיחה שנקראה מראש. סוגרים את הדפדפן
         // הפנימי (w.meta.me — לא עובד בכרום) ופותחים את הקישור האמיתי ב-Chrome.
+        // שורת הכתובת של הדפדפן הפנימי — הכתובת האמיתית (אחרי ההפניה מ-w.meta.me). המקור האמין ביותר:
+        // לחיצה על קישור (ClickableSpan) לא תמיד נשלחת כאירוע, ומטמון השיחה עלול להיות לא מדויק.
+        val barUrl = readWaBrowserUrl()
         val clicked = waClickLinks.takeIf { now - waClickAt < WA_CLICK_FRESH_MS }.orEmpty()
-        val real = clicked.ifEmpty { waChatLinks.takeIf { now - waChatLinksAt < WA_CHAT_FRESH_MS }.orEmpty() }
+        val real = when {
+            barUrl != null -> listOf(barUrl)
+            clicked.isNotEmpty() -> clicked
+            else -> waChatLinks.takeIf { now - waChatLinksAt < WA_CHAT_FRESH_MS }.orEmpty()
+        }
         waClickLinks = emptyList()
         if (real.isNotEmpty()) {
             main.postDelayed({
@@ -1655,6 +1709,31 @@ class GuardService : AccessibilityService() {
             return
         }
         main.postDelayed({ waBrowserFindMenu(pkg, attempt = 0) }, WA_STEP_MS)
+    }
+
+    /** הכתובת מתוך שורת הכתובת של הדפדפן הפנימי של וואטסאפ (בלי המעטפת w.meta.me שלא עובדת בכרום). */
+    private fun readWaBrowserUrl(): String? {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return null
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        var visited = 0
+        queue.add(root)
+        try {
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                seen += n
+                visited++
+                if (n.isVisibleToUser) {
+                    val u = InAppBrowser.addressBarUrl(n.text?.toString())
+                    if (u != null && !WaBrowser.isShim(u)) return u
+                }
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { recycle(it) }
+        }
+        return null
     }
 
     /** הקישורים מההודעה שנלחצה בוואטסאפ (הטקסט של הרכיב שנלחץ). */
