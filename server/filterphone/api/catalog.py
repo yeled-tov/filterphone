@@ -73,13 +73,14 @@ class Option:
     needs_guard: bool = False                   # עובד רק כשמגן FilterPhone פעיל בטלפון
     protections: tuple[str, ...] = ()           # מפתחות ב-PROTECTIONS — הגנות מיוחדות בטלפון
     wa_screens: tuple[str, ...] = ()            # מסכים בתוך וואטסאפ שנחסמים לפי תוכן (updates/channels/status)
+    ui_rules: tuple[str, ...] = ()              # מפתחות ב-UI_RULES — כללי ממשק מהשרת (חסימת מסך/כפתור)
 
     @property
     def mechanisms(self) -> list[str]:
         m = []
         if self.hosts or self.paths:
             m.append("network")
-        if self.apps or self.screens or self.protections or self.wa_screens:
+        if self.apps or self.screens or self.protections or self.wa_screens or self.ui_rules:
             m.append("device")
         if self.images or self.video:
             m.append("proxy")
@@ -100,7 +101,7 @@ class Option:
                 "screens": [{"package": p, "match": list(m)} for p, m in self.screens],
                 "mechanisms": self.mechanisms, "needs_guard": self.needs_guard,
                 "protections": list(self.protections), "wa_screens": list(self.wa_screens),
-                "images": self.images, "video": self.video}
+                "ui_rules": list(self.ui_rules), "images": self.images, "video": self.video}
 
 
 WA = ("com.whatsapp", "com.whatsapp.w4b")
@@ -154,6 +155,10 @@ OPTIONS: tuple[Option, ...] = (
            screens=tuple((p, ("status.playback", "StatusPlayback", "statusplayback", "newsletter", "Newsletter"))
                          for p in WA),
            wa_screens=("updates", "status", "channels"), popular=True, needs_guard=True),
+    Option("whatsapp_ai", "messaging", "בינה מלאכותית בוואטסאפ (Meta AI)",
+           "הכפתור של Meta AI בוואטסאפ מכוסה, ואי אפשר להיכנס למסך הבינה המלאכותית — ברגע שנפתח, מגן "
+           "FilterPhone מחזיר אחורה. הצ'אטים, השיחות והקבוצות ממשיכים כרגיל. נאכף בטלפון עצמו.",
+           ui_rules=("meta_ai",), needs_guard=True),
     Option("whatsapp_media", "messaging", "מדיה בוואטסאפ (תמונות, סרטונים, סטטוסים)",
            "תמונות, סרטונים וסטטוסים לא יורדים. ההודעות הכתובות והשיחות עובדות.",
            hosts=("mmg.whatsapp.net", "mmg-fna.whatsapp.net", "media*.whatsapp.net"),
@@ -547,6 +552,23 @@ PROTECTIONS: dict[str, dict] = {
     "wa_profile_mask": {},
     # Google Play פתוח ומנוהל: התקנה רק של המאושרות (allowlist.apps / allowlist.titles במדיניות)
     "play_managed": {"package": "com.android.vending"},
+}
+
+# מנוע כללים מהשרת (ui_rules): השרת שולח כללי-ממשק והאפליקציה (UiRules) אוכפת אותם בלי עדכון חדש.
+# כל ערך = רשימת כללים. כלל: packages (ריק=הכל), ומזהה לפי activities (שם מסך) או view_ids/descriptions/
+# texts (רכיב); action: back / home / cover (כיסוי לבן על הכפתור) / scroll_up. כשוואטסאפ/אפליקציה משנים
+# מזהה — מעדכנים כאן בלי גרסה חדשה לכל המכשירים.
+UI_RULES: dict[str, list[dict]] = {
+    # הבינה המלאכותית של מטא בוואטסאפ (Meta AI): כיסוי הכפתור/שורת החיפוש, וחסימת המסך עצמו.
+    "meta_ai": [
+        {"id": "wa_meta_ai_button", "packages": list(WA),
+         "view_ids": ["ai_fab", "meta_ai", "metaai", "ai_entry", "aibar", "ai_search"],
+         "descriptions": ["meta ai", "מטא ai", "מטה ai", "ask meta ai", "שאל את meta ai", "שאלו את meta ai"],
+         "action": "cover"},
+        {"id": "wa_meta_ai_screen", "packages": list(WA),
+         "activities": ["metaai", "aichat", "aiimmersive", "ai.ui", "imaginemeactivity", "aivoice"],
+         "action": "back", "message": "הבינה המלאכותית חסומה על ידי FilterPhone"},
+    ],
 }
 
 # מנהל מכשיר (Device Owner) — מה נאכף כשהאפליקציה מוגדרת כמנהלת המכשיר. רק יכולות רשמיות
@@ -1154,6 +1176,7 @@ class Compiled:
     split_apps: tuple[str, ...] = ()            # חסומות רק במסכים שלהן (SPLIT_APPS), לא כאפליקציה שלמה
     accessibility_only: tuple[str, ...] = ()    # חסומות בנגישות בלבד — לא מוסתרות במנהל המכשיר
     wa_screens: tuple[str, ...] = ()            # מסכים בוואטסאפ שנחסמים לפי תוכן (updates/channels/status)
+    ui_rules: tuple[dict, ...] = ()             # כללי ממשק מהשרת (UI_RULES) — חסימת מסך/כפתור בלי עדכון
     temp_allow: tuple[dict, ...] = ()           # פתוח זמנית בטלפון: [{"package"|"dpc", "until"}]
     track: str = ""                             # מסלול הסינון (TRACKS)
     allowlist_apps: tuple[str, ...] | None = None   # רשימה לבנה של המסלול; None = הקטלוג + Chrome
@@ -1170,8 +1193,8 @@ class Compiled:
 
     @property
     def needs_accessibility(self) -> bool:
-        """מסכים, הגנות מיוחדות וחסימת מילים — רק בנגישות. חסימת אפליקציות — גם מנהל מכשיר (הסתרה)."""
-        return bool(self.screens or self.protections or self.keywords.get("enabled"))
+        """מסכים, הגנות, כללי ממשק וחסימת מילים — רק בנגישות. חסימת אפליקציות — גם מנהל מכשיר (הסתרה)."""
+        return bool(self.screens or self.protections or self.keywords.get("enabled") or self.ui_rules)
 
     def _protections_json(self) -> dict:
         """ההגדרות של כל הגנה בטלפון. "כיסוי לבן" (wa_profile_mask) = mask בתוך wa_profile_photo."""
@@ -1195,6 +1218,8 @@ class Compiled:
             "vpn_bypass": self.vpn_bypass,
             "accessibility_only": list(self.accessibility_only),
             "wa_screens": list(self.wa_screens),
+            # רק כשיש כללים — מדיניות בלי כללים נשארת זהה בבייט (בלי גרסה חדשה לכל המכשירים)
+            **({"ui_rules": list(self.ui_rules)} if self.ui_rules else {}),
             **({"block_root_prompt": True} if "block_root_prompt" in self.protections else {}),
             # רק כשיש — כדי שמדיניות בלי פתיחה זמנית תישאר זהה (בלי גרסה חדשה לכל המכשירים)
             **({"temp_allow": list(self.temp_allow)} if self.temp_allow else {}),
@@ -1265,6 +1290,7 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
         accessibility_only=tuple(sorted(p for p, full in ACCESSIBILITY_ONLY_APPS.items()
                                         if p in device_apps and full not in s.options)),
         wa_screens=tuple(sorted({k for o in opts for k in o.wa_screens})),
+        ui_rules=tuple(r for k in dict.fromkeys(k for o in opts for k in o.ui_rules) for r in UI_RULES.get(k, ())),
         temp_allow=_temp_allow(s, opts),
         track=s.track,
         allowlist_apps=None if track["allowlist"] is None else tuple(track["allowlist"]),

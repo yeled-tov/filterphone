@@ -70,6 +70,11 @@ class GuardService : AccessibilityService() {
     private val chromeBubble by lazy { ChromeBubble(this, { onChromeBubble() }, { onChromeChip() }) }
     /** רק ערוצים חסומים: כיסוי על אזור הערוצים בטאב העדכונים של וואטסאפ (הסטטוסים נשארים). */
     private val channelMask by lazy { AvatarMask(this) }
+
+    /** כיסוי לבן לכללי ממשק מהשרת (UiRules) — כפתור שצריך להסתיר (למשל Meta AI). */
+    private val rulesMask by lazy { AvatarMask(this) }
+    private var lastRuleScanAt = 0L
+    private var lastRuleScanPkg: String? = null
     private var chromePageUrl: String? = null
     private var chromeMenu: Pair<ChromeReport.Kind, String?>? = null
     private val chromeMenuCheck = Runnable { safely("chrome-menu") { checkChromeMenu() } }
@@ -287,6 +292,7 @@ class GuardService : AccessibilityService() {
             trackForeground(pkg, policy)
             if (guardPlay(pkg, policy, fromContent = false)) return
             if (!policy.isEmpty) onWindow(pkg, event.className?.toString(), policy)
+            applyUiNodeRules(pkg, policy)                 // כללי רכיב מהשרת (כיסוי כפתור / חסימה)
             if (maskWanted(pkg, policy)) {
                 // מסך חדש בוואטסאפ: עכשיו, ושוב כשהתוכן נטען
                 scheduleMask(0)
@@ -302,6 +308,7 @@ class GuardService : AccessibilityService() {
             maybeSnapshotWaChat(pkg, null)
             if (maskWanted(pkg, policy)) onMaskEvent(event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED)
             onContent(pkg, policy)
+            applyUiNodeRules(pkg, policy)
         }
     }
 
@@ -1135,6 +1142,7 @@ class GuardService : AccessibilityService() {
         if (waBrowserReturnUntil != 0L && pkg in WaScreens.PACKAGES && cls?.startsWith("com.whatsapp") == true &&
             !WaBrowser.isBrowserScreen(cls)) waBrowserReturnUntil = 0L     // חזרו לשיחה — הקישור הבא מועבר כרגיל
         if (policy.blockRootPrompt && guardRootPrompt(pkg, cls)) return    // חלון בקשת הרשאת-על — דחייה
+        if (applyUiWindowRules(pkg, cls, policy)) return                   // כלל מסך מהשרת (UiRules)
         when (GuardPolicy.check(this, policy, pkg, cls)) {
             GuardPolicy.Block.APP -> {
                 block(pkg, GLOBAL_ACTION_HOME, R.string.guard_app_blocked)
@@ -1254,6 +1262,129 @@ class GuardService : AccessibilityService() {
             return true
         } catch (e: Exception) {
             return false
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { recycle(it) }
+        }
+    }
+
+    // ------------------------------------------------------------ מנוע כללים מהשרת (UiRules)
+
+    /** כלל מסך (activity) מהשרת התאים למסך הנוכחי → פעולה (אחורה/בית). true = טופל. */
+    private fun applyUiWindowRules(pkg: String, cls: String?, policy: GuardPolicy.Policy): Boolean {
+        if (cls == null || policy.uiRules.isEmpty()) return false
+        if (pkg in GuardPolicy.untouchable(this) && !isLauncher(pkg)) return false   // לא על בית/מקלדת/הגדרות
+        for (rule in policy.uiRules) {
+            if (rule.isWindow && UiRules.appliesTo(rule, pkg) && UiRules.matchesWindow(rule, cls)) {
+                ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+                return performUiAction(pkg, rule.action, rule.message)
+            }
+        }
+        return false
+    }
+
+    /**
+     * כללי רכיב מהשרת: מעבר קצר (מוגבל, מווסת) על רכיבי החלון — כיסוי כפתור (COVER) או פעולה (אחורה/בית/
+     * גלילה) כשרכיב מזוהה מופיע. לא קורא הודעות: טקסט נקרא רק אם יש כלל עם texts, ורק אם הוא קצר.
+     */
+    private fun applyUiNodeRules(pkg: String, policy: GuardPolicy.Policy) {
+        val rules = policy.uiRules.filter { it.isNode && UiRules.appliesTo(it, pkg) }
+        if (rules.isEmpty() || (pkg in GuardPolicy.untouchable(this) && !isLauncher(pkg))) {
+            if (rulesMask.isShown) rulesMask.hide()
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        if (pkg == lastRuleScanPkg && now - lastRuleScanAt < SCAN_EVERY_MS) return   // מעבר אפליקציה — סריקה מיד
+        lastRuleScanAt = now
+        lastRuleScanPkg = pkg
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
+        if (root.packageName?.toString() != pkg) { recycle(root); return }
+        val anyText = rules.any { it.needsText }
+        val covers = ArrayList<WaAvatars.Box>()
+        var action: UiRules.Action? = null
+        var actionMsg = ""
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        val b = Rect()
+        var visited = 0
+        queue.add(root)
+        try {
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                seen += n
+                visited++
+                if (n.isVisibleToUser) {
+                    val viewId = n.viewIdResourceName
+                    val desc = n.contentDescription?.toString()
+                    val text = if (anyText) n.text?.toString()?.takeIf { it.length <= MAX_TEXT_SCAN } else null
+                    for (rule in rules) {
+                        if (!UiRules.matchesNode(rule, viewId, desc, text)) continue
+                        if (rule.action == UiRules.Action.COVER) {
+                            n.getBoundsInScreen(b)
+                            if (b.width() > 0 && b.height() > 0) {
+                                covers += WaAvatars.Box(b.left, b.top, b.right, b.bottom, round = false)
+                            }
+                        } else if (action == null || rule.action == UiRules.Action.HOME) {
+                            action = rule.action
+                            actionMsg = rule.message
+                        }
+                    }
+                }
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+            if (covers.isEmpty()) rulesMask.hide() else rulesMask.show(covers)
+            action?.let {
+                ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+                performUiAction(pkg, it, actionMsg)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "ui node rules failed", e)
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { recycle(it) }
+        }
+    }
+
+    private fun performUiAction(pkg: String, action: UiRules.Action, message: String): Boolean = when (action) {
+        UiRules.Action.SCROLL_UP -> { scrollActiveUp(); true }
+        UiRules.Action.HOME -> blockRule(pkg, GLOBAL_ACTION_HOME, message)
+        else -> blockRule(pkg, GLOBAL_ACTION_BACK, message)   // BACK, וגם COVER ברמת מסך
+    }
+
+    /** כמו block(), אבל עם הודעת toast חופשית (מהכלל) במקום מזהה-משאב. */
+    private fun blockRule(pkg: String, action: Int, message: String): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (pkg == lastBlockPkg && now - lastBlockAt < 400) return false
+        lastBlockPkg = pkg
+        lastBlockAt = now
+        if (action != NO_GLOBAL_ACTION) performGlobalAction(action)
+        if (now - lastToastAt > 3_000) {
+            lastToastAt = now
+            val text = message.ifBlank { getString(R.string.guard_screen_blocked) }
+            Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+        }
+        return true
+    }
+
+    /** גולל את הרשימה הנגללת הגדולה בחלון הפעיל חזרה למעלה. */
+    private fun scrollActiveUp() {
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        val b = Rect()
+        var visited = 0
+        queue.add(root)
+        try {
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                seen += n
+                visited++
+                if (n.isScrollable && n.isVisibleToUser) {
+                    n.getBoundsInScreen(b)
+                    if (b.height() > 400 && n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) return
+                }
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
         } finally {
             seen.forEach { recycle(it) }
             queue.forEach { recycle(it) }
@@ -1802,6 +1933,7 @@ class GuardService : AccessibilityService() {
         runCatching { chromeBubble.hide() }
         runCatching { channelMask.hide() }
         runCatching { avatarMask.hide() }
+        runCatching { rulesMask.hide() }
         Recovery.syncSoon(this)            // המגן כובה — לדווח לשרת
         // כובה בהגדרות? עם ההרשאה (הקמה) — מדליקים מחדש מיד (לא בהשהיה שהמנהל אישר)
         val app = applicationContext
@@ -1822,6 +1954,7 @@ class GuardService : AccessibilityService() {
         runCatching { chromeBubble.hide() }
         runCatching { channelMask.hide() }
         runCatching { avatarMask.hide() }
+        runCatching { rulesMask.hide() }
         super.onDestroy()
     }
 
@@ -1843,6 +1976,7 @@ class GuardService : AccessibilityService() {
         /** ל-block(): כבר טיפלנו בעצמנו (למשל לחצנו על טאב) — רק ההודעה, בלי פעולה גלובלית. */
         private const val NO_GLOBAL_ACTION = 0
         private const val MAX_NODES = 300
+        private const val MAX_TEXT_SCAN = 48       // כלל-רכיב עם texts קורא טקסט רק עד אורך כזה (כיתוב/כפתור, לא הודעה)
         private const val MAX_MASK_NODES = 600
         private const val MASK_EVERY_MS = 50L          // עדכון הכיסוי — לכל היותר 20 בשנייה
         private const val MASK_SCROLL_HOLD_MS = 650L   // אחרי אירוע הגלילה האחרון — עוד כמה זמן פסים

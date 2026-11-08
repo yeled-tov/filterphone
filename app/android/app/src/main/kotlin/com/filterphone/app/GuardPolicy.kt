@@ -102,9 +102,11 @@ object GuardPolicy {
         val playManaged: Boolean = false,
         /** השמות של האפליקציות המאושרות ב-Play — לזיהוי עמוד של אפליקציה מאושרת. */
         val approvedTitles: List<String> = emptyList(),
+        /** כללי ממשק מהשרת: חסימת מסך/כפתור חדש בלי עדכון אפליקציה (UiRules). */
+        val uiRules: List<UiRules.Rule> = emptyList(),
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty() &&
-            !allowlistOnly && !blockRootPrompt && !playManaged
+            !allowlistOnly && !blockRootPrompt && !playManaged && uiRules.isEmpty()
         /** טאב "עדכונים" בוואטסאפ חסום (סטטוסים + ערוצים). */
         val blocksWaUpdates get() = "updates" in waScreens
         /** רק הערוצים (הסטטוסים נשארים): כיסוי לבן על אזור הערוצים, ויציאה אם גוללים לתוכו. */
@@ -228,6 +230,7 @@ object GuardPolicy {
             approvedTitles = o.optJSONObject("allowlist")?.optJSONArray("titles")
                 ?.let { a -> (0 until a.length()).map { a.optString(it).trim().lowercase() }.filter { it.length >= 2 } }
                 ?: emptyList(),
+            uiRules = UiRules.parse(o.opt("ui_rules")),
         )
     }
 

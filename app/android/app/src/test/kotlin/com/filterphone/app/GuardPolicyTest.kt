@@ -84,6 +84,19 @@ class GuardPolicyTest {
     }
 
     @Test
+    fun uiRulesFromServerAreParsedIntoThePolicy() {
+        val p = GuardPolicy.parseStrict(
+            """{"ui_rules":[
+                {"id":"meta_ai","packages":["com.whatsapp"],"view_ids":["ai_fab"],"action":"cover"},
+                {"id":"iab","activities":["IABWebCoreActivity"],"action":"home"}
+            ]}""",
+        )
+        assertEquals(listOf("meta_ai", "iab"), p.uiRules.map { it.id })
+        assertFalse(p.isEmpty)                                   // גם רק כללים — מדיניות לא ריקה
+        assertTrue(GuardPolicy.parse("""{"ui_rules":"bad"}""").uiRules.isEmpty())
+    }
+
+    @Test
     fun keywordBlockParsesWhenEnabledAndHasTerms() {
         val p = GuardPolicy.parseStrict("""{"keywords":{"enabled":true,"action":"back","terms":["sex","סקס"]}}""")
         assertNotNull(p.keywords)
