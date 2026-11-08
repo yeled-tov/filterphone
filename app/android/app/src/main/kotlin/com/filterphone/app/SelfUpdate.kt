@@ -443,7 +443,21 @@ class UpdateReceiver : BroadcastReceiver() {
             }
             // התקנה מהחנות / מהקטלוג: מחזירים את חסימת ההתקנות ומעדכנים את המצב
             ManagedApps.ACTION_RESULT -> {
-                if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) return   // לא קורה במנהל מכשיר
+                if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                    // בלי מנהל מכשיר: אנדרואיד מבקש מהמשתמש לאשר "התקנה / עדכון" — פותחים את החלון
+                    val confirm: Intent? = if (Build.VERSION.SDK_INT >= 33) {
+                        intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
+                    } else {
+                        @Suppress("DEPRECATION") intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                    }
+                    val ok = confirm != null && runCatching {
+                        context.startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }.isSuccess
+                    val pkg = intent.getStringExtra(ManagedApps.EXTRA_PACKAGE)
+                    if (ok) ManagedApps.awaitingUser(context.applicationContext, pkg)
+                    else ManagedApps.onResult(context.applicationContext, pkg, false, "confirm_failed")
+                    return
+                }
                 ManagedApps.onResult(context.applicationContext, intent.getStringExtra(ManagedApps.EXTRA_PACKAGE),
                     status == PackageInstaller.STATUS_SUCCESS, message)
             }

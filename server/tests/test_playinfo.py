@@ -36,6 +36,17 @@ def test_status_compares_versions_or_dates():
     assert P.status({"version_name": "1.0"}, None) == "unknown"                         # לא ב-Play
 
 
+def test_status_update_only_when_play_really_offers_it():
+    day, now = 86400, 1_800_000_000
+    old = {"version": "6.18", "updated": now - 10 * day}
+    assert P.status({"version_name": "6.17", "updated_ms": 1000 * (now - 30 * day)}, old, now) == "update"
+    fresh = {"version": "6.18", "updated": now - day}                       # שחרור הדרגתי — עוד לא לכולם
+    assert P.status({"version_name": "6.17", "updated_ms": 1000 * (now - 30 * day)}, fresh, now) == "maybe"
+    # הטלפון התעדכן אחרי שהגרסה החדשה יצאה, ועדיין בגרסה ישנה — היא לא הוצעה לו
+    assert P.status({"version_name": "6.17", "updated_ms": 1000 * (now - 2 * day)}, old, now) == "maybe"
+    assert P.status({"version_name": "6.18", "updated_ms": 0}, old, now) == "current"
+
+
 def test_lookup_caches_results_and_missing_apps():
     r = fakeredis.FakeRedis(decode_responses=True)
     calls = []

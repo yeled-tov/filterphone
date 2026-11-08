@@ -79,15 +79,17 @@ object ManagedApps {
     }
 
     /**
-     * התקנה / עדכון מהחנות, ביוזמת המשתמש (רק במנהל מכשיר — בלי "התקנה ממקור לא ידוע", ועובד גם
-     * כשהתקנת אפליקציות חסומה בטלפון). מחזיר מיד: started / not_owner / busy / invalid / up_to_date.
-     * המצב מתעדכן ב-state(); התוצאה הסופית מגיעה ל-UpdateReceiver.
+     * התקנה / עדכון מהחנות, ביוזמת המשתמש. במנהל מכשיר — בשקט (עובד גם כשהתקנת אפליקציות חסומה בטלפון).
+     * בלי מנהל מכשיר — אותו קובץ מהשרת שלנו (SHA-256 נבדק), ואנדרואיד מציג "התקנה / עדכון" לאישור; צריך
+     * פעם אחת "התקנת אפליקציות לא מוכרות" ל-FilterPhone (permission). כך FilterTube וכל אפליקציה שמתארחת
+     * אצלנו מותקנות כמו מחנות — בלי בקשה מהמנהל.
+     * מחזיר מיד: started / permission / busy / invalid / up_to_date. התוצאה הסופית מגיעה ל-UpdateReceiver.
      */
     fun installNow(context: Context, item: JSONObject): String {
         val app = context.applicationContext
-        if (!DeviceOwnerManager.isDeviceOwner(app)) return "not_owner"
         val a = fromStoreItem(item) ?: return "invalid"
         if (!needsInstall(a, installedVersion(app, a.pkg))) return "up_to_date"
+        if (!DeviceOwnerManager.isDeviceOwner(app) && !app.packageManager.canRequestPackageInstalls()) return "permission"
         if (!busy.compareAndSet(false, true)) return "busy"
         setState(app, a.pkg, "installing")
         worker.execute {
@@ -123,6 +125,12 @@ object ManagedApps {
     private fun setState(context: Context, pkg: String, state: String?) {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .apply { if (state == null) remove(K_STATE + pkg) else putString(K_STATE + pkg, state) }.apply()
+    }
+
+    /** בלי מנהל מכשיר: חלון "התקנה / עדכון" של אנדרואיד נפתח — הכפתור בחנות חוזר (אם המשתמש סגר את החלון
+     *  או שהוא לא נפתח כי FilterPhone לא בחזית — אפשר ללחוץ שוב). התוצאה הסופית עדיין מגיעה ל-onResult. */
+    fun awaitingUser(context: Context, pkg: String?) {
+        if (pkg != null) setState(context, pkg, null)
     }
 
     /** תוצאת ההתקנה (UpdateReceiver): מחזירים את חסימת ההתקנות אם הורדה, ומעדכנים את המצב. */
@@ -167,11 +175,34 @@ object ManagedApps {
             ?.clearUserRestriction(DeviceAdmin.component(context), UserManager.DISALLOW_INSTALL_APPS)
     }
 
-    /** נקרא אחרי heartbeat עם "managed_apps". מתקין אפליקציות חובה חסרות (רק במנהל מכשיר). */
+    /**
+     * אפליקציות מהחנות שכבר מותקנות ויש להן גרסה חדשה יותר אצלנו (קובץ שמתארח בשרת) — עדכון אוטומטי. טהור.
+     * לא מתקין אפליקציות חדשות (זה רק "חובה"), ולא נוגע במה שלא מותקן.
+     */
+    fun updatable(apps: JSONArray?, installed: (String) -> Long?): List<App> {
+        val out = ArrayList<App>()
+        for (i in 0 until (apps?.length() ?: 0)) {
+            val a = fromStoreItem(apps!!.optJSONObject(i) ?: continue) ?: continue
+            val v = installed(a.pkg) ?: continue
+            if (v < a.versionCode) out += a
+        }
+        return out
+    }
+
+    /**
+     * נקרא אחרי heartbeat עם "managed_apps". במנהל מכשיר: מתקין אפליקציות חובה חסרות ומעדכן בשקט כל אפליקציה
+     * מהחנות שיש לה גרסה חדשה אצלנו (FilterTube וכו'). בלי מנהל מכשיר: התראה "יש עדכון" (פעם אחת לגרסה) —
+     * לחיצה פותחת את החנות, ושם "עדכון" מוריד ומציג את אישור ההתקנה.
+     */
     fun sync(context: Context, apps: JSONArray?) {
         val app = context.applicationContext
-        if (!DeviceOwnerManager.isDeviceOwner(app)) return
-        val todo = installable(apps).filter { needsInstall(it, installedVersion(app, it.pkg)) }
+        if (!DeviceOwnerManager.isDeviceOwner(app)) {
+            runCatching { StoreUpdateNotify.onUpdates(app, updatable(apps) { installedVersion(app, it) }, apps) }
+                .onFailure { Log.w(TAG, "store update notice failed", it) }
+            return
+        }
+        val required = installable(apps).filter { needsInstall(it, installedVersion(app, it.pkg)) }
+        val todo = (required + updatable(apps) { installedVersion(app, it) }).distinctBy { it.pkg }
         if (todo.isEmpty() || !busy.compareAndSet(false, true)) return
         worker.execute {
             try {
@@ -198,7 +229,7 @@ object ManagedApps {
             if (info == null || info.packageName != app.pkg || vc != app.versionCode) {
                 Log.w(TAG, "managed ${app.pkg}: archive mismatch"); return "archive_mismatch"
             }
-            relaxInstallRestriction(context)
+            if (DeviceOwnerManager.isDeviceOwner(context)) relaxInstallRestriction(context)
             try {
                 val installer = context.packageManager.packageInstaller
                 val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {

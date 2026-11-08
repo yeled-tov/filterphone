@@ -231,7 +231,14 @@ class MainActivity : FlutterActivity() {
             "installedForUpdates" -> background(result) { InstalledApps.forUpdates(this) }
             // החנות: התקנה/עדכון דרך מנהל המכשיר, מצב לכל אפליקציה, ופתיחה
             "installStoreApp" -> background(result) {
-                ManagedApps.installNow(this, org.json.JSONObject(call.argument<String>("item") ?: "{}"))
+                val r = ManagedApps.installNow(this, org.json.JSONObject(call.argument<String>("item") ?: "{}"))
+                if (r == "permission") {
+                    // בלי מנהל מכשיר: פעם אחת "התקנת אפליקציות לא מוכרות" ל-FilterPhone (ואז לוחצים שוב)
+                    runOnUiThread {
+                        tryStart(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+                    }
+                }
+                r
             }
             "storeAppStates" -> background(result) {
                 (call.argument<List<String>>("packages") ?: emptyList()).associateWith { pkg ->

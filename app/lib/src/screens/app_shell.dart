@@ -30,6 +30,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   // הלשוניות: סייר מוגן · אפליקציות · תמיכה · פרופיל (מצב ההגנה — בתוך הפרופיל)
   static const _browserTab = 0;
+  static const _storeTab = 1;
   static const _supportTab = 2;
   static const _profileTab = 3;
   int _index = _browserTab;
@@ -54,6 +55,7 @@ class _AppShellState extends State<AppShell> {
   static int? _tabFor(String? name) => switch (name) {
         'support' => _supportTab,
         'browser' => _browserTab,
+        'store' => _storeTab,
         _ => null,
       };
 
@@ -121,7 +123,7 @@ class _AppShellState extends State<AppShell> {
         index: _index,
         children: [
           BrowserScreen(controller: c, visible: _index == _browserTab, onOpenTab: _openTab),
-          AppStoreScreen(controller: c),
+          AppStoreScreen(controller: c, visible: _index == _storeTab),
           SupportScreen(controller: c, visible: _index == _supportTab, onOpenTab: _openTab),
           ProfileScreen(controller: c),
         ],

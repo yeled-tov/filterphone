@@ -929,6 +929,17 @@ void main() {
     await tester.tap(find.text('מפות'));
     await tester.pumpAndSettle();
     expect(find.text('בקשה מהמנהל'), findsOneWidget);
+    // אפליקציה שהקובץ שלה אצלנו (כמו FilterTube), מותקנת בגרסה ישנה, בלי מנהל מכשיר: "פתיחה" + "עדכון"
+    // ליד — ו"עדכון" מוריד מהשרת (עם אישור ההתקנה של אנדרואיד), לא בקשה מהמנהל
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('פתקים'));
+    await tester.pumpAndSettle();
+    expect(find.text('פתיחה'), findsOneWidget);
+    expect(find.text('בקשה מהמנהל'), findsNothing);
+    await tester.tap(find.text('עדכון'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    expect(native.installs, ['org.example.notes']);
   });
 
   testWidgets('store has category tabs on top, rows under "all", and filtering by tab', (tester) async {
@@ -1010,6 +1021,8 @@ void main() {
         InstalledApp(package: 'com.waze', label: 'Waze', versionName: '5.1', versionCode: 51, updatedMs: 1000),
         InstalledApp(package: 'com.google.android.calculator', label: 'מחשבון', versionName: '9.0', versionCode: 90,
             system: true),
+        InstalledApp(package: 'com.google.android.youtube', label: 'YouTube', versionName: '19.1', versionCode: 191,
+            system: true, updatedMs: 1000),
       ];
     final checked = <Object?>[];
     final server = MockClient((req) async {
@@ -1026,8 +1039,10 @@ void main() {
         final day = DateTime.now().millisecondsSinceEpoch ~/ 1000 - 3 * 86400;
         return http.Response(jsonEncode({'apps': {
           'com.bnhp.payments.paymentsapp': {'status': 'update', 'play_version': '6.18', 'play_updated': day},
-          'com.waze': {'status': 'maybe', 'play_version': null, 'play_updated': day},
+          'com.waze': {'status': 'update', 'play_version': '5.2', 'play_updated': day},
           'com.google.android.calculator': {'status': 'current', 'play_version': null, 'play_updated': 1},
+          // "ייתכן" (גרסה לפי מכשיר / שחרור הדרגתי) — ב-Play לרוב אין כפתור עדכון: לא נספר
+          'com.google.android.youtube': {'status': 'maybe', 'play_version': null, 'play_updated': day},
         }}), 200, headers: json);
       }
       if (req.url.path == '/v1/device/vpn') return http.Response(jsonEncode(_vpn), 200, headers: json);
@@ -1048,7 +1063,7 @@ void main() {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('עדכונים'));
+    await tester.tap(find.textContaining('עדכונים').first);      // כבר עם המספר — נבדק כשנכנסים לחנות
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
     // נשלח לשרת: חבילה, גרסה ומתי עודכנה — בלי אייקונים
@@ -1061,8 +1076,7 @@ void main() {
     expect(find.text('Google Play'), findsOneWidget);
     expect(find.text('מותקנת: 6.10 ← 6.18'), findsOneWidget);
     expect(find.text('214 MB'), findsOneWidget);
-    expect(find.textContaining('עודכנה ב-Google Play לפני 3 ימים'), findsOneWidget);
-    expect(find.text('מעודכנות ואחרות (1)'), findsOneWidget);
+    expect(find.text('מעודכנות ואחרות (2)'), findsOneWidget);       // המחשבון + YouTube ("ייתכן" — לא נספר)
     // הכפתור קומפקטי — לא נמתח לכל רוחב הכרטיס (כמו בערכת הנושא)
     final btn = tester.getSize(find.ancestor(of: find.text('עדכון').first, matching: find.byWidgetPredicate((w) => w is FilledButton)));
     expect(btn.width, lessThan(200));
@@ -1128,7 +1142,7 @@ void main() {
         child: AppStoreScreen(controller: c))));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('עדכונים'));
+    await tester.tap(find.textContaining('עדכונים').first);      // כבר עם המספר — נבדק כשנכנסים לחנות
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
     expect(find.text('2 עדכונים זמינים'), findsOneWidget);

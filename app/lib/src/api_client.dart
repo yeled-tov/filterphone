@@ -444,7 +444,9 @@ class AppUpdateInfo {
   /// מתי עודכנה ב-Play (שניות מאז 1970).
   final int? playUpdated;
 
-  bool get needsUpdate => status == 'update' || status == 'maybe';
+  /// רק כשבטוח שיש גרסה חדשה (Play מפרסם גרסה גבוהה יותר, ולא בשחרור הדרגתי טרי). "maybe" — לא נספר:
+  /// ב-Play הרבה פעמים אין בכלל כפתור "עדכון" (גרסה לפי מכשיר, אפליקציית מערכת, שחרור הדרגתי).
+  bool get needsUpdate => status == 'update';
 }
 
 /// הקטגוריות (הטאבים בחנות) בסדר קבוע — כשהשרת לא שלח סדר משלו.

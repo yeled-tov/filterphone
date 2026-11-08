@@ -29,9 +29,24 @@ class StoreController extends ChangeNotifier {
   String? state(StoreApp a) => _states[a.package]?['state'] as String?;
   bool installed(StoreApp a) => installedVersion(a) != null;
   bool installing(StoreApp a) => state(a) == 'installing' || progress.containsKey(a.package);
+  /// עדכון זמין: לאפליקציה שמתארחת אצלנו — לפי הגרסה שהמנהל העלה (מדויק); לאפליקציה מ-Play — רק כש-Play
+  /// מפרסם גרסה גבוהה יותר (needsUpdate).
   bool hasUpdate(StoreApp a) {
     final v = installedVersion(a);
-    return v != null && a.versionCode != null && v < a.versionCode!;
+    if (v == null) return false;
+    if (a.directInstall) return v < a.versionCode!;
+    return a.viaPlay && (updates[a.package]?.needsUpdate ?? false);
+  }
+
+  /// אפשר לעדכן מכאן (קובץ אצלנו — בשקט או עם אישור התקנה; או דרך Play).
+  bool canUpdate(StoreApp a) => hasUpdate(a) && !installing(a) && (a.directInstall || a.viaPlay);
+
+  /// אפליקציה בטלפון שהקובץ שלה מתארח אצלנו: העדכון נקבע לפי הגרסה שלנו ולא לפי Play (FilterTube ב-Play
+  /// היא בנייה אחרת עם אותו שם חבילה — Play היה מציג "עדכון" שלא קיים). null = לא שלנו.
+  bool? ownUpdate(InstalledApp a) {
+    final cat = catalogApp(a.package);
+    if (cat == null || !cat.directInstall) return null;
+    return a.versionCode < cat.versionCode!;
   }
 
   bool isFresh(StoreApp a) {
@@ -129,7 +144,7 @@ class StoreController extends ChangeNotifier {
 
   /// מה שצריך עדכון — בלי מה שהוחרג (⊘).
   List<InstalledApp> get pendingUpdates => (phoneApps ?? const [])
-      .where((a) => !excluded(a.package) && (updates[a.package]?.needsUpdate ?? false))
+      .where((a) => !excluded(a.package) && (ownUpdate(a) ?? (updates[a.package]?.needsUpdate ?? false)))
       .toList();
 
   List<InstalledApp> get excludedApps => (phoneApps ?? const []).where((a) => excluded(a.package)).toList();
@@ -147,7 +162,7 @@ class StoreController extends ChangeNotifier {
   /// (חלון התקנה נעול לאפליקציה הזו).
   Future<String> updateApp(InstalledApp a) async {
     final cat = catalogApp(a.package);
-    if (cat != null && c.deviceOwner && cat.directInstall) return install(cat);
+    if (cat != null && cat.directInstall) return install(cat);
     return _openForUpdate(a.package);
   }
 
@@ -176,9 +191,9 @@ class StoreController extends ChangeNotifier {
       ..addAll(list.map((a) => a.package));
     for (final a in list) {
       final cat = catalogApp(a.package);
-      if (cat != null && c.deviceOwner && cat.directInstall) {
+      if (cat != null && cat.directInstall) {
         _queue.remove(a.package);
-        await install(cat);                                   // בשקט, בלי Play
+        await install(cat);                                   // מהשרת שלנו, בלי Play
       }
     }
     if (_queue.isEmpty) return 'מעדכן…';
@@ -210,16 +225,18 @@ class StoreController extends ChangeNotifier {
 
   /// מתקין (ישיר דרך מנהל המכשיר, או דרך Google Play). מחזיר הודעה למשתמש.
   Future<String> install(StoreApp a) async {
-    if (a.viaPlay && !(c.deviceOwner && a.directInstall)) {
+    if (a.viaPlay && !a.directInstall) {
       listenProgress();
       final msg = await _openForUpdate(a.package);
-      return msg.isEmpty ? 'נפתח ב-Google Play — לוחצים "התקנה"' : msg;
+      return msg.isEmpty ? 'נפתח ב-Google Play — לוחצים "${installed(a) ? 'עדכון' : 'התקנה'}"' : msg;
     }
     try {
       final r = await c.native.installStoreApp(a.raw);
       if (r == 'not_owner') return await request(a);
       final msg = switch (r) {
+        'started' when !c.deviceOwner => 'מוריד את ${a.label}… בסיום יופיע אישור התקנה — לוחצים "${installed(a) ? 'עדכון' : 'התקנה'}"',
         'started' => 'מתקין את ${a.label}…',
+        'permission' => 'צריך לאשר פעם אחת: "התקנת אפליקציות לא מוכרות" ל-FilterPhone — ואז לחזור וללחוץ שוב',
         'up_to_date' => '${a.label} כבר מעודכנת',
         'busy' => 'התקנה אחרת בתהליך — נסו שוב בעוד רגע',
         _ => 'לא ניתן להתקין את ${a.label} כרגע',
@@ -264,14 +281,14 @@ class StoreController extends ChangeNotifier {
 }
 
 /// כפתור הפעולה המתאים למצב האפליקציה (התקנה / עדכון / פתיחה / בקשה / מתקין…).
-enum _ActionKind { install, update, open, request, installing }
+/// עדכון זמין מוצג ליד "פתיחה" (canUpdate), לא במקומה.
+enum _ActionKind { install, open, request, installing }
 
 _ActionKind _actionFor(StoreController s, StoreApp a) {
   if (s.installing(a)) return _ActionKind.installing;
-  final canInstall = (s.c.deviceOwner && a.directInstall) || a.viaPlay;
-  if (s.hasUpdate(a) && (s.c.deviceOwner && a.directInstall)) return _ActionKind.update;
   if (s.installed(a)) return _ActionKind.open;
-  return canInstall ? _ActionKind.install : _ActionKind.request;
+  // קובץ שמתארח אצלנו — מתקינים ישר (במנהל מכשיר בשקט, אחרת עם אישור ההתקנה של אנדרואיד), לא "בקשה מהמנהל"
+  return (a.directInstall || a.viaPlay) ? _ActionKind.install : _ActionKind.request;
 }
 
 const _allTab = 'הכול';
@@ -281,8 +298,11 @@ enum _StoreView { apps, updates }
 /// חנות FilterPhone — כמו חנות אמיתית: טאבים של קטגוריות מוצמדים למעלה, אריחים מרובעים,
 /// ולחיצה פותחת עמוד אפליקציה. בטאב "הכול" — שורה לכל קטגוריה.
 class AppStoreScreen extends StatefulWidget {
-  const AppStoreScreen({super.key, required this.controller});
+  const AppStoreScreen({super.key, required this.controller, this.visible = true});
   final AppController controller;
+
+  /// הלשונית מוצגת עכשיו — רק אז בודקים עדכונים (לא בכל פתיחה של FilterPhone).
+  final bool visible;
 
   @override
   State<AppStoreScreen> createState() => _AppStoreScreenState();
@@ -303,6 +323,14 @@ class _AppStoreScreenState extends State<AppStoreScreen> {
     c.addListener(_onController);
     _store.addListener(_onStore);
     _store.loadStates();
+    if (widget.visible) unawaited(_store.checkUpdates());
+  }
+
+  @override
+  void didUpdateWidget(AppStoreScreen old) {
+    super.didUpdateWidget(old);
+    // נכנסו לחנות: ליד כל אפליקציה מ-Play יופיע "עדכון" כשיש (השרת שומר את התשובות של Play ל-12 שעות)
+    if (widget.visible && !old.visible) unawaited(_store.checkUpdates());
   }
 
   @override
@@ -804,17 +832,28 @@ class _UpdateCard extends StatelessWidget {
     final version = <InlineSpan>[
       const TextSpan(text: 'מותקנת: '),
       TextSpan(text: app.versionName.isEmpty ? '—' : app.versionName, style: const TextStyle(fontWeight: FontWeight.w600)),
-      ...switch (info?.status) {
-        'update' when pv.isNotEmpty => [const TextSpan(text: ' ← '), TextSpan(text: pv, style: accent)],
-        'update' => [TextSpan(text: ' · עדכון זמין', style: accent)],
-        'maybe' => [
-            TextSpan(
-                text: info!.playUpdated != null ? '\nעודכנה ב-Google Play ${_ago(info.playUpdated!)}' : ' · עדכון זמין',
-                style: accent.copyWith(fontWeight: FontWeight.w600)),
+      ...switch (store.ownUpdate(app)) {
+        // הקובץ מתארח אצלנו — לפי הגרסה שהמנהל העלה, לא לפי Play
+        true => [
+            const TextSpan(text: ' ← '),
+            TextSpan(text: store.catalogApp(app.package)?.versionName.isNotEmpty == true
+                ? store.catalogApp(app.package)!.versionName : 'עדכון זמין', style: accent),
           ],
-        'current' => [const TextSpan(text: ' · מעודכנת')],
-        'unknown' => [const TextSpan(text: ' · לא מ-Google Play')],
-        _ => const <InlineSpan>[],
+        false => [const TextSpan(text: ' · מעודכנת')],
+        null => switch (info?.status) {
+            'update' when pv.isNotEmpty => [const TextSpan(text: ' ← '), TextSpan(text: pv, style: accent)],
+            'update' => [TextSpan(text: ' · עדכון זמין', style: accent)],
+            'maybe' => [
+                TextSpan(
+                    text: info!.playUpdated != null
+                        ? '\nאולי יש עדכון (Play עודכנה ${_ago(info.playUpdated!)})'
+                        : ' · אולי יש עדכון',
+                    style: muted),
+              ],
+            'current' => [const TextSpan(text: ' · מעודכנת')],
+            'unknown' => [const TextSpan(text: ' · לא מ-Google Play')],
+            _ => const <InlineSpan>[],
+          },
       },
     ];
 
@@ -1152,12 +1191,23 @@ class _AppDetailScreenState extends State<AppDetailScreen> {
           const SizedBox(height: 6),
           Text(p == null ? 'מתקין…' : 'מתקין… ${(p * 100).round()}%', textAlign: TextAlign.center),
         ]);
-      case _ActionKind.update:
-        return FilledButton.icon(
-            onPressed: () => _run(s.install(a)), icon: const Icon(Icons.system_update_rounded), label: const Text('עדכון'));
       case _ActionKind.open:
-        return FilledButton.icon(
-            onPressed: () => s.open(a), icon: const Icon(Icons.open_in_new_rounded), label: const Text('פתיחה'));
+        final open = s.canUpdate(a)
+            ? OutlinedButton.icon(
+                onPressed: () => s.open(a), icon: const Icon(Icons.open_in_new_rounded), label: const Text('פתיחה'))
+            : FilledButton.icon(
+                onPressed: () => s.open(a), icon: const Icon(Icons.open_in_new_rounded), label: const Text('פתיחה'));
+        if (!s.canUpdate(a)) return open;
+        return Row(children: [
+          Expanded(child: open),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton.icon(
+                onPressed: () => _run(s.install(a)),
+                icon: const Icon(Icons.system_update_rounded),
+                label: const Text('עדכון')),
+          ),
+        ]);
       case _ActionKind.install:
         return FilledButton.icon(
             onPressed: () => _run(s.install(a)),

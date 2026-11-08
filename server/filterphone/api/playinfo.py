@@ -31,6 +31,7 @@ log = logging.getLogger("filterphone.playinfo")
 CACHE_TTL_S = 12 * 3600
 MISSING_TTL_S = 7 * 86400          # לא ב-Play — לא בודקים שוב שבוע
 MAYBE_SLACK_S = 36 * 3600          # Play משחרר עדכונים בהדרגה — "עודכן ב-Play" לא אומר שכבר זמין לכולם
+ROLLOUT_GRACE_S = 4 * 86400        # גרסה חדשה ב-Play — "עדכון" רק אחרי כמה ימים (עד אז "maybe")
 MAX_PACKAGES = 250
 _PKG = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$")
 _DS5 = re.compile(r"AF_initDataCallback\(\{key: 'ds:5'.*?data:(.*?), sideChannel: \{\}\}\);", re.S)
@@ -121,16 +122,27 @@ def version_key(v: str) -> tuple[int, ...]:
     return tuple(int(x) for x in re.findall(r"\d+", v or "")[:6])
 
 
-def status(installed: dict, info: dict | None) -> str:
-    """installed: {version_name, updated_ms}. info: מה ש-Play אמר (או None = לא נבדק / לא ב-Play)."""
+def status(installed: dict, info: dict | None, now: float | None = None) -> str:
+    """installed: {version_name, updated_ms}. info: מה ש-Play אמר (או None = לא נבדק / לא ב-Play).
+    "update" רק כשבטוח שיש כפתור "עדכון" ב-Play: גרסה גבוהה יותר, שלא שוחררה ממש עכשיו (שחרור הדרגתי —
+    Play מציג את הגרסה החדשה לפני שהיא זמינה לכל המכשירים), ושהטלפון לא התעדכן כבר אחרי השחרור (אם כן —
+    הגרסה הזו לא הוצעה לו: מכשיר / אנדרואיד שונים). אחרת "maybe" — מוצג, לא נספר כעדכון."""
     if not info:
         return "unknown"
     pv, iv = version_key(info.get("version") or ""), version_key(installed.get("version_name") or "")
-    if pv and iv:
-        return "update" if pv > iv else "current"
     updated, local_ms = info.get("updated"), installed.get("updated_ms")
-    if updated and isinstance(local_ms, int | float) and local_ms > 0:
-        return "maybe" if updated > local_ms / 1000 + MAYBE_SLACK_S else "current"
+    local_s = local_ms / 1000 if isinstance(local_ms, int | float) and local_ms > 0 else None
+    if pv and iv:
+        if pv <= iv:
+            return "current"
+        now = time.time() if now is None else now
+        if updated and now - updated < ROLLOUT_GRACE_S:
+            return "maybe"
+        if updated and local_s and local_s > updated + 3600:
+            return "maybe"
+        return "update"
+    if updated and local_s:
+        return "maybe" if updated > local_s + MAYBE_SLACK_S else "current"
     return "unknown"
 
 

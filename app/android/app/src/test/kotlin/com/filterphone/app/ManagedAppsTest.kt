@@ -47,6 +47,27 @@ class ManagedAppsTest {
     }
 
     @Test
+    fun autoUpdatesOnlyInstalledStoreAppsWithANewerHostedVersion() {
+        val list = JSONArray(listOf(
+            app(pkg = "com.filtertube.app", required = false, versionCode = 20),   // מותקנת בגרסה 19 → עדכון
+            app(pkg = "same.version", required = false, versionCode = 5),          // מעודכנת
+            app(pkg = "not.installed", required = false, versionCode = 3),         // לא מתקינים חדשות
+            app(pkg = "via.play", required = false, url = "", versionCode = 9),    // לא מתארחת אצלנו
+        ))
+        val installed = mapOf("com.filtertube.app" to 19L, "same.version" to 5L, "via.play" to 1L)
+        assertEquals(listOf("com.filtertube.app"), ManagedApps.updatable(list) { installed[it] }.map { it.pkg })
+        assertTrue(ManagedApps.updatable(null) { 1L }.isEmpty())
+    }
+
+    @Test
+    fun storeUpdateNoticeKeyIsStablePerVersion() {
+        val a = ManagedApps.App("b.pkg", "https://x/a.apk", sha, 3)
+        val b = ManagedApps.App("a.pkg", "https://x/b.apk", sha, 7)
+        assertEquals("a.pkg:7,b.pkg:3", StoreUpdateNotify.key(listOf(a, b)))
+        assertEquals(StoreUpdateNotify.key(listOf(a, b)), StoreUpdateNotify.key(listOf(b, a)))
+    }
+
+    @Test
     fun installsWhenMissingOrOlder() {
         val a = ManagedApps.installable(JSONArray(listOf(app(versionCode = 12)))).single()
         assertTrue(ManagedApps.needsInstall(a, installedVersion = null))
