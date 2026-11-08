@@ -139,6 +139,7 @@ class GuardService : AccessibilityService() {
     private val avatarMask by lazy { AvatarMask(this) }   // תמונות פרופיל בוואטסאפ — לבן במקומן (WaAvatars)
     private var maskScrollUntil = 0L                // רשימה בוואטסאפ בגלילה — עד אז פסים במקום עיגולים
     private var lastMaskAt = 0L
+    private var maskOnUpdatesTab = false            // טאב "עדכונים"/"סטטוס" פתוח — לא מכסים שם תמונות פרופיל
     private val waImageIds = LinkedHashSet<String>()  // לכיול מרחוק: מזהי רכיבי תמונה ריבועיים שנראו
     private var waImageIdsSavedAt = 0L
     private var playGraceUntil = 0L                 // חזרנו מ-Play לפילטר פון — לא "לחסום" את Play בדרך
@@ -1195,6 +1196,7 @@ class GuardService : AccessibilityService() {
             var chats: AccessibilityNodeInfo? = null
             var channelsTop = -1                       // רק ערוצים: איפה מתחיל אזור הערוצים
             var statusSeen = false
+            var scroller: AccessibilityNodeInfo? = null    // הרשימה הנגללת (סטטוסים+ערוצים) — כדי לגלול חזרה למעלה
             val b = android.graphics.Rect()
             var visited = 0
             while (queue.isNotEmpty() && visited < MAX_NODES) {
@@ -1216,6 +1218,8 @@ class GuardService : AccessibilityService() {
                 if (channelsOnly && n.isVisibleToUser) {
                     if (channelsTop < 0 && WaScreens.isChannelsHeader(text)) { n.getBoundsInScreen(b); channelsTop = b.top }
                     if (!statusSeen && WaScreens.isStatusHeader(text)) statusSeen = true
+                    // הרשימה הנגללת הגדולה (לא פס קטן): כדי לגלול חזרה למעלה אם גללו לתוך הערוצים
+                    if (scroller == null && n.isScrollable) { n.getBoundsInScreen(b); if (b.height() > 400) scroller = n }
                 }
                 for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
             }
@@ -1236,7 +1240,10 @@ class GuardService : AccessibilityService() {
                     channelMask.hide()
                     return false
                 }
-                channelMask.hide()                     // גללו לתוך רשימת הערוצים — יוצאים לצ'אטים
+                // גללו לתוך רשימת הערוצים (הסטטוסים נשארו למעלה): לא מעיפים לצ'אטים — גוללים חזרה למעלה
+                // לסטטוסים. ברגע שכותרת "ערוצים" או הסטטוסים חוזרות לתצוגה — הכיסוי/ההסתרה משתלטים.
+                channelMask.hide()
+                if (scroller?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) == true) return true
             }
             val clicked = chats?.let { clickSelfOrParent(it) } ?: false
             if (block(pkg, if (clicked) NO_GLOBAL_ACTION else GLOBAL_ACTION_BACK,
@@ -1274,6 +1281,18 @@ class GuardService : AccessibilityService() {
     private fun maskWanted(pkg: String?, policy: GuardPolicy.Policy): Boolean =
         policy.waProfile?.let { it.mask && pkg != null && pkg in it.packages } == true
 
+    /** הרכיב הוא הטאב הנבחר "עדכונים"/"סטטוס" (על עצמו או על כיתוב שבתוכו) — כמו ב-guardWaUpdates. */
+    private fun isUpdatesTabNode(n: AccessibilityNodeInfo): Boolean {
+        if (WaScreens.isUpdatesLabel(n.text?.toString(), n.contentDescription?.toString())) return true
+        for (i in 0 until n.childCount) {
+            val ch = runCatching { n.getChild(i) }.getOrNull() ?: continue
+            val hit = WaScreens.isUpdatesLabel(ch.text?.toString(), ch.contentDescription?.toString())
+            recycle(ch)
+            if (hit) return true
+        }
+        return false
+    }
+
     private val maskUpdate = Runnable { safely("avatar-mask") { updateAvatarMask() } }
 
     private fun scheduleMask(delayMs: Long) {
@@ -1305,6 +1324,12 @@ class GuardService : AccessibilityService() {
             return
         }
         val nodes = collectMaskNodes(root)
+        if (maskOnUpdatesTab) {
+            // מסך הסטטוסים: הסטטוסים מותרים (אחרת כל הטאב חסום) — לא מכסים כאן תמונות פרופיל, כי הכיסוי
+            // מכסה כמעט את כל הסטטוס. תוכן הסטטוס עצמו מסונן ברשת (מסנן התמונות) כשפותחים אותו.
+            avatarMask.hide()
+            return
+        }
         val dm = resources.displayMetrics
         val d = dm.density
         val screen = (dm.widthPixels.toLong() * dm.heightPixels).coerceAtLeast(1)
@@ -1323,11 +1348,13 @@ class GuardService : AccessibilityService() {
         queue.add(root to null)
         val r = Rect()
         var visited = 0
+        maskOnUpdatesTab = false
         try {
             while (queue.isNotEmpty() && visited < MAX_MASK_NODES) {
                 val (n, list) = queue.removeFirst()
                 seen += n
                 visited++
+                if (n.isSelected && !maskOnUpdatesTab && isUpdatesTabNode(n)) maskOnUpdatesTab = true
                 if (!n.isVisibleToUser) continue
                 n.getBoundsInScreen(r)
                 val box = WaAvatars.Box(r.left, r.top, r.right, r.bottom)
