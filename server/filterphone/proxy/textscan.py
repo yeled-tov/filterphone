@@ -1,4 +1,5 @@
-"""סינון טקסט בדפים (בכל רמות הגלישה): דף שהטקסט שלו מלא בתוכן לא ראוי — נחסם כולו.
+"""סינון טקסט בדפים (בכל רמות הגלישה): דף שהטקסט שלו מלא בתוכן לא ראוי — נחסם כולו; בדף רגיל (כתבה)
+המילים הבעייתיות מכוסות ב-XXXX, וקטע שיש בו כמה כאלה — מכוסה כולו (כמו כתוביות מסוננות בסרט).
 
 משתמש באותה רשימת מונחים של חסימת מילות החיפוש (resolve_keywords → serp.TermMatcher), כך שאין רשימה
 נוספת לתחזק. דף נחסם רק כשיש בו *הרבה* התאמות וגם צפיפות גבוהה — מילה אחת בכתבה לא חוסמת דף. טהור.
@@ -48,3 +49,56 @@ _URL_SEP = re.compile(r"[/_\-+.?=&#%:;,]+")
 def url_words(path: str) -> str:
     """הנתיב והשאילתה של כתובת כטקסט (מפוענח, מפרידים → רווחים), כדי לבדוק מילים חסומות בכתובת."""
     return _URL_SEP.sub(" ", unquote_plus(path or "")[:2000])
+
+
+# ---------------------------------------------------------------- כיסוי ב-XXXX
+
+_SEGMENTS = re.compile(r"(<!--.*?-->|<[^>]*>)", re.S)
+_SKIP_OPEN = re.compile(r"<(script|style|noscript|svg|template|textarea|code|pre)\b", re.I)
+PASSAGE_HITS = 2                # קטע (צומת טקסט) עם לפחות כך הרבה התאמות...
+PASSAGE_MAX_WORDS = 120         # ...וקצר מזה — מכוסה כולו. ארוך יותר — רק המילים עצמן
+_LETTER = re.compile(r"[^\s\d.,:;!?()\[\]\"'״׳\-–—/]")
+
+
+def _cover(text: str) -> str:
+    """כל אות → X (רווחים, ספרות וסימני פיסוק נשארים — כדי שהעימוד לא יישבר)."""
+    return _LETTER.sub("X", text)
+
+
+def mask_html(page: str, terms) -> tuple[str, int]:
+    """מכסה בדף HTML את המילים הבעייתיות ב-XXXX; קטע קצר עם כמה מהן — מכוסה כולו. רק בטקסט שמוצג (לא
+    בתגיות, סקריפטים, עיצוב או שדות קלט). → (הדף אחרי הכיסוי, כמה התאמות כוסו). [terms] — serp.TermMatcher."""
+    out: list[str] = []
+    hits = 0
+    skip: str | None = None
+    for seg in _SEGMENTS.split(page):
+        if not seg:
+            continue
+        if seg[0] == "<":
+            if skip is None:
+                m = _SKIP_OPEN.match(seg)
+                if m and not seg.endswith("/>"):
+                    skip = m.group(1).lower()
+            elif re.match(rf"</{skip}\s*>", seg, re.I):
+                skip = None
+            out.append(seg)
+            continue
+        if skip is not None or not seg.strip():
+            out.append(seg)
+            continue
+        spans = terms.spans(seg)
+        if not spans:
+            out.append(seg)
+            continue
+        hits += len(spans)
+        if len(spans) >= PASSAGE_HITS and len(seg.split()) <= PASSAGE_MAX_WORDS:
+            out.append(_cover(seg))
+            continue
+        buf, last = [], 0
+        for a, b in spans:
+            buf.append(seg[last:a])
+            buf.append(_cover(seg[a:b]))
+            last = b
+        buf.append(seg[last:])
+        out.append("".join(buf))
+    return "".join(out), hits

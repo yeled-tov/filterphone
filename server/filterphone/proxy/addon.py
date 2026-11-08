@@ -742,9 +742,15 @@ class FilterPhone:
     # ------------------------------------------------------------ טקסט
 
     def _filter_text(self, flow: http.HTTPFlow) -> bool:
-        """דף שהטקסט שלו מלא בתוכן לא ראוי → דף חסימה (עם "שליחה לבדיקה"). True = נחסם."""
+        """דף שהטקסט שלו מלא בתוכן לא ראוי → דף חסימה (עם "שליחה לבדיקה"). True = נחסם.
+        אחרת — המילים הבעייתיות בדף מכוסות ב-XXXX (וקטע עם כמה מהן — כולו)."""
         body = bounded_content(flow.response, MAX_INLINE_BYTES)
-        if not body or not textscan.is_bad(textscan.visible_text(body), self.terms):
+        if not body:
+            return False
+        visible = textscan.visible_text(body)
+        if not textscan.is_bad(visible, self.terms):
+            if self.terms.matches(visible):
+                self._mask_text(flow, body)
             return False
         host = flow.request.pretty_host
         flow.response = http.Response.make(403, block_page(host, "בדף יש הרבה תוכן לא ראוי.", review=True,
@@ -753,6 +759,29 @@ class FilterPhone:
         flow.metadata["fp_handled"] = True
         self._spawn(self._record(_client_ip(flow), host, "block", "text", "page", _short_path(flow.request)))
         return True
+
+    def _mask_text(self, flow: http.HTTPFlow, body: bytes) -> None:
+        resp = flow.response
+        charset = "utf-8"
+        for part in resp.headers.get("content-type", "").split(";")[1:]:
+            k, _, v = part.strip().partition("=")
+            if k.lower() == "charset" and v:
+                charset = v.strip('"')
+        try:
+            text = body.decode(charset, "surrogateescape")
+            new, hits = textscan.mask_html(text, self.terms)
+            if not hits:
+                return
+            data = new.encode(charset, "surrogateescape")
+        except (LookupError, UnicodeError) as e:
+            log.debug("text mask skipped: %s", e)
+            return
+        for h in ("etag", "last-modified", "content-md5", "digest"):
+            resp.headers.pop(h, None)
+        resp.content = data
+        self.m_search.inc(kind="masked")
+        self._spawn(self._record(_client_ip(flow), flow.request.pretty_host, "text", f"text masked ×{hits}",
+                                 "page", _short_path(flow.request)))
 
     # ------------------------------------------------------------ תמונות
 

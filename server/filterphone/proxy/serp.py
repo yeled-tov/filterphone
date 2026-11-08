@@ -101,6 +101,16 @@ class TermMatcher:
                 latin.append(rf"(?<!\w){re.escape(t)}(?!\w)")
         parts = latin + other + [re.escape(t) for t in cjk]
         self._re = re.compile("|".join(parts)) if parts else None
+        self._parts = parts
+        self._re_ci: re.Pattern | None = None       # לכיסוי בטקסט המקורי (בלי נרמול) — נבנה בפעם הראשונה
+
+    def spans(self, text: str) -> list[tuple[int, int]]:
+        """מיקומי ההתאמות בטקסט המקורי (לכיסוי ב-XXXX). בלי נרמול — כדי שהמיקומים יתאימו."""
+        if not self._parts:
+            return []
+        if self._re_ci is None:
+            self._re_ci = re.compile("|".join(self._parts), re.IGNORECASE)
+        return [m.span() for m in self._re_ci.finditer(text)]
 
     def matches(self, text: str) -> bool:
         return bool(self._re and self._re.search(norm(text)))

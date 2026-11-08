@@ -160,3 +160,20 @@ def test_api_hosts_skip_web_level():
     assert is_api_host("www.gstatic.com") and is_api_host("clients4.google.com")
     assert not is_api_host("www.google.com") and not is_api_host("play.google.com")
     assert not is_api_host("evilgoogleapis.com") and not is_api_host("") and not is_api_host(None)
+
+
+def test_problematic_words_in_an_article_are_covered_with_x():
+    """כתבה רגילה עם מילה בעייתית: המילה מכוסה ב-XXXX; קטע קצר עם כמה מהן — מכוסה כולו. לא נוגעים
+    בתגיות, בסקריפטים ובשדות קלט."""
+    from filterphone.proxy import serp, textscan
+    t = serp.TermMatcher(["badword", "רעמילה"])
+    page = ("<html><head><title>כתבה</title><script>var badword=1</script></head><body>"
+            "<p class='badword'>שורה ראשונה עם Badword באמצע ועוד הרבה מילים רגילות "
+            + "מילה " * 130 + "</p>"
+            "<p>קטע קצר: badword ושוב והרעמילה כאן</p><textarea>badword</textarea></body></html>")
+    out, hits = textscan.mask_html(page, t)
+    assert hits == 3                                             # לא בסקריפט, לא בתגית ולא בשדה קלט
+    assert "var badword=1" in out and "class='badword'" in out and "<textarea>badword</textarea>" in out
+    assert "עם XXXXXXX באמצע" in out                             # רק המילה (קטע ארוך)
+    assert "<p>XXX XXX: XXXXXXX XXXX XXXXXXXX XXX</p>" in out    # קטע קצר עם שתיים — כולו
+    assert textscan.mask_html("<p>שלום</p>", t) == ("<p>שלום</p>", 0)

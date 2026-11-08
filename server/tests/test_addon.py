@@ -305,3 +305,18 @@ async def test_whatsapp_servers_are_counted_for_the_profile_photo_diagnosis(fp):
     await drain(fp)
     seen = await fp.redis.hgetall(A.WA_SNI_KEY)
     assert seen == {f"{IP}|pps.whatsapp.net|blocked": "1", f"{IP}|mmg.whatsapp.net|open": "2"}
+
+
+async def test_article_with_a_problematic_word_is_masked_not_blocked(fp):
+    """כתבה עם מילה בעייתית אחת — לא נחסמת (זה רק לדף מלא בתוכן כזה), אבל המילה מכוסה ב-XXXX."""
+    from filterphone.proxy import serp
+    fp.terms = serp.TermMatcher(["badword"])
+    page = ("<html><body><p>" + "חדשות היום ועוד מילים רגילות " * 60 + "</p><p>וכאן badword אחת</p>"
+            "<p>" + "סוף הכתבה " * 40 + "</p></body></html>").encode()
+    f = mkflow("https://news.example/article/1", {"sec-fetch-dest": "document"}, "text/html; charset=utf-8", page)
+    f.response.headers["etag"] = '"v1"'
+    fp.responseheaders(f)
+    await fp.response(f)
+    assert f.response.status_code == 200
+    body = f.response.text
+    assert "badword" not in body and "וכאן XXXXXXX אחת" in body and "etag" not in f.response.headers
