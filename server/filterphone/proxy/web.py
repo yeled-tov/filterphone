@@ -6,6 +6,7 @@ Redis (ה-API כותב, הפרוקסי קורא):
     fp:web:changes  (stream)  כל שינוי בפסק דין — הפרוקסי קורא כל שנייה (לא טוען את כל הטבלה שוב).
     fp:web:check    (list)    אתרים שמחכים לבוט (הפרוקסי דוחף, ה-API שולף).
     fp:web:reviews  (stream)  "שליחה לבדיקה" מדף החסימה: כתובת המכשיר, אתר, קישור, הערה.
+    fp:web:assist   (stream)  "בדיקה דרכי": הדף שהלקוח קיבל אחרי שעבר אימות "אני לא רובוט" (הבוט מנתח).
 רשימת האתרים למבוגרים — קובץ שה-API מוריד (HaGeZi NSFW, דומיין בשורה), נטען כשהוא משתנה.
 """
 from __future__ import annotations
@@ -26,6 +27,10 @@ VERDICT_KEY = "fp:web:verdict"
 CHANGES_KEY = "fp:web:changes"
 CHECK_KEY = "fp:web:check"
 REVIEWS_KEY = "fp:web:reviews"
+# "בדיקה דרכי": דף שלקוח הגיע אליו אחרי שעבר אימות "אני לא רובוט" בעצמו — הבוט מנתח אותו
+ASSIST_KEY = "fp:web:assist"
+ASSIST_WINDOW_S = 120.0     # כמה זמן האתר פתוח ללקוח במצב בדיקה (בלי שום תמונה)
+ASSIST_PER_HOUR = 6         # לכל מכשיר — כדי שזה לא יהפוך לדרך לגלוש באתרים חסומים
 # החלטות על תמונות מסוימות (דיווחים מכרום): "<מפתח>" — לכולם, "<ip>|<מפתח>" — למכשיר אחד → block / pass
 IMAGE_OVERRIDE_KEY = "fp:img:override"
 

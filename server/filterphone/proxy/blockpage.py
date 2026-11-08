@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 
 REVIEW_PATH = "/__filterphone__/review"
+ASSIST_PATH = "/__filterphone__/assist"     # "בדיקה דרכי" — אתר עם אימות "אני לא רובוט"
 
 _STYLE = """
 :root{--bg:#f4f6f8;--card:#fff;--text:#18212b;--muted:#66727f;--accent:#1f6feb;--line:#e2e7ec}
@@ -43,17 +44,25 @@ def _page(title: str, body: str, head: str = "") -> bytes:
 
 
 def block_page(host: str, reason: str = "החסימה הופעלה עבור המכשיר הזה.", review: bool = False,
-               url: str = "") -> bytes:
-    """[review] — עם כפתור "שליחה לבדיקה" (אתר שלא ברמת הגלישה של הלקוח)."""
+               url: str = "", assist: bool = False) -> bytes:
+    """[review] — עם כפתור "שליחה לבדיקה" (אתר שלא ברמת הגלישה של הלקוח).
+    [assist] — האתר חוסם בדיקה אוטומטית ("אני לא רובוט"): כפתור "בדיקה דרכי"."""
     form = ""
+    if assist:
+        form = (f'<form method="post" action="{ASSIST_PATH}">'
+                f'<input type="hidden" name="url" value="{html.escape(url or "https://" + host + "/")}">'
+                '<button type="submit">אני לא רובוט — לבדוק את האתר דרכי</button></form>'
+                '<p style="font-size:14px">האתר לא נותן לבוט שלנו להיכנס. לחיצה פותחת אותו לשתי דקות במצב '
+                'בדיקה — <b>בלי שום תמונה</b>. אם מופיע "אני לא רובוט" — מאשרים, והדף נבדק אוטומטית. '
+                'אם הוא נקי — הוא ייפתח כרגיל.</p>')
     if review:
-        form = (f'<form method="post" action="{REVIEW_PATH}">'
+        form += (f'<form method="post" action="{REVIEW_PATH}">'
                 f'<input type="hidden" name="url" value="{html.escape(url or "https://" + host + "/")}">'
                 '<textarea name="note" maxlength="300" placeholder="למה צריך את האתר? (לא חובה)"></textarea>'
                 '<button type="submit">שליחה לבדיקה</button></form>'
                 '<p style="font-size:14px">האתר ייבדק (אוטומטית, ואם צריך — גם על ידי אדם). אם הוא מתאים '
                 'לסינון שבחרת — הוא ייפתח.</p>')
-    else:
+    if not form:
         form = "<p>לפתיחה — פנו למנהל FilterPhone.</p>"
     body = (_SHIELD.format(mark=_X) + "<h1>האתר חסום</h1>"
             f"<p><code>{html.escape(host)}</code></p><p>{html.escape(reason)}</p>{form}"

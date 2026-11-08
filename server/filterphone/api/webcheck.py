@@ -4,8 +4,14 @@
   1. בודק ברשימות: הקטלוג (רשתות, וידאו, חדשות…) ורשימת האתרים למבוגרים (HaGeZi NSFW).
   2. מוריד את דף הבית (כמו טלפון — אותה בקשה, דרך המורד המוגן מ-SSRF) ומנתח: מילים מפורשות, סימני
      חדשות / חנות / וידאו.
-  3. בודק במנוע הסינון עד web_check_images תמונות מהדף (ברמה המחמירה): תמונה של אישה = "יש תמונות".
-  4. פסק דין: adult / news / video / shopping_general / shopping_clean / images / auto_clean / error.
+  3. "כמו אדם": נכנס גם לשניים-שלושה דפים פנימיים (קטגוריה / כתבה) — לא רק דף הבית.
+  4. בודק במנוע הסינון עד web_check_images תמונות מכל הדפים (ברמה המחמירה) וסופר כמה מהן של נשים.
+  5. פסק דין: adult / news / video / shopping_general / shopping_clean / images (הרבה תמונות של נשים —
+     חנויות אופנה, שיין, אליאקספרס) / auto_images (נקי, רק כמה תמונות — אתר חרדי למשל: האתר נפתח והתמונות
+     נחסמות) / auto_clean / challenge (אימות "אני לא רובוט") / error.
+
+אתר עם אימות "אני לא רובוט": בדף החסימה יש "בדיקה דרכי" — הפרוקסי פותח את האתר ללקוח לשתי דקות בלי שום
+תמונה; הלקוח עובר את האימות בעצמו, והדף שהגיע אליו נשלח לכאן (fp:web:assist) ונבדק כמו כל דף.
 פסק הדין נשמר במסד (web_sites) וב-Redis — והפרוקסי פותח או חוסם לפי הרמה של כל לקוח.
 
 בקשת בדיקה מדף החסימה מגיעה מהפרוקסי (stream). אם הבוט (בבדיקה חוזרת) מוצא שהאתר מתאים לרמה של
@@ -30,6 +36,7 @@ from urllib.parse import urljoin, urlsplit
 from .. import protocol, websites
 from ..proxy import serp
 from ..proxy.web import (
+    ASSIST_KEY,
     CHANGES_KEY,
     CHECK_KEY,
     IMAGE_OVERRIDE_KEY,
@@ -41,7 +48,7 @@ from ..proxy.web import (
 from ..websites import WebPolicy, group_of, lookup, no_auto, norm_host
 from . import db
 from .catalog import OPTIONS, DeviceSettings, clean_host, compile_settings, resolve_keywords
-from .fetch import FetchError, fetch, fetch_image, fetch_page
+from .fetch import ChallengeError, FetchError, fetch, fetch_image, fetch_page
 
 log = logging.getLogger("filterphone.webcheck")
 
@@ -52,6 +59,19 @@ LIST_REFRESH_S = 86400
 MAX_IMAGE_BYTES = 4_000_000
 MIN_IMAGE_BYTES = 2_500         # אייקונים ופיקסלים — לא נבדקים
 THIN_TEXT = 200                 # דף שכמעט אין בו טקסט (נבנה ב-JavaScript) — מסומן לבדיקה של המנהל
+INNER_PAGES = 2                 # דפים פנימיים שהבוט נכנס אליהם (כמו אדם שמסתובב באתר)
+HEAVY_WOMEN = 4                 # "בעייתי": לפחות כך הרבה תמונות של נשים...
+HEAVY_RATIO = 0.3               # ...וגם לפחות שליש מהתמונות שנבדקו (או HEAVY_ALWAYS בכל מקרה)
+HEAVY_ALWAYS = 8
+ASSIST_LAST_KEY = "fp:web:assist:last"
+_CHALLENGE_HTML = re.compile(
+    r"<title>\s*(?:just a moment|attention required|checking your browser|one moment,? please|verify you are human|"
+    r"security check|access denied|ddos-guard|human verification|are you a robot|רק רגע)|/cdn-cgi/challenge-platform|"
+    r"cf-chl-|cf_chl_opt|_incapsula_resource|captcha-delivery\.com|px-captcha|sgcaptcha|"
+    r"challenges\.cloudflare\.com/turnstile", re.IGNORECASE)
+_SKIP_LINK = re.compile(r"(?:login|signin|sign-in|register|account|cart|checkout|basket|wishlist|privacy|terms|"
+                        r"cookie|policy|contact|about|careers|accessibility|נגישות|תקנון|wp-admin|feed|rss|"
+                        r"\.(?:pdf|jpe?g|png|gif|webp|zip|xml|json)$)", re.IGNORECASE)
 
 # קטגוריות בקטלוג → פסק דין (אתר שמופיע באחת מהן לא נפתח ברמות הרשימה הלבנה)
 _CATEGORY_VERDICT = {"social": "social", "video": "video", "ai": "ai", "games": "games", "dating": "dating",
@@ -84,6 +104,7 @@ class PageInfo:
     articles: int = 0
     published: int = 0
     videos: int = 0
+    links: list[str] = field(default_factory=list)     # קישורים פנימיים (לדפים שהבוט נכנס אליהם)
 
 
 class _PageParser(HTMLParser):
@@ -138,6 +159,12 @@ class _PageParser(HTMLParser):
                         or (a.get("srcset") or a.get("data-srcset") or "").split(",")[0], a)
         elif tag == "source" and (a.get("srcset") or "") and "image" in (a.get("type") or "image"):
             self._image(a["srcset"].split(",")[0])
+        elif tag == "a" and len(self.info.links) < 120:
+            href = (a.get("href") or "").strip()
+            if href and not href.startswith(("#", "javascript:", "mailto:", "tel:", "whatsapp:")):
+                url = urljoin(self.base, href).split("#", 1)[0]
+                if url.startswith(("http://", "https://")) and url not in self.info.links:
+                    self.info.links.append(url)
         elif tag == "article":
             self.info.articles += 1
         elif tag == "video":
@@ -177,8 +204,45 @@ def parse_page(html_text: str, base_url: str, max_images: int = 12) -> PageInfo:
     return p.result()
 
 
-def classify_page(info: PageInfo, terms: serp.TermMatcher, women: int, adult_images: int) -> tuple[str, dict]:
-    """פסק הדין לפי מה שנמצא בדף (טהור). → (פסק דין, סימנים)."""
+def is_challenge_page(html_text: str, info: PageInfo) -> bool:
+    """דף "אני לא רובוט" במקום האתר (טהור): סימן של שירות הגנה + כמעט בלי תוכן. reCAPTCHA בטופס יצירת קשר
+    באתר רגיל — לא נחשב (יש בו תוכן)."""
+    return len(info.text) < THIN_TEXT * 3 and bool(_CHALLENGE_HTML.search(html_text[:200_000]))
+
+
+def pick_inner_links(links: list[str], host: str, n: int = INNER_PAGES) -> list[str]:
+    """הדפים הפנימיים שהבוט ייכנס אליהם (טהור): באותו אתר, לא דף הבית / התחברות / סל / מדיניות, ומאזורים
+    שונים באתר (חלק ראשון שונה בנתיב) — כמו אדם שמסתובב: קטגוריה אחת, כתבה אחת."""
+    out: list[str] = []
+    seen_sections: set[str] = set()
+    for url in links:
+        u = urlsplit(url)
+        if norm_host(u.hostname or "") != norm_host(host):
+            continue
+        path = u.path or "/"
+        parts = [x for x in path.split("/") if x]
+        if not parts or len(parts) > 4 or _SKIP_LINK.search(path):
+            continue
+        section = parts[0].lower()
+        if section in seen_sections:
+            continue
+        seen_sections.add(section)
+        out.append(url)
+        if len(out) >= n:
+            break
+    return out
+
+
+def heavy_women(women: int, checked: int) -> bool:
+    """"בעייתי" (טהור): הרבה תמונות של נשים — לא תמונה או שתיים באתר נקי."""
+    return women >= HEAVY_ALWAYS or (women >= HEAVY_WOMEN and women >= checked * HEAVY_RATIO)
+
+
+def classify_page(info: PageInfo, terms: serp.TermMatcher, women: int, adult_images: int,
+                  checked: int = 0) -> tuple[str, dict]:
+    """פסק הדין לפי מה שנמצא בדף (טהור). → (פסק דין, סימנים).
+    [checked] — כמה תמונות נבדקו בפועל (ליחס). כמה תמונות של נשים באתר נקי (אתר חרדי) → auto_images: האתר
+    נפתח והתמונות נחסמות. הרבה (חנויות אופנה, שיין, אליאקספרס) → images / shopping_general."""
     head = " ".join((info.title, info.description, info.site_name))
     explicit_head = terms.matches(head)
     explicit_hits = terms.count(info.text)
@@ -195,10 +259,14 @@ def classify_page(info: PageInfo, terms: serp.TermMatcher, women: int, adult_ima
         return "news", signals
     if info.videos >= 3:
         return "video", signals
+    heavy = heavy_women(women, max(checked, women))
+    signals["women_heavy"] = heavy
     if cart:
-        return ("shopping_general" if women else "shopping_clean"), signals
-    if women:
+        return ("shopping_general" if heavy else "auto_images" if women else "shopping_clean"), signals
+    if heavy:
         return "images", signals
+    if women:
+        return "auto_images", signals
     return "auto_clean", signals
 
 
@@ -216,6 +284,7 @@ class WebDesk:
         self.adult: frozenset[str] = frozenset()
         self._adult_mtime = -1.0
         self._busy = threading.BoundedSemaphore(max(1, self.cfg.web_check_workers))
+        self._assist_lock = threading.Lock()        # ingest_assists רץ ברקע — פעם אחת בכל רגע
 
     # ------------------------------------------------------------ פסקי דין
 
@@ -316,9 +385,13 @@ class WebDesk:
             return known, {"source": "list"}
         try:
             html_text, final = self._fetch_page(f"https://{host}/")
+        except ChallengeError as e:
+            return "challenge", {"error": str(e)[:200]}
         except FetchError as e:
             try:
                 html_text, final = self._fetch_page(f"http://{host}/")
+            except ChallengeError as e2:
+                return "challenge", {"error": str(e2)[:200]}
             except FetchError:
                 return "error", {"error": str(e)[:200]}
         final_host = norm_host(urlsplit(final).hostname or host)
@@ -327,13 +400,42 @@ class WebDesk:
             known = self._known_verdict(final_host) or group_of(final_host)
             if known:
                 return known, {"redirect": final_host}
-        info = parse_page(html_text, final, self.cfg.web_check_images)
+        verdict, signals = self.analyze_html(host, html_text, final, inner=True)
+        if final_host != host:
+            signals["redirect"] = final_host
+        return verdict, signals
+
+    def analyze_html(self, host: str, html_text: str, url: str, inner: bool = False) -> tuple[str, dict]:
+        """הניתוח עצמו — מדף שהבוט הוריד, או מדף שהגיע דרך לקוח שעבר אימות (assist). [inner] — להיכנס גם
+        לדפים פנימיים (כמו אדם), ולהוסיף את הטקסט והתמונות שלהם."""
+        max_images = self.cfg.web_check_images
+        info = parse_page(html_text, url, max_images)
+        if is_challenge_page(html_text, info):
+            return "challenge", {"title": info.title[:120]}
+        pages = [url]
+        if inner:
+            for link in pick_inner_links(info.links, host):
+                try:
+                    sub_html, sub_final = self._fetch_page(link)
+                except FetchError:
+                    continue
+                sub = parse_page(sub_html, sub_final, max_images)
+                if is_challenge_page(sub_html, sub):
+                    continue
+                pages.append(sub_final)
+                info.text = (info.text + " " + sub.text)[:400_000]
+                info.articles += sub.articles
+                info.published += sub.published
+                info.videos += sub.videos
+                for im in sub.images:
+                    if im not in info.images and len(info.images) < max_images:
+                        info.images.append(im)
         women = adult_images = checked = unverifiable = 0
         flagged: list[str] = []
 
-        def one(url: str) -> tuple[str, str]:
+        def one(img_url: str) -> tuple[str, str]:
             try:
-                data, _ = self._fetch_image(url)
+                data, _ = self._fetch_image(img_url)
             except FetchError:
                 return "skip", ""
             if len(data) < MIN_IMAGE_BYTES:
@@ -362,15 +464,56 @@ class WebDesk:
                     unverifiable += kind == "unverifiable"
                     if reason:
                         flagged.append(reason)
-        verdict, signals = classify_page(info, self.terms, women, adult_images)
+        verdict, signals = classify_page(info, self.terms, women, adult_images, checked)
         signals["images_checked"] = checked
+        signals["pages"] = len(pages)
         if unverifiable:
             signals["images_unverifiable"] = unverifiable
         if flagged:
             signals["image_reasons"] = flagged[:12]       # לבודק האנושי: למה המנוע סימן (בלי התמונות)
-        if final_host != host:
-            signals["redirect"] = final_host
+        if verdict == "auto_clean" and info.images and not checked:
+            # יש תמונות ולא הצלחנו לבדוק אף אחת (אתר מוגן) — נפתח, אבל התמונות עוברות סינון: "מעט תמונות"
+            verdict = "auto_images"
+            signals["images_unchecked"] = len(info.images)
         return verdict, signals
+
+    # ------------------------------------------------------------ בדיקה בעזרת הלקוח (אימות "אני לא רובוט")
+
+    def ingest_assists(self) -> int:
+        """דפים שהגיעו דרך לקוח שעבר את האימות בעצמו (הפרוקסי, fp:web:assist) → ניתוח ופסק דין.
+        רק לאתר שהבוט לא הצליח לבדוק (challenge / error / אין פסק דין) — לא דורס החלטה של אדם או של הבוט."""
+        if not self._assist_lock.acquire(blocking=False):
+            return 0
+        try:
+            return self._ingest_assists()
+        finally:
+            self._assist_lock.release()
+
+    def _ingest_assists(self) -> int:
+        last = self.redis.get(ASSIST_LAST_KEY) or "0-0"
+        res = self.redis.xread({ASSIST_KEY: last}, count=20)
+        n = 0
+        for _stream, entries in res or ():
+            for entry_id, f in entries:
+                self.redis.set(ASSIST_LAST_KEY, entry_id)
+                try:
+                    host = norm_host(clean_host(f.get("host", "")) or "")
+                    if not host or no_auto(host) or group_of(host):
+                        continue
+                    cur = self.site(host)
+                    if cur and cur.get("verdict") not in ("challenge", "error"):
+                        continue
+                    with self._busy:
+                        verdict, detail = self.analyze_html(host, f.get("html", ""), f.get("url") or f"https://{host}/")
+                    if verdict in ("challenge", "error"):
+                        continue
+                    detail["assist"] = True
+                    log.info("site check (assist) %s → %s", host, verdict)
+                    self.set_verdict(host, verdict, "auto", "assist", detail)
+                    n += 1
+                except Exception as e:
+                    log.warning("assisted site check failed: %s", e)
+        return n
 
     def check(self, host: str, force: bool = False) -> dict:
         """בודק ושומר (אם צריך). → השורה של האתר."""
@@ -388,6 +531,10 @@ class WebDesk:
             return cur                                   # החלטה של אדם — הבוט לא דורס
         with self._busy:
             verdict, detail = self.analyze(h)
+        if verdict == "challenge" and cur and cur.get("updated_by") == "assist" \
+                and cur.get("verdict") not in ("challenge", "error"):
+            # הבוט שוב נתקע באימות — פסק הדין שהגיע דרך לקוח שעבר אותו נשאר (רק מרעננים את הזמן)
+            return self.set_verdict(h, cur["verdict"], "auto", "assist", cur.get("detail") or {})
         log.info("site check %s → %s", h, verdict)
         return self.set_verdict(h, verdict, "auto", "bot", detail)
 

@@ -204,6 +204,10 @@ GROUPS: tuple[Group, ...] = (
     Group("auto_clean", "אתרים נקיים שהבוט בדק",
           "כל אתר שלא ברשימות נבדק אוטומטית בכניסה הראשונה (טקסט ותמונות). אתר נקי — נפתח לבד. "
           "בלי זה נפתחים רק אתרים שאדם בדק ואישר.", levels=("clean", "shopping")),
+    Group("auto_images", "אתרים נקיים עם מעט תמונות (התמונות נחסמות)",
+          "אתר נקי שיש בו רק כמה תמונות של נשים (למשל אתר חרדי, חנות עם באנר) — האתר נפתח, והתמונות עצמן "
+          "נחסמות בסינון התמונות. אתר עם הרבה תמונות (חנויות אופנה, שיין, אליאקספרס) — לא כאן.",
+          levels=("clean", "shopping")),
     Group("clean", "אתרים שאושרו בבדיקה אנושית", "אתרים שהמנהל בדק ואישר כנקיים — פתוחים מרמת 'נקי'.",
           levels=("clean", "shopping"), extra=False),
     Group("shopping_general", "קניות כלליות",
@@ -221,7 +225,7 @@ assert len(GROUP_BY_ID) == len(GROUPS), "duplicate group id"
 
 # פסקי דין שאינם קבוצה — לעולם לא נפתחים ברמות של רשימה לבנה
 BLOCKED_VERDICTS = {
-    "images": "יש באתר תמונות של נשים",
+    "images": "באתר הרבה תמונות של נשים",
     "news": "אתר חדשות",
     "shopping": "חנות עם תמונות של אנשים",
     "social": "רשת חברתית",
@@ -234,6 +238,7 @@ BLOCKED_VERDICTS = {
     "proxy": "עקיפת סינון",
     "blocked": "נחסם על ידי המנהל",
     "error": "לא הצלחנו לבדוק את האתר",
+    "challenge": "האתר דורש אימות 'אני לא רובוט'",
 }
 VERDICTS = tuple(GROUP_BY_ID) + tuple(BLOCKED_VERDICTS)
 VERDICT_TITLES = {**{g.id: g.title for g in GROUPS}, **BLOCKED_VERDICTS}

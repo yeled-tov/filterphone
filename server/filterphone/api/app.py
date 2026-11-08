@@ -164,6 +164,8 @@ async def _web_worker(desk: WebDesk) -> None:
                 if host:
                     loop.run_in_executor(pool, desk.check_safe, host)
                 await asyncio.to_thread(desk.ingest_reviews)
+                # דפים שהגיעו דרך לקוח שעבר אימות "אני לא רובוט" (הפרוקסי) — בדיקה ברקע
+                loop.run_in_executor(pool, desk.ingest_assists)
             except asyncio.CancelledError:
                 raise
             except Exception as e:

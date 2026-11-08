@@ -5,7 +5,7 @@ import fakeredis
 import pytest
 from helpers import admin_headers, wg_key
 from mitmproxy import http
-from test_addon import IP, mkflow
+from test_addon import IP, jpeg, mkflow
 
 from filterphone import websites as W
 from filterphone.api.fetch import FetchError
@@ -195,7 +195,8 @@ async def test_site_with_wrong_verdict_gets_block_page_with_review(fp):
     f = nav("https://www.fashion.example/sale")
     fp.requestheaders(f)
     body = f.response.text
-    assert "האתר חסום" in body and "יש באתר תמונות של נשים" in body and "נקי לגמרי" in body
+    assert "האתר חסום" in body and "הרבה תמונות של נשים" in body and "נקי לגמרי" in body
+    assert "/__filterphone__/assist" not in body                    # נבדק — אין "בדיקה דרכי"
     assert 'action="/__filterphone__/review"' in body
     # שליחה לבדיקה — נרשם, ולא יוצא לאתר
     r = mkflow("https://www.fashion.example/__filterphone__/review", {"content-type": "application/x-www-form-urlencoded"})
@@ -207,6 +208,50 @@ async def test_site_with_wrong_verdict_gets_block_page_with_review(fp):
     assert "נשלח לבדיקה" in r.response.text
     (_, ev), = await fp.redis.xrange(REVIEWS_KEY)
     assert ev["ip"] == IP and ev["host"] == "fashion.example" and ev["url"].endswith("/sale") and ev["note"] == "צריך"
+
+
+async def test_human_check_through_the_customer(fp):
+    """אתר שהבוט נתקע באימות שלו: בדף החסימה "בדיקה דרכי" → האתר נפתח לשתי דקות בלי שום תמונה, והדף
+    שהלקוח הגיע אליו נשלח לבוט. אתר שכבר נבדק — אין בדיקה דרכי."""
+    from filterphone.proxy.web import ASSIST_KEY
+    fp.web.apply("guarded.example", "challenge")
+    f = nav("https://guarded.example/page")
+    fp.requestheaders(f)
+    assert 'action="/__filterphone__/assist"' in f.response.text and "אני לא רובוט" in f.response.text
+    post = mkflow("https://guarded.example/__filterphone__/assist", {"content-type": "application/x-www-form-urlencoded"})
+    post.request.method = "POST"
+    post.request.text = "url=https%3A%2F%2Fguarded.example%2Fpage"
+    fp.requestheaders(post)
+    await fp.request(post)
+    assert post.response.status_code == 303 and post.response.headers["location"] == "https://guarded.example/page"
+    # עכשיו פתוח (במצב בדיקה)
+    page = nav("https://guarded.example/page")
+    fp.requestheaders(page)
+    assert page.response is None and page.metadata.get("fp_assist")
+    # כל תמונה מדף של האתר — נחסמת בלי בדיקה (גם מ-CDN אחר)
+    img = mkflow("https://cdn.other.example/a.jpg", {"sec-fetch-dest": "image", "referer": "https://guarded.example/page"},
+                 "image/jpeg", jpeg())
+    fp.responseheaders(img)
+    await fp.response(img)
+    assert img.response.content.startswith(b"\x89PNG")                # בלי לשלוח למנוע
+    # הדף שהגיע אחרי האימות → לבוט
+    html_flow = mkflow("https://guarded.example/page", {"sec-fetch-dest": "document"}, "text/html; charset=utf-8",
+                       "<title>שלום</title><p>תוכן</p>".encode())
+    html_flow.metadata["fp_assist"] = True
+    fp.responseheaders(html_flow)
+    await fp.response(html_flow)
+    (_, ev), = await fp.redis.xrange(ASSIST_KEY)
+    assert ev["host"] == "guarded.example" and "תוכן" in ev["html"] and ev["ip"] == IP
+    # אתר שכבר נבדק (חסום מסיבה אחרת) — הבדיקה דרכי לא פותחת אותו
+    fp.web.apply("fashion.example", "images")
+    other = mkflow("https://fashion.example/__filterphone__/assist", {"content-type": "application/x-www-form-urlencoded"})
+    other.request.method = "POST"
+    fp.requestheaders(other)
+    await fp.request(other)
+    assert other.response.status_code == 200 and "כבר נבדק" in other.response.text
+    still = nav("https://fashion.example/")
+    fp.requestheaders(still)
+    assert "האתר חסום" in still.response.text
 
 
 async def test_subresources_of_unknown_hosts_load(fp):
@@ -359,8 +404,11 @@ def test_classify_page_priorities():
     assert classify_page(PageInfo(title="Free porn"), t, 0, 0)[0] == "adult"
     assert classify_page(PageInfo(title="חדשות היום"), t, 0, 0)[0] == "news"
     assert classify_page(PageInfo(text="הוסף לסל"), t, 0, 0)[0] == "shopping_clean"
-    assert classify_page(PageInfo(text="הוסף לסל"), t, 2, 0)[0] == "shopping_general"
-    assert classify_page(PageInfo(text="שלום"), t, 1, 0)[0] == "images"
+    assert classify_page(PageInfo(text="הוסף לסל"), t, 2, 0, 12)[0] == "auto_images"      # חנות עם באנר אחד-שניים
+    assert classify_page(PageInfo(text="הוסף לסל"), t, 6, 0, 12)[0] == "shopping_general"  # אופנה, שיין
+    assert classify_page(PageInfo(text="שלום"), t, 1, 0, 10)[0] == "auto_images"          # אתר חרדי, תמונה או שתיים
+    assert classify_page(PageInfo(text="שלום"), t, 5, 0, 10)[0] == "images"               # הרבה — בעייתי
+    assert classify_page(PageInfo(text="שלום"), t, 8, 0, 40)[0] == "images"
     assert classify_page(PageInfo(text="שלום"), t, 0, 1)[0] == "adult"
     v, sig = classify_page(PageInfo(text="אישורי הגעה לחתונה"), t, 0, 0)
     assert v == "auto_clean" and sig["thin"] is True
@@ -404,7 +452,7 @@ def test_undecodable_images_are_not_counted_as_women(env):
     assert v == "auto_clean" and d["images_checked"] == 1 and d["images_unverifiable"] == 1
     assert d["women_images"] == 0 and d["image_reasons"] == ["unverifiable"]
     v, d = desk.analyze("mixed.example")
-    assert v == "images" and d["women_images"] == 1 and sorted(d["image_reasons"]) == ["female 0.9", "unverifiable"]
+    assert v == "auto_images" and d["women_images"] == 1 and sorted(d["image_reasons"]) == ["female 0.9", "unverifiable"]
 
 
 def test_bot_verdicts_are_saved_and_published(env):
@@ -412,8 +460,8 @@ def test_bot_verdicts_are_saved_and_published(env):
     woman = b"W" * 5000
     desk = desk_for(svc, {
         "rsvp.example": "<title>אישור הגעה</title><p>נשמח לראותכם</p><img src='/a.jpg'>",
-        "fashion.example": "<title>אופנה</title><img src='/w.jpg'>",
-    }, {"https://fashion.example/w.jpg": woman}, women=(woman,))
+        "fashion.example": "<title>אופנה</title>" + "".join(f"<img src='/w{i}.jpg'>" for i in range(5)),
+    }, {f"https://fashion.example/w{i}.jpg": woman for i in range(5)}, women=(woman,))
     assert desk.check("www.rsvp.example")["verdict"] == "auto_clean"
     assert desk.check("fashion.example")["verdict"] == "images"
     assert desk.check("gone.example")["verdict"] == "error"
@@ -425,6 +473,93 @@ def test_bot_verdicts_are_saved_and_published(env):
     desk.set_verdict("fashion.example", "shopping_general", "human", "admin")
     assert desk.check("fashion.example", force=True)["verdict"] == "shopping_general"
     assert desk.sync_redis() == 4
+
+
+def test_haredi_site_with_a_few_women_images_opens_and_fashion_site_does_not(env):
+    """אתר חרדי עם תמונה-שתיים של נשים — נפתח ברמת "נקי" (התמונות עצמן נחסמות בסינון). אתר עם הרבה
+    תמונות של נשים (אופנה) — "בעייתי", חסום."""
+    svc, _ = env
+    woman = b"W" * 5000
+    imgs = "".join(f"<img src='/p{i}.jpg'>" for i in range(10))
+    desk = desk_for(svc, {
+        "haredi-news.example": "<title>קהילה</title><p>שיעורי תורה והודעות הקהילה</p>" + imgs,
+        "shop-fashion.example": "<title>Fashion</title><p>הוספה לסל</p>" + imgs,
+    }, {**{"https://haredi-news.example/p0.jpg": woman},
+        **{f"https://shop-fashion.example/p{i}.jpg": woman for i in range(7)}}, women=(woman,))
+    v, d = desk.analyze("haredi-news.example")
+    assert v == "auto_images" and d["women_images"] == 1 and d["images_checked"] == 10
+    assert web("clean").decide("haredi-news.example", v) == "allow"
+    v, d = desk.analyze("shop-fashion.example")
+    assert v == "shopping_general" and d["women_heavy"] is True
+    assert web("clean").decide("shop-fashion.example", v) == "block"
+    # לקוח מחמיר יכול להוריד את "מעט תמונות" מהרמה שלו
+    assert web("clean", without=["auto_images"]).decide("x.example", "auto_images") == "block"
+
+
+def test_bot_walks_into_inner_pages_like_a_person(env):
+    """דף הבית נקי, אבל בדפי הקטגוריות יש הרבה תמונות של נשים — הבוט נכנס לשניים מהם (לא התחברות / סל)."""
+    from filterphone.api.webcheck import pick_inner_links
+    svc, _ = env
+    woman = b"W" * 5000
+    home = ("<title>חנות</title><p>ברוכים הבאים</p><a href='/login'>כניסה</a><a href='/cart'>סל</a>"
+            "<a href='/women/dresses'>שמלות</a><a href='/women/shoes'>נעליים</a><a href='/sale/1'>מבצע</a>")
+    inner = "".join(f"<img src='/i{i}.jpg'>" for i in range(6))
+
+    class Site(FakeSite):
+        def page(self, url):
+            if url.rstrip("/").endswith("site.example"):
+                return home, url
+            return inner, url
+    site = Site({}, {f"https://site.example/i{i}.jpg": woman for i in range(6)})
+    desk = WebDesk(svc, classify=lambda d: {"action": "block", "reason": "female 0.9"} if d == woman
+                   else {"action": "pass"}, page_fetcher=site.page, image_fetcher=site.image)
+    v, d = desk.analyze("site.example")
+    assert d["pages"] == 3 and d["women_images"] == 6 and v == "images"
+    links = ["https://site.example/login", "https://site.example/women/a", "https://site.example/women/b",
+             "https://other.example/x", "https://site.example/", "https://site.example/torah/1"]
+    assert pick_inner_links(links, "www.site.example") == ["https://site.example/women/a",
+                                                           "https://site.example/torah/1"]
+
+
+def test_human_verification_pages_are_recognized(env):
+    from filterphone.api.fetch import ChallengeError
+    from filterphone.api.webcheck import is_challenge_page
+    svc, _ = env
+    cf = "<html><head><title>Just a moment...</title></head><body><div id=cf-chl-widget></div></body></html>"
+    contact = ("<title>צרו קשר</title><p>" + "מידע על החברה והשירותים שלנו. " * 40 +
+               "</p><div class='g-recaptcha'></div>")
+    assert is_challenge_page(cf, parse_page(cf, "https://x/"))
+    assert not is_challenge_page(contact, parse_page(contact, "https://x/"))     # reCAPTCHA בטופס — לא אימות
+
+    def page(url):
+        if "blocked" in url:
+            raise ChallengeError("האתר דורש אימות אנושי (403)")
+        return cf, url
+    desk = WebDesk(svc, classify=lambda d: {"action": "pass"}, page_fetcher=page,
+                   image_fetcher=lambda u: (b"x" * 5000, "image/jpeg"))
+    assert desk.analyze("blocked.example")[0] == "challenge"
+    assert desk.analyze("cf.example")[0] == "challenge"
+
+
+def test_assisted_page_from_the_customer_gets_a_verdict_that_survives_rechecks(env):
+    """לקוח עבר את האימות בעצמו ("בדיקה דרכי") — הדף שהגיע דרכו נבדק ומקבל פסק דין; בדיקה חוזרת של הבוט
+    שנתקעת שוב באימות לא דורסת אותו."""
+    from filterphone.proxy.web import ASSIST_KEY
+    svc, _ = env
+    cf = "<html><head><title>Just a moment...</title></head><body></body></html>"
+    desk = WebDesk(svc, classify=lambda d: {"action": "pass"}, page_fetcher=lambda u: (cf, u),
+                   image_fetcher=lambda u: (b"x" * 5000, "image/jpeg"))
+    assert desk.check("guarded.example")["verdict"] == "challenge"
+    svc.redis.xadd(ASSIST_KEY, {"ip": "10.8.0.9", "host": "guarded.example", "url": "https://guarded.example/",
+                                "html": "<title>טפסים</title><p>" + "טופס הרשמה לשיעור. " * 30 + "</p>"})
+    svc.redis.xadd(ASSIST_KEY, {"ip": "10.8.0.9", "host": "news-site.example", "url": "https://news-site.example/",
+                                "html": "<title>טפסים</title>"})                  # לא ביקשו בדיקה — לא נוגעים
+    desk.set_verdict("news-site.example", "news", "human", "admin")
+    assert desk.ingest_assists() == 1
+    site = desk.site("guarded.example")
+    assert site["verdict"] == "auto_clean" and site["updated_by"] == "assist" and site["detail"]["assist"] is True
+    assert desk.site("news-site.example")["verdict"] == "news"
+    assert desk.check("guarded.example", force=True)["verdict"] == "auto_clean"   # שוב אימות — נשאר
 
 
 def enroll_clean(svc, client, n=1):
@@ -459,8 +594,9 @@ def test_review_requests_auto_approve_or_wait_for_admin(env):
     svc, client = env
     did, ip, h = enroll_clean(svc, client)
     woman = b"W" * 5000
-    desk = desk_for(svc, {"clean.example": "<title>טופס</title>", "pics.example": "<img src='/w.jpg'>"},
-                    {"https://pics.example/w.jpg": woman}, women=(woman,))
+    desk = desk_for(svc, {"clean.example": "<title>טופס</title>",
+                          "pics.example": "".join(f"<img src='/w{i}.jpg'>" for i in range(5))},   # הרבה — בעייתי
+                    {f"https://pics.example/w{i}.jpg": woman for i in range(5)}, women=(woman,))
     client.app.state.web = desk
     for host in ("clean.example", "pics.example", "pics.example"):
         svc.redis.xadd("fp:web:reviews", {"ip": ip, "host": host, "url": f"https://{host}/", "note": "", "ts": 1})
@@ -509,8 +645,9 @@ def test_chrome_reports_check_by_the_customers_level(env):
     svc, client = env
     did, ip, h = enroll_clean(svc, client)
     woman = b"W" * 5000
-    desk = desk_for(svc, {"clean.example": "<title>טופס</title>", "pics.example": "<img src='/w.jpg'>"},
-                    {"https://pics.example/w.jpg": woman}, women=(woman,))
+    desk = desk_for(svc, {"clean.example": "<title>טופס</title>",
+                          "pics.example": "".join(f"<img src='/w{i}.jpg'>" for i in range(5))},
+                    {f"https://pics.example/w{i}.jpg": woman for i in range(5)}, women=(woman,))
     client.app.state.web = desk
     dev = svc.device_row(did)
 

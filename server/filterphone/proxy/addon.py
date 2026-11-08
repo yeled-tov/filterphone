@@ -18,7 +18,7 @@ import json
 import logging
 import re
 import time
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import redis.asyncio as aioredis
 from mitmproxy import http, tls
@@ -29,14 +29,22 @@ from ..api.catalog import GLOBAL_TERMS_KEY, resolve_keywords
 from ..engine.imaging import PLACEHOLDER_PNG
 from ..engine.policy import Action, on_failure
 from ..settings import get_settings
-from ..websites import BLOCKED_VERDICTS, WEB_LEVELS
+from ..websites import BLOCKED_VERDICTS, WEB_LEVELS, norm_host
 from . import inline, rewrite, serp, textscan
-from .blockpage import REVIEW_PATH, block_page, checking_page, review_sent_page
+from .blockpage import ASSIST_PATH, REVIEW_PATH, block_page, checking_page, review_sent_page
 from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
 from .hosts import HostPolicy, hello_fingerprint, is_api_host, is_chromium_hello, load_lists
 from .policy import DevicePolicy, PolicyTable
-from .web import CHECK_WAIT_S, IMAGE_OVERRIDE_KEY, WebState, image_key_of
+from .web import (
+    ASSIST_KEY,
+    ASSIST_PER_HOUR,
+    ASSIST_WINDOW_S,
+    CHECK_WAIT_S,
+    IMAGE_OVERRIDE_KEY,
+    WebState,
+    image_key_of,
+)
 
 log = logging.getLogger("filterphone.proxy")
 
@@ -156,6 +164,10 @@ class FilterPhone:
         self._distrust_fp: dict[tuple[str, str], set] = {}
         self._trusted_fp: dict[str, set] = {}
         self._distrust_logged: dict[tuple[str, str], float] = {}
+        # "בדיקה דרכי" (אתר עם אימות "אני לא רובוט"): (מכשיר, אתר) → עד מתי פתוח במצב בדיקה, בלי תמונות
+        self._assist: dict[tuple[str, str], float] = {}
+        self._assist_sent: dict[tuple[str, str], int] = {}
+        self._assist_starts: dict[str, list[float]] = {}
         self._background: set[asyncio.Task] = set()
         self._host_events: dict[tuple[str, str], float] = {}
         # החלטות על תמונות מסוימות (דיווחים מכרום — המנהל / בדיקה לפי הרמה): מפתח → block / pass
@@ -412,6 +424,9 @@ class FilterPhone:
             # "שליחה לבדיקה" מדף החסימה — נענה כאן (request), לא יוצא לאתר
             flow.metadata["fp_review"] = True
             return
+        if req.path.startswith(ASSIST_PATH):
+            flow.metadata["fp_assist_req"] = True          # "בדיקה דרכי" — נענה כאן (request)
+            return
         if _dst_ip(flow) == self.cfg.dns_sinkhole_ip:
             # חסום ב-DNS (AdGuard — רשימות גלובליות או של המכשיר): דף חסימה במקום "האתר לא זמין"
             reason = "תוכן למבוגרים — חסום תמיד." if self.web.is_adult(host) else "האתר חסום ברשת של FilterPhone."
@@ -481,6 +496,9 @@ class FilterPhone:
             return True
         if not pol.web.active:
             return False
+        if self._assisting(ip, host):
+            flow.metadata["fp_assist"] = True               # "בדיקה דרכי": פתוח, בלי תמונות; הדף נשלח לבוט
+            return False
         verdict = self.web.verdict(host)
         decision = pol.web.decide(host, verdict)
         if decision == "check" and self.web.waited(host) > CHECK_WAIT_S:
@@ -497,7 +515,8 @@ class FilterPhone:
         reason = f"האתר לא נכלל ברמת הגלישה שלך ({level})."
         if verdict in BLOCKED_VERDICTS:
             reason = f"{BLOCKED_VERDICTS[verdict]} — לא נכלל ברמת הגלישה שלך ({level})."
-        flow.response = self._page(block_page(host, reason, review=True, url=req.pretty_url))
+        flow.response = self._page(block_page(host, reason, review=True, url=req.pretty_url,
+                                              assist=verdict in ("challenge", "error")))
         self._record_host_block(ip, host, req)
         return True
 
@@ -512,6 +531,9 @@ class FilterPhone:
         return http.Response.make(204, b"", {"cache-control": "no-store", "x-filterphone": "search"})
 
     async def request(self, flow: http.HTTPFlow) -> None:
+        if flow.metadata.get("fp_assist_req"):
+            self._start_assist(flow)
+            return
         if not flow.metadata.get("fp_review"):
             return
         req = flow.request
@@ -529,6 +551,87 @@ class FilterPhone:
         else:
             flow.response = self._page(block_page(host, "שליחה לבדיקה — מדף החסימה בלבד."))
         flow.metadata["fp_handled"] = True
+
+    # ------------------------------------------------------------ "בדיקה דרכי" (אימות "אני לא רובוט")
+
+    def _assisting(self, ip: str, host: str | None) -> bool:
+        if not self._assist or not host:
+            return False
+        key = (ip, norm_host(host))
+        until = self._assist.get(key)
+        if until is None:
+            return False
+        if until < time.time():
+            self._assist.pop(key, None)
+            self._assist_sent.pop(key, None)
+            return False
+        return True
+
+    def _assist_image(self, flow: http.HTTPFlow, ip: str) -> bool:
+        """תמונה בזמן "בדיקה דרכי" — מהאתר עצמו, או מדף שלו (Referer): נחסמת תמיד, בלי לבדוק."""
+        if not self._assist:
+            return False
+        ref = urlsplit(flow.request.headers.get("referer", "")).hostname
+        return self._assisting(ip, flow.request.pretty_host) or self._assisting(ip, ref)
+
+    def _start_assist(self, flow: http.HTTPFlow) -> None:
+        """הלקוח לחץ "בדיקה דרכי": רק לאתר שהבוט לא הצליח לבדוק (אימות / שגיאה), ובמגבלה לשעה. האתר נפתח
+        לשתי דקות בלי שום תמונה; הדף שהלקוח מגיע אליו (אחרי האימות) נשלח לבוט."""
+        req = flow.request
+        ip = _client_ip(flow)
+        host = req.pretty_host
+        flow.metadata["fp_handled"] = True
+        if req.method != "POST":
+            flow.response = self._page(block_page(host, "בדיקה דרכי — מדף החסימה בלבד."))
+            return
+        if self.web.verdict(host) not in ("challenge", "error"):
+            flow.response = self._page(block_page(host, "האתר כבר נבדק — אין צורך בבדיקה דרכך.", review=True))
+            return
+        now = time.time()
+        starts = [t for t in self._assist_starts.get(ip, []) if now - t < 3600]
+        if len(starts) >= ASSIST_PER_HOUR:
+            flow.response = self._page(block_page(host, "יותר מדי בדיקות בשעה האחרונה. נסו שוב מאוחר יותר.",
+                                                  review=True))
+            return
+        if len(self._assist) > 5000:
+            self._assist.clear()
+            self._assist_sent.clear()
+        if len(self._assist_starts) > 5000:
+            self._assist_starts.clear()
+        self._assist_starts[ip] = starts + [now]
+        self._assist[(ip, norm_host(host))] = now + ASSIST_WINDOW_S
+        form = parse_qs(req.get_text(strict=False) or "")
+        url = (form.get("url") or [""])[0]
+        if norm_host(urlsplit(url).hostname or "") != norm_host(host):
+            url = f"https://{host}/"
+        log.warning("assist window %s %s", ip, norm_host(host))     # לאבחון (warning — כדי שיגיע ליומן)
+        flow.response = http.Response.make(303, b"", {"location": url, "cache-control": "no-store",
+                                                      "x-filterphone": "assist"})
+
+    async def _send_assist(self, flow: http.HTTPFlow) -> None:
+        """הדף שהלקוח קיבל (אחרי שעבר את האימות) → לבוט. עד 3 דפים לכל פתיחה."""
+        ip, host = _client_ip(flow), norm_host(flow.request.pretty_host)
+        key = (ip, host)
+        if self._assist_sent.get(key, 0) >= 3:
+            return
+        body = bounded_content(flow.response, MAX_INLINE_BYTES)
+        if not body:
+            return
+        self._assist_sent[key] = self._assist_sent.get(key, 0) + 1
+        charset = "utf-8"
+        for part in flow.response.headers.get("content-type", "").split(";")[1:]:
+            k, _, v = part.strip().partition("=")
+            if k.lower() == "charset" and v:
+                charset = v.strip('"')
+        try:
+            text = body.decode(charset, "replace")
+        except LookupError:
+            text = body.decode("utf-8", "replace")
+        try:
+            await self.redis.xadd(ASSIST_KEY, {"ip": ip, "host": host, "url": flow.request.pretty_url[:1000],
+                                               "html": text[:400_000]}, maxlen=500, approximate=True)
+        except Exception as e:
+            log.warning("assisted page not sent: %s", e)
 
     async def _filter_serp(self, flow: http.HTTPFlow) -> None:
         """דף תוצאות של Google / Bing: מוחקים תוצאות לאתרים שחסומים ללקוח."""
@@ -581,6 +684,10 @@ class FilterPhone:
         length = resp.headers.get("content-length", "")
         size = int(length) if length.isdigit() else None
         if _is_image(flow):
+            if self._assist_image(flow, ip):
+                flow.metadata["fp_kind"] = "image"
+                flow.metadata["fp_assist_img"] = True
+                return
             if pol.level <= 0 and pol.images != "block":
                 resp.stream = True
                 return
@@ -618,6 +725,8 @@ class FilterPhone:
         kind = flow.metadata.get("fp_kind")
         if kind is None or flow.metadata.get("fp_handled") or flow.response.stream:
             return
+        if flow.metadata.get("fp_assist") and flow.response.status_code == 200 and _ctype(flow.response) == "text/html":
+            await self._send_assist(flow)
         if flow.metadata.get("fp_text") and self._filter_text(flow):
             return
         if kind == "image":
@@ -670,6 +779,9 @@ class FilterPhone:
         return action, reason, out, ct
 
     async def _filter_image(self, flow: http.HTTPFlow) -> None:
+        if flow.metadata.get("fp_assist_img"):
+            self._replace(flow.response, PLACEHOLDER_PNG, "image/png", "block")      # "בדיקה דרכי" — בלי תמונות
+            return
         ip = _client_ip(flow)
         pol = self.policies.get(ip)
         host = flow.request.pretty_host

@@ -1986,7 +1986,7 @@ async function viewSupportThread(id) {
     box, el("div", { class: "composer" }, text, send));
 }
 
-const WEB_TONE = { auto_clean: "ok", clean: "ok", torah: "ok", tools: "ok", shopping_clean: "ok", essential: "ok",
+const WEB_TONE = { auto_clean: "ok", auto_images: "ok", challenge: "warn", clean: "ok", torah: "ok", tools: "ok", shopping_clean: "ok", essential: "ok",
   payments: "ok", accounts: "ok", search: "ok", images: "warn", news: "warn", shopping: "warn", shopping_general: "warn",
   news_haredi: "warn", news_general: "warn", sport: "warn", error: "", adult: "bad", social: "bad", video: "bad",
   gambling: "bad", dating: "bad", games: "bad", ai: "bad", proxy: "bad", blocked: "bad" };

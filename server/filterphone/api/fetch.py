@@ -25,6 +25,25 @@ class FetchError(Exception):
     pass
 
 
+class ChallengeError(FetchError):
+    """האתר מציג אימות "אני לא רובוט" (Cloudflare, DataDome, Akamai...) במקום הדף — בוט לא יעבור אותו."""
+
+
+# כותרות של שירותי הגנה מבוטים בתשובת חסימה (403 / 429 / 503)
+_CHALLENGE_HEADERS = (("cf-mitigated", ""), ("server", "cloudflare"), ("server", "ddos-guard"), ("x-datadome", ""),
+                      ("server", "datadome"), ("x-sucuri-id", ""), ("server", "akamaighost"), ("x-iinfo", ""))
+
+
+def _is_challenge(resp) -> bool:
+    if resp.status not in (403, 429, 503):
+        return False
+    for name, value in _CHALLENGE_HEADERS:
+        got = (resp.getheader(name) or "").lower()
+        if got and (not value or value in got):
+            return True
+    return False
+
+
 def _public_ip(host: str, port: int) -> str:
     """מפענח את השם ומחזיר כתובת ציבורית אחת. כל כתובת לא-ציבורית בתשובה = סירוב."""
     try:
@@ -82,8 +101,15 @@ def _open(url: str, timeout: float, accept: str = ACCEPT):
     cls = _PinnedHTTPSConnection if u.scheme == "https" else _PinnedHTTPConnection
     conn = cls(ip, u.hostname, port, timeout)
     path = urllib.parse.urlunsplit(("", "", u.path or "/", u.query, ""))
-    conn.request("GET", path, headers={"User-Agent": UA, "Accept": accept, "Accept-Encoding": "identity",
-                                       "Accept-Language": "he-IL,he;q=0.9,en;q=0.8"})
+    headers = {"User-Agent": UA, "Accept": accept, "Accept-Encoding": "identity",
+               "Accept-Language": "he-IL,he;q=0.9,en;q=0.8"}
+    if accept == ACCEPT_PAGE:
+        # כמו כרום בטלפון שנכנס לאתר — אתרים רבים חוסמים בקשה "חשופה" של בוט
+        headers.update({"Upgrade-Insecure-Requests": "1", "Sec-Fetch-Dest": "document", "Sec-Fetch-Mode": "navigate",
+                        "Sec-Fetch-Site": "none", "Sec-Fetch-User": "?1", "Sec-CH-UA-Mobile": "?1",
+                        "Sec-CH-UA-Platform": '"Android"',
+                        "Sec-CH-UA": '"Google Chrome";v="141", "Chromium";v="141", "Not.A/Brand";v="24"'})
+    conn.request("GET", path, headers=headers)
     return conn, conn.getresponse()
 
 
@@ -128,6 +154,8 @@ def fetch(url: str, max_bytes: int, timeout: float, total_s: float, accept: str,
                 url = urllib.parse.urljoin(url, resp.getheader("location"))
                 continue
             if resp.status != 200:
+                if _is_challenge(resp):
+                    raise ChallengeError(f"האתר דורש אימות אנושי ({resp.status})")
                 raise FetchError(f"האתר החזיר {resp.status}")
             length = resp.getheader("content-length")
             if not truncate and length and length.isdigit() and int(length) > max_bytes:
