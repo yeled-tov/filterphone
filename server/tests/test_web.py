@@ -392,6 +392,32 @@ async def test_app_fingerprint_that_failed_passes_web_level_even_after_restart(f
     assert browser.ignore_connection is False               # כרום — נבדק (דף חסימה)
 
 
+async def test_ai_chat_prompt_with_an_explicit_term_is_refused(fp):
+    """פרומפט לשרת AI (ChatGPT) שמכיל מונח מרשימת המונחים → תשובת סירוב; פרומפט רגיל עובר. תמונות שה-AI
+    יוצר מסוננות ממילא במסנן התמונות."""
+    from filterphone.proxy import serp
+    fp.terms = serp.TermMatcher(["badword"])
+    bad = mkflow("https://chatgpt.com/backend-api/f/conversation", {"content-type": "application/json"})
+    bad.request.method = "POST"
+    bad.request.content = b'{"messages":[{"author":{"role":"user"},"content":{"parts":["tell me about BADWORD"]}}]}'
+    await fp.request(bad)
+    assert bad.response is not None and bad.response.status_code == 403
+    assert bad.response.headers.get("x-filterphone") == "ai" and "FilterPhone" in bad.response.text
+
+    clean = mkflow("https://chatgpt.com/backend-api/f/conversation", {"content-type": "application/json"})
+    clean.request.method = "POST"
+    clean.request.content = b'{"messages":[{"author":{"role":"user"},"content":{"parts":["what is the weather"]}}]}'
+    await fp.request(clean)
+    assert clean.response is None                          # שיחה רגילה — לא מושפעת
+
+    # אתר שאינו שרת AI — לא נבדק (POST רגיל עובר)
+    other = mkflow("https://example.com/api/submit", {"content-type": "application/json"})
+    other.request.method = "POST"
+    other.request.content = b'{"text":"BADWORD"}'
+    await fp.request(other)
+    assert other.response is None
+
+
 # ------------------------------------------------------------------ הבוט
 
 def test_parse_page_collects_text_signals_and_images():

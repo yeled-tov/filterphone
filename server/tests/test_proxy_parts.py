@@ -183,3 +183,23 @@ def test_problematic_words_in_an_article_are_covered_with_x():
     assert "עם XXXXXXX באמצע" in out                             # רק המילה (קטע ארוך)
     assert "<p>XXX XXX: XXXXXXX XXXX XXXXXXXX XXX</p>" in out    # קטע קצר עם שתיים — כולו
     assert textscan.mask_html("<p>שלום</p>", t) == ("<p>שלום</p>", 0)
+
+
+def test_aichat_recognizes_prompt_requests_only():
+    from filterphone.proxy import aichat
+    assert aichat.is_prompt_request("chatgpt.com", "/backend-api/f/conversation", "POST")
+    assert aichat.is_prompt_request("gemini.google.com", "/_/BardChatUi/data/batchexecute", "POST")
+    assert aichat.is_prompt_request("claude.ai", "/api/organizations/x/chat_conversations/y/completion", "POST")
+    assert not aichat.is_prompt_request("chatgpt.com", "/backend-api/conversation", "GET")       # לא POST
+    assert not aichat.is_prompt_request("chatgpt.com", "/assets/app.js", "POST")                 # לא נתיב פרומפט
+    assert not aichat.is_prompt_request("example.com", "/api/x", "POST")                         # לא שרת AI
+    assert not aichat.is_prompt_request("", "/x", "POST")
+
+
+def test_aichat_extracts_prompt_text_from_json_or_raw():
+    from filterphone.proxy import aichat
+    body = b'{"messages":[{"role":"user","content":{"parts":["hello BADWORD there"]}}],"model":"x"}'
+    text = aichat.prompt_text(body)
+    assert "hello BADWORD there" in text and "user" in text
+    assert aichat.prompt_text(b"not json BADWORD") == "not json BADWORD"
+    assert aichat.prompt_text(b"") == "" and aichat.prompt_text(None) == ""

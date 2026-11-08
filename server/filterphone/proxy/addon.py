@@ -30,7 +30,7 @@ from ..engine.imaging import PLACEHOLDER_PNG
 from ..engine.policy import Action, on_failure
 from ..settings import get_settings
 from ..websites import BLOCKED_VERDICTS, WEB_LEVELS, norm_host
-from . import inline, rewrite, serp, textscan
+from . import aichat, inline, rewrite, serp, textscan
 from .blockpage import ASSIST_PATH, REVIEW_PATH, block_page, checking_page, review_sent_page
 from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
@@ -64,6 +64,7 @@ EVENTS_KEY = "fp:events"
 METRICS_KEY = "fp:metrics:proxy"
 METRICS_EVERY_S = 15
 HOST_EVENT_EVERY_S = 60             # חסימת אתר נרשמת פעם בדקה לכל (מכשיר, אתר) — לא על כל בקשה
+AI_BLOCK_MSG = "FilterPhone חסם את התוכן הזה — הבקשה כוללת תוכן שאינו לפי הסינון, ולכן לא נענית."
 PLACEHOLDER_HEADERS_DROP = ("etag", "last-modified", "content-md5", "content-range",
                             "accept-ranges", "content-encoding", "digest")
 MAX_SERP_BYTES = 6_000_000
@@ -535,6 +536,8 @@ class FilterPhone:
             self._start_assist(flow)
             return
         if not flow.metadata.get("fp_review"):
+            if not flow.metadata.get("fp_handled"):
+                self._ai_gate(flow)                 # צ'אט AI: פרומפט מפורש → סירוב
             return
         req = flow.request
         ip = _client_ip(flow)
@@ -551,6 +554,30 @@ class FilterPhone:
         else:
             flow.response = self._page(block_page(host, "שליחה לבדיקה — מדף החסימה בלבד."))
         flow.metadata["fp_handled"] = True
+
+    def _ai_gate(self, flow: http.HTTPFlow) -> None:
+        """בקשת פרומפט לשרת AI (ChatGPT/Gemini...) שמכילה מונח מפורש מרשימת המונחים — תשובת סירוב במקום
+        לשלוח אותה. שיחה רגילה לא מושפעת (רק מונחים מהרשימה נתפסים). תמונות שה-AI יוצר מסוננות ממילא."""
+        req = flow.request
+        ip = _client_ip(flow)
+        pol = self.policies.get(ip)
+        if not pol.filtering or not aichat.is_prompt_request(req.pretty_host, req.path, req.method):
+            return
+        try:
+            text = aichat.prompt_text(req.get_content(strict=False))
+        except Exception as e:
+            log.debug("ai prompt read failed: %s", e)
+            return
+        if not text or not self.terms.matches(text):
+            return
+        body = json.dumps({"error": {"message": AI_BLOCK_MSG, "type": "filterphone_blocked",
+                                     "code": "content_policy_violation"}}, ensure_ascii=False).encode()
+        flow.response = http.Response.make(
+            403, body, {"content-type": "application/json; charset=utf-8", "cache-control": "no-store",
+                        "x-filterphone": "ai"})
+        flow.metadata["fp_handled"] = True
+        self.m_search.inc(kind="ai")
+        self._spawn(self._record(ip, req.pretty_host, "block", "ai prompt", "ai", _short_path(req)))
 
     # ------------------------------------------------------------ "בדיקה דרכי" (אימות "אני לא רובוט")
 
