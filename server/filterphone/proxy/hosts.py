@@ -50,15 +50,32 @@ def is_chromium_hello(hello) -> bool:
         return False
 
 
-def hello_fingerprint(hello) -> tuple:
+def hello_fingerprint(hello) -> str:
     """טביעת אצבע של ClientHello (סוגי ההרחבות בלי GREASE, ממוינים, + ALPN): כרום ו-Cronet של אפליקציות
-    גוגל שניהם "Chromium", אבל שונים בהרחבות. בלי מידע — טאפל ריק."""
+    גוגל שניהם "Chromium", אבל שונים בהרחבות. מחרוזת יציבה (נשמרת ב-Redis ושורדת הפעלה מחדש).
+    בלי מידע — מחרוזת ריקה."""
     try:
-        exts = tuple(sorted(e[0] for e in (getattr(hello, "extensions", None) or ()) if not is_grease(e[0])))
-        alpn = tuple(getattr(hello, "alpn_protocols", None) or ())
-        return exts + (-1,) + tuple(a if isinstance(a, int) else hash(a) for a in alpn)
+        exts = sorted(e[0] for e in (getattr(hello, "extensions", None) or ()) if not is_grease(e[0]))
+        if not exts:
+            return ""
+        alpn = [a.decode("ascii", "replace") if isinstance(a, bytes | bytearray) else str(a)
+                for a in (getattr(hello, "alpn_protocols", None) or ())]
+        return ",".join(map(str, exts)) + "|" + ",".join(alpn)
     except Exception:
-        return ()
+        return ""
+
+
+# שרתי API / תשתית של אפליקציות — אף אחד לא "גולש" אליהם בדפדפן. רמת הגלישה (דף חסימה לכרום) לא חלה
+# עליהם: Cronet של אפליקציות גוגל (המיקרופון במקלדת → speechs3proto2-pa.googleapis.com, Play, מפות)
+# נראה כמו כרום, ויירוט שלהם רק שובר את האפליקציה בכל פעם מחדש.
+_API_HOST = re.compile(r"(?:^|\.)(?:googleapis\.com|googlevideo\.com|gvt[123]\.com|gstatic\.com|"
+                       r"firebaseio\.com|crashlytics\.com|app-measurement\.com|whatsapp\.net|"
+                       r"android\.clients\.google\.com|mtalk\.google\.com|clients\d*\.google\.com)$")
+
+
+def is_api_host(host: str | None) -> bool:
+    """שרת API של אפליקציות (לא אתר שגולשים אליו) — רמת הגלישה לא מיירטת אותו."""
+    return bool(host) and bool(_API_HOST.search(host.lower().rstrip(".")))
 
 
 def _glob(p: str) -> str:

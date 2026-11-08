@@ -149,4 +149,14 @@ def test_hello_fingerprint_ignores_grease_and_order():
     cronet = SimpleNamespace(extensions=[(0x2A2A, b""), (43, b""), (16, b"")], alpn_protocols=[b"h2"])
     assert hello_fingerprint(chrome) == hello_fingerprint(chrome2)      # סדר + GREASE לא משנים
     assert hello_fingerprint(chrome) != hello_fingerprint(cronet)       # כרום ≠ Cronet (בלי ECH)
-    assert hello_fingerprint(object()) == (-1,)
+    assert hello_fingerprint(object()) == ""
+    assert hello_fingerprint(chrome) == "16,43,65037|h2"                # יציב — נשמר ב-Redis בין הפעלות
+
+
+def test_api_hosts_skip_web_level():
+    from filterphone.proxy.hosts import is_api_host
+    assert is_api_host("speechs3proto2-pa.googleapis.com")              # המיקרופון במקלדת (Gboard)
+    assert is_api_host("play-fe.googleapis.com") and is_api_host("rr3---sn-x.googlevideo.com")
+    assert is_api_host("www.gstatic.com") and is_api_host("clients4.google.com")
+    assert not is_api_host("www.google.com") and not is_api_host("play.google.com")
+    assert not is_api_host("evilgoogleapis.com") and not is_api_host("") and not is_api_host(None)

@@ -286,6 +286,61 @@ async def test_learned_passthrough_does_not_open_sites_to_chrome(fp):
     assert data2.ignore_connection is True                            # האפליקציה — כרגיל
 
 
+async def test_web_level_does_not_break_google_voice_typing(fp):
+    """המיקרופון במקלדת (Gboard → Cronet ל-speechs3proto2-pa.googleapis.com) ברמת גלישה: Cronet נראה כמו
+    כרום, והשרת לא בשום קבוצה — פעם זה יורט, נכשל ב-TLS, וחוזר חלילה. עכשיו: שרתי API לא מיורטים."""
+    from types import SimpleNamespace
+    fp.policies.set(IP, DevicePolicy(level=2, web=web("clean")))
+    ctx = SimpleNamespace(client=SimpleNamespace(peername=(IP, 1)))
+    cronet = dict(cipher_suites=[0x3A3A, 0x1301], extensions=[(0x4A4A, b""), (0, b""), (43, b"")],
+                  alpn_protocols=[b"h2"])
+
+    def hello(sni, kind):
+        return SimpleNamespace(context=ctx, client_hello=SimpleNamespace(sni=sni, **kind), ignore_connection=False)
+
+    for sni in ("speechs3proto2-pa.googleapis.com", "play-fe.googleapis.com", "rr1---sn-x.googlevideo.com"):
+        h = hello(sni, cronet)
+        fp.tls_clienthello(h)
+        assert h.ignore_connection is True, sni
+    site = hello("claude.ai", cronet)                       # אתר אמיתי ברשימה הקבועה — עדיין נבדק לכרום
+    fp.tls_clienthello(site)
+    assert site.ignore_connection is False
+
+
+async def test_app_fingerprint_that_failed_passes_web_level_even_after_restart(fp):
+    """אפליקציה (טביעה שונה מכרום) שנכשלה בשרת שנלמד — עוברת בפעם הבאה, גם אחרי הפעלה מחדש של הפרוקסי.
+    כרום (טביעה שעברה בדיקה בהצלחה) — עדיין נבדק ומקבל דף חסימה."""
+    from types import SimpleNamespace
+    fp.policies.set(IP, DevicePolicy(level=2, web=web("clean")))
+    ctx = SimpleNamespace(client=SimpleNamespace(peername=(IP, 1)))
+    chrome = dict(cipher_suites=[0x3A3A], extensions=[(0x4A4A, b""), (0, b""), (43, b""), (65037, b"")],
+                  alpn_protocols=[b"h2", b"http/1.1"])
+    cronet = dict(cipher_suites=[0x3A3A], extensions=[(0x4A4A, b""), (0, b""), (43, b"")], alpn_protocols=[b"h2"])
+    sni = "app-api.unknown.example"
+
+    def hello(kind):
+        return SimpleNamespace(context=ctx, client_hello=SimpleNamespace(sni=sni, **kind), ignore_connection=False)
+
+    fp.tls_clienthello(hello(chrome))
+    fp.tls_established_client(SimpleNamespace(conn=SimpleNamespace(sni=sni), context=ctx))
+    first = hello(cronet)
+    fp.tls_clienthello(first)
+    assert first.ignore_connection is False                 # עוד לא ידוע — יורט
+    fp.tls_failed_client(SimpleNamespace(conn=SimpleNamespace(sni=sni, error="client does not trust the proxy's"
+                                                             " certificate"), context=ctx))
+    await drain(fp)
+    fresh = A.FilterPhone()                                 # הפעלה מחדש: הכל נטען מ-Redis
+    fresh.redis, fresh.web = fp.redis, fp.web
+    fresh.policies.set(IP, DevicePolicy(level=2, web=web("clean")))
+    await fresh._load_learned()
+    again = hello(cronet)
+    fresh.tls_clienthello(again)
+    assert again.ignore_connection is True                  # האפליקציה עוברת
+    browser = hello(chrome)
+    fresh.tls_clienthello(browser)
+    assert browser.ignore_connection is False               # כרום — נבדק (דף חסימה)
+
+
 # ------------------------------------------------------------------ הבוט
 
 def test_parse_page_collects_text_signals_and_images():

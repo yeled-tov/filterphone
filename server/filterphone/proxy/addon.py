@@ -34,7 +34,7 @@ from . import inline, rewrite, serp, textscan
 from .blockpage import REVIEW_PATH, block_page, checking_page, review_sent_page
 from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
-from .hosts import HostPolicy, hello_fingerprint, is_chromium_hello, load_lists
+from .hosts import HostPolicy, hello_fingerprint, is_api_host, is_chromium_hello, load_lists
 from .policy import DevicePolicy, PolicyTable
 from .web import CHECK_WAIT_S, IMAGE_OVERRIDE_KEY, WebState, image_key_of
 
@@ -48,6 +48,10 @@ VIDEO_TYPES = ("application/vnd.apple.mpegurl", "application/x-mpegurl", "applic
 MAX_INLINE_BYTES = 4_000_000
 MAX_INLINE_DECODED = 16_000_000     # דף אחרי פריסת gzip/br — מעבר לזה לא סורקים (פצצת דחיסה)
 PASSTHROUGH_KEY = "fp:pt"
+# טביעות TLS שנלמדו (שורדות הפעלה מחדש): "d|ip|שרת|טביעה" — לקוח שלא סומך עלינו בשרת הזה (Cronet של
+# אפליקציה); "t|ip|טביעה" — לקוח שכן סומך (כרום). ערך = תפוגה (epoch).
+TLS_FP_KEY = "fp:tlsfp"
+TLS_FP_DAYS = 30
 EVENTS_KEY = "fp:events"
 METRICS_KEY = "fp:metrics:proxy"
 METRICS_EVERY_S = 15
@@ -148,9 +152,10 @@ class FilterPhone:
         self._hello_chromium: dict[tuple[str, str], bool] = {}
         # Cronet (אפליקציות גוגל) נראה כמו כרום. טביעות של לקוח שלא סומך עלינו בשרת מסוים, ושל לקוחות שכן
         # סומכים (כרום) — כדי לפתוח את השרת רק לאפליקציה שנכשלה ולא לכרום
-        self._hello_fp: dict[tuple[str, str], tuple] = {}
+        self._hello_fp: dict[tuple[str, str], str] = {}
         self._distrust_fp: dict[tuple[str, str], set] = {}
         self._trusted_fp: dict[str, set] = {}
+        self._distrust_logged: dict[tuple[str, str], float] = {}
         self._background: set[asyncio.Task] = set()
         self._host_events: dict[tuple[str, str], float] = {}
         # החלטות על תמונות מסוימות (דיווחים מכרום — המנהל / בדיקה לפי הרמה): מפתח → block / pass
@@ -234,6 +239,34 @@ class FilterPhone:
                 await self.redis.hdel(PASSTHROUGH_KEY, *expired)
         except Exception as e:
             log.warning("could not load learned passthrough list: %s", e)
+        await self._load_tls_fingerprints()
+
+    async def _load_tls_fingerprints(self) -> None:
+        """טביעות שנלמדו (אחרי הפעלה מחדש האפליקציה לא נכשלת שוב). מצטרף לזיכרון — לא מחליף."""
+        try:
+            now, expired = time.time(), []
+            for field, exp in (await self.redis.hgetall(TLS_FP_KEY)).items():
+                if float(exp) <= now:
+                    expired.append(field)
+                    continue
+                kind, _, rest = field.partition("|")
+                if kind == "d":
+                    ip, _, rest = rest.partition("|")
+                    host, _, fp = rest.partition("|")
+                    if ip and host and fp:
+                        self._distrust_fp.setdefault((ip, host), set()).add(fp)
+                elif kind == "t":
+                    ip, _, fp = rest.partition("|")
+                    if ip and fp:
+                        self._trusted_fp.setdefault(ip, set()).add(fp)
+            if expired:
+                await self.redis.hdel(TLS_FP_KEY, *expired[:5000])
+        except Exception as e:
+            log.warning("could not load tls fingerprints: %s", e)
+
+    def _is_app_fp(self, ip: str, sni: str, fp: str) -> bool:
+        """הטביעה הזו נכשלה בשרת הזה (אפליקציה שלא סומכת עלינו) ואינה של כרום שעבר בדיקה בהצלחה."""
+        return bool(fp) and fp in self._distrust_fp.get((ip, sni), ()) and fp not in self._trusted_fp.get(ip, ())
 
     async def _load_image_overrides(self) -> None:
         try:
@@ -293,6 +326,7 @@ class FilterPhone:
             if len(self._hello_fp) > 20_000:
                 self._hello_fp.clear()
             self._hello_fp[(ip, sni.lower())] = hello_fingerprint(data.client_hello)
+        fp = self._hello_fp.get((ip, sni.lower()), "") if sni else ""
         if sni and _WA_HOST.search(sni.lower()):
             self._spawn(self._note_wa_sni(ip, sni.lower(), pol.blocks(sni)))
         if _dst_ip(data.context) == self.cfg.dns_sinkhole_ip:
@@ -309,13 +343,14 @@ class FilterPhone:
                     and is_chromium_hello(data.client_hello):
                 # אבל: אם זו בדיוק טביעת האפליקציה שנכשלה (Cronet של גוגל — חיפוש קולי / מיקרופון במקלדת)
                 # ולא של כרום שעבר בדיקה בהצלחה — עוקפים, אחרת היא נכשלת בכל פעם
-                fp = hello_fingerprint(data.client_hello)
-                if not (fp and fp in self._distrust_fp.get((ip, sni.lower()), ())
-                        and fp not in self._trusted_fp.get(ip, ())):
+                if not self._is_app_fp(ip, sni.lower(), fp):
                     self.m_learned_inspected.inc()
                     return
-            # רמת גלישה: כרום לאתר שלא פתוח ללקוח — נבדק (דף חסימה), גם אם אפליקציה "לימדה" אותו
+            # רמת גלישה: כרום לאתר שלא פתוח ללקוח — נבדק (דף חסימה), גם אם אפליקציה "לימדה" אותו.
+            # לא שרתי API של אפליקציות (googleapis — המיקרופון במקלדת, Play...) ולא טביעה של אפליקציה שכבר
+            # נכשלה כאן: Cronet נראה כמו כרום, ויירוט שלו רק שובר את האפליקציה בכל פעם מחדש.
             if pol.web.active and sni and is_chromium_hello(data.client_hello) \
+                    and not is_api_host(sni) and not self._is_app_fp(ip, sni.lower(), fp) \
                     and pol.web.decide(sni, self.web.verdict(sni)) != "allow":
                 return
             data.ignore_connection = True
@@ -336,12 +371,19 @@ class FilterPhone:
         ip = _client_ip(data.context)
         pol = self.policies.get(ip)
         chrome = self._hello_chromium.get((ip, sni.lower()))
-        log.info("tls distrust %s %s blocked=%d chromium=%s", ip, sni.lower(), int(pol.blocks(sni)), chrome)
+        key = (ip, sni.lower())
+        now = time.time()
+        if now - self._distrust_logged.get(key, 0.0) > 600:      # warning — כדי שיגיע ליומן (אבחון מכשירים)
+            if len(self._distrust_logged) > 20_000:
+                self._distrust_logged.clear()
+            self._distrust_logged[key] = now
+            log.warning("tls distrust %s %s blocked=%d chromium=%s", ip, sni.lower(), int(pol.blocks(sni)), chrome)
         if pol.blocks(sni):
             return          # חסום בכוונה — לא "לומדים" לעקוף אותו
-        fp = self._hello_fp.get((ip, sni.lower()))
-        if chrome and fp:
-            self._distrust_fp.setdefault((ip, sni.lower()), set()).add(fp)
+        fp = self._hello_fp.get(key)
+        if chrome and fp and fp not in self._distrust_fp.get(key, ()):
+            self._distrust_fp.setdefault(key, set()).add(fp)
+            self._spawn(self.redis.hset(TLS_FP_KEY, f"d|{ip}|{sni.lower()}|{fp}", now + TLS_FP_DAYS * 86400))
         expires = time.time() + self.cfg.passthrough_learn_days * 86400
         if self.hosts.learn(ip, sni, pol.app_images == "block", expires):
             self._spawn(self.redis.hset(PASSTHROUGH_KEY, f"{ip}|{sni.lower()}", expires))
@@ -355,8 +397,9 @@ class FilterPhone:
         fp = self._hello_fp.get((ip, sni.lower()))
         if fp and self._hello_chromium.get((ip, sni.lower())):
             fps = self._trusted_fp.setdefault(ip, set())
-            if len(fps) < 64:
+            if len(fps) < 64 and fp not in fps:
                 fps.add(fp)
+                self._spawn(self.redis.hset(TLS_FP_KEY, f"t|{ip}|{fp}", time.time() + TLS_FP_DAYS * 86400))
 
     # ------------------------------------------------------------ HTTP
 
