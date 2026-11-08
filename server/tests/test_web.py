@@ -252,6 +252,12 @@ async def test_human_check_through_the_customer(fp):
     still = nav("https://fashion.example/")
     fp.requestheaders(still)
     assert "האתר חסום" in still.response.text
+    # הבוט לא סיים לבדוק בזמן (עוד אין פסק דין) — "בדיקה דרכי" עובדת גם כאן
+    slow = mkflow("https://slow-site.example/__filterphone__/assist", {"content-type": "application/x-www-form-urlencoded"})
+    slow.request.method = "POST"
+    fp.requestheaders(slow)
+    await fp.request(slow)
+    assert slow.response.status_code == 303
 
 
 async def test_subresources_of_unknown_hosts_load(fp):

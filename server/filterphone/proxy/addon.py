@@ -584,7 +584,9 @@ class FilterPhone:
         if req.method != "POST":
             flow.response = self._page(block_page(host, "בדיקה דרכי — מדף החסימה בלבד."))
             return
-        if self.web.verdict(host) not in ("challenge", "error"):
+        verdict = self.web.verdict(host)
+        # רק אתר שהבוט לא הצליח לבדוק (אימות / שגיאה), או שעוד לא סיים לבדוק ללקוח שהבוט בודק לו אתרים חדשים
+        if not (verdict in ("challenge", "error") or (verdict is None and self.policies.get(ip).web.auto_check)):
             flow.response = self._page(block_page(host, "האתר כבר נבדק — אין צורך בבדיקה דרכך.", review=True))
             return
         now = time.time()
