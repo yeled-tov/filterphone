@@ -1,8 +1,9 @@
 {
- "version": 2,
+ "version": 4,
  "categories": [
   "תקשורת",
   "בנקים ותשלומים",
+  "ביטוח ופנסיה",
   "בריאות",
   "תחבורה",
   "רכב חשמלי",
@@ -10,6 +11,8 @@
   "יהדות",
   "חדשות ופורומים",
   "מדיה",
+  "משרד ומסמכים",
+  "פתקים ומשימות",
   "כלים",
   "ממשלה ושירותים",
   "עבודה ולימודים"
@@ -1801,7 +1804,7 @@
   {
    "package": "com.google.android.keep",
    "label": "Google Keep",
-   "category": "כלים",
+   "category": "פתקים ומשימות",
    "note": "פתקים ורשימות.",
    "description": "מתעדים במהירות את מה שעובר בראש ואחר כך מקבלים תזכורות בזמן ובמקום הנכונים. בדרכים, מקליטים תזכורת קולית שמתומללת באופן אוטומטי. יש גם אפשרות לצלם תמונה של פוסטר, קבלה או מסמך ולשמור אותה בצורה מסודרת או לאתר אותה באמצעות החיפוש בשלב מאוחר יותר. בזכות Google Keep קל לתעד את המחשבות וליצור רשימות, ולשתף אותן עם החברים והמשפחה.\n \n מתעדים את כל מה שעובר בראש\n • מוסיפים פתקים, רשימות ותמונות ב-Google Keep. אין לכם הרבה זמן? מקליטים תזכורת קולית, והמערכת של Keep תתמלל אותה כדי שתוכלו למצוא אותה בקלות מאוחר יותר.\n • משתמשים בווידג'טים לטלפון ולטאבלט ומוסיפים כרטיסי מידע כותכונות נוספות למכשיר Wear OS כדי לתעד את המחשבות במהירות.\n משתפים רעיונות עם חברים ומשפחה",
    "icon_url": "https://play-lh.googleusercontent.com/0AM0MfDO-MWUAKwg8vpbftm7GqvEW1JfLGHCgwsgIemF6hMW61XOVnnNDHCGeRMiYZtVaxV2M-AYoP_zMoJt6w=s192",
@@ -1878,7 +1881,7 @@
   {
    "package": "com.adobe.scan.android",
    "label": "Adobe Scan",
-   "category": "כלים",
+   "category": "משרד ומסמכים",
    "note": "סריקת מסמכים ל-PDF במצלמה.",
    "description": "מחק קסם לסריקות נקיות יותר.\nמחק הקסם החדש מסיר טביעות אצבעות, צללים, כתמים וקמטים לא רצויים בסריקות, בלחיצה אחת. מקבלים מסמכים נקיים יותר בלי לסרוק מחדש.\n\nסורק מסמכים, אצלכם בכיס.\n‏Adobe Scan זמינה להורדה בחינם והופכת את המכשיר הנייד שלכם לסורק PDF ומסמכים חכם, שעוזר לכם ליצור, לשמור ולארגן מסמכים מודפסים כקבצים דיגיטליים.\n\n‏4 דרכים להשתמש ב-Adobe Scan‏\n1) חסכו זמן עם סורק מסמכים מהיר: סרקו במהירות גבוהה כדי להפוך ערימות של דפים לקובצי PDF תוך שניות.\n\n2) צרו קובץ PDF ישירות מהטלפון: המירו מסמכי נייר או תמונות מודפסות ל-PDF או ל-JPEG בעזרת סורק המסמכים והתמונות הנייד.\n\n3) המירו תמונות לטקסט: השתמשו בתכונת התמונה-לטקסט כדי להפוך מילים בסריקות שלכם לכאלה שניתן לחפש ולערוך באמצעות OCR.",
    "icon_url": "https://play-lh.googleusercontent.com/C90I3a2u64QLuE_BiMr4YbHRtgjRoOCrNMLg67R5buhqH82pMq6weh9IvYkUVPl_IAVAlfCYl18DN4XCEbq2Hg=s192",
@@ -1898,7 +1901,7 @@
   {
    "package": "com.adobe.reader",
    "label": "Adobe Acrobat Reader",
-   "category": "כלים",
+   "category": "משרד ומסמכים",
    "note": "קריאה וחתימה על קובצי PDF.",
    "description": "Reader היא קורא ה-PDF ועורך ה-PDF הפופולריים בעולם עם יותר מאשר 635 מיליון התקנות. פותחים ומשתפים מסמכים, מוסיפים להם הערות וחותמים עליהם – והכול באפליקציה אחת. שומרים את הקבצים באינטרנט וקוראים מסמכים בכל מקום.\n\n**עדכון**\nתכונות מאפליקציית Fill & Sign של Adobe זמינות כעת ב-Adobe Acrobat Reader. מלאו, חתמו ושלחו כל טופס באופן מהיר ואמין. אתם יכולים אפילו לצלם תמונה של מסמך נייר ולמלא אותו בטלפון או בטאבלט שלכם, ואז לחתום ולשלוח. זה קל ופשוט: בלי מסמך פיזי, וללא צורך בהדפסה או בשליחת פקסים.\n\nקבלו 7 ימי ניסיון חינם ונסו את כל התכונות של Acrobat Reader.\n\nמנוי פרימיום מאפשר לך לערוך טקסט ותמונות בקבצי PDF, להשתמש בממיר PDF לשילוב, לארגן ולהמיר קבצי PDF ועוד.\n\nתכונות בתשלום:\nעריכת קובצי PDF",
    "icon_url": "https://play-lh.googleusercontent.com/VIohTA3wyJgKJ-SZzoJeYuykxyVFCbSmXFAjefIGQybY57FX44VCHyVa3CTOZROzWLbMc-VFwL4CEDj47LeRpM0=s192",
@@ -2148,7 +2151,7 @@
   {
    "package": "com.microsoft.office.word",
    "label": "Word",
-   "category": "עבודה ולימודים",
+   "category": "משרד ומסמכים",
    "note": "עריכת מסמכים.",
    "description": "ניתן ליצור, לערוך, לקרוא ולשתף מסמכים במכשיר הנייד עם אותה עוצמה שאתם רגילים אליה מהמחשב.\n\nכתבו קורות חיים, מכתבים, עבודות, הערות או יצירה מכל מקום. המרה בין Word ל- PDF, שיתוף פעולה עם אחרים וגישה לקבצים שלכם מכל מקום. בעזרת כלי עריכה נוחים לשימוש וכלי מובנה לצפייה במסמכים, Word הופך את הכתיבה במכשיר נייד לפשוטה ויעילה.\n\nבחרו מתוך תבניות של קורות חיים, ניוזלטרים, ברושורים ועוד כדי להניע כל פרויקט. אם אתם סטודנטים, בלוגרים, עיתונאים או מנהלי פרויקטים, Word הולך איתכם לכל מקום.\n\nיצירת מסמכים\n\n• התחילו בקלות עם תבניות מודרניות למכתבים, קורות חיים, תסריטים, הצעות מחיר, חשבוניות ועוד \n• השתמשו בכלי עיצוב ופריסה עשירים כדי להביע את הרעיונות שלכם בצורה ברורה",
    "icon_url": "https://play-lh.googleusercontent.com/UPPHK323_gvNZWTnmq_lgp_qrSXwdXI8aYNfqNF27MtuujT2YAytdueWIKncRh5YfNB_rfpCBfImzo95iYC1Fw=s192",
@@ -2167,7 +2170,7 @@
   {
    "package": "com.microsoft.office.excel",
    "label": "Excel",
-   "category": "עבודה ולימודים",
+   "category": "משרד ומסמכים",
    "note": "גיליונות אלקטרוניים.",
    "description": "גיליונות אלקטרוניים וחישובים \n • יצירת תרשימים, תקציבים, תכניות פרויקט, חשבונאות וניתוח פיננסי באמצעות התבניות המודרניות של Excel.\n • השתמשו במחשבון חשבונאי, בכלי ניתוח נתונים ובנוסחאות מוכרות לביצוע חישובים.\n• עבדו עם גליונות ותרשימים ברורים וקלים לקריאה, המשופרים על-ידי עיצוב עשיר.\n \nחשבונאות, תקציב ומעקב הוצאות \n • תבניות תקציב וכלי תכנון: השתמשו בגיליונות אלקטרוניים מוכנים כדי לתכנן הוצאות בקטגוריות ובמסגרות זמן שונות.\n • מעקב אחר תקציב: ניתן לעקוב אחר הוצאות ולחסוך כסף.\n • כלי חשבונאות: השתמשו ב- Excel כמחשבון מס עבור הערכות, ניהול כספים אישי ועוד.\n \nניתוח נתונים \n • יוצר תרשימים: ניתן להוסיף הערות, לערוך ולהוסיף תרשימים שממחישים את הנתונים.",
    "icon_url": "https://play-lh.googleusercontent.com/yycGmvRqYttLxLsu_2mMo17jb5KVfrSSj0W67w5nN6QcOn30HIxQ7DBwdNVtbTRTFCQNd5vNyd-bgeGfmiSS=s192",
@@ -2186,7 +2189,7 @@
   {
    "package": "com.google.android.apps.docs.editors.docs",
    "label": "Google Docs",
-   "category": "עבודה ולימודים",
+   "category": "משרד ומסמכים",
    "note": "מסמכים של Google.",
    "description": "אפליקציית Docs מאפשרת ליצור ולערוך מסמכים, ולעבוד עליהם יחד עם אחרים בטלפון או בטאבלט עם Android. \n\nאילו פעולות ניתן לבצע באפליקציית Docs?\n- ליצור מסמכים חדשים ולערוך קבצים קיימים\n- לשתף מסמכים ולערוך מסמך בו-זמנית עם אחרים\n- לעבוד מכל מקום ובכל שעה, גם כשאין חיבור לאינטרנט\n- להוסיף תגובות ולהגיב להן\n- כל העבודה נשמרת אוטומטית תוך כדי הקלדה ולעולם לא תאבדו אותה\n- להשתמש בכלי החקירה ישירות מתוך Docs\n- לפתוח, לערוך ולשמור מסמכי Word.",
    "icon_url": "https://play-lh.googleusercontent.com/fzQ8TFqWZQ34NVL5veaXOFtymoGSVqI5YisBw3sgl6mc0AMKAGgKw5st2YMiSzTanSWbCDrmLipI7bD_epry=s192",
@@ -2205,7 +2208,7 @@
   {
    "package": "com.google.android.apps.docs.editors.sheets",
    "label": "Google Sheets",
-   "category": "עבודה ולימודים",
+   "category": "משרד ומסמכים",
    "note": "גיליונות של Google.",
    "description": "אפליקציית Sheets מאפשרת ליצור ולערוך גיליונות אלקטרוניים, ולעבוד עליהם יחד עם אחרים בטלפון או בטאבלט עם Android. \n\nאילו פעולות ניתן לבצע באפליקציית Sheets?\n- ליצור גיליונות אלקטרוניים חדשים ולערוך קבצים קיימים\n- לשתף גיליונות אלקטרוניים ולערוך גיליון בו-זמנית עם אחרים\n- לעבוד מכל מקום ובכל שעה, גם כשאין חיבור לאינטרנט\n- להוסיף תגובות ולהגיב להן\n- לעצב תאים, להוסיף ולמיין נתונים, להציג תרשימים, להוסיף נוסחאות, למצוא ולהחליף תוכן ועוד\n- כל העבודה נשמרת אוטומטית תוך כדי הקלדה ולעולם לא תאבדו אותה\n- להשתמש בכלי החקירה לקבלת תובנות מיידיות, להוספה מהירה של תרשימים ולהחלת עיצוב בלחיצה אחת\n- לפתוח, לערוך ולשמור קובצי Excel.",
    "icon_url": "https://play-lh.googleusercontent.com/NjfIWrzr4KXjVVUpihoWNJ1ZFfDBqjr3l4lsrbXG9fcYNJlpiH4wCxFXrQsgqMt7fXgKCmk33mvI2arRyzo5hGY=s192",
@@ -2257,6 +2260,1689 @@
    "play_titles": [
     "Webtop - וובטופ"
    ]
+  },
+  {
+   "package": "com.microsoft.office.powerpoint",
+   "label": "PowerPoint",
+   "category": "משרד ומסמכים",
+   "note": "מצגות של Microsoft — צפייה ועריכה.",
+   "description": "צרו רושם בעזרת שקופיות שניתנות להתאמה אישית ובעלות מראה מקצועי. השתמשו בתבניות וברעיונות עיצוב כדי ליצור מצגות מלוטשות תוך דקות. הציגו בביטחון עם מאמן המצגות, כלי בינה מלאכותית שמציע הצעות בזמן אמת על קצב הדיבור, מילות חיבור ואופן ההעברה. (נדרש מנוי של Microsoft 365.)\n\nשתפו פעולה בקלות באמצעות שיתוף מצגות ועבודה עם אחרים בזמן אמת. ניתן לנהל הרשאות, לעקוב אחר שינויים ולצפות במשוב ישירות בשקופיות.\n\nלהספיק יותר עם Copilot – מסייע ה- AI המובנה שלכם ל- PowerPoint.* \n •  סיכום של מצגות ארוכות \n •  לקבל הצעות לשאלות ותשובות כדי להתכונן לפגישות \n •  לחקור נושא באמצעות Copilot Chat\n\nלהציג בביטחון\n•  יצירת מצגות חדשות או עריכת מצגות קיימות גם בזמן תנועה",
+   "icon_url": "https://play-lh.googleusercontent.com/T1Jpfdfi6q8x0da-eNvBve4UlTxxLBGDFEeXR9sH5uFwU5m6EUpaK6vL4J3t4Gc9RlzDCgmsp4N4E8aeNCmNCw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/aOX0vpSpb8GJkpZKoPsEzHy_qGxK29J72kYEHktTmb5Av6Vjt8YSudk20-JKdOz_bnhvfBXdfR-0JR9TANigkA=h720",
+    "https://play-lh.googleusercontent.com/9KKv8SZEmOcGu0M7VI12Bmw_krfSraUaVKSDK8-sFuylKd4smGD-Z1hjxgctf5iRhHWi22bspdFrFjF4oP6Jcw=h720",
+    "https://play-lh.googleusercontent.com/J1v8MDZZjcYjEQ9B8Zj6SxN7TdhxZqYaFfiSQ2gDqNVkJTVvK21RGLDt_6LIXRfj3TjO7G-XJIhzA2yJbwwSNlI=h720",
+    "https://play-lh.googleusercontent.com/AHQRsgxitsjRAzBrGQKcSb4fuG-rr4wkkV_2fluHPc3XITbEk2kyp1hCK3lvDIQdeWmpdKMsCn6w9VqYyeJFBQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.office.powerpoint",
+   "sort": 216,
+   "play_titles": [
+    "Microsoft PowerPoint"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.google.android.apps.docs.editors.slides",
+   "label": "Google Slides",
+   "category": "משרד ומסמכים",
+   "note": "מצגות של Google, נשמרות בדרייב.",
+   "description": "אפליקציית Google Slides מאפשרת ליצור מצגות, לערוך אותן ולעבוד עליהן יחד עם אחרים באמצעות טלפון או טאבלט עם Android. \nבאפליקציית Slides אפשר:\n\n- ליצור מצגות חדשות או לערוך קבצים קיימים.\n- לשתף מצגות ולערוך אותן יחד בו-זמנית.\n- לעבוד בכל שעה ומכל מקום, גם בלי חיבור לאינטרנט.\n- להוסיף תגובות ולהשיב לתגובות.\n- להוסיף שקפים ולשנות את הסדר שלהם, לעצב את הטקסט והצורות ועוד.\n- להציג מצגת ישירות מהמכשיר הנייד.\n- להיות בראש שקט - העבודה שלך אף פעם לא תאבד, כי הכול נשמר אוטומטית תוך כדי הקלדה.\n- ליצור שקפים נהדרים באמצעות התכונה 'חיפוש ובדיקה'.\n- להציג שקפים בשיחות וידאו - פגישות מתוזמנות יופיעו באופן אוטומטי.\n- לפתוח, לערוך ולשמור קובצי PowerPoint.\n\nהודעה לגבי הרשאות",
+   "icon_url": "https://play-lh.googleusercontent.com/xqxFEBjrkpXc_RtE9sPfOEftQmPS0KhFg3IHWyaYVS243dIEbQArz1xOhPgfF_s1NCHpVNBPeb5ykWU_LqyUDw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/3x7Q8T03Dg5NUqmEcQnpWHxOq0cBZhzUPdO4m00RaEhlvYjdiIjGcTmqeNs__RLg5oLYi_kCSMNQM9JEASo615M=h720",
+    "https://play-lh.googleusercontent.com/R1Kif7wV4bK9gh5KV7HDTEDRnalrB4zqkcEa0eHpGw6evCG9mfv_66a38dsFZOrrE8hnSMJDsUPxb3Ez1VfRhKc=h720",
+    "https://play-lh.googleusercontent.com/PI6SihMj7n22wHdWfT6jYBNJ7UYUCdXkeCEA0rlhbHHz4GDFs0S5EJ1l2wjRzbGsjR8j0i3-fDkGQJLiGu6fzw=h720",
+    "https://play-lh.googleusercontent.com/ggNBVE_v6dEDLQWZs4RbbqicHkJiuiT_uKuwwbwn2zL6VFEu27mj14_LRHkJbAcrlyWT0Ansyw7WTctvgmMCBw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.docs.editors.slides",
+   "sort": 217,
+   "play_titles": [
+    "Google Slides"
+   ],
+   "since": 4
+  },
+  {
+   "package": "cn.wps.moffice_eng",
+   "label": "WPS Office",
+   "category": "משרד ומסמכים",
+   "note": "חבילת אופיס חינמית: מסמכים, טבלאות, מצגות ו-PDF.",
+   "description": "★WPS Office-Free Office suite for Word, PDF, Sheet, is an all-in-one office suite integrates Word docs, PDF, Sheet spreadsheets, PowerPoint slides, WPS AI, Forms, Cloud Storage, Online Editing, Template library and Sharing.  Access various WPS Office functions through mobile devices, such as scan PDF files, edit slides, convert spreadsheets, or view documents anytime, anywhere. WPS AI revolutionizes your workflow by offering functions like AI-Powered document scanner, AI-generated content, rewriting, ChatPDFs, and more.\n\n「Features of WPS AI 」\n1. AI-Powered Document Scanner   \n• Digitize paper documents, extract &  erase elements rapidly and accurately!\n\n2. WPS AI-generated content (AIGC)",
+   "icon_url": "https://play-lh.googleusercontent.com/IrviqpGmCduI8CYHUyUVPa2V4a8e1FOxO8tYCUUvaYSHGhih4BdPyjtInBf8SZokbpT6-NImQP6-BM2rQu_UgA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/d6MjlMG8h1Aie3RgOhHegFrtMq3RwgoiQy1O8zaZK_-oD7QQnMC9wpyG-XEca4bhHc1MUv0JotzBEM8HWI20PA=h720",
+    "https://play-lh.googleusercontent.com/Aa_qTO2lzXb0w1uFrz9PLReyOQ5xjs7idAhWAhQoObChX1k_-Li9sR6VFOoxEr1bWugnSzausAB6UKnTBG0zjw=h720",
+    "https://play-lh.googleusercontent.com/UvgOyZ4rbdW00_L341-KO_HaHPPNBq-X23sLXo6LTnnlbffY_AUfYNxHHZIOPJ2MOx6-FEOHj0pwaGURpJYabQ=h720",
+    "https://play-lh.googleusercontent.com/1QdjSt561dShJyZEf-XX2gklAizZ7noyWjocaxtD_c6Fnv59OnvP0nEQS6ZMxdLv6KQB5lT02J0s2XG94jRy=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=cn.wps.moffice_eng",
+   "sort": 218,
+   "play_titles": [
+    "WPS Office-PDF, Word, Sheet"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.mobisystems.office",
+   "label": "MobiOffice",
+   "category": "משרד ומסמכים",
+   "note": "מסמכי Word, טבלאות ו-PDF באפליקציה אחת (לשעבר OfficeSuite).",
+   "description": "MobiOffice הוא בחירה מצוינת להבטחת פרודוקטיביות במשרד. הודות לשילוב של כל התכונות הדרושות לקריאה, עריכה ויצירה של קובצי PDF‏, Word‏, Excel ו-PowerPoint‏, MobiOffice הוא הפתרון עתיר-התכונות ביותר לשימוש אישי ומקצועי במכשירים ניידים.\n\nמסמכים, גיליונות אלקטרוניים ומצגות\n•\tיישומים רבי-עוצמה שכוללים שפע של כלים חיוניים שמאפשרים לבצע כל משימה.\n•\tכל התכונות המתקדמות שדרושות לך – מברשת עיצוב, מעקב אחר שינויים, עיצוב מותנה, נוסחאות, מצב מצגת ועוד.\n•\tתחושה מוכרת בהשראת שולחן העבודה האהוב.\n•\tייצוא של מסמכי Word,‏ Excel או PowerPoint ל-PDF.\n•\tאפשרויות אבטחה מתקדמות.\n\nניהול PDF מתקדם \n•\tפתיחה, הצגה ותיקון של קובצי PDF.\n•\tעבודה עם טפסים שניתנים למילוי.\n•\tהוספת חתימה דיגיטלית למסמכי PDF.",
+   "icon_url": "https://play-lh.googleusercontent.com/zrx4obX-smDllWz6sQr3hbg1QyodgMT_AJcbOOQJNsE-7XE-UdQsV86JXI5QZY5IjHooUBa_ASJcO_HWsdc5FCA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/UU5Zb8I3N7cb6FPZKlfQIt4Mx-knMlPMwDk2-968lSPJ9w9fcTwbGLJeTXuXMIxfhOLb2dFHb66VeuY4ZWmW0w=h720",
+    "https://play-lh.googleusercontent.com/tqr4fddA3cbDOH2bjq-aYDQ2fi-3xoelS_NL0ydnjI3Ffj_n1IZ4TjVJ1O54diFjvYXBWHxTIUXSVNueHQjzCAo=h720",
+    "https://play-lh.googleusercontent.com/dnepcNBTzsxTSDTckfFsuxLpI08XGothY7fOc00Q1Z8tYblX_W_v2JLclt4Jgi8PBaQb368J8Xhr2lwHoanIWg=h720",
+    "https://play-lh.googleusercontent.com/e8R2stobJRcTXqVYt4yM070gc75YqnR6Bkzm6l9om7jh0WXFUTW2Wq1IJNcYvTyjsLVUbQwfAfPv5N4rt8LIZg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.mobisystems.office",
+   "sort": 219,
+   "play_titles": [
+    "MobiOffice: Word, Sheets, PDF"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.infraware.office.link",
+   "label": "Polaris Office",
+   "category": "משרד ומסמכים",
+   "note": "עריכת מסמכים, טבלאות ומצגות, וצפייה ב-PDF.",
+   "description": "כ-100‏ מיליון משתמשים בכל העולם, קבל את האפליקציה המעודכנת של ‏Office‏ ל-‏Android‏ בחינם. \nתוכל ליהנות מחבילת ‏Office‏ המלאה, הכל כלול, שתואמת ל-‏MS Word‏, ל-‏Excel‏, ל-‏PowerPoint‏ ול-‏Adobe PDF‏. הפרסים \"בחירת העורכים\", \"האפליקציה הטובה ביותר ל-‏2015‏\", ו-\"המפתח הטוב ביותר\" בחסות ‏Google Play‏.\nחבילת ה-‏Office‏ הבאה לנייד, ובחינם, כבר כאן.\nקומפקטית - רק ‏60‏ ‏MB‏. אפליקציה אחת שמספיקה לכל סוגי המסמכים.\n‏•‏אפשר לפתוח, לערוך ולשמור את כל הסוגים של קובצי ‏office‏, כמו קובצי ‏word‏, ‏excel‏ ו-‏powerpoint‏ באפליקציה אחת שמותקנת ב-‏android‏.\n‏•‏מחפש מקרן מיני? תוכל להציג את המצגת הראשונה שלך ממכשיר נייד עם תכונות עט ומצביע. כמו כן, ‏Google Chromecast‏ זמין להצגה במסך גדול.",
+   "icon_url": "https://play-lh.googleusercontent.com/L9CIoaJtZWg1693Hyv-IeaE-ML1gSv25WNbla82rw6xYGTb28ZPcitCtnZ2ZXzcIR1W5-APYN7NnMellLbd6=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/DflQDv5w-cDIUsk66_h6khkRgXZTBbSYIofPS8mLqp_AW8ZRvKXbCyzvsVTMsjZO_GXY8GyPHKo8ZjTi-AU=h720",
+    "https://play-lh.googleusercontent.com/6CQokQXqTNIaiQpY5jtU7qvBdVgtVMx8CH5tg5sUkV4uL7Y5d6sYHUU_ti9CfAxBIpQIRJi0yEMVSNnoQvq859I=h720",
+    "https://play-lh.googleusercontent.com/wJ_pUf773-EV9YaowjIkPUZFkhMW7uNIqDN3V5SsP1oWE_FRoaWrcZSFYcqxIFL2eU4TjOblXJCvo-OejM4xHQ=h720",
+    "https://play-lh.googleusercontent.com/9-QaD5GsVsvjo-RSqjfBrkBoriy3iRJykKr4Zt1CYdIc4c9avzNAuuUPG87oPbdcHE2RO_iRDfl39vDKdU2CXA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.infraware.office.link",
+   "sort": 220,
+   "play_titles": [
+    "Polaris Office - Edit,View,PDF"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.collabora.libreoffice",
+   "label": "Collabora Office",
+   "category": "משרד ומסמכים",
+   "note": "LibreOffice לטלפון — קוד פתוח, בלי פרסומות.",
+   "description": "Collabora Office is a text editor, spreadsheet and presentation program based on LibreOffice, the world's most popular Open Source office suite - and now it's on Android, enhancing your possibilities to work on mobile and for collaboration.\n\nThis app is in active development, feedback and bug reports are very welcome.\n\nSupported files:\n\n• Open Document Format (.odt, .odp, .ods, .ots, .ott, .otp)\n• Microsoft Office 2007/2010/2013/2016/2019 (.docx, .pptx, .xlsx, .dotx, .xltx, .ppsx)\n• Microsoft Office 97/2000/XP/2003 (.doc, .ppt, .xls, .dot, .xlt, .pps)\n\nReport issues:\n\nUse the bugtracker and attach any files that caused problems via",
+   "icon_url": "https://play-lh.googleusercontent.com/aXlKBRFHrggoiN7q4EOfM128QHvEeqRK3tediPBdzvvoJvPIil5R0Zmy7zw9RE_f69U5B7UkAXAPwWzqHkHW4Q=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/y-f-EIC262Fh3KyDVwGAJFx8l3Hf5X-nZ_TVGrE5fc3mr8Xd57OmPzxsTG9mp-5bU5PTrtnO1aXjSEHP_WNnkD0=h720",
+    "https://play-lh.googleusercontent.com/X9cRlcH2Egpmmz8M058kxp-JwieZmH9IEc3aFLG91Vu7mbBjpFcLg77zDjeJOcv2cnO4c9yjJ3Z-AZknSBFcvA=h720",
+    "https://play-lh.googleusercontent.com/-cvI4rV7cIAqjZ5g7ZcSbos3Xd-nMGISlgTsoWIlo68csxSr8yGX-Tm6nogeT2qLGDVb-aEnber_lUqXMTxE=h720",
+    "https://play-lh.googleusercontent.com/lkXa_ql42oChhL3bQ6wEMhhKpyI9GvCkW04dWm5foDgHBtd26Siz299Y6HlXAGedhBOlPLtbx3zO818rLaMI2Zw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.collabora.libreoffice",
+   "sort": 221,
+   "play_titles": [
+    "Collabora Office"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.onlyoffice.documents",
+   "label": "ONLYOFFICE",
+   "category": "משרד ומסמכים",
+   "note": "עורך מסמכים, טבלאות ומצגות — חינמי.",
+   "description": "ONLYOFFICE Documents - The ultimate mobile office suite for Android\nONLYOFFICE Documents is a free office suite for Android that lets you edit text, spreadsheets, presentations, PDFs, and fill out online forms. Fully compatible with MS Office formats, it supports real-time collaboration and offline access. Organize, edit, and share documents from your mobile device.\nSync your cloud services: ONLYOFFICE, Nextcloud, OneDrive, ownCloud, kDrive, Dropbox, or WebDAV for instant access to your files.",
+   "icon_url": "https://play-lh.googleusercontent.com/n7K3ur5pXxfVoDVTiyDcSLAvf0WAaT00JmahMJW_s7-bhFf7JUqsN2BKSgP41IIZwMdUOEZt8drhxpGdxZab=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/rQD3aDlJE94QemBj-WGHetvza-_apIyl5BKtQt_dtY8z6txV2sKCUtCKbkJb8iR8bLPoPjlI298FzZnJ-1jY=h720",
+    "https://play-lh.googleusercontent.com/G0br7mW8z02bZJxviEiBJ8G3wSSjUlEuFXDihbchDw4qM8qDcACWDCFOb8-y6YtvIttvGVQhDxChUoO6pEaZ=h720",
+    "https://play-lh.googleusercontent.com/3UD1LVKkZFzBKI0qCWiyIYJU3ibx9wiWi5gntgm23FC0E2Tb8-iyZDZwSCGtncBjoj-e9ycZgYM3buxKKK6U2A=h720",
+    "https://play-lh.googleusercontent.com/QFUxDFRNxnPtJtPkuVkP5qpjiFyDwvuOkWTqMPV6F608LyxmTjGLuGg1w5jFUbuUs5b0hNhVb9Rh2navnvVEdA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.onlyoffice.documents",
+   "sort": 222,
+   "play_titles": [
+    "ONLYOFFICE Documents"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.xodo.pdf.reader",
+   "label": "Xodo PDF",
+   "category": "משרד ומסמכים",
+   "note": "קריאה, סימון, מילוי וחתימה על PDF.",
+   "description": "📄 Xodo — PDF Reader, Scanner & Editor. Manage PDFs for Work, Productivity, and Study\nRead, edit, annotate, scan, sign, and share PDFs effortlessly in one app with Xodo — a powerful PDF reader scanner and editor built for document management and business workflows. Designed for professionals and everyday productivity, this PDF reader scanner and editor helps you handle digital documents efficiently, whether you're working with contracts, reports, or forms.",
+   "icon_url": "https://play-lh.googleusercontent.com/AmBoaxTjw_jERw2p8YUqv52zctH_P5K9Hxb1OXBEIrKFXV_KDi4HYEQ1303G2e_cQwnIDsHR225tySjFYJCxDg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ibBnXwcQW4YoDgxnIFmr25md3s_qJeYZQiyM_91WGmwT-2JMn4WdJzMcOIGWSYEoSQhe524_zifwxux9174lOw=h720",
+    "https://play-lh.googleusercontent.com/S2iXXBdCohMsSNYtBWjuFbNxHzvPkCtIR6EaCPoWE_PVJl7pW49UdLYmM0AaGAUNL8iFsxTiY-YNUQ8nH0aqyA=h720",
+    "https://play-lh.googleusercontent.com/BkfvDUgUh2oKpyhkopCGZk4qyp9ekka-9-YSRJmm1vH5Nz_JxNf-MZa37OSwpfwU41n65BDP6GytqBGnk4-25F4=h720",
+    "https://play-lh.googleusercontent.com/Wbo9Q0XQ0Kkds3Yc-o_-lJr6tmp6fssKiAveRIdQUWTN1udyv1u9vX_WGzdGwFyrL76cI-kHv78iePdQ14Nbrg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.xodo.pdf.reader",
+   "sort": 223,
+   "play_titles": [
+    "PDF Reader & Editor: Xodo"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.foxit.mobile.pdf.lite",
+   "label": "Foxit PDF",
+   "category": "משרד ומסמכים",
+   "note": "קורא ועורך PDF.",
+   "description": "Looking for a versatile PDF editor that you can use anytime, anywhere? Look no further than Foxit PDF Editor mobile app. This easy-to-use PDF editor  – trusted by hundreds of millions – allows you to view, edit, and annotate PDF files on Android devices while on the go. The app also offers advanced subscription-based features, including our AI Assistant, optical character recognition (OCR), handwritten notes conversion, and more.\n\nDiscover the capabilities of Foxit PDF Editor:\n• Reliable: 100% compliant with your current PDF ecosystem.\n• Efficient: Let our AI Assistant do the work for you.\n• Lightweight: Doesn’t exhaust your device resources.\n• Fast: Instant access to PDFs with no delays.",
+   "icon_url": "https://play-lh.googleusercontent.com/FlxJ1nPxOLWPqiNAVh54NWHT0J7lxizvtYgtNyHQOjjV15rIcxm53eAfE6kOQMAcvfI76l0BFcPwEdXkbkT1qA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/sG_2iVl73mgJlbfKoMJer7tWLD3cnkRhfaqN3yh-oFd2PUJS2lEjykI-256-hzDOCCFWmAy-AzcrQwE0o3AYrw=h720",
+    "https://play-lh.googleusercontent.com/sQFXWTe5h94JWjgKqM4Q5Tkl1N0_joZH2kbIbQyCWwglA_jXmZXbCBXaFUcbjnw0OJudmbH0EgIzzGvk5VwHTg=h720",
+    "https://play-lh.googleusercontent.com/X_MGCW29kypg93y32uGf7H-pUBA2OgmR3rQm1Gsp4WNIqVa0dMDsdDDHNMVFmDFGdwurDPWkkjznvGhWk8-DjB0=h720",
+    "https://play-lh.googleusercontent.com/gNL9naamPwVA09TB6zzNhRVIJO5evdGtcS2qAyh89uYMQkDsoaDkZqJ_ZOvxrK7FP8T6gyuebkh2f_CGN5WYvA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.foxit.mobile.pdf.lite",
+   "sort": 224,
+   "play_titles": [
+    "Foxit PDF Editor"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.thegrizzlylabs.geniusscan.free",
+   "label": "Genius Scan",
+   "category": "משרד ומסמכים",
+   "note": "סריקת מסמכים ל-PDF במצלמה.",
+   "description": "סרקו את מסמכי הנייר שלכם במהירות כשאתם בנסיעות, וייצאו אותם כקובצי PDF מרובי-דפים.\n\n*** 20+ מיליון משתמשים *** אלפי עסקים קטנים ***\n\nהניחו מסמך כלשהו מול עדשת המצלמה: אפליקציית הסורק שלנו תזהה אוטומטית את הדף כנגד הרקע, תחתוך אותו מהרקע הזה ותנקה את התוצאה לקבלת סריקה חדה וקריאה. באמצעות אפשרות הסריקה בכמויות תוכלו לסרוק עשרות דפים תוך שניות ספורות. הכלים העוצמתיים שלנו מסייעים לכם לארגן, לשתף או לשמור בארכיון את המסמכים שלכם.\n\n== התכונות העיקריות == \n\n סריקה חכמה: \n\n - זיהוי מסמך והסרת רקע \n - תיקון עיוותים \n - הסרת צללים וניקוי פגמים \n - מסננים (שחור-לבן, לוח לבן, תצלום) \n - סריקה בכמות \n\n יצירה ועריכה של PDF: \n\n - מיזוג ופיצול מסמכים \n - יצירת מסמכי PDF מרובי-דפים \n - ייבוא תמונות ו-PDF",
+   "icon_url": "https://play-lh.googleusercontent.com/SK7dINLoGBg4JFtGP__81cj7F-0q8hTd6L_Laug7oOUXE5fiGfh9kcA-kHeic1RlDzwOnMfU91tpazGOsRnrSg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/kGwxImhbrM0OrS6NXeR1k7nphWO0dmnX2nLCpJhaPaMTNj1LNc9YcrZPONrmk4FnYyjRPmI5zSES5Xr7sj7K=h720",
+    "https://play-lh.googleusercontent.com/Rgi0V4NEItV3Ik6zFRHX5FtEjRbViREEADYm32lyzrvUuSyLiZe4tcq4vDWK1RBKOv0n_3ySjxq0ZLBx7qneSg=h720",
+    "https://play-lh.googleusercontent.com/U3b8qpgXGKlYJ2camXn3KrhCDiJOZBkBol1piMKYecx_he3mFDSMuIvt3c2rqu2ed2PYKe1sVMOdsfXEAmgSdw=h720",
+    "https://play-lh.googleusercontent.com/l1x9yjxRoAH3oif0hI8DUT_nrwVq1HjDwhYF773t5P3SQoIj0TZFrnNRCCqj3aPj96zDDtfEe4pmF2TzQJ5q=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.thegrizzlylabs.geniusscan.free",
+   "sort": 225,
+   "play_titles": [
+    "Genius Scan - PDF Scanner"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.intsig.camscanner",
+   "label": "CamScanner",
+   "category": "משרד ומסמכים",
+   "note": "סריקת מסמכים, קבלות ותעודות ל-PDF.",
+   "description": "מחפשים אפליקציית סורק יעילה? נסו את CamScanner! CamScanner היא אפליקציית סורק כוללת המפכית את המכשיר הנייד שלך לסורק נייד עוצמתי שמזהה טקסט באופן אוטומטי (OCR) ומשפרת את היעילות כדי לחסוך זמן. הורידו את אפליקציית הסורק הזו כדי לסרוק, לשמור ולשתף מסמכים בפורמטים PDF, JPG, Word או TXT באופן מיידי.\n\nרוצים להכיל את כל המשרד בכיס ולהגביר את היעילות שלכם בעבודה? השתמשו באפליקציית סורק CamScanner לטפל בניירות בקלות. אמרו להתראות למכונות ההעתקה הגדולות והכבדות וקבלו אפליקציית הסורק האולטרה-מהירה הזו עכשיו.\n\n· יש ל-CamScanner מעל 500 מיליון התקנות ביותר מ-200 מדינות ואזורים ברחבי העולם.\n· מעל 500,000 הרשמות חדשות ביום\n\nתכונות",
+   "icon_url": "https://play-lh.googleusercontent.com/XSoqEDquJuenUosbMN_EA2n2U5lsomPEUdCKj4j9bUdPfdWMCtRqXlyPgQ6zxQxWaDFIXrqbqyFjwXQ5FMYubw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/6x5Ko3nGK8fLROlECEsOLgIvWw13AqACv6cCryBpHDkJm74FS7sdetvvYm1zBPeu8YCCq-KBbTWzqj0aCu4MHw=h720",
+    "https://play-lh.googleusercontent.com/1EnkSrwiOR_0dugQuYXuGwqvwkvTNmOlObzWlsz58i5zlM0Eua7sLnOjQi7LYilBxnwnEpMWKKwed6s3ppFuhRM=h720",
+    "https://play-lh.googleusercontent.com/HiwbZxZyckVtFz1mLt6_2pmRl-VMVwIYBXxNXcMXRMAMzmTAJi_8-WCMX_NEhotg93TpALog3fUgeYzuujxj=h720",
+    "https://play-lh.googleusercontent.com/RHP8zpb3JFoEAjNat-lU5nkchDqatSf42z7zBOxVpX1pK-JYimQd8LpLPFNDfd6mwHatc49f8R6_Vw8ehrfdJQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.intsig.camscanner",
+   "sort": 226,
+   "play_titles": [
+    "CamScanner -אפליקציית סורק PDF"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.microsoft.office.onenote",
+   "label": "OneNote",
+   "category": "פתקים ומשימות",
+   "note": "מחברת דיגיטלית: פתקים, רשימות וציורים.",
+   "description": "צור בדרך שלך\nהקלד, כתוב ביד, צייר וגזור פריטים מהאינטרנט כדי לתעד את מחשבותיך במחברת שלך. השתמש בבד הציור הגמיש של OneNote כדי למקם תוכן היכן שתרצה. תוכל אפילו לסרוק הערות בכתב יד או דפים ישירות ל- OneNote ולהפוך אותם לניתנים לחיפוש.\n\nהתארגן\nהעבר את הקלסר הפיזי שלך לעידן הדיגיטלי. OneNote בנוי כמחברת הכוללת מקטעים ועמודים, שניתן להשתמש בהם בקלות כדי למיין רעיונות לפי נושא בלימודים, בבית או בעבודה. תוכל להשתמש בתגיות כדי לתייג רשימות של משימות לביצוע, להמשיך את הטיפול בפריטים, לסמן את הדברים החשובים או ליצור תוויות מותאמות אישית. השתמש ב- OneNote כמחברת, יומן או פנקס. ארגן הכל במקום אחד, מכל מקום.\n\nשתף פעולה עם כל מי שתרצה",
+   "icon_url": "https://play-lh.googleusercontent.com/9EfkTyLOKF8za5xRjWQOSkGn-YuXnPVYbXBN9mT_HZp9PcIuMl4wqxTBeE-iN0fbfYDqBiUdr8Vd2ip9sX2n0g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/9rUYIfJiNOFZyd69nrq9U49PyLyJ04AgKkvsyXrkinYEqXGHJpJNmtM-Bj0inQdUAel5YZvIICGvCyyvrkEPVg=h720",
+    "https://play-lh.googleusercontent.com/tNHA1hhLRWpxjuZZELr1abftk0UxPik8Bj49535vfsvQgnmTpOms3N0xT4dfqZeJ4MJbT4A-oVwgvNBEYwQO=h720",
+    "https://play-lh.googleusercontent.com/p7hlKhZ-Bcf8bqOsLedTJOu5FwXaODK4hpM44jkE2q6suHCWxkemijn8-mW-kuXN7kWjlPGrpGJw1g0a-bhF8w=h720",
+    "https://play-lh.googleusercontent.com/OokNG1bACHc9P8OnspEaiedFbd1Rl2leEX-trRB8v-XHK4gYv7mppJafoDIceP1DEIE86qKEs-7El60uoIVvKgM=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.office.onenote",
+   "sort": 227,
+   "play_titles": [
+    "Microsoft OneNote: Save Notes"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.samsung.android.app.notes",
+   "label": "Samsung Notes",
+   "category": "פתקים ומשימות",
+   "note": "הפתקים של סמסונג (לגלקסי), כולל כתב יד.",
+   "description": "Samsung Notes can create and edit documents on mobile, tablet, or PC and collaborate with others.\nUser can add annotations to the PDF using S Pen and create documents with images or voices.\nIt can also be used by connecting documents with various apps such as PDF, Microsoft Word, Microsoft PowerPoint, etc.\n\nTry creating a new note. \nYou can create a new note by tapping + in the bottom right corner of the main screen. \nNewly created notes will have the “sdocx” extension. \n\nProtect your notes. \n1. On the main screen, tap More Options in the upper right corner, select Settings, then select Lock Note. \nThen select a note locking method and password.",
+   "icon_url": "https://play-lh.googleusercontent.com/z_o9Zbkp-r2ZU6_Erc2zNnrJDaD0rSa2mxX90Ucg77VzdTaCJvPj_RWywsT1NcRwBNAZffOM66PYkuOhBqwRlg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/cqPbktlPGj5FRG4qHTHleEFLjkmKODGsMhvuLljLUXvhlshKmZOAmn5ie59ExtHVMDPbx_Xsn-zEhFK1otDXnA=h720",
+    "https://play-lh.googleusercontent.com/ameedzsc2EhhTZybggHIduC_iHd6OU5GbtwVbuAewvJoeuobzJDf1u1Ro_t-WxTRPd3R0IFaAXGo1wMj7yvgDg=h720",
+    "https://play-lh.googleusercontent.com/_6ftN9c5Uaqly0z9aEn_yZmcvxQAfzOiYASzgMj6vugATaw_kZ1D-P1ksx6OdhfdyvREnVzg3UP00KN7Jp-Fl64=h720",
+    "https://play-lh.googleusercontent.com/wkYf8DlzopqmRO6MfIzvTNfT82xLKBdd9OqIxCIH7l6euWKLuVTRmrq6Nu_CTgnRDb1o9wF6MoffeZjSkcjpGkI=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.samsung.android.app.notes",
+   "sort": 228,
+   "play_titles": [
+    "Samsung Notes"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.socialnmobile.dictapps.notepad.color.note",
+   "label": "ColorNote",
+   "category": "פתקים ומשימות",
+   "note": "פנקס פתקים פשוט, רשימות ותזכורות.",
+   "description": "הערה צבע הוא היישום פנקס פשוטה. זה להעניק לך חוויה פנקס מהירה ופשוטה לעריכת כשאתה כותב הערות, רשימה, מזכר דואר אלקטרוני, הודעה, קניות הרשימה TODO. הערה צבע עושה לוקח פתק קל יותר מאשר פנקס אחר ויישומים תזכיר.\n\n* שימו לב *\nאם אינך יכול למצוא יישומון, אנא קרא להלן שאלות נפוצות. זה לא באג.\n\n* תכונות *\n, ארגן רשימות לפי צבע\nדביק-Widget הערה\n-Checklist עבור ToDo & רשימת קניות\n, ארגן את לוח הזמנים שלך בלוח השנה\nלהגן על ההערות שלך על ידי סיסמה\n סיסמה לב Lock\n-Secured גיבוי הערות סטיית תקן האחסון\nתמיכה ב-חזרה למעלה באינטרנט ולסנכרן. ניתן לסנכרן פתקים בין הטלפון לבין מחשב לוח.\nתזכורת, על שורת המצב\nצפה -List/Grid\nחיפוש מציין-\n-Notepad תומך ColorDict Add-On",
+   "icon_url": "https://play-lh.googleusercontent.com/IoYdXZ5Z9ooJ7QoQA4LOACcrXhndg3nBZgy81s4UmxuQUoXB-gwAlGXyf1qFrYxTXxGsFE6jFwYuFXWJe0InYnw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ZUbHLxC8Cb02OXGqqM-zjD1fp8TGo1LWcypVXXJrq6QwDHnAE1jsz5bSg6bBN95d5GSPwhrpIYJlFCXCS-pPM6M=h720",
+    "https://play-lh.googleusercontent.com/gpiv_fhjlOplqeLnlAjmTGljnAWS3KE5PpT551KWp4t2uUts3cSogxZiYjrCYgbgIpjwpA4kNvDSNJbs10br0Q=h720",
+    "https://play-lh.googleusercontent.com/-Kt_dKyIqHpttLLmRwA9KSkGc_PTqmowFUxDDLwxguEACYF2n-HqjWDeM6BltLzHSl6UvLnt3oQfSkGSo3iSgwA=h720",
+    "https://play-lh.googleusercontent.com/uFpXH-CAMkF5zC3rnsilPbD8aD4wXcBsnpwxF7O5KRt-E6onTvQWBCtZhrseBO9XRMAWj4lZRn3ODLGdx-V8=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.socialnmobile.dictapps.notepad.color.note",
+   "sort": 229,
+   "play_titles": [
+    "ColorNote Notepad הערות"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.evernote",
+   "label": "Evernote",
+   "category": "פתקים ומשימות",
+   "note": "פתקים מסודרים במחברות, עם חיפוש.",
+   "description": "Capture ideas when inspiration strikes. Bring your notes, to-dos, and schedule together to tame life’s distractions and accomplish more—at work, at home, and everywhere in between. \n\nEvernote syncs to all your devices, so you can stay productive on the go. Tackle your to-do list with Tasks, connect your Google Calendar to stay on top of your schedule, and see your most relevant information quickly with a customizable Home dashboard.\n\n\"Use Evernote as the place you put everything … Don’t ask yourself which device it’s on—it’s in Evernote\" – The New York Times\n \n“When it comes to taking all manner of notes and getting work done, Evernote is an indispensable tool.” – PC Mag\n \n---\n\nCAPTURE IDEAS",
+   "icon_url": "https://play-lh.googleusercontent.com/dVQlfnQ_Fp-wNfKv2eI9XxbLymV6oGW_0ywIw3pxhYyKhjC0Lk8y6Ru_-sUc1fq2akADzAN7QWn8nPvcw6Ck=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/lK7KyZyJnlSKzOsjptlqzNdgwInVANgbfMKk3puSXfZs0B_2q6nVO_sIRRHYmHpzPpKYz4NzToMnmDg7M8XhhA=h720",
+    "https://play-lh.googleusercontent.com/8CO42VzPhJzTT_1GscLT8Lu33MnbEVr_RD6Xmjc82izJYoNXs7m2kMUVonmQtw1WlouT1uJbZIctmDcHIx_lfA=h720",
+    "https://play-lh.googleusercontent.com/OIaL2eGbYrCmhmrSke6dkFGFqLseO8vOgfDuFwyAQDSdref4OyFXoyKC1gtAgASjqX5qtZM443UHPc5z6F-juQ=h720",
+    "https://play-lh.googleusercontent.com/lHGLrI6MZWQD-XfgE5jaMSZUBPCZgqgEU2cIig3EOjNcVuj3CrL7YoyCDIaHt0iyHeQ5GZmFBun6oYdYKrZV=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.evernote",
+   "sort": 230,
+   "play_titles": [
+    "Evernote - Note Organizer"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.google.android.apps.tasks",
+   "label": "Google Tasks",
+   "category": "פתקים ומשימות",
+   "note": "רשימת משימות פשוטה של Google.",
+   "description": "בזכות אפליקציית Google Tasks לנייד קל להיות עם יד על הדופק ולדעת מה צריך לעשות: אתם יכולים ליצור ולנהל את המשימות בכל שעה ובכל מקום, והן יסתנכרנו בכל המכשירים. קל גם לסיים את המשימות מהר ובזמן: האפליקציה משתלבת עם Gmail ועם יומן Google, ואתם יכולים לקבל תזכורות.\n\nמה אפשר לעשות ב-Google Task?  \n• לראות, ליצור, לערוך ולנהל את המשימות בכל מקום \n• ליצור רשימות למשימות בנושאים שונים או בעדיפות שונה, כדי לעשות סדר בכל מה שצריך לעשות\n• לגרור משימות שצריך לתעדף למקום גבוה יותר ברשימה או לסמן את המשימות הכי חשובות בכוכב \n• ליצור תתי-משימות, כדי לחלק משימות מורכבות יותר לשלבים \n• להגדיר תאריכי יעד, כדי לקבל תזכורות ולוודא שהמשימות יושלמו בזמן",
+   "icon_url": "https://play-lh.googleusercontent.com/CHgl9nsIJn7g-QeUk-08KGHk0baiEsK3buBTVnOpatdFfF5HFzgbiGliR1lt8jRv29sYJQ0HQlDmlz544oMdDQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/NU_x2_uk9BbQdtJHgZOmYpv6llVFMVnHxjCDrK5KYxsbpkURPQkibwao4IYEZV_ewZJGu-YkvF99vL8FTC3fpw=h720",
+    "https://play-lh.googleusercontent.com/YHQU7rhQ7BNL6CdqizMFen_IHAp6H6319iG7J_z1QJvt0_cM4Rbga1E3lFDrI-BaT8Z2yzq6p271zU_F5kjhMA=h720",
+    "https://play-lh.googleusercontent.com/7s95zg1UzLeBfM7t5tOB3kqyMAXUjfeh8IKshYQKfhvovYLl4vkDK_SeN-NZ_LLHmdH3YAJVEHei4ZOWzKL4_A=h720",
+    "https://play-lh.googleusercontent.com/JD2rDM8nJqpp7RfqksrLWMdGi40ummYMFkEF5IMkbMPiylXtqbYnBpJBDtZcGXIt2J-2ZGY1N4HN5Qn3KDrM3Qs=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.tasks",
+   "sort": 231,
+   "play_titles": [
+    "Google Tasks"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.microsoft.todos",
+   "label": "Microsoft To Do",
+   "category": "פתקים ומשימות",
+   "note": "משימות ורשימות קניות, עם תזכורות.",
+   "description": "'ניהול משימות של Microsoft' היא רשימת משימות פשוטה וחכמה שמקלה עליך לתכנן את היום. לעבודה, לבית הספר או לבית, 'ניהול משימות' תעזור לך להתייעל ולהפחית את רמת הלחץ והמתח. היא משלבת בין טכנולוגיה חכמה לבין עיצוב יפהפה כדי להעצים אותך ליצור זרימת עבודה יומיומית ופשוטה. \n\nארגן ותכנן את היום שלך \n\nארגן את היום שלך עם ההצעות החכמות של 'ניהול משימות' ובצע את המשימות, המטלות או הסידורים החשובים ביותר שאתה חייב להשלים מדי יום. 'ניהול משימות' מסנכרן בין הטלפון למחשב, כך שתוכל לגשת לכל משימה מבית הספר, מהמשרד או מחנות המכולת, ואפילו במהלך נסיעות ברחבי העולם. \n\nשתף את הרשימות שלך עם בני משפחה ועמיתים",
+   "icon_url": "https://play-lh.googleusercontent.com/0fRzm2MnlTBFTzOc2nnQQvnsW4r3r1m4gN1oo33JDoNejOkgg1iy0BuUNrX81wGd6RRPb-Epwa3w_1jvToiU=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/zq23eM0paGBzU-v32tmCUi47vJasfGpF5rB7kVDnjP4JhG10F01Vg6Jx720Ap2BzmrkorePtxkmsUpjCcZ7p1Q=h720",
+    "https://play-lh.googleusercontent.com/v4yTqRRj6LSS0CQsB3hw2jAj_ymH8ttlAMmEXBNSsB3kuaJ2yV9fpj9NzSTdREdYzl_tUcEB-ZCRtRTqbBxWrlA=h720",
+    "https://play-lh.googleusercontent.com/-zVmylmxpnjlQf8QvSTBLHL9jnwtxAKDNceUTGBf68W_7KxrPSwRJDxgFBzaHuPadsuB3ZFYXFjEqk5hgITc=h720",
+    "https://play-lh.googleusercontent.com/EHmTRE6Ixr_3iiqQDLZvGGPwJ2PwomMNobu49CP79lU8ud5IqKsmK4AIDVAyPLloWTqJQgXJz0sdkV7B2WEtQ0U=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.todos",
+   "sort": 232,
+   "play_titles": [
+    "Microsoft To Do: Lists & Tasks"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.ticktick.task",
+   "label": "TickTick",
+   "category": "פתקים ומשימות",
+   "note": "ניהול משימות ותזכורות עם יומן.",
+   "description": "www.ticktick.com\nטיקטיק היא אפליקצייה לניהול משימות הזמינה במספר פלטפורמות. היא עוזרת לך להשלים משימות ולסנכרן אותן באמצעות שירותי ענן.\nעם טיקטיק אתם יכולים לארגן את חייכם בקלות יותר.\nטיקטיק ניתנת כשירות חינם, אך תוכלו גם לשדרג לגירסת הפרימיום הכוללת אפשרויות נוספות: http://ticktick.com/about/upgrade\n★\tדברים נפלאים שטיקטיק מאפשרת לך לעשות:\n●\tסנכרן משימות בין כל המכשירים שלך \n●\tצור ווידג'ט לגישה נוחה לטיקטיק\n●\tצור משימות שחוזרות על עצמן אוטומטית, עם הגדרות נוחות וגמישות\n●\tצור משימות המכילות תתי משימות\n●\tשתף משימות עם אנשים אחרים \n●\tהוסף משימות דרך דואר אלקטרוני \n●\tהוסף קבצים למשימות \n●\tשלב את המשימות שלך בתוך היומן שלך \n●\tתייג משימות\n★\tעוד דברים שיעזרו לך להתמקד ויגבירו את הפרודקטיביות שלך",
+   "icon_url": "https://play-lh.googleusercontent.com/cStkq8fqyxyFJc2mK1_MT8aNhsaU_Fy5cD5jd6-bsshZf-pC_WAdyR-iw7NIe99W5A2wNEXBGuzOtDorNcSSJIk=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/tt58zbIEsXs9HtCD3pU9CVde37JxJcm3BSTZpeP3HSEKu8evCtjgqf2lmA6JOzXMWCn7ZtOHJPKc93GoEemm=h720",
+    "https://play-lh.googleusercontent.com/fNDqPH6VnYVDaarpQoy0PsAW9BprX8Aft4IMZtKcH_vEz72Afe94nM_pJwMz8dzFcEB70d7zqfyAGRx6Pvjc=h720",
+    "https://play-lh.googleusercontent.com/KDXK5WBekaJPMwRn3VlATDuWgcYwDvJBaZHeCDkt-1SMoeAk-qtMn8bCXYYQb0-ghaTOnCw2yY7DYQYns2cohA=h720",
+    "https://play-lh.googleusercontent.com/RaraVLpvewqJAD-6vpRH5Ayw4_l9jHlEKNJKXJwGZaA_R-9I-WcnkvmnLTeFMFKUA4pzcJdsb-oF4Thbc9GRkw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.ticktick.task",
+   "sort": 233,
+   "play_titles": [
+    "טיקטיק - ניהול משימות"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.todoist",
+   "label": "Todoist",
+   "category": "פתקים ומשימות",
+   "note": "רשימת משימות ופרויקטים.",
+   "description": "You have enough on your plate without fighting your productivity tools. Todoist is the planner and habit tracker that bridges personal and professional productivity, without the complexity tax.\n\nJoin 50+ million people and teams who trust Todoist as their second brain to organize work, life, and everything in between. Your notes, reminders, calendar events, and daily tasks finally have a simple planning center that's easy to use and impossible to outgrow.\n\n–\nStart a 7-day Pro trial or 14-day Business trial today\n–\n\n→ Turn chaos into clarity.",
+   "icon_url": "https://play-lh.googleusercontent.com/03uYCmB2qWmmr-rIL8X_gj20wdIxLPW3bmqf1ZSNlwf_ZjuQYGnNnOB-8ig2CBzwqyf5meCgOgUEzxvC1QY6rg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ILp3t6zX8Za2lYzUXFJsPfHqvlrRjyZsuF1Am9RD__t40cEZnmF1rNGLu8we22iDtRWJ8fa7qB7P_VkTDLiaFw=h720",
+    "https://play-lh.googleusercontent.com/8BcMwcn2ZTPLyDic8teprTPfGR6gVo7b1wjSOrVQgo8LIphYgrnz10yXc4Mjawa_wmIjMN3omuZp8m-GdD2nZw=h720",
+    "https://play-lh.googleusercontent.com/76damq9rXWT90UD2z87yRiVHxjqXxSgGzAoXTjTaBlQnX-6nVskHUdidFRr48SCQp2XVu5PRdhMR50vAGH-U=h720",
+    "https://play-lh.googleusercontent.com/tdsazzBMZOo1aX0vBoZLXyRWnOtzXSeomL_7eUumS1gPsXPvL8HxADbo32krrQgdiPnF7VTDJzn4w_xUKafv5g=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.todoist",
+   "sort": 234,
+   "play_titles": [
+    "Todoist: To Do List & Calendar"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.anydo",
+   "label": "Any.do",
+   "category": "פתקים ומשימות",
+   "note": "משימות, תזכורות ויומן.",
+   "description": "🏆 בחירת העורכים על ידי Google  \n\nמעל 40 מיליון אנשים, משפחות וצוותים מסתמכים על Any.do כדי להישאר מאורגנים ולהשלים יותר משימות. זו אפליקציה פשוטה אך עוצמתית לניהול משימות עם תזכורות מובנות, יומן יומי ולוח שנה - הכל באפליקציה אחת.\n\n🥇 \"אפליקציה שחייבים שיהיה לך\" (Lifehacker, NYTimes, USA TODAY).\n\nAny.do היא אפליקציה חינמית לניהול משימות, תכנון ולוח שנה, המיועדת לניהול וארגון המשימות היומיות שלך, רשימות המטלות, פתקים, תזכורות, רשימות בדיקה, אירועים בלוח השנה, רשימות קניות ועוד.\n\nארגון המשימות שלך ורשימת המטלות",
+   "icon_url": "https://play-lh.googleusercontent.com/LWXoxr-_uTPP-7qbwNJXaTpNf-G6YbqdhqySVpJNpFYYe0VbSaA2ELXgLfEXJBMJLbBuRN4d2xu3_hsYbFYUUPI=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/XL12lBhN9eSAJiZA9k803jdIY98fKhl8175yz9cKwPb809PYD8QNRsQ06HxrbDk1EaRhKkhB4HX6fJaIDlaKZGY=h720",
+    "https://play-lh.googleusercontent.com/dhClx-TpZxTyPD4fpugI36iTitqN4CfoSFMdyI6J799DcJz2geveyvJFqhliRbqZgkvdIjstQgl8pMgl-M_ScA=h720",
+    "https://play-lh.googleusercontent.com/NgBZeHzsogXbSrvsh0JxIPi0dama78wI_OrXh3u7LTNujkshqHPhOKBTbM2tLmDiUHmxaSij4Y4xNKeNVv2D=h720",
+    "https://play-lh.googleusercontent.com/-OAo3TsxEDnq4tVq3iv0PU51lej2VtNNhw9Lq5qeo-pqZB5XkCiFsM43YNMZXZy2f_jzgHYchpaAAfBsGrcLVMk=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.anydo",
+   "sort": 235,
+   "play_titles": [
+    "Any.do - משימות עם יומן פגישות"
+   ],
+   "since": 4
+  },
+  {
+   "package": "org.tasks",
+   "label": "Tasks.org",
+   "category": "פתקים ומשימות",
+   "note": "משימות — קוד פתוח, בלי פרסומות.",
+   "description": "Supercharge Your Productivity with Tasks.org: To-Do List & Tasks\n\nSearching for the perfect \"tasks\" app? Look no further! Tasks.org is the open-source, privacy-focused to-do list and task management solution designed to streamline your life.  Take control of your schedule with powerful features, seamless synchronization, and a completely customizable experience.\n\nEffortless Task Management:\n\n• Conquer Complex Projects: Organize your tasks with nested, collapsible subtasks of unlimited depth.  Break down large projects into manageable steps and stay on top of every detail.",
+   "icon_url": "https://play-lh.googleusercontent.com/6l4LBpMYhJF-orUFD055v0vjkz3einVupuGmGNRFpuAJOz7CbDSNIoBg80PiUA2PClXP-wkbUQdKKebYv2DX=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/OHhbmpYg5creeheIxmr8w9m7nD43mu7Eq9xyd_0SeOu0Yxc3hrda8GFfwsGAUZYcq_Mj8a6eX_Nc5WXDjVhCkw=h720",
+    "https://play-lh.googleusercontent.com/LKUTGvWtdHXJC78xXktFf6ZLTJ7Vr_P4IMO2JlYBRnADGXzt2vGbjQgdPVFei_y23B0LFhakv9WS_NYsYvLR=h720",
+    "https://play-lh.googleusercontent.com/7Dq3Yk1n1vIPBLinEWNFvpQxqiYgE3kA4m3ZjFxx7vrMbPS2_DPGwgvP9IVcqI9ve8hvDChZUTMeh-AyfB-0=h720",
+    "https://play-lh.googleusercontent.com/jAj8-7V69yuhUTCrScRRFZMSLu9sLaMfPhImSKv4I-9xxyZptvOBFzpUGkqzuu5CG-zS9rCwU-jql03oTin9wZw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=org.tasks",
+   "sort": 236,
+   "play_titles": [
+    "Tasks.org: to-do list & tasks"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.trello",
+   "label": "Trello",
+   "category": "פתקים ומשימות",
+   "note": "לוחות משימות לעבודה ולצוות.",
+   "description": "Work smarter and do more with your personal productivity powerhouse, Trello. Capture, organize, and tackle your to do checklist from anywhere. No more chaotic schedules, lost sticky notes, or searching for bookmarked messages across apps. Stay organized and efficient with Trello Inbox, Boards, and Planner. Every personal or work-related to-do, idea, or responsibility—no matter how small—finds its place, keeping you at the top of your game. Smarter task list management, all from your mobile device.",
+   "icon_url": "https://play-lh.googleusercontent.com/n61MGuPfTK5t8ETbAAmc2nwy6CQnw5BFCqPSTRdsPbUc2e9MJhKu4GGB6qYgi2-B8-Cx6LVPPGqUKNkgPnO-xg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/iF1UXJt1SZJh-k-nNzT1YTlhLX-Q2DzVEMsT-ahuqbhkkFiCYoIgukPNTj8ff2fTib7YEQuWXMDsqcKmYTDsr50=h720",
+    "https://play-lh.googleusercontent.com/syOue_Hw94iWiR0GhFu8oJrT2XfUWi56utjn7Ka8xWQ_WXMxLoeMomASPLEZcIWg_TdvejpbJisJtHZSqz3v3Q=h720",
+    "https://play-lh.googleusercontent.com/2PmOi6SLL5mFJAZDprlndxyWDXH0-aHY5MhQOSIHdaNCtwHMc35cW04OtCC3h7fP-ovFI-wa0m3kJXP-_eVUWA=h720",
+    "https://play-lh.googleusercontent.com/AWvlEMZsF91WfvcW3ma4AekQ0-9ptndgCP0fXH51L5G4IQKaMAismcbTfjtssjCm1ldid7CwDEv9vwmHOtB9Dg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.trello",
+   "sort": 237,
+   "play_titles": [
+    "Trello: Daily Task Tracker"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.google.android.deskclock",
+   "label": "שעון",
+   "category": "כלים",
+   "note": "שעון מעורר, טיימר ושעון עצר.",
+   "description": "‏האפליקציה 'שעון' מציעה את כל התכונות השימושיות בחבילה אחת שתענוג להסתכל עליה וקל להשתמש בה.\n\n  1. מגדירים התראות, מוסיפים טיימרים, ומפעילים שעון עצר\n  2. עוקבים אחרי השעה מסביב לעולם עם השעון העולמי‏\n  3. מגדירים לוח זמנים לשינה, מקשיבים לצלילים שעוזרים לשינה ורואים את האירועים הקרובים\n  4. מתאימים למכשיר Wear OS כדי לקבל את ההתראות ואת הטיימרים בפרק כף היד עם כרטיסי מידע שמורים או תכונות נוספות של תצוגת השעון",
+   "icon_url": "https://play-lh.googleusercontent.com/EuxRXLT112vxErcVv9RH7qlZcO4nhnQ0gDMbnCWTgUTzCT0ahKah1HR6B3Xc2VYSD3wCG-bDmlJXwDWVn3in=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/a6L2_rJllNapEAZXcuZg_PJoQs-_IyUcJqyRqNCTMRucJPSRMezmJdcmjdjm63fRN2iWawy3cgjxf9UhsMNjpgA=h720",
+    "https://play-lh.googleusercontent.com/-4W1V2NzPaOixfyvNtJuqc6mLKvAomTmB7NygiWwf8LzDO3YF-afK-l08YO_Xf1w-7xVIzoEmP9r6ExyAH_aCw=h720",
+    "https://play-lh.googleusercontent.com/3BxwrBRU4C1aFWXs_QFzuxAFUfBoQf0NUf3e5Gp1FPDvi1E2NJmHEv61dEqKbKPC0QGdXvDsfxWBfSEWxk_I=h720",
+    "https://play-lh.googleusercontent.com/4u79VuLovaiovMDZCbR2HmMVWTgQ2s3TjCfnPLy7-3-ljtT2dV9bnYHTmzygBXGywcKV0q4lJxkz3kJhYE_N3K4=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.deskclock",
+   "sort": 238,
+   "play_titles": [
+    "שעון"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.google.android.contacts",
+   "label": "אנשי קשר",
+   "category": "כלים",
+   "note": "אנשי הקשר של Google, עם גיבוי.",
+   "description": "‏לגבות ולסנכרן את אנשי הקשר בכל המכשירים\n• אנשי הקשר יגובו בבטחה בחשבון Google\n• בכל פעם שנכנסים לחשבון, אנשי הקשר מסתנכרנים (למשל, כשמחליפים טלפון)\n• אנשי הקשר שנמחקים נשמרים באשפה למשך 30 יום ואפשר לשחזר אותם\n\nלעשות סדר ולעדכן את הפרטים\n• אפשר לראות את אנשי הקשר בחלוקה לחשבון (למשל, עבודה או אישי)\n• קל להוסיף אנשי קשר ולערוך את הפרטים שלהם, כמו מספרי טלפון, כתובות אימייל ותמונות\n• קבלת עזרה במיזוג אנשי קשר כפולים, הוספת פרטים שימושיים ועוד\n\nלשמור על קשר ולא לשכוח אירועים חשובים\n• קבלת עדכונים על תאריכים חשובים, כמו ימי שנה\n• אפשר ליצור תזכורות על תאריכים חשובים כדי לא לפספס אותם\n• קל להגיע לאנשי הקשר שנוצרו או שנצפו לאחרונה",
+   "icon_url": "https://play-lh.googleusercontent.com/Ojx9mA-MvK6RMsiLR9RqNuXldBBlFLGCBakylruyouG9L4GDadjgO4-T9CpbHpo4N7Y7YshMkcgdtPH48YFgSw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/QxeuDf7wNj5UySQq60LTx6GiBrsMozO73ugeNcbDMZa30DdHHUhHYI1nubsTKjFHUUwX64-cx8fEbfMKLIVJ8g=h720",
+    "https://play-lh.googleusercontent.com/Pykk-4ljQyX1NGw-ItJxQt9TPEpdOX4hbIhRc3Cr69O94uYiZMIIU-ryPHOEreveTaqXLUCVNWmMA2B9Jbjy=h720",
+    "https://play-lh.googleusercontent.com/lgq_mSui4cPhrus7l9OUHFsFS5xdJX19pCPu_sf78FdlMfNJtWdxZiclE_Tft3syugL9tBLzYxuH6MFPCVvm=h720",
+    "https://play-lh.googleusercontent.com/Wo8rdnqE2WD5sd6yblj8LrilFfRCeeJf-gt2X8NVI7Afo-DUeLZrtsNNeV93I4eV2bpLxPChcPvRcu1Gb_RH=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.contacts",
+   "sort": 239,
+   "play_titles": [
+    "אנשי קשר"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.google.android.dialer",
+   "label": "טלפון של Google",
+   "category": "כלים",
+   "note": "חייגן עם זיהוי מתקשר וחסימת ספאם.",
+   "description": "לראשונה אפשר להוריד את אפליקציית השיחות הרשמית של Google – אפליקציית 'טלפון' – כדי לדבר עם המשפחה והחברים, לחסום ספאם ולדעת מי מתקשר לפני שעונים, הכול בעיצוב פשוט ואינטואיטיבי.\n\nהגנה מעולה מפני ספאם\nאזהרות על שיחות חשודות יעזרו לכם להימנע משיחות לא רצויות – טלמרקטינג, הונאות או \"סתם\" ספאם. תוכלו גם לחסום מספרים כדי לא לקבל מהם יותר שיחות.\n\nלדעת מי מתקשר\nבזכות מאגר המספרים הרחב בשירות השיחה המזוהה של Google תוכלו לדעת מאיזה עסק מתקשרים אליכם ולענות בראש שקט.\n\nסינון שיחות ממי שלא מכירים 1,2\nלא מכירים את מי שמתקשר? הפיצ'ר Call Screen יענה לשיחה, יסנן שיחות ספאם ממקורות מוכרים בלי להפריע לכם ויעזור לכם לקבל מידע נוסף על מי שמתקשר לפני שתענו.\n\nדואר קולי ויזואלי 1,3",
+   "icon_url": "https://play-lh.googleusercontent.com/Q8H3qzqdVjWtyUGYAK6DoDJBYbtSmfmnIPfB5mRKRq01aWiIVRIxvlgDx6mbvkzanEczMTWL_7Ak0sLwe5GCEA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ZkAkPEsfoHHiYG7jQq5CreYqHLrcZsK6vaP1vMGU1rqrncSnhEpZBfLt31PKzPiXUqGPtEuzbhFQUi0l2oVd=h720",
+    "https://play-lh.googleusercontent.com/UvOM9DgDi61SUnzonITcB8W8vJ5eT8I4Dj7QVYTyhIZqNYC-CDxXb3xocAzAs5LRab2LrzLO_gihkI9RPm7B=h720",
+    "https://play-lh.googleusercontent.com/HaqYEGGXwatJHOKB6vWeOQ9iisC59ht-CH71BlBmPQMfj1dreCDWUs004JydeyrbQTz3lsm1x_bxF8rXWVqCxQ=h720",
+    "https://play-lh.googleusercontent.com/R_LrJdot-m4BY-KfDv6UxWQ-34vjE0cAubdnT87b2Q45LRaHag2dH_fOYCD5UJCUOEt6hbepo4L6UOcEG3oN=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.dialer",
+   "sort": 240,
+   "play_titles": [
+    "טלפון של Google"
+   ],
+   "since": 4
+  },
+  {
+   "package": "cz.hipercalc",
+   "label": "HiPER — מחשבון מדעי",
+   "category": "כלים",
+   "note": "מחשבון מדעי מתקדם.",
+   "description": "Excellent scientific calculator with step-by-step solutions, symbolic algebra, graphing, equations, integrals and derivatives.\n\nFamiliar from school: HiPER offers the functions you know from 991 calculators (991ES Plus, 991EX, 991MS, 991CW) and from the 570, 82 and 100MS models – fractions, equations, matrices, vectors, statistics, complex numbers, integrals and derivatives. On top of that, you get step-by-step solutions and graphs you would otherwise need an 84 Plus graphing calculator for.\n\nThe calculator has globally more than 50 million downloads and 250 000 five-star ratings.",
+   "icon_url": "https://play-lh.googleusercontent.com/K6jjz8LVIrs_UPmKTjJPHkRtTW27CGhdWoauqTYgugiWkhBhveWh097U0ZEjLe8f7dzhnkHniKgry7C3US6x2IE=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/tAM5PoIhpOEt98wBW8B_QGimi5OvX8LM1ye7R5Fy1sST8I4mIkgB1Dv3JR9vmPif8515wW9oAU7fHDGiUQAm8Q=h720",
+    "https://play-lh.googleusercontent.com/8JVr_PZ7mHIJK1jFA22I4-skoeovdsnODAt6dihTw-Fk2roR7geG6yOKXF8ZZryMyN2Q9KFoolyGr5rS_iOf=h720",
+    "https://play-lh.googleusercontent.com/Z1raQjDsfw07dDcYyj1knvSedQr45pu2Ci3bOun8M-9I3EeNIUsci1XBP8ZPOGRhtjPuFKu1hGkc5LQqsHm6=h720",
+    "https://play-lh.googleusercontent.com/uqjRDVLrwdyDLJLxBjFmh4D8cFs6b3iUOdeCmcTunyzeR7DRmgJsgAkiv6EBLAWRA1zcCLh3jux0w_qvsqfC_w=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=cz.hipercalc",
+   "sort": 241,
+   "play_titles": [
+    "HiPER Scientific Calculator"
+   ],
+   "since": 4
+  },
+  {
+   "package": "uk.co.nickfines.RealCalc",
+   "label": "RealCalc",
+   "category": "כלים",
+   "note": "מחשבון מדעי קלאסי.",
+   "description": "RealCalc Scientific Calculator is one of Android's most popular scientific calculators. It has over 20 million downloads and more than 100,000 5* reviews.\n\nRealCalc is designed to look and operate exactly like a real hand-held calculator. It has all the standard scientific functions plus history, memories, unit conversions and constants. You can choose from a number of display styles and formats. It also supports binary, octal and hexadecimal calculations and has an optional RPN mode. RealCalc is easy to use, but has full help included in the app.",
+   "icon_url": "https://play-lh.googleusercontent.com/RgO0E_ukP1oihMo8rs1Fr8V1p2elrbntFdWGB_W-EJG-dwopyXnzEN6JEFayeNuK3xAD5LPMtRGh246O3Ovk4g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/J5Cz5KrD8TLQ-Jtrfu3OSmIIN28bFMHTaZdtLDefCaOBmD8WHaTOUbL24ID-Hl4QPd_ngwccra38Zm8ImdoB=h720",
+    "https://play-lh.googleusercontent.com/IlCmDU6GqWIT72u26SvO9ZynS1mtFR5Gv5MLlb2vMAo4XwxUpFv48piwGGd4_iSEWSdNTuqenwkSFkdPjjNJXw=h720",
+    "https://play-lh.googleusercontent.com/AVEWnsISIoelk2a9-UT_RpBieh_SM9VpLibtjxIBNZi_I80rAkiDKbojU153ayBYGs57akAm0P8hbnF2isvynzE=h720",
+    "https://play-lh.googleusercontent.com/TW0TYRs5lCr1BsENW7sWFmMufvoHwVW6sg-99QhE9QTJYkLGTZJ7-E3VgQDK9ryv8IzxEvMN67MX_nZ0YHJg4RA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=uk.co.nickfines.RealCalc",
+   "sort": 242,
+   "play_titles": [
+    "RealCalc Scientific Calculator"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.androidapps.unitconverter",
+   "label": "ממיר יחידות",
+   "category": "כלים",
+   "note": "המרת מידות, משקלים, מטבעות ועוד.",
+   "description": "🔢 Unit Converter היא ערכת כלים הכול-באחד למדידות, מטבעות וחישובים — נבנתה מחדש מהיסוד בעיצוב מודרני ונקי, עם 18 ערכות צבע ואוסף עצום של 87 קטגוריות יחידות (מהמקיפים ביותר ב-Google Play).\n\n🌍 מעל 10 מיליון הורדות ברחבי העולם.\n\nתלמידים, מהנדסים, טכנאים, טבחים, מטיילים וחובבי עשה-זאת-בעצמך — כל מה שצריך להמיר או לחשב נמצא כאן, ורוב התכונות עובדות לגמרי במצב לא מקוון.\n\n📐 87 קטגוריות יחידות\nאורך, משקל, שטח, נפח, טמפרטורה, מהירות, לחץ, אנרגיה, הספק, נתונים, צריכה, זווית, כוח, מומנט, תדר ועוד הרבה — מיחידות יומיומיות ועד סקאלות טכניות מתקדמות.\n\n💱 מטבעות בזמן אמת ומתכות יקרות\n• 145 מטבעות עולמיים עם שערים המתעדכנים באופן קבוע\n• מחירי זהב וכסף בזמן אמת",
+   "icon_url": "https://play-lh.googleusercontent.com/s_cYINiZNZUP_u1N3o3HG4yB4SluUoV-QzxTuVBhhFy-hmjZ5eDG_Vd8XQjcqWZkShWf-L1JwPHvqgOc7t68VA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/OC2SvINTrx2JDO9GQj7CHLJdna_7yPKmvyZWUCqc5zMWzHMQ2zrnzZVlkcWneLYswKJ6ze1jwiJ5Fcj-jB0DAA=h720",
+    "https://play-lh.googleusercontent.com/f9qnlo0386FtQ7_4kkEyQu48EVi2fIrN1N4dAFHFLdvvUNTS0tJZf3XjZcHi4bJPe8orTgUeEFYUun1upXP0=h720",
+    "https://play-lh.googleusercontent.com/bLXWXqfHQWnriOqe0fjPliZ8gHMTySAKr1osum01w0mZDaJs8JRz4l6nEv-h2SV6w4Cr4oK7neaNpWIjf06emac=h720",
+    "https://play-lh.googleusercontent.com/q4xcUqoUV7647Jad9ARe696uinHrLOVjt9T7JKRGn_egzkaZNSLYK5kY6ZISlA0cG9DlnSENdfsqOdZuPH3dFw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.androidapps.unitconverter",
+   "sort": 243,
+   "play_titles": [
+    "ממיר יחידה"
+   ],
+   "since": 4
+  },
+  {
+   "package": "de.markusfisch.android.binaryeye",
+   "label": "Binary Eye",
+   "category": "כלים",
+   "note": "סורק QR וברקודים — בלי פרסומות.",
+   "description": "No ads, can read inverted codes and can generate barcodes.\n\nUses the ZXing (\"Zebra Crossing\") barcode scanning library. Supported barcode formats are: AZTEC, CODABAR, CODE 39, CODE 93, CODE 128, DATA MATRIX, DX FILM EDGE, EAN 8, EAN 13, ITF, MAXICODE (partial), PDF417, QR CODE, Micro QR Code, rMQR Code, RSS 14, RSS EXPANDED, UPC A, UPC E, UPC EAN EXTENSION\n\nThis is open source:\nhttps://github.com/markusfisch/BinaryEye",
+   "icon_url": "https://play-lh.googleusercontent.com/o-_EslkBFlwgRI-Sgj3gma4dUVTU2sdJ6GGF_uJKFDN4ki34XhI1oP8D_t9kaCtWI4Sxy_2LKn20ZVc0cnWG=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/zb1tYKfvImMiBrmVka3LeyargWqAlLKNB6NkUFzdjMow3VfY8ia-XzK5jw9Y4Og3Bx4CL-xpVe3NCyahdVHnAw=h720",
+    "https://play-lh.googleusercontent.com/Xb_CwTtGplvmOJ6Rhi2vly82ib6senoFVgrzJVmVlScn7416kTt-F5t2OubB4MNSv5f4xPEM9IyAwyTC4Vsr_8g=h720",
+    "https://play-lh.googleusercontent.com/BMAjnKuZWWFNTJHlwCtMuqHWdYVGdNiH02IEj44fguXyUiiA8-fsDOWPjcCZf9PvkyJy0cj9Hfen_ap9irhw=h720",
+    "https://play-lh.googleusercontent.com/O7IlUJ8bKTSPL4UZtqscDNsGTbeVdR4PFT75vO2A6ydpGJUgPk17Vb6svGZGNSb5-yVp4gviRqRd5vgphhOI=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=de.markusfisch.android.binaryeye",
+   "sort": 244,
+   "play_titles": [
+    "Binary Eye"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.gamma.scan",
+   "label": "סורק QR וברקוד",
+   "category": "כלים",
+   "note": "סורק קודי QR וברקודים.",
+   "description": "QR & Barcode Scanner הוא סורק הברקוד/QR המהיר ביותר שקיים. QR & Barcode Scanner היא אפליקציה חיונית לכל מכשיר אנדרואיד.\n \nQR & Barcode Scanner/QR code reader קל מאוד לתפעול; פשוט לכוון לקוד הQR או לברקוד שברצונך לסרוק והאפליקציה תזהה ותסרוק אותו באופן אוטומטי. אין צורך ללחוץ על אף כפתור, לצלם תמונות או להתאים את הזום.\n \nQR & Barcode Scanner יכול לסרוק ולקרוא את כל סוגי קודי הQR והברקודים כולל טקסט, כתובת אתר (URL), מספר ספר תקני בינלאומי (מסת\"ב / ISBN), מוצר, איש קשר, לוח שנה, אימייל, מיקום, Wi-Fi ופורמטים רבים אחרים. לאחר הסריקה והפענוח האוטומטי, למשתמש ניתנות רק האפשרויות הרלוונטיות לסוג הQR או הברקוד האינדיבידואלי וניתן לבחור באפשרות המתאימה. ניתן להשתמש",
+   "icon_url": "https://play-lh.googleusercontent.com/0QweSUOytSSdqMwlE1AWZ1piX68JLr92qmpm4WkK0waLvi6lzSxO9PCWdXO50O4-HugHrO9FDqrPcPZ060EZnw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/IWS6NksUuFX1QwSqVgcNfVHbkVtCsPwxj7p8HwwHRDgf7111iSoRRi1wBj8OoEVi9hlDaPF3Ui8tTQ-7USEiyw=h720",
+    "https://play-lh.googleusercontent.com/yJ8T95Zm0s3oWSQkBNnNHXaXX2SDEZJj3Hsq11AkH05uZbGaFc_ZMIE5WXmp3XJhCpr3ka2iRaq3cknoGQk0FA=h720",
+    "https://play-lh.googleusercontent.com/5WydR65TPDdWdrD0VxBvhgf46HA1okwEFHQsN8NMfj_3SQaWhk-50AqZs_7b9_kK7WDTTiI-8iraGRdtt_Xw=h720",
+    "https://play-lh.googleusercontent.com/d-l7hIA1X4zGKUzgtoY325C8WWVC7MTWCCLP8j4LOuERhOxuomO_1oksNjwZjw-LciY2JKBVw6ouHeiDVGsogA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.gamma.scan",
+   "sort": 245,
+   "play_titles": [
+    "סורק QR וברקוד"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.microsoft.translator",
+   "label": "Microsoft Translator",
+   "category": "כלים",
+   "note": "תרגום טקסט, דיבור ותמונות.",
+   "description": "Break language barriers instantly with Microsoft Translator.\n \nTranslate text, speech, and images in over 100 languages — for free. Whether you're traveling, navigating daily life, or working across languages, Microsoft Translator helps you communicate quickly and confidently.\n \nKey features:\n• Translate text in 100+ languages\n• Real-time speech translation\n• Translate text in images\n\nNote: The multi-device conversation feature has been retired.\n \nWith a simple, intuitive interface and high-quality translations, Microsoft Translator makes it easy to connect with people anywhere in the world.",
+   "icon_url": "https://play-lh.googleusercontent.com/XlNAPG1rLYea512qWHiiFLAa__PPxICmdxn3HgzML1OL3GuySiNSkOua1rGP_SoNVOzuXPkR1SBShWqRL7Xy1Pc=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/RziOfbXRWO7WyjWyzjcCroz9wT7D5jhL4iVj191VRZlRJLqt1qNh_yUWOoQp8pGW92ZL63AfG3FiE_yMYwjE1w=h720",
+    "https://play-lh.googleusercontent.com/mIN-kyU1LUCZDnodwDevgwWj8cMl-8FgVSGQZF6ym9EKTF7KV3WhTi95g2zVC3bxlW6pujhqzT8wzqQqK32xpQ=h720",
+    "https://play-lh.googleusercontent.com/XYPWFlXjQlWAZpbs09nUe_ixIYisW3EnCYW8WGl-pWxXXhxGu55hbApaGd2-fXC9Z59ayQnPxzWRNlgW7AtR6A=h720",
+    "https://play-lh.googleusercontent.com/E_1AlDkpMGYupnuPE_5t_wYMOyuRPyAYH0DhYq2dL9hj6vsJjOemEvP8kfk-6_o4PIrqt7EHIvBmWVJ1AJMxzQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.translator",
+   "sort": 246,
+   "play_titles": [
+    "Microsoft Translator"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.coffeebeanventures.easyvoicerecorder",
+   "label": "רשמקול קליל",
+   "category": "כלים",
+   "note": "הקלטת קול פשוטה ואיכותית.",
+   "description": "Easy Voice Recorder הוא המלווה היומיומי שלך להקלטת רגעים חשובים. הקלט פגישות, הערות אישיות, שיעורים, שירים ועוד הרבה, ללא הגבלות זמן!\n\nלסטודנטים\n\nהקלט שיעורים והרצאות באיכות ברורה, גם כשהמורה אינו עומד ממש מולך. האזן להקלטות כמה פעמים שתרצה כדי להתכונן למבחן הבא. האץ או האט את ההשמעה, ודלג על קטעים שקטים, כדי להאזין בקצב נוח.\n\nללא הגבלות זמן ועם אפשרות לבחור פורמט דחוס, קל להקליט שיעורים והרצאות ארוכים במיוחד.\n\nלעסקים\n\nהקלט ראיונות ופגישות מהטלפון, הטאבלט או השעון החכם שלך, ושתף אותם עם חבריך לעבודה דרך האימייל או אפליקציית המסרים האהובה עליך. השתמש בווידג׳טים וקיצורי דרך רבי עוצמה כדי להתחיל הקלטה חדשה היישר ממסך הבית.\n\nלמוזיקאים ולכולם",
+   "icon_url": "https://play-lh.googleusercontent.com/IVjD1kwORyWNF-Nv7ufoxFtjT98rq5dh8-muE9I9ZUmlheOM3oT3RvBEuwr_WsoRf7f7dnnuNZQjZX-henBtP0k=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ody5xDB68O23_xpdnnULK76FUPu0XIKDKHEC35iosxfc1B6GolqAb8sLSD0YxodyaVp2eRJX9gagIT-fBr_ZqFg=h720",
+    "https://play-lh.googleusercontent.com/BruGFy5odGLvkKM6yJNoKdFy-wVuFDosnNtsIP7cvvjjjpjNrXuWpjFKQr44sL7G4bsdYa-LuDZkZ4m4BdNk=h720",
+    "https://play-lh.googleusercontent.com/DwcUD8_xP1PjO8Nefp0jfb41rLBZ010AGLINsgcn57HsmR1b4v6H6fH9AfMlKR4HMZHo8WWvpgpwLsWew3A4_A=h720",
+    "https://play-lh.googleusercontent.com/FVfCqDlFZOR6HoZv6UUnqff4L8AFVEfUkO5EAPE9AQVCstR-yxdv4doyvoEu8MdNUxVahwLmv7r4c5jdkAmlxw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.coffeebeanventures.easyvoicerecorder",
+   "sort": 247,
+   "play_titles": [
+    "רשמקול קליל"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.x8bit.bitwarden",
+   "label": "Bitwarden",
+   "category": "כלים",
+   "note": "מנהל סיסמאות מאובטח.",
+   "description": "תוכנת Bitwarden היא הדרך הקלה והבטוחה לשמירת הסיסמאות שלך ועוזרת לסנכרן את הסיסמאות בין המכשירים שברשותך. \n\nגניבת סיסמאות היא בעיה רצינית. אתרים ואפליקציות מותקפים באופן יום יומי. פירצות אבטחה קורות מדי פעם ומאגרי סיסמאות נחשפים במלואם. כשאתה משתמש באותה סיסמה עבור כמה אתרים או אפליקציות, ההאקרים יכולים לנצל את אותה הסיסמה עבור אותם האתרים והאפליקציות ויכולים להשיג גישה למייל, לבנק, ולחשבונות חשובים אחרים.\n\nמומחי אבטחה ממליצים להשתמש בסיסמאות שונות ורנדומליות עבור כל חשבון שאתה יוצר. אבל איך תנהל את כל הסיסמאות הללו? תוכנת Bitwarden עוזרת לך ליצור, לשמור, ולגשת לכל הסיסמאות שלך.",
+   "icon_url": "https://play-lh.googleusercontent.com/ezsPZ5JtRMkMd6DtbUOZghm4m-EbYcZSzXAIxJMumYOaDP9sI8o-DN8-tZpds0HJUXb-ur7F-oB9rFH78Jy2lA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/CMTlm6MBF6ohMl4Hkq0kjIM_VRJQMBTKbEhqwXWU6ahS0_XDdRVz1hSTdolys6WkG_dFkWLg6bZKFeEgmlMjKQ=h720",
+    "https://play-lh.googleusercontent.com/zMFGx1mNZXJU8R4oZAVvc1raFz-jW2Es3CNcger0uT0bScsX_Jw-jr1w4P5YYck9GER4NHzGXnTzuUykShKkmQ=h720",
+    "https://play-lh.googleusercontent.com/Hd7VFaL54HaUO9sBziXyhhngUrwHdEa5pw8qtmHQcqgA-DA8-90kugJMTJSbDAKT7ee98USi-abmEFxC0fYeqg=h720",
+    "https://play-lh.googleusercontent.com/qR1OpDaabSoLIQ6m6cfHY9QhysWqV2uabEoUu1tZCXugAqEvIeEwMAW0GbwAaPuYX6nI0oeaVZ1kBvmHd1I1fg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.x8bit.bitwarden",
+   "sort": 248,
+   "play_titles": [
+    "מנהל הסיסמאות Bitwarden"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.microsoft.skydrive",
+   "label": "OneDrive",
+   "category": "כלים",
+   "note": "אחסון וגיבוי קבצים בענן של Microsoft.",
+   "description": "התחילו עם 5GB של אחסון בענן בחינם, או שדרגו ל- Microsoft 365 Personal או Family עבור 1TB לכל משתמש. גישה לקבצים שלכם מכל מקום – אפילו במצב לא מקוון. \n\nגיבוי תמונות וסרטונים\n•  הפעילו את Camera Upload לגיבוי אוטומטי של תמונות וסרטונים \n•  כספת תמונות מאובטחת עם תיוג אוטומטי \n•  צפו ושתפו תמונות בכל המכשירים שלכם \n•  שמרו על התמונות והסרטונים שלכם באמצעות אחסון מוצפן\n\nשיתוף קבצים וגישה אליהם \n•  אחסון מאובטח לכל התמונות, הסרטונים והאלבומים שלכם \n•  שיתוף קבצים, תמונות, סרטונים ואלבומים עם חברים ובני משפחה\n•  גישה לקבצים נבחרים במצב לא מקוון\n\n•  שיתוף תמונות והעלאת סרטוני וידאו בקלות \n•  קבלת התראות בעת עריכה של מסמך משותף",
+   "icon_url": "https://play-lh.googleusercontent.com/pkzkr91OWFffdDGZ9706Ev2lxjM1pMizefY__r8JkCAtNVO-hmaMG2Qfx9ngpu7V7K4Yx_E7csAMl6fP7dGNS28=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ltt76cuuwjQlyCm6x1W7d5WWVrF-zFZIGe087Q0dcW7SvN-YybeMJAUj1Yu2aL59dNScprFM0jSU9cfMK1mlmQ=h720",
+    "https://play-lh.googleusercontent.com/P5qIjZsHavxs5K9htHzmGKxWnHyDijpCve-kWz_WN7ENHL5GQEMkwtaqP_hKYAfmvZJ5YoTrznd9oASLcq2ItlA=h720",
+    "https://play-lh.googleusercontent.com/qtJBV5wYl_agCjNtI18yMhtZ4uh32wppm-yGEwfZyGhaI2w2v-hA5X-6RTZ9ZzAmPL8BYbPBuvl0RQCPotWutA=h720",
+    "https://play-lh.googleusercontent.com/OcDGBoXWlTcP5xzlPlOXNN94uzsn1ePkOuxx_oDMz6sfkU03knmY7n7xCsY8cXeDfeTg15p4o-vtpn5DAdXC90Y=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microsoft.skydrive",
+   "sort": 249,
+   "play_titles": [
+    "OneDrive – אחסון בענן"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.dropbox.android",
+   "label": "Dropbox",
+   "category": "כלים",
+   "note": "אחסון ושיתוף קבצים בענן.",
+   "description": "Dropbox keeps your files organized, safe, and accessible at all times! You can effortlessly view and share files with anybody, no matter how big or small, by just sending them a link. Keep all of your important files in one place and easily backup your phone or computer. Additionally, you may also use Dropbox to scan your files with ease and organize them in a safe storage.\n\nFeatures:\n• Automatically upload photos and pictures from your camera roll to cloud photo storage for easy photo sharing ready to send anywhere. \n• Access any file in your account - even offline - and preview over 175 different file types with no special software required.",
+   "icon_url": "https://play-lh.googleusercontent.com/A8rNctsbRVnv05n6gwR74kN68SuSaBW-B9NTdCrq62snoMxMnedV2PGZaatv-sPS9ygdVvXUomyRfGWa8Xul1Q=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/vjFfipciZhKNcGDRElwjJhYkWy941nN0DUCv2thHGAVyVN-QFES5yqthiHfsHxoclg6GY_zdM-AwQz_bHzh2rg=h720",
+    "https://play-lh.googleusercontent.com/dxkT99dqIS0DMT8uwecmXw6RK6sWqaLaZDd7mc97KK6wWRu8LfczG0pTTI8UNm9Y7dKkxqFW622Zg67MgPgDCA=h720",
+    "https://play-lh.googleusercontent.com/WmFu3DznGY-0tJo3gg7N8ppqpfBvatYCtVcf5QiOlz80Zud4l7x9nfQ17cNxft3g8E1QC1Vr6JlPXJMEqccE=h720",
+    "https://play-lh.googleusercontent.com/x5bsAkca5Orr1lvo5WD9IrZG1fCVC-M4mlIXciyLLQdUS3habkodI1f5J1IuIpepfcTHEdW-Denydk6f6lvakA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.dropbox.android",
+   "sort": 250,
+   "play_titles": [
+    "Dropbox: Files & Cloud Storage"
+   ],
+   "since": 4
+  },
+  {
+   "package": "il.gov.ims.app",
+   "label": "השירות המטאורולוגי",
+   "category": "כלים",
+   "note": "התחזית הרשמית של השירות המטאורולוגי.",
+   "description": "הכירו את האפליקציה הרשמית של השירות המטאורולוגי הישראלי – המקור המוסמך, המקצועי והמדויק ביותר למזג האוויר בישראל, עכשיו ישירות בנייד שלכם.\n\nרוצים לדעת אם ירד גשם, לעקוב אחר אזהרות או פשוט לתכנן את היום שלכם בצורה הכי מדוייקת?\n\nהאפליקציה שלנו מעמידה לרשותכם את מיטב הכלים והנתונים של חזאי השירות המטאורולוגי, בזמן אמת ועל גבי מפות מתקדמות ונוחות לשימוש\n\nמה תמצאו באפליקציה?\n\nתחזית מזג אוויר מפורטת:  תחזית לכל חלקי הארץ ותחזית ייעודית לפי ערים ויישובים, המתעדכנת באופן קבוע.\nתצוגת מכ\"ם הגשם של השירות המטאורלוגי:  צפייה ישירה במכ\"ם מזג האוויר של ישראל. עקבו אחר התקדמות תאי הגשם, עוצמת המשקעים וכיוון הגשם בדיוק מירבי בזמן ובמרחב.",
+   "icon_url": "https://play-lh.googleusercontent.com/zYj6qZ0RXGxBxsulAobD4ylsNnVdd_ycIkIrpHPNdsyoXwXH90ifykLvpf5knT65XNk-UV_NgAJa3j9PzVjb=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/3oLxggWcVSD0IR3GjSOwiLcWowltDusjVEZawrqYQ1zuqq67spzhiV9Qyr5HMv7CIL36Kk2Xpbp7Wo7W7gO8=h720",
+    "https://play-lh.googleusercontent.com/zBE8eVFPxuo3hmFNWLu55Q79gk0jXUi3MhzQYot4ZiXYSKjAoBFanwfALMtOM5KD6swlrHJH89ExD1wiMctkaw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.gov.ims.app",
+   "sort": 251,
+   "play_titles": [
+    "השירות המטאורולוגי הישראלי"
+   ],
+   "since": 4
+  },
+  {
+   "package": "org.zwanoo.android.speedtest",
+   "label": "Speedtest",
+   "category": "כלים",
+   "note": "בדיקת מהירות האינטרנט.",
+   "description": "The Speedtest® app now features Downdetector® to help you plan, assess, and troubleshoot your internet connection for seamless connectivity in one location. Make the Speedtest app your first stop when connecting and staying connected.\n\nWith 55 billion tests and counting, our speed test is the go-to solution to wifi testing, cell measurement, and internet performance analysis Speedtest around the world. Now we feature Downdetector in the app so you can see real-time status updates on your favorite online apps and services. Use it to track your favorite services and report problems  to stay informed.",
+   "icon_url": "https://play-lh.googleusercontent.com/ZH4EUfCHaf8hoFSpeLx_guqWN-DkGdJWbP5Ydim9dbvqO4L95TC3V7WD20-KsEpGaZuCrWz62ClSYdmCanL9=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ZUin-Q7jOYoJeBmI541Ru_vgS-6n38KQ3aH_F62XkBObbDSkWKxuyiiH5RecH4tTEBY1p8_lkUCXehFx52BH=h720",
+    "https://play-lh.googleusercontent.com/0K2X3O2liqSjrl4Nt1PMdwd8lPCWyytO8AA-4ef7be72HPGPGlVGQ7F_fr8j6_kPMf5FV2tO2llaJfFkiOYR=h720",
+    "https://play-lh.googleusercontent.com/CXxmrfvN59kqitmIfhBeDhWrE87JXFw2moafkxe-iaWeabZ4RH8-sCp9SENHgjMatTzHxd65Iw9tGO6jBaLz=h720",
+    "https://play-lh.googleusercontent.com/Pt5JD92zruPpkk5ObZBKQV2SfUKJQnQVMlYqujY61S9SQ-_B16Gee3d8RNLvvZ764gPdGqoEwEVyKYQOUh14aQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=org.zwanoo.android.speedtest",
+   "sort": 252,
+   "play_titles": [
+    "Speedtest by Ookla"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.google.android.apps.walletnfcrel",
+   "label": "Google Wallet",
+   "category": "בנקים ותשלומים",
+   "note": "תשלום בנגיעה בטלפון, כרטיסים וכרטיסיות.",
+   "description": "עם Google Wallet, נהנים מגישה מהירה ומאובטחת לכל מה שצריך באופן יומיומי. לא משנה לאן תלכו – הכול נשמר במקום אחד בטלפון הנייד.\n\nכרטיסים, שוברים ועוד – תמיד איתכם\n+ משלמים ללא מגע עם Google Pay, עולים למטוס/רכבת, הולכים לסרט/הופעה או צוברים נקודות בכרטיסי מועדון עם ארנק דיגיטלי שיש בו יותר מקום.\n\nגש Wallet Google משעון Wear OS שלך\n+ קבל גישה מיידית לארנק בלוח השעון הראשי של Wear OS עם סיבוכים.\n\nמוצאים מהר את מה שצריכים\n+ שלוש דרכים מהירות לגשת לכל מה שצריך באופן יומיומי: שימוש בהגדרות של הטלפון לגישה מהירה, פתיחה של אפליקציית Wallet ממסך הבית או שימוש ב-Google Assistant כשהידיים תפוסות.\n\nכל מה שצריך, בדיוק בזמן הנכון",
+   "icon_url": "https://play-lh.googleusercontent.com/zd5pb7c2r_TXGBPSQyNN_Kq_WzsjhEqX8sdyl0CkEAjshnbscd71SmLPh1L_xVCcckP2LOC2ZpB1n23Q8NuRvA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/2GPJZZCSHcCFtUxsSxHQvuAaRVhF_mjL2F5WkZm-wUn4H5vj8wgPSICKullXaVKgxSz2JmC4iDSAvzm5hZzKqac=h720",
+    "https://play-lh.googleusercontent.com/mjyZ3yjFrKARf1UeVg2FUWLf3CDR-foBjNXthKEQf2XsHg8Y_Ex_RHi626Nwwtnawscru2iMkmBKDWy30rC70g=h720",
+    "https://play-lh.googleusercontent.com/o0U0Rxkl12n9ocnMu-Xo3sJCGDNe9B0pz05dIenbblft5aKj0Q-w2267ysQdwu-7Ho3GF2fNO_NzU_tSyZadwQ=h720",
+    "https://play-lh.googleusercontent.com/PtmXi5g2gl0tu2WqjgyNNGh4RAQ4jk774nTPzU_c4jPoDsUJ-yv2ZacG-s3It0KEpVywcVEXdCyYI3UBVaaPQQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.walletnfcrel",
+   "sort": 253,
+   "play_titles": [
+    "Google Wallet"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.samsung.android.spay",
+   "label": "Samsung Wallet",
+   "category": "בנקים ותשלומים",
+   "note": "תשלום בנגיעה (לגלקסי).",
+   "description": "Samsung Pay got even better. Meet Samsung Wallet!\n \nSamsung Pay is now part of Samsung Wallet. With Wallet, you get the features and benefits of Samsung Pay, plus Samsung Pass, digital home and car keys, digital asset management, and more. \n\nAll this comes in a simplified in-app experience, so you’ll get more and find it with ease. Just swipe up to launch Samsung Wallet with Quick Access.\n\nPayment Transactions\nCarry your popular credit, debit, gift and membership cards on your phone. To check out, just tap, pay, and go. Get additional savings at top merchants with Cash Back Awards.\n\nDigital Keys\nAdd your eligible keys to Samsung Wallet so that you have a spare set right in your phone.",
+   "icon_url": "https://play-lh.googleusercontent.com/Oy8bbVOACpQsG-1SVj1KgA_6hL1mGS8iI1zy9Z0NgK2Kz_dLyDNfpDFDY0BmKN52x9Y4vvHfcQYF8wVeW5K5zQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/Z35C1S16bZ7QPf9Z2tslyymmaIxdNRWzr4CSCkTUHIkU60_YXsPDoyWcoJpcUvmiLsLCoHgERA8e1e2xqpNoqA=h720",
+    "https://play-lh.googleusercontent.com/4-UPGMuFMIe1voLfBsK19fOGZlTDVZiefqhjv16LXyxfpr6hOMXjK32eOa7n6GikT0Rwp_ajnI-AN6lEN2Cn=h720",
+    "https://play-lh.googleusercontent.com/bhacvnQO0EUSkkWQ8USdc1F6EgFCdsFeRXj1OZ6FyQtFIZKaACL-jruXJ6jrD7C-8XN8Mdz9_tVDILdOmSsdUg=h720",
+    "https://play-lh.googleusercontent.com/PEcJKyxLK4Kwm1bHo1kj3eEW0esUrU1NeBpiQhiVWehQDaphFckCZwkbuz_6E38SlccUk0WUFxFQYDa5C6U5VgI=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.samsung.android.spay",
+   "sort": 254,
+   "play_titles": [
+    "Samsung Wallet (Samsung Pay)"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.paypal.android.p2pmobile",
+   "label": "PayPal",
+   "category": "בנקים ותשלומים",
+   "note": "תשלומים והעברות, גם לחו\"ל.",
+   "description": "בין אם אתה משלם עבור שירותי שמרטפות או במספרה, חוויית האפליקציה לנייד המשופרת שלנו תאפשר לך לשלם בקלות עבור מוצרים ושירותים, אם המקבל הוא משתמש PayPal, להציג בקלות את הפעילות בחשבון שלך ועוד.\nשליחת תשלום באופן מאובטח יותר\nניטור עסקאות מסביב לשעון (24/7), טכנולוגיית הצפנה מאובטחת והגנה מפני הונאות יבטיחו לך שקט נפשי בכל פעם שתבצע תשלום.\nשליחת תשלומים לכל העולם \nהודות לאפליקציה PayPal Mobile, שליחת תשלום לכל רחבי העולם הופכת לקלה ופשוטה.\nניהול קל יותר של פעולות תשלום\nהודות לאפליקציה PayPal Mobile, תוכל לעקוב ולנטר בקלות רבה יותר כל עסקה שתבצע באמצעות PayPal.\nהסכמים משפטיים\nנדרש חשבון כדי לשלוח ולקבל תשלום. אם למקבל אין חשבון PayPal, הוא יוכל לפתוח אחד בקלות, ללא כל עלות.",
+   "icon_url": "https://play-lh.googleusercontent.com/9SeHb3IaNFm7sXRQmWZaL5MHqVn4qcBGz12sPgjBisZCFMyZPOCXUFOZIttUu-CiTqQz3alXL7jxxGW1Y4fn=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/8vju6FMZvKvYG1wocEkamd_XGq7-MG-dAdvvObxeSqd-4ET_BIscd2mPjGKjJeFxGi1lIKjAL4uC1BGQ3RdSfA=h720",
+    "https://play-lh.googleusercontent.com/YVHoQ35X-Zf6xiHcws94tUwegvJ6SIDtUKOw8MwD0zGJokZ5Nj2y66kMUtbWOODmJLKjbr61lhxhoWUdNw3OpDc=h720",
+    "https://play-lh.googleusercontent.com/5fYs4Mj1DqOt_kQa2e2SD5iORk4sEmbHFT-c1PXamx8vZuXh65VfOJMmLDozSPv4wA7wpOMKQxI6n2gREFUKOH8=h720",
+    "https://play-lh.googleusercontent.com/iBqigO1hQ7c17NUhrEa53zaDe48tr-GVPsu9tK3NkuRhrcHT370bkCYAlF4hf1ZIlWlywyoFD1Q0MKSMdtvm=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.paypal.android.p2pmobile",
+   "sort": 255,
+   "play_titles": [
+    "PayPal"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.morning.mobileapp",
+   "label": "מורנינג (חשבונית ירוקה)",
+   "category": "בנקים ותשלומים",
+   "note": "הפקת חשבוניות וקבלות לעסק.",
+   "description": "מורנינג (חשבונית ירוקה), היא המערכת המובילה והמומלצת בישראל להפקת חשבוניות דיגיטליות וניהול העסק, עם מעל 160,000 עסקים שכבר בחרו לעבוד איתנו.\n\nהאפליקציה המתקדמת של מורנינג מאפשרת לבצע את כל הפעולות החשובות שעסקים צריכים, ישירות מהנייד: הפקת חשבוניות וקבלות בשניות, בניית הצעות מחיר, סריקה אוטומטית של קבלות על הוצאות, שליחה אוטומטית של דוחות אל הרו״ח, סליקת אשראי וקבלת תשלומים מלקוחות ועוד ה-מ-ו-ן כלים מעולים ויעילים שעוזרים לעסק שלך להצליח.\n\nהנה חלק מהפיצ׳רים שיעשו לך חיים נוחים יותר בניהול העסק:\n\nהפקת כל סוגי המסמכים בשניות\nחשבוניות, קבלות, דרישות תשלום, הצעות מחיר, תעודות משלוח ועוד. את כל המסמכים אפשר לשלוח דיגיטלית ללקוחות ישירות מהאפליקציה דרך המייל, וואטסאפ ומגוון דרכים נוספות.",
+   "icon_url": "https://play-lh.googleusercontent.com/fFsdkAgtv85vF5H3SXCbaGml4VteTxSf7WBzP-gU3mUJxuMBF66dppXhSiywqagey4CdESyabh7CeVmYlqMX=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/V16mzEklzqQS7n_F6mbJckDQ16VZHSQZ_DhpuBI-dhi_MVlBYnq1wP2w6_VVZilJFLjR4AwdkTjyVcAx7iC0UtM=h720",
+    "https://play-lh.googleusercontent.com/zs_mVFrev1uV-_5iYkGvU-aaklHYZPm7wga05gkO_VgME04YsE5PSOTpV6HYtnOk2y_5e3Lse8HvyoRTcb3h6Rc=h720",
+    "https://play-lh.googleusercontent.com/HnjH9TTUg-FrPEsDRwuOyLxke-mxVfin_sK1ocMUvaGVEhLwqJtxAAuz-KpAel4_dx1lxYavOaFXMSn-BUmXPQ=h720",
+    "https://play-lh.googleusercontent.com/kIohvYSoQHx_Ziz5-xtD7PcMyyVN72TTg-If6ytZRp8FDzVwyRuhpdLRiqjVvD7Hqt91Ys65h6EzvgYdD7h_LA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.morning.mobileapp",
+   "sort": 256,
+   "play_titles": [
+    "מורנינג של חשבונית ירוקה"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.icount",
+   "label": "iCount",
+   "category": "בנקים ותשלומים",
+   "note": "הנהלת חשבונות וחשבוניות לעסק.",
+   "description": "אנחנו גאים, מתרגשים ושמחים להציג את האפליקציה החדשה של iCount! \n\nהשקענו המון זמן בשביל לחסוך לך זמן\nפילוח הכנסות והוצאות בחלוקה לתקופות, מעבר מהיר למקומות החשובים ביותר במינימום לחיצות וכפתור כל-יכול שיעזור לך לבצע את כל הפעולות שרק דמיינת.\nכאילו, בגבולות האפליקציה. הוא לא יכול להפוך קפה לזהב נגיד.\n\nכאילו מעולם לא יצאת מהמשרד\nפישטנו, סידרנו, ניקינו ותיכננו מחדש את תהליך הפקת המסמכים והזנת ההוצאות, כדי לתת לך את החוויה החלקה והקרובה ביותר לגרסת הדפדפן שלנו.\n\nשולחן נקי ממשימות לראש נקי מדאגות\nיש לך חשבונית שזמן הגבייה שלה עבר או הוצאה שעדיין לא סיימת להעלות למערכת?\nיצרנו אזור חדש באפליקציה שמרכז את כל ההכנסות וההוצאות שדורשות המשך טיפול ומעקב.",
+   "icon_url": "https://play-lh.googleusercontent.com/NqRM7ZeNxAzkhJ0ZczeGiYUGz9aUcA4m4teIxCX7dOWy3ThSpVQyCDFx0KGa9wFrl0bLQZALt2gnLfSH2Xfejg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/T0ayJZ5wEDLEP0hB5gjriCxWVs0RZnYiew5MSbg79IBVXf3UN44kMdlS6iPKQhLPeZZVzQhmUHqbjzoXlJIMKQ=h720",
+    "https://play-lh.googleusercontent.com/7UlPWOzXfsiRMQog5Dpujju6tq5f-NZTySE4IcdLUk27-SqDocV1ZGj9LwlokCI3b1cSC3rTUyFOxhuH9Vn1YA=h720",
+    "https://play-lh.googleusercontent.com/s5vZ9w_LPgAUn36_ph6D2d3OcoWrt4zY9Ks69fixqw1uWaUrHjFj4Rn95d3qvqSOFd-CS-lnDi2K8UwQFyIoIEM=h720",
+    "https://play-lh.googleusercontent.com/EaAEWJuFr7fhEXzM3e8oQpyqBjNYvnA9OBDxYN_xRibHBsJb6OgRWtVPmS92rPcL4mzW79dp-LLm5jfCOuv7Wgs=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.icount",
+   "sort": 257,
+   "play_titles": [
+    "iCount"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.app.yeshinvoice",
+   "label": "יש חשבונית",
+   "category": "בנקים ותשלומים",
+   "note": "חשבוניות וקבלות לעסקים קטנים.",
+   "description": "ברוכים הבאים לאפליקציה של \"יש חשבונית\", חשבונית ירוקה דיגיטלית החדשנית ביותר העושה רפורמה בתחום - עם יש חשבונית ניתן לקבל את כל שירותי החברה ללא הגבלה! כל השירותים במחיר אחיד, ללא הגבלה , \nללא תוספת מחיר! במצב הכלכלי של היום, יותר ויותר אנשים מחפשים כיצד ואיפה ניתן לחסוך בכסף, לשלם פחות מבלי לוותר על איכות ולקבל שירות ברמה גבוהה במחיר פצצה. \nכאן אנחנו נכנסים לתמונה ומסייעים לכם לנהל חכם את העסק שלכם בפחות זמן ופחות כסף. \n\nמה ניתן למצוא באפליקציה של יש חשבונית?",
+   "icon_url": "https://play-lh.googleusercontent.com/iDJdD21ik6wwsfaMDYf5hxlNOoA5ss0ZYcJF6aE7DWoQbjqt-Vt8WbQH_jBDXRVzUfGOTKwc4YrUyW0NdFSq=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/PCCALEYbAdCz3iHK8g94O8yvWeVvDjVaz2Oqh0lbGaLHpV907z9NR7Wvs5auRGlYHR8T0gV8nN1n6J6TgxhN=h720",
+    "https://play-lh.googleusercontent.com/UIDgDr8KLfIUj1VE0BM5qY-ScUTqKJz_ZzXP8B8CNhRncPbkGutf-y4K_N9omZeZLBD4Lq6nFJ5y0ez8gjCETIs=h720",
+    "https://play-lh.googleusercontent.com/VCR8IFFdwaKrKrSC8H4aMgvvpr2n4dy6D2-zwxlazFtC2Hc2AAHOcICjRP2RHQTg1NqD8vV9z-ihL1Fi1iQhQuI=h720",
+    "https://play-lh.googleusercontent.com/qajdm7HlNFeq6SmeW5ucl-pN6UFhREO910t5h3u4z59xLKGD3YRFzkO9C1yey3QaxG98erBQhKQ1wvvEX58wYbA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.app.yeshinvoice",
+   "sort": 258,
+   "play_titles": [
+    "יש חשבונית"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.migdal.migdalcustomers",
+   "label": "מגדל",
+   "category": "ביטוח ופנסיה",
+   "note": "ביטוח, פנסיה וחיסכון — אזור אישי.",
+   "description": "\"מגדל שלי\", האזור האישי שלך באתר ובאפליקציית מגדל, מרכז את כל המידע האישי שחשוב שצריך לדעת על המוצרים\nשלך במגדל ומגוון פעולות אונליין שאפשר לבצע בשירות עצמי, 24/7, בלי לצאת מהבית.\nכניסה קלה, מהירה ונוחה בטביעת אצבע או זיהוי פנים ובלי לזכור סיסמאות.\n\nלא הגיע הזמן לקבל יותר מהביטוח שלך?\nאפליקציית מגדל נותנת לך יותר! יותר מידע, יותר פעולות אונליין, יותר זמן פנוי ועכשיו עם האפליקציה המשודרגת שלנו, גם הרבה יותר נוח.\n\nמה למשל?\n\n-        כל המידע על מוצרי הביטוח, הפנסיה והפיננסים שלך\n\n-        הודעות ועדכונים חשובים שנשלח לך\n\n-        מגוון רחב של פעולות אונליין כמו שינוי מסלול השקעה, משיכת כספים, עדכון פרטים אישיים ועוד שיחסכו לך זמן\n\n-        הטבות שוות שאפשר לממש רק מהאפליקציה",
+   "icon_url": "https://play-lh.googleusercontent.com/s395LyAGZhj1fMTNeP7g0efcQaxeWeC37NDd2Ibk9cff2BoNLhcJPuwQ_K5b6pESdteRBYPbKkwSSFce6dJJ-g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/pFhT940nX2eJMCwHZecAXikOwQWsyfCXC9qN_bJz3rYZQYSthZTJ7Q8_IwHacmtxL2aI0Od13ROe26dtO3VNDg=h720",
+    "https://play-lh.googleusercontent.com/QpXW8AIdA9URa40P-RfGYIXRsDlgUqNceU5QLhs6Uxv-iGf5NAi52KiFR00s_z50GhVqbFdJcWVeKuQPmRSn=h720",
+    "https://play-lh.googleusercontent.com/Y4x_LScb5ECPR2PBRnAZ1Nd2KZhf5pQjM5l17WlEe4Nr9ECbyTQWkTlcD-wVDkWs1qIxLWC8vxen4_WxjHE89g=h720",
+    "https://play-lh.googleusercontent.com/y2Iakj4ETGmmtUE3XT0lxHR9E_N9rxV4yudvP5ijeIF7aNA1hQBpoNC36Ndn3O4S9mywQhRXAJCxuljibh9f=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.migdal.migdalcustomers",
+   "sort": 259,
+   "play_titles": [
+    "מגדל"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.digital_app",
+   "label": "הפניקס",
+   "category": "ביטוח ופנסיה",
+   "note": "ביטוח, פנסיה וחיסכון — אזור אישי.",
+   "description": "חדש! האפליקציה של הפניקס תעשה לך חיים קלים, עם כל המידע והפעולות \nעל המוצרים שלך בעולמות הביטוח, ההשקעות והאשראי. \n\nמה אפשר לעשות בעזרת האפליקציה?\n•\tהצגת יתרות, הפקדות, דמי ניהול, תשואות ומסלולי השקעה\n•\tהצגת פרטי הביטוחים שלך בהפניקס\n•\tהצגת פרטי הלוואות קיימות\n•\tצפייה בדוחות של המוצרים השונים\n•\tהגשת תביעה וצפייה בהתקדמות הטיפול\n•\tביצוע מגוון פעולות אונליין, בקלות ובמהירות\n•\tקבלת הודעות ועדכונים אישיים\n•\tקבלת הצעות ערך מותאמות אישית\n•\tאפשרות ליצור קשר",
+   "icon_url": "https://play-lh.googleusercontent.com/beMybJNC6WyUaLtqyd6tibAtgkv8xbdw07D8-a5lhBfWmLcGAbLBrC6hiMsiB1jOCHM28UxDeKsHib53z_FVhA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/MqAtXfM20Hx27LUM4hp0pdsUhvAvAyFYwGHZYCDP-Pj3DDzPsOP0cRAR-7LSObjYPDk2imBy6WdFRaFTX7vQdw=h720",
+    "https://play-lh.googleusercontent.com/vvwB2qkbxpQl_iE8QRDMXaOueUpc_rbx0ufVbBAqtwswBl2vGg2QqqO7KGl9-d5r98f4GrX3LvcrKQRlJasOtg=h720",
+    "https://play-lh.googleusercontent.com/owvgYr5Yxdyn_E5hCuj6XAiU_4WhvFgr_0jAWDDe3ZD71BHh3qhPjoLSvSmiocmCzGKz4dod_eZSiDhB3ltF_g=h720",
+    "https://play-lh.googleusercontent.com/I133ae1CRVOntOYlL0mswUbi2IVNm1H-caGbVvgAFD_awgAd9FyxIjekQs45geQsJI5BneSu3dPj2oQzf1qTkYk=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.digital_app",
+   "sort": 260,
+   "play_titles": [
+    "הפניקס"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.nineoneone",
+   "label": "כלל",
+   "category": "ביטוח ופנסיה",
+   "note": "כלל ביטוח ופיננסים — אזור אישי.",
+   "description": "האפליקציה המשודרגת של \"כלל ביטוח ופיננסים\" מעניקה לכם חווית שירות דיגיטלית מתקדמת, אינטואיטיבית ומותאמת אישית לניהול עולמות הביטוח והחיסכון שלכם – בכל זמן ומכל מקום.\n\nבעדכון זה, ביצענו \"מתיחת פנים\" מלאה כדי להבטיח ממשק נקי, מהיר ופשוט, המאפשר לכם לבצע פעולות בקלות ולקבל תמונה מלאה על המצב הפיננסי והביטוחים שלכם.\n\nמה חדש באפליקציה?\nעיצוב חדש וחוויית משתמש מתקדמת: ניווט קל ומהיר בשפה עיצובית אחידה ונוחה.\nמעקב סטטוס בזמן אמת: צפייה בסטטוס בקשות שירות (הלוואות, משיכת כספים, ניוד כספים ומעבר מסלולי השקעה) ללא צורך בהמתנה לנציג.\nשירות נהג זמני בקליק: הוספת כיסוי לנהג זמני ורכישת הביטוח ישירות מהאפליקציה, בלחיצת כפתור, ובאישור מיידי.",
+   "icon_url": "https://play-lh.googleusercontent.com/IsRy_yMmFkEqAB7Uo8bDiX6O03iQISB-u_TPPZoktPmwPbVPTGhYLKuaMvdYznlyWr0xKNwWBfIfIyn1K3G3gg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/CcybWfXlVt3kN5qHVtZDkXAUsna88T5d6X6tV0XspI9VG0zsylOL-NXQhMgc5HblLO41JgHPjngnAmnUITYTOg=h720",
+    "https://play-lh.googleusercontent.com/H-_lZ7RkQUu6y3OJyKkXJ-Gp70q1bMt20FMzaicJcxoqunuFfc-FUoO64l2foncZbsU7dqq_lmUI1BmuGrfckw=h720",
+    "https://play-lh.googleusercontent.com/MncrjNJKrb0osLengTrov3dlIUESq10AgqomtkQFJQs6wLbdAGgqCHSWrYp2toUQHiOEYN2xkuVrwofmrOHPWjY=h720",
+    "https://play-lh.googleusercontent.com/BtiUj3mwAbSjZY62aaP5PlbLr_cfcYvwfD0kNJDjDyysnDofmZO2voS8DB09tyDkzJE-cMiVtXyA0z7_zSgc=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.nineoneone",
+   "sort": 261,
+   "play_titles": [
+    "כלל ביטוח ופיננסים"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.menora_myway",
+   "label": "מנורה ON",
+   "category": "ביטוח ופנסיה",
+   "note": "מנורה מבטחים — אזור אישי.",
+   "description": "אפליקציית ביטוח מנורה ON – מהיום משלמים על הביטוח רק כשמשתמשים!\nבשורה לציבור הנהגים בכבישים והנוסעים לחו\"ל: נעים להכיר! מנורה ON – אפליקציה חדשה מבית \"מנורה מבטחים\", שהופכת את הביטוח שלכם לחכם יותר, אישי יותר, והכי חשוב - חסכוני יותר!\nביטוח הרכב של מנורה ON יאפשר לכם לעקוב ללא מאמץ אחר הנסיעות ברכב, לטעון מספר קילומטרים בהתאם לשימוש ברכב, ליהנות מכיסוי ביטוחי איכותי ולשלם אך ורק על הקילומטרים שנסעתם!\nמקפידים על נהיגה בטוחה וזהירה? תוכלו ליהנות ולחסוך עוד יותר. האפליקציה החכמה שלנו תזכה אתכם בנקודות שיומרו לכסף – אותו תוכלו לנצל לטובת הגדלת חבילת הק\"מ הקיימת או להוזלת החבילה הבאה שתרכשו. לקינוח, אנחנו נדאג לפנק אתכם במתנות שונות ומגוונות לאורך תקופת הביטוח. יש למה לחכות!",
+   "icon_url": "https://play-lh.googleusercontent.com/A1vylykqNZQgXRQAnpLgDB0ajTe4gpw1KF6oWeUDfzSevNKKQft4RRpSZ-0yJc5_h91j5K5CFEa4ACopvB1-dg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/d1Jp0qAiqnKwxiS55cGzvNosxgfPrdDagFMJ_fZtgNNv6a6gz9-TT1vdPbf2sgFgZHaW9Oxic9Kd0AMJIr3-=h720",
+    "https://play-lh.googleusercontent.com/sE-ArV99tMtVq_oixMY-zKsgEAbP1cFWdV5phKQq7qpJdmX1xYh1Zezh3it6IqmFqXcxjDfZhZzkowckirVpWA=h720",
+    "https://play-lh.googleusercontent.com/KY0nE9o-1OGaHVpgiD8Q0lUlXjL3vjwtmfw_0FoAi7ITceNv_vdsVYu1wOrkC5WzEk_x3woEE1RDIAXO-a7AIA=h720",
+    "https://play-lh.googleusercontent.com/AhFOL2NQDNzblTKFpoD8yHFjHngp8Vc8sv6svGRjLtWe3gEoXmgOi76H4r-m_cvnf2gtI5qRMjtY3DsFGLc5=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.menora_myway",
+   "sort": 262,
+   "play_titles": [
+    "מנורה ON"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.harel",
+   "label": "הראל — ביטוח בריאות",
+   "category": "ביטוח ופנסיה",
+   "note": "ביטוח הבריאות של הראל: תביעות והחזרים.",
+   "description": "הראל רפואה אישית on line הינו שירות הניתן במסגרת הרחבה לרוכשי כתב שירות הנלווה לביטוח הבריאות הפרטי של הראל. \nבאמצעות האפליקציה ניתן להתייעץ עם רופא משפחה, רופא ילדים ורופאים מומחים בשיחת וידאו באמצעות הטלפון הסלולארי, המחשב או הטאבלט. \nבמסגרת הייעוץ ניתן לקבל מרשמים לתרופות על בסיס צורך רפואי, המלצות לבדיקות המשך והפניה למרפאה לרפואה ראשונית של ביקורופא או לחדר מיון.\nלמידע נוסף על האפליקציה או על השירות, פנה לסוכן הביטוח שלך או למוקד הראל בטלפון 2735*.\nהשירות ניתן בכפוף לתנאי לרוכשי כתב השרות \"רפואה אישית און ליין\" (להוסיף הפנייה) ובכפוף לתנאיו, באמצעות ביקורופא און ליין.",
+   "icon_url": "https://play-lh.googleusercontent.com/d664thAzAJmBqJaN8phU3OEX5_oHFOwJJG0W31vtltVpYpf00i64j1pFBpTy5q60cfj3MrdwAG20jyy8C-A1xCk=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/796C4CvxvL8EL5Xp669QplinX-g-O2GQqsqXk6uxQuya55sV98jm93QxQp0Wlv23nMRPBKoQ1IMzfLQ4AoDw=h720",
+    "https://play-lh.googleusercontent.com/ZhXmV4S3Ip2w26UTr9z-W6eThrn5i4Hzw08rQ6g7mgbgV92qTw7k5dwjWgDY-HtTpNV9BrgwPC90_9Hd67km1g=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.harel",
+   "sort": 263,
+   "play_titles": [
+    "ביטוח בריאות הראל אונליין"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.idi.youapp.five",
+   "label": "ביטוח ישיר",
+   "category": "ביטוח ופנסיה",
+   "note": "ביטוח רכב, דירה ובריאות.",
+   "description": "יותר מידע על הביטוח, יותר פעולות דיגיטליות, אמרנו יותר? מועדון ישיר מגוון הטבות ייחודיות והנחות\nעל הביטוחים שלך. בנוסף, אפליקציית ביטוח ישיר חוסכת לך זמן ומאפשרת לך לבצע פעולות בלחיצת\nכפתור ולקבל את כל המידע שצריך על הביטוח שלך. כל זה – מבית IDI חברה לביטוח.\n\nמה עוד אפשר לעשות באפליקציה?\n* צפייה במסמכים ופירוט התשלומים שלך - הכל במקום אחד\n* הוספת כיסוי נהג זמני בקליק הכולל הוספת מורשים\n* עוזר ה-AI שלך! איתור מסמכים עבורך בקלות ובמהירות\n* משהו קרה? כל מה שצריך לדעת בשעת חירום\n* מגוון פעולות דיגיטליות, חידוש הביטוח, תשלום חוב, עדכון אמצעי תשלום, עדכון פרטים ועוד\n* סטטוס התביעה שלך באפליקציה! סטטוס+\n* רכישת ביטוח נסיעות לחו״ל עם רופא בקליק ללא עלות",
+   "icon_url": "https://play-lh.googleusercontent.com/ePDxBZmRLJTu8f8d-GDV_UUrsVrBEIquF18NLTxSKKCKIl68GORqDas-vPtXYUpJH1UBhHAsuoaS_xVbP01d9g=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/PhYA07GkkOV2CwY9BETVKZEXcAeXlbrg_s6B_Wii7qK-z-wK2X3tfA6hSinoRUjA0dTX8Ml23jPUtSYdBPd3u3Y=h720",
+    "https://play-lh.googleusercontent.com/gk1UnkMem7aRt2ZW0n8eCPEelTU6vpngABAEkYG_Y64inAChuLLycVg-o_KXpBptOkdSFRJPc6Fm0eBOSVtaeuA=h720",
+    "https://play-lh.googleusercontent.com/QFPc3WK5yqfK7_O0-XNnKuWWy7DCtzV8hYpy-1tk2D8yzxoHu5qp8jid6jtxYVBZayZiJVGL69jijdoZRyF1=h720",
+    "https://play-lh.googleusercontent.com/lxcv17xTvSFejb8UmxFZCfiLO9KciU7-_46eta0l2KHfGLArcpKK_HyEn-LBrg_5r4ZnlmJcDJjc2GIPeu9pkQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.idi.youapp.five",
+   "sort": 264,
+   "play_titles": [
+    "ביטוח ישיר"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.idi.youapp.nine",
+   "label": "ביטוח 9",
+   "category": "ביטוח ופנסיה",
+   "note": "ביטוח רכב ודירה מבית ביטוח ישיר.",
+   "description": "הכירו את 9, ביטוח בעצמך\n\nאפליקציית 9 ביטוח, הדור הבא של הביטוח שלא צריך שום דבר חוץ ממנה!\nמאפשרת לכם לבצע פעולות ולקבל מידע באמצעות נינה - עוזרת חכמה AI, מלווה אתכם בשגרה וגם כשקורה משהו. היא מותאמת אישית, מדברת בשפה שלכם, ויש לה גם אישיות. אמיתית. אבל לא של חברת ביטוח :) , אלא יותר של ידידה טובה. וכל זה - מבית IDI חברה לביטוח.\n\nהאפליקציה שמאפשרת לעשות הכל בעצמך!\n* לשאול את נינה - נציגת AI חכמה של 9 תענה על כל שאלה בנוגע לביטוחים שלך\n* לצפות ולעדכן את פרטי ותנאי הביטוח שלך \n* לחדש את הביטוח שלך בקלות ובמהירות\n* לצפות במסמכים ובפירוט התשלומים שלך - הכל במקום אחד\n* להוסיף כיסוי נהג זמני / צעיר / חדש בקליק, כולל הוספת מורשים להוספת הכיסוי מטעמך\n* משהו קרה?! כל מה שצריך לדעת ולעשות בשעת חירום",
+   "icon_url": "https://play-lh.googleusercontent.com/yljZ9mokWWA8KTyQXDKYcNRGOpxlnT6nnFtSZVUNo3Of6VOwMi5jDu2S8dqYcg7lEthDTPHybh9mD-TcJjeWsA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/dtj7fsXGpgUk8v-9A0StzWN_FzhfUcfV-OpFNM7OJOlmqXQbtpcHyTpN8g7H5tEplsMdPl6IfMi3G0DQq3kZ4w=h720",
+    "https://play-lh.googleusercontent.com/prx7IchIpDgk81qjBshzoxLrQAtqtHjOG9svnKEC9bZsKTP7XfvaOIqFB4a85vecsyf50z3aHsq7txPoAI9xbw=h720",
+    "https://play-lh.googleusercontent.com/KYW8IWA0ZGOcoRwcO-v1qjPSWn_6OL4OzREku26a0WdgZqIdGZKPxEDX5UYx8EeRtT23D0JOry4kaZ1rUfbd73o=h720",
+    "https://play-lh.googleusercontent.com/RUOuy7XpVEd-JUPsKk3_mh4C65ipdv86g7KADUcpvvRHVFCC53EixpE3SY8oAn4PfjKL98rPGWR9Z71av-4X=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.idi.youapp.nine",
+   "sort": 265,
+   "play_titles": [
+    "ביטוח 9"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.ayalon.financialapp",
+   "label": "איילון פיננסים",
+   "category": "ביטוח ופנסיה",
+   "note": "חיסכון והשקעה של איילון.",
+   "description": "חדש! אפליקציית איילון פיננסים של איילון ביטוח ופיננסים מרכזת עבורך את כל המידע החשוב על פוליסת חיסכון הפרט שלך \"יתרון פיננסי\" במקום אחד, ומאפשרת לך לבצע מגוון פעולות באופן עצמי וללא צורך בפנייה למוקדי השירות.\nבאמצעות האפליקציה ניתן לקבל תמונה מלאה ועדכנית של פוליסת החיסכון שלך, לעקוב אחר מצב ההשקעות והיתרה בכל רגע נתון, ולבצע פעולות שונות בצורה פשוטה, מהירה ונוחה, מכל מקום ובכל זמן.\nהאפליקציה מעניקה לך חוויית שימוש קלה וברורה, עם ממשק ידידותי ונגיש המאפשר להבין בקלות את מצב החיסכון וההשקעות שלך, לקבל החלטות בצורה מושכלת, לעקוב אחר הביצועים ולהרגיש שליטה וביטחון בניהול העתיד הפיננסי שלך.\nאז מה אפשר לעשות באמצעות האפליקציה?",
+   "icon_url": "https://play-lh.googleusercontent.com/IN1a3k0ddV86m04TZN8W1BXwvqUqhmZT42fUZmoemqSCkE3LU-jsKwOim964ANEBUdbnIo7FpufAyKcY-lQj=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/K6s_ameoNvyVjNJUjkvlP0TSYDCeo3z6QyzXgVlOLKDMsrUS25KER3eTigyem7aMnTZc1Gz3xvL6Me-FD6-6=h720",
+    "https://play-lh.googleusercontent.com/aIkKlKTNjxaQm8LtdkJj04XF7KeRujugXPvq2sU3cVGEbKm6vJfXQfAwMIDXWuQPi7Rg57F6KGau-V6dCs-jf94=h720",
+    "https://play-lh.googleusercontent.com/eUPH-r7xnFx91JZmsPXGiJBWTYv-GNcdMxAaJiW9LaWWjoR9iHXZ3hlis641P74cWcT5yIoPrp1hS7kuAeQsnw=h720",
+    "https://play-lh.googleusercontent.com/WXhCERgEFEGVcefF5SqSN0v0FC4M_9KDb-hyTG8bOs_UfEcjXkeBOBXFsKhWeBq9bYzMCJGbukek2Dw7Vut5gw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.ayalon.financialapp",
+   "sort": 266,
+   "play_titles": [
+    "איילון פיננסים – חיסכון והשקעה"
+   ],
+   "since": 4
+  },
+  {
+   "package": "il.co.Go.production",
+   "label": "go — הכשרה",
+   "category": "ביטוח ופנסיה",
+   "note": "ביטוח דיגיטלי מבית הכשרה.",
+   "description": "go מבית הכשרה, זה הדרך שלנו להפוך את עולם ביטוחי הרכב לפשוט יותר לניהול, יעיל יותר לשימוש והרבה יותר משתלם. אצלנו תיהנו מרכישת פוליסה בתהליך דיגיטלי מלא וידידותי למשתמש.\n\nאבל לא רק תהליך הרכישה דיגיטלי, באפליקציית go תוכלו לעדכן ולשנות פרטים בפוליסה, לדווח על תאונות, גנבות ותקלות בזמן אמת. בנוסף, תוכלו להעביר את הפרטים הדרושים להמשך הטיפול ולקבל עדכונים שוטפים על תהליך התביעה, ללא צורך בנציגי שירות ובלי להסתבך בפרוצדורות מתישות.\n\nכמו כן, באפליקציה תמצאו את כל הפרטים והנתונים שאתם צריכים, מסודרים ומפורטים, לשליפה מהירה בעת הצורך, כלומר - נגמר הבלאגן בתא הכפפות!",
+   "icon_url": "https://play-lh.googleusercontent.com/UfyAKq8iN79ZtklsKChIzVo5FvjGbFtEFWhcL1GoLN2ZwjNA6jY89kPHvjvaCqOYGfe8uwpgyTFjVRqBXZ6Hmw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/hE5vueUNMhk1ZSW_LoQ6XD9vukY07CfxgEftQeNs9b_PJcbE6NljFo7OFvSgxhXFPH_ba8slG19dY85yigFj=h720",
+    "https://play-lh.googleusercontent.com/RkVY9UdbTHxRoO43WediC3ASzPXsdxmkHn16ShoXmVf3XgCjBp4wKpVbwZprSNwjjSEpYK-m4EaP1QUf8R4hZQ=h720",
+    "https://play-lh.googleusercontent.com/ZEyrCr7Glog_lrRlhig3vhCWsP9ti1XcfY4r0pUPoQ-Z_VpG7zxlAGO8uCn1uqzNEnBDtNb6e59LsTp9mR4pfQ=h720",
+    "https://play-lh.googleusercontent.com/IZrgTgXo3QayDq2gWJlE86UioYiQdrhzSzIiJbMI2Srx1Ji31IjU9oDi_xymjr1EViNeiYVff6O-0UGrth09QA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.Go.production",
+   "sort": 267,
+   "play_titles": [
+    "go - ביטוח דיגיטלי מבית הכשרה"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.medisafe.android.client",
+   "label": "מדיסייף",
+   "category": "בריאות",
+   "note": "תזכורות לתרופות וניהול תרופות.",
+   "description": "מדיסייף הינה אפליקציה נוחה, יפה וידידותית לניהול נטילת תרופות. היא תעזור לך לנהל את הנטילה בצורה קלה ובטוחה.היא גם תעזור לך לעזור לאחרים לנהל את תרופותיהם. האפליקציה מדורגת במקום הגבוה ביותר בעולם בתחומה.\n\nאם הינך לוקחת מספר תרופות, את בוודאי יודעת כמה מורכב לנהל את נטילת התרופות , במיוחד אם חשוב לקחתן בזמן, בכמות ובמינון המדוייק. אם הינך עוזרת לטפל בהורה, ילד, מטופל או חבר - את בוודאי יודעת כמה מלחיץ לא לדעת אם הם לוקחים את התרופות בזמן ובכמות הנכונה. אלפי מקרי חירום בשנה נובעים מטעויות בנטילת תרופות - ניתן למנוע אותם בקלות!\n\nלמדיסייף יש פיתרון פשוט ואלגנטי. האפיליקציה לא רק עוזרת לך לזכור ולנהל את תרופותיך, אלא גם מחברת בני משפחה/עוזרים/מטפלים ליצירת \"רשת ביטחון וירטואלית\" לנטילת התרופות.",
+   "icon_url": "https://play-lh.googleusercontent.com/epxe9TPkOYoDDMcBd6yw1AO0CI62rZ1ny-eJZXmFEsMsnoEcfGXKTcE38rzmDbSRW99zWLRB3XtorZSAq9Hj6Q=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/XznMl5TvuX3dxbERwE5V2cXvNW_yIowUB2FzD3raPPZFcExB70Y7AtooG6dddCP47Dwt8fiy5goTy-X0ka0z=h720",
+    "https://play-lh.googleusercontent.com/oBZvoJsm5u-4RUHRMAa8Kxr_GI8wygTZmI38P0auT5_hx4UQk8dfy56NPSdIWUF7KRjdOCpMYxwGgc4LiNoIMQ=h720",
+    "https://play-lh.googleusercontent.com/V3Siuc11q-ZqEyv-h4kMSsl0yOA73lqWYPDgXGd1YHvhJMqJQhi9YjPsmxBFR7H9UyERUNgFTxhovWO0wc_0cw=h720",
+    "https://play-lh.googleusercontent.com/CpCmug2dMZEvjGlZxBTsXDlfFKZIh1Hvz6cumeXcBpCRHnXAjKSVuSqDRBDBzIMK9R0XmVXbphs3aG2XOQoEgg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.medisafe.android.client",
+   "sort": 268,
+   "play_titles": [
+    "מדיסייף תזכורות וניהול תרופות"
+   ],
+   "since": 4
+  },
+  {
+   "package": "eu.smartpatient.mytherapy",
+   "label": "MyTherapy",
+   "category": "בריאות",
+   "note": "תזכורות לתרופות ומעקב.",
+   "description": "MyTherapy הינה אפליקציה חינמית, זוכת פרסים, המשמשת לתזכורות ומעקב אחר תרופותיך. אבל MyTherapy היא הרבה מעבר לתזכורות: בשילוב עם מעקב אחר תרופות, מצב רוח, יומן בריאות – למשל, למעקב אחר משקלך, אפליקציה זו מאפשרת לך ולרופא שלך לעקוב אחר הצלחת טיפולך.\n\nתזכורות מקיפות\nעיצבנו את האפליקציה כך שכל המידע שאתה צריך מרוכז במקום אחד: תזכורת עבור תרופות (למשל, גלולות למניעת הריון), מאגר מידע מקיף עבור תרופות מרשם ותרופות ללא מרשם, תמיכה עבור כל אופן צריכה (טבליות, גלולות, שאיפה..) ומתכונת. אפילו תזכורות עבור מלאי התרופות. כמו כן, האפליקציה אינה רק מתזכרת לגבי נטילת התרופה, אלא גם מאפשרת מעקב, כך תוכל לבדוק ביומן המעקב על מנת לוודא שאכן נטלת את התרופה.\n\nמעקב בריאותי במיוחד בשבילך",
+   "icon_url": "https://play-lh.googleusercontent.com/-FV01TrTg_PGNaQ2aCKP36JSfMMEdbo3vybhfwkgwfVFcEoJr5J25d3p8XFoDu2G73FTSwSzVzt9c7un1cHWRw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/GHhPz5Ioyyvp2Aw5Bmvl5z8CepHXaobd66KsLKE4H9duTngSymPQrW8ljGlT_wJRqiJaxeh1SYJk39Ws30QRI3A=h720",
+    "https://play-lh.googleusercontent.com/d4IITmYqOxmpNh2uihwPxAJRgxtnQTV5PjsSsoejOgKnGgUSHLJlDDivO_XoPyinwsU7VKkNgWtk9eNIOUWbPg=h720",
+    "https://play-lh.googleusercontent.com/h8piRFcpGsba_GO-JlW0lxB1FaVbDdfjZDGaioRBovAWAFFcn9Ft_j0YMRmqVZ6QTJwN-_fHU7MOh2EDEie5uQ=h720",
+    "https://play-lh.googleusercontent.com/oWQ5nDjPR0w8FLCDuRWSM6Ke0RNXUDjqI3LJ0cGvN-O4Q6iwbxs1OXAbDdCoNSY1q0-XyiueIAaDrt9bq8R6=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=eu.smartpatient.mytherapy",
+   "sort": 269,
+   "play_titles": [
+    "תזכורות לתרופות"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.release.victory",
+   "label": "ויקטורי",
+   "category": "קניות ומשלוחים",
+   "note": "קניות בסופר ויקטורי אונליין.",
+   "description": "אנו גאים להציג את אפליקציית ויקטורי אונליין החדשה המציעה עולם חדש של חוויית קניות. \nבאפליקציה החדשה תוכלו לבצע הזמנה הביתה מהטלפון הנייד מכל מקום ובכל זמן וליהנות ממבצעים הטבות וקופונים ייחודיים.\nלהזמין משלוח בכל שעה.\nליהנות ממבצעים והטבות ייחודיות. \nלסרוק ברקוד מהמוצרים בבית ולהזמין בקלות.\nלאתר סניפים שלנו בנוחות ובקלות. \nלשמור על רשימת הקניות קדימה.",
+   "icon_url": "https://play-lh.googleusercontent.com/DL3Gw64wW7vqtR6fC-k07sVIbeum2tATndDgQBmVbanOGiBEHrPJQadCaHXZHQdCSEvebkgzmttqOGN_rW_8sbE=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/BHNUAf1CufGbBRo50Al6Zln-UZciF7oElSUDUOkfPPWZYQBNDwlhCLTFiYVN9BVh5dnEG3upWMzm0A7IdFKk-A=h720",
+    "https://play-lh.googleusercontent.com/_iHHJqI62tOcLbp2Vqs5YM58zKiwbNBOBViZV_IYfU0v6OkJhp74tUdc9SDou2K4CP-fRedKOyAZ9oxQ46tS=h720",
+    "https://play-lh.googleusercontent.com/B1i7xpDRRynCfnFSoSTJJHVo_AVo5_B3hONTMWzYDQ_-isn6Ga7Ehs1ZDNhklCbxAwpcaRTN4H1wikQR1QrJ-Q=h720",
+    "https://play-lh.googleusercontent.com/BHNUAf1CufGbBRo50Al6Zln-UZciF7oElSUDUOkfPPWZYQBNDwlhCLTFiYVN9BVh5dnEG3upWMzm0A7IdFKk-A=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.release.victory",
+   "sort": 270,
+   "play_titles": [
+    "ויקטורי Online"
+   ],
+   "since": 4
+  },
+  {
+   "package": "il.co.inmanage.carrefour_android",
+   "label": "קרפור",
+   "category": "קניות ומשלוחים",
+   "note": "קניות בסופר קרפור.",
+   "description": "באפליקציה של קרפור ניתן למצוא מגוון רחב של הטבות \n\nמבצעים:\nגם אם אתם אוהבים להסתובב בסניף ולבחור את הקניות שלכם לבד או אם אתם אוהבים להזמין אונליין ויבחרו עבורכם אנו מקפידים לתת לכם את המבצעים הכי אטרקטיביים שיש.\nבאפליקציה של קרפור יש מבצעים בלעדיים רק למי שהוריד את האפליקציה\n\nקופונים:\nאנחנו בקרפור מאמינים כי מגיע לכם הטוב ביותר ולכן בנוסף למבצעים השווים שלנו באפליקציה שלנו תמצאו גם קופונים שווים על מוצרים שאתם רוכשים בכל מקרה\n\nקרפור אונליין:\nמשלוח שמגיע עד הבית עם המוצרים האהובים עליכם, מוצרי מזון, ניקיון, פארם ועוד המון מוצרים.\n\nקרפור קלאב:\nמצטרפים לכרטיס האשראי קרפור קלאב ונהנים מעד 15% צבירה ברשתות המועדון. בכפוף לתקנון המועדון",
+   "icon_url": "https://play-lh.googleusercontent.com/lRpTJfY_4GE5W8r99QQU00UcLE8ZkSbBdZ3OhXpFGzFB4rFBfx8UsA8KsK8oMw_uTt6zSDam1k0uydIK5eWGyA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/YoKuaH9aLGXkutazcPc7-YgKLz8JqwozXQpUSTB4pEHBjDZ_dzvvYI-e5YMx0hKqgoDZ7iH-WkfCP17LEQn8=h720",
+    "https://play-lh.googleusercontent.com/-RutE7I6YLggPvTjYO43FaVjznUQMZ2Bc0tZwvYPuffrhDTbY40E6BqBscobaXLE6lsdsH-nN4y0rnOPOceoxg=h720",
+    "https://play-lh.googleusercontent.com/80WK6MZwnL2eIcxd_kyeA4EtDjhnqCANz-ChfHD9vu-MP0u48hT8reDcM4S-4z4vGGDq3X7UR5tWS7XEeNBhcw=h720",
+    "https://play-lh.googleusercontent.com/CQMr1JBbdRxxTRHt7Fp3K7wwKrO07sZ6xapaSevKwy1JyNsv8a3D5dvl4dTMif-1wCgnZeimt1p2fbT1CTCEKA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.co.inmanage.carrefour_android",
+   "sort": 271,
+   "play_titles": [
+    "קרפור"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.selfpoint.MahsaneiShuk",
+   "label": "מחסני השוק",
+   "category": "קניות ומשלוחים",
+   "note": "קניות במחסני השוק אונליין.",
+   "description": "מחסני השוק אונליין - מנצחים גם באינטרנט\n\nהסופר שאתם אוהבים והמחירים שאתם אוהבים, עכשיו יותר קרובים מתמיד.\nהאפליקציה של מחסני השוק אונליין מאפשרת לחפש ולהזמין ממגוון מוצרי החנות בקלות ובמהירות, ובזמן שמתאים לכם.\n* מבצעים והטבות\n* רשימת קניות \n* סריקת ברקוד מוצרים\n* פרטי החנות, שעות פתיחה ודרכים ליצירת קשר",
+   "icon_url": "https://play-lh.googleusercontent.com/3OQ5_crZOJb1jYTgBEnfzcFkNbnqfg8T7G45EA_8TGv0bIfO7QEvg0kRuNZtO9ZBFE1oNai0tpJfT4EZQWDL=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/jJBPTJxMtcUPLXQjvlyjfDG5v8pnL52KTUB2edHlwmIGgLUOzJLCOuJdkByK9ERfXF_ScIDjDkOnDQaolAXwZTo=h720",
+    "https://play-lh.googleusercontent.com/DM__f2nGwaIzUWlEpj5xzOCOTiE34BDYQJmla5Mxf6BFlBDF-JC1TDbK5QE4PPy3PiRd8xC1p7v2GZnI9DoV=h720",
+    "https://play-lh.googleusercontent.com/rtr3ti3ixEiTuL8Vs-pLx5jyBlEkoVc3iu86ZzOxZNF4s4UnqwDO_blqScrpDMRW_iwCTMwU5PrlbI_RU6US_g=h720",
+    "https://play-lh.googleusercontent.com/AxkarAeudJSbVx3qRXo-BeK4fLCQCYAbQ6Y9BoN5TRxdFzJS3EbyZZG7UF_IhY5LEgJrgL__Q4J8yhmSfLCMNA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.selfpoint.MahsaneiShuk",
+   "sort": 272,
+   "play_titles": [
+    "מחסני השוק אונליין"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.mishloha.mishapp",
+   "label": "משלוחה",
+   "category": "קניות ומשלוחים",
+   "note": "משלוחי אוכל ממסעדות.",
+   "description": "הכירו את משלוחה - ארנק דיגיטלי למשלוחים, מסעדות ומרקט שמאפשרת לצבור ולממש כסף במאות מסעדות.\n\nמשלוחה מחזירה מליוני שקלים בכל שנה ללקוחות המזמינים דרך האפלקיציה.הורידו עכשיו בחינם את אפליקציית משלוחי אוכל עם ציון הדירוג הגבוה ביותר 4.9 והצטרפו אל מעל +300,000 חברים שנהנים 24/7 מחווית שירות משלוחים מהיר בכל הזמנה ממבחר ענק של מסעדות, וחנויות, וכן ממגוון הטבות בלעדיות!\n\nבאפליקציית משלוחה תמצאו:\n✔ מזמינים משלוחים ממסעדות עם משלוחה וחוסכים בעזרת MishCoins קאשבק - אתם מרוויחים! צוברים כסף בכל הזמנת משלוח באפליקציה ומשלמים פחות!",
+   "icon_url": "https://play-lh.googleusercontent.com/tlbI-kgdID5_mOwQaCtrPA0cEu9DKxkLyURguDjtHYw4yEGlgUdlLmiGDhR0anMGSYT0iuJaRKu64H5rN-Lx=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/Y7hb_xHrUWcLgEva66VPm8-Q8z76A1dQlx9f2fh0sLCXCmc7TDG8Ns5hvl5opzfAMpAVWZuREuT_tgfnEheONQ=h720",
+    "https://play-lh.googleusercontent.com/_hDU8hnGMY5qIlrAoTCqbwIMiBg8j_XT7TZg0msnUYbAud1TnWITMf0f89rkVr2-KyL6p8-KLlPWnSG3NzZip1E=h720",
+    "https://play-lh.googleusercontent.com/j4mLvsDMNdvqiRGYN2PeL4CGTZUrH0pgZqFhlYD4iSp_e16E6PinW_S69kyQbZmnBKPrXA4MvwZd66Ot_s2S=h720",
+    "https://play-lh.googleusercontent.com/L1P8q7L--eKtDd7acjHanXsKBf7Cp89r3lH0O1mQsXjjr6YXL7gi5BsgChSCrLbAcunXz-N1E_xzP-0_qd-kZyk=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.mishloha.mishapp",
+   "sort": 273,
+   "play_titles": [
+    "משלוחה: משלוחי אוכל עם קאשבק"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.sodexo.mysodexo",
+   "label": "סיבוס",
+   "category": "קניות ומשלוחים",
+   "note": "כרטיס הסיבוס לארוחות במקום העבודה.",
+   "description": "האפליקציה של סיבוס פלאקסי - הזמנת משלוחים, איסוף עצמי ותשלום בנייד - ועכשיו גם באנגלית!\n\nטעים להכיר :) האפליקציה של סיבוס פלאקסי היא החלום של כל בטן מקרקרת! איתה אפשר ליהנות מאוכל טעים, עטוף בחווית הזמנה מתקדמת, נוחה וקלה ועכשיו זמינה גם בשפה האנגלית! \n \nבאפליקציה מחכות לך למעלה מ-9,200 מסעדות, שפע של ארוחות טעימות (במשלוח עד הדלת, איסוף עצמי או ישיבה במסעדה), שוברים לרשתות הסופר וחנויות הנוחות המובילות, ומגוון הטבות ומבצעים במיוחד עבורך!\n\nבדף הבית - יש אזור אישי בו אפשר לשמור את המסעדות האהובות ביותר, לגלות מסעדות חדשות, לבצע הזמנה ולצפות במגוון ההנחות הניתנות באזורך.",
+   "icon_url": "https://play-lh.googleusercontent.com/kQysk4i_Z55k0QYcUxzt-A0uwXFelJ7-6_rEf5tyR-8Hg8Cz06x8mDxMtjl5FhfAEc0tV3WfSDhHGFAHj7Nxfkg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/VP0pO3vSZFfpwyZ4EudAhd6Naany9wNZF3k6fg9gSoiuR0qve17tUribxdZcQwOsGyosjHX0ucPwzxCuv4hUisw=h720",
+    "https://play-lh.googleusercontent.com/LT-4c03-FaKbE3Ywm6NDtyEkEMpFOugKxKAY51EhwYxODwRrkbujNNHQrr9TzTqS1n1GSr02jse-IhzjdnG96Zk=h720",
+    "https://play-lh.googleusercontent.com/s6hmf1TnqoAT98zTfer9m0ux444mzek2xhcWnibxvYOsMTzXNaiTOWZ3SZDGZgWD-qJAkMtlxe2bNoCX4OyH=h720",
+    "https://play-lh.googleusercontent.com/MF7g3WOdHZwPwnTprYTQmlt2Of_dYnlRB4Q2LzzprFv1UWWOE1CY1iPBZs4y7jJBdFA9hyXBjfIXldon8ri0Css=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.sodexo.mysodexo",
+   "sort": 274,
+   "play_titles": [
+    "Cibus Pluxee"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.siddurim.klilat_yofi.sfard",
+   "label": "סידור כלילת יופי — ספרד",
+   "category": "יהדות",
+   "note": "סידור מלא בנוסח ספרד.",
+   "description": "סידור אמיתי עם דפים מקוריים של 'כלילת יופי' נוסח ספרד.\n\nהתפילות מותאמות לתאריך ושעה ומיקום.\nמצפן תפילה - מראה לאיזה כיוון מתפללים.\nלוח שנה עברי - כולל זמני היום, דף היומי, והאירועים של אותו יום.\nשאל את הרב - אפשרות לשלוח שאלות לרב.\nספר תהילים.\n\nאפליקציית סידור תפילה לאנדרואיד שהמייחד אותה משאר אפליקציות הסידור הוא שיש לה \"צורת הדף\", כדי שלמתפללים תהיה תחושה של תפילה במקום לקרוא מאמר.\nבנוסף - האפליקציה מציגה את התפילות הרלוונטיות לשעה ביום על המסך הראשי ומתאימות אותן לתאריך, כך שבראש חודש היא תציג גם את הלל ומוסף, ותזכיר לך לומר יעלה ויבוא וכו'.\nכמו כן מציגה את זמני היום בהתאם למיקום, ואת כיוון התפילה.",
+   "icon_url": "https://play-lh.googleusercontent.com/izYbd7xudqpYnQTV592xbhpku8KUCvo2-_nxKuOvfKpA9dE4UyZ9W0Csln5UdlSnm5BJg3V1COof2XdTPg4xzw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/MC_vwArW7n4JfKNYxlFIRxLrDggdIEsPo0CSIU74bsl5WAi8C_tWuJwGN5MuaqcL_68VYosD5w3eXUKIGEjI=h720",
+    "https://play-lh.googleusercontent.com/l8VfIdFKy88At27Rhvlbz4Kl8DRRZ8d5mvs7VBcfTZq7kU2OfujdlItl5Lmk8MCAoyzgzeO36OcbCTj8UwgLXWE=h720",
+    "https://play-lh.googleusercontent.com/O4pVab8oxQc-OLpjYA77MB7sgLRXm9CdaVdVG59DYP7em9k1taw9U68uV_4WMRg5Sql0gtrSrH4QFC5BGsouZg=h720",
+    "https://play-lh.googleusercontent.com/j3pXLz2iyim2QMvAXl3mm_cJLZB8UZW-QwCbQshieiTWDFOQuDq6j0FRQUpzh4be2w_7V59o6QDs8h52BFLksg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.siddurim.klilat_yofi.sfard",
+   "sort": 275,
+   "play_titles": [
+    "סידור כלילת יופי ספרד"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.siddurim.klilat_yofi.ashkenaz",
+   "label": "סידור כלילת יופי — אשכנז",
+   "category": "יהדות",
+   "note": "סידור מלא בנוסח אשכנז.",
+   "description": "סידור אמיתי עם דפים מקוריים של 'כלילת יופי' נוסח אשכנז.\n\nהתפילות מותאמות לתאריך ושעה ומיקום.\nמצפן תפילה - מראה לאיזה כיוון מתפללים.\nלוח שנה עברי לועזי - כולל זמני היום, דף היומי, והאירועים של אותו יום.\nשאל את הרב - אפשרות לשלוח שאלות לרב.\nספר תהילים.\n\nאפליקציית סידור תפילה לאנדרואיד שהמייחד אותה משאר אפליקציות הסידור הוא שיש לה \"צורת הדף\", כדי שלמתפללים תהיה תחושה של תפילה במקום לקרוא מאמר.\nבנוסף - האפליקציה מציגה את התפילות הרלוונטיות לשעה ביום על המסך הראשי ומתאימות אותן לתאריך, כך שבראש חודש היא תציג גם את הלל ומוסף, ותזכיר לך לומר יעלה ויבוא וכו'.\nכמו כן מציגה את זמני היום בהתאם למיקום, ואת כיוון התפילה.",
+   "icon_url": "https://play-lh.googleusercontent.com/F3M0Ayuj2T3K3rwq46Mgqg9XzAP45-NrIWkDmnpR7NnfyT7VSGKIjuZMKdfd1LFAzLBCGmfnQ6wnTFhJkbkZ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/kQzHS1dakwkNAHgP4jd66pXUxL4fBGarg6v9cqGaHmIh_ONBsx1gEs-ttZNBJyLIvXQiUtVJLyssUbDEKUIdUEo=h720",
+    "https://play-lh.googleusercontent.com/y4WOVSVhkF5hqNkkwYCNYIWwCZ3ln7HRrPBuawL0Gr-PEWhSUabtfyAbU8PYqHmMQYzH6mbWivUPwPPtS551=h720",
+    "https://play-lh.googleusercontent.com/TIA2Rxp4U4kptmCrKmymbf52UN5_Z-y5wp9zFEQ3TKAZpHSRQ2ozKuFPM7ZZj8q5nVC_K7ninoXk0u8lMqKeSw=h720",
+    "https://play-lh.googleusercontent.com/G5KF_kgIPP4u_9KzMrtY5T1q7DbL-DWZF_ASV-RGp_A8tWmSxViuhHd3n1DxGj1ljIzfLwzxtWY31UYFhlLBPw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.siddurim.klilat_yofi.ashkenaz",
+   "sort": 276,
+   "play_titles": [
+    "סידור כלילת יופי אשכנז"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.siddurim.kavanathalev",
+   "label": "תפילאור",
+   "category": "יהדות",
+   "note": "סידור חכם שמתאים את התפילה ליום.",
+   "description": "תפילאור – הסידור החכם לתפילה בכל מקום ובכל זמן!\n\nמחפש סידור חכם שלא רק מציג טקסט על המסך?\nתפילאור הוא סידור תפילה דיגיטלי עם עיצוב “צורת הדף” הייחודי, שמעניק לך חוויית תפילה אותנטית ממש כמו בסידור מודפס – בכל זמן ובכל מקום.\n\nמה מחכה לך באפליקציה?\n\t•\tסידור מלא עם דפי מקור – כולל “כוונת הלב” (עדות המזרח) ו“כלילת יופי” (ספרד ואשכנז).\n\t•\tתפילות מותאמות אישית – אין צורך לחפש! תפילאור מציג אוטומטית את התפילות הרלוונטיות לפי התאריך, השעה והמיקום שלך. בראש חודש יוצגו הלל ומוסף, ותקבל תזכורת ליעלה ויבוא.\n\t•\tזמני תפילה מדויקים – חישוב זמני היום בהתאמה אישית לפי מיקומך.\n\t•\tלוח שנה עברי-לועזי – כולל זמני היום, דף יומי ואירועים חשובים.\n\t•\tשאל את הרב – שלח שאלות לרבנים או חפש במאגר אלפי תשובות קיימות.",
+   "icon_url": "https://play-lh.googleusercontent.com/PiUaHItYDc_GeQ_rHKYqEkpGQGZHQlfgGxq7cJM8GVBVwqNl5TA83Iooi07PPWQEx7K6tslykX5p3pENzI9Z6A=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/KJLFIr6rjbjCZho0Ezdylv9yHdBOll0twLAUuMfzV8nytjFM_7xVcDFfPBSkYggCqP6Bn_VEybOBWVubOLwu=h720",
+    "https://play-lh.googleusercontent.com/nWRk-53csnW2Iz3w49sycwY9e_MUyAFk9Tls-X7Z9UiMr07dBWA0iJR124ThVh9ZNB2vt1Jj5ZtQ0IvcVYp95w=h720",
+    "https://play-lh.googleusercontent.com/43xn_4MkDlh1OqYafReiiFn78v8RnZyk_RbTF3diesYK1j-qc2_ph4bTn1wkvUZUUqgRNlQK293-uwvYM1NO=h720",
+    "https://play-lh.googleusercontent.com/1ub5MSxEYTsT197p7TlnZYwz1uNrsEOJ8-7XH7lXuKezwyivKkQqDjfCEgjS6uIEj3SeDc68tqdL7I8lEp63W7o=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.siddurim.kavanathalev",
+   "sort": 277,
+   "play_titles": [
+    "תפילאור - הסידור החכם החדש"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.colorsense.PocketSidur",
+   "label": "סידור כיס — עדות המזרח",
+   "category": "יהדות",
+   "note": "סידור בנוסח עדות המזרח.",
+   "description": "אפליקציית סידור שכולל את כל התפילות הדרושות ביומיום ולצרכים מיוחדים: ברכות השחר, הנחת תפילין, תיקון חצות, פתיחת אליהו, טקס אזכרה, תפילת שחרית, מנחה וערבית.  \nבשימוש בסידור אתם יכולים להתפלל בכל מקום ובכל זמן, בנוחות ובקלות. \nבנוסף, אפליקציית הסידור כולל את התכונות הבאות: \n\nמצב שקט - אפשרות להגדרה אוטומטית של המכשיר למצב שקט בזמן התפילות. \n\nמצפן תפילה - מצפן המציג את כיוון התפילה - כיוון ירושלים (דורש גישה למיקום). \n\nגודל טקסט - שינוי גודל הטקסט ישירות מתוך מסך ההגדרות. \n\nסדר אזכרה לבית העלמין. \nניידות ונגישות: תפילה בכל מקום ובכל זמן, בלי צורך בספר פיזי. \nממשק משתמש ידידותי בעל ניווט פשוט ואינטואיטיבי.",
+   "icon_url": "https://play-lh.googleusercontent.com/ZGi2a2NTvs0QuovKp8lHllPlBF2ZB40_a0kv4fhU6IXuj_C2OyQX7iF_s58XF60NYKdxoCXPT5m-x0yydjIqtA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/TolVn2pKKQ6XQ_EWofuYEH_3xX4hlOJP49wbVjLJDbvtbGsnV5aS__Zwu0YpenRl0SzaRp-bc8leI1FGnpS3mA=h720",
+    "https://play-lh.googleusercontent.com/tU8BUge4G-m9Q2DsWfXNmzHK4BvOr31kIyJXIAVnwWqQiavwFaUgVuHy-51_W5KcA8ZimOGwGSK9cQyq4G1ezR8=h720",
+    "https://play-lh.googleusercontent.com/tWu4YhGxGQiMx8hU3rQ-_SvwAri65FLxWcsDYZA8eYcsbTsuA9yEGlP1P7taVqPKL_owAHMuxTpDLdYb6GGY=h720",
+    "https://play-lh.googleusercontent.com/uYYloDDyR08tsxf0WT3VDszz79460Pa42Z95eWjqr7a7dd64L8pIdEKBuiVGoP1zXdB7xRWz0RoFZ1pkxhtb=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.colorsense.PocketSidur",
+   "sort": 278,
+   "play_titles": [
+    "סידור כיס נוסח עדות המזרח"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.iend.hebrewcalendar",
+   "label": "הלוח העברי",
+   "category": "יהדות",
+   "note": "זמני היום, סידור ולוח שנה עברי.",
+   "description": "לוח עברי — כל היום היהודי שלך, באפליקציה אחת. זמנים מדויקים, זמני הדלקת נרות שבת, סידור מלא, לוח שנה עברי/לועזי משולב ותזכורות לפי התאריך העברי — האפליקציה המובילה ליהודים שומרי מסורת בכל העולם, ב-7 שפות.\n★ היום, על מסך הבית\nהוסיפו ווידג'ט מעוצב (3 גדלים) המציג את התאריך העברי של היום, זמני הדלקת נרות, פרשת השבוע, דף יומי ועוד — במבט אחד, בלי לפתוח את האפליקציה.\n★ זמנים מדויקים והדלקת נרות\nזמנים הלכתיים לפי מיקום: עלות השחר, הנץ החמה, סוף זמן קריאת שמע ותפילה, חצות, מנחה, שקיעה וצאת הכוכבים — וכן זמני הדלקת נרות שבת לפי מנהג עירכם. הגדירו התראה לכל זמן. קבעו מיקום פעם אחת — מדויק גם ללא הרשאת GPS.\n★ לוח עברי ולועזי",
+   "icon_url": "https://play-lh.googleusercontent.com/au7x0tOkzeCbq-joI_iG8AVnfM_PC5ddrEHW8-ap4h6PAJtRA3WueSFp4SedTQH8WCB3VsdGaplpD9Ao4eBdzQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/mFTT6phuNE40mqhxDrT2ujgiVqJdOAFBt-lw0eytisMHNff6-3tcK21MQU1alp5i35ebWN1JoySV26hCNjlb6A=h720",
+    "https://play-lh.googleusercontent.com/E-Cdx3C6RNHIK8VinzjOByC3cJjHs3GjgeN8tOO_5nuHdCVr_hBjyJEJERW0_4-KduegypLRPUkGkBSiYGnGrA=h720",
+    "https://play-lh.googleusercontent.com/oNArCgkypkNlhETJ8hl9CR3OTwn538bw-pX5h5eM-R1iOeJ58OdoSonLuGQk7ZQlZykJq4OzZPmBPqeBjn3l=h720",
+    "https://play-lh.googleusercontent.com/V_hG-y6KI71Uc2yAnuLLs3m0VH7Uqtl_QjLS6ba0Gz_rEcBT8csku2nyhlsqevlUklMBSVQYex5EjHySvZ43zQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.iend.hebrewcalendar",
+   "sort": 279,
+   "play_titles": [
+    "הלוח העברי – זמנים, סידור ולוח"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.EJ.ROvadiahYosefCalendar",
+   "label": "זמני יוסף",
+   "category": "יהדות",
+   "note": "זמני היום לפי פסקי הרב עובדיה יוסף.",
+   "description": "אנחנו הפלטפורמה לשימוש בכל עת ובכל מקום שתזדקקו להלכה (זמנים) על פי מרן רבינו עובדיה יוסף זצ\"ל, בהתאם לנוהגיו המיוצגים בלוח אור החיים. המדע האסטרונומי שמאחורי לוח השנה שלו נחקר ושוכפל כדי להתאים לפי הצורך כאשר הוא מתרחק מעבר לגבולות ארץ ישראל, תוך שמירת הפסיקות בארץ ישראל.\n\n- הגדרה פשוטה: בחר את המיקום שלך (GPS, שם/מיקוד או מתקדם). אין צורך באינטרנט לשימוש נוסף באפליקציה.\n- השתמש בהודעות שלנו כדי להתעדכן בזמנים המשתנים! הם ניתנים להתאמה אישית כדי להפעיל כאשר אתה רוצה שהם.\n- הוסף ווידג'ט למסך הבית כדי לראות פרטים מיידיים (תאריך עברי, תחנון, יום מיוחד - כמו ספרת העומר, הזמן הבא) מחוץ לאפליקציה.",
+   "icon_url": "https://play-lh.googleusercontent.com/ogg7ar9kck0wLfNHhg6IPPvmYKfTBHhgCaCqLb0GUP8Tu59gKqlk8BKdEWAOyvYGDeGPJRUi0NFojbBzTbSzVw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/35_3O7wLz21JJRSKrh2mBjucwrAr5LB6wktZmdzt-4-R_4cC_iaLkkY6eNlGupsO29PwvxQb-OroJr8Wp-H0=h720",
+    "https://play-lh.googleusercontent.com/V_gTv0xrwMEk0AhMctpvrU5hyPmL7qzrOYp3xmK5gUkIo6p3byA06qTLJ3AI_S7uHYG4yad1Ct8LxtgYsLlfww=h720",
+    "https://play-lh.googleusercontent.com/4Z_-MD6Bi7YGB1x-WtiNWa0AQ9fNKz0JelA_yQZzQrgsH08NizY0R5-vZTps0qJfihdPLTjBmINMiZnPCJht=h720",
+    "https://play-lh.googleusercontent.com/XqxgZBhibNO4aJSdgPXYfXCAiU6YMK6BJsPNVmlIxKpnU7XBzPyNNtWOlkeiJIOO0O4HWOai4iDdTkhe4nAz=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.EJ.ROvadiahYosefCalendar",
+   "sort": 280,
+   "play_titles": [
+    "זמני יוסף"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.neemapp.tehilim",
+   "label": "תהילים וסידור",
+   "category": "יהדות",
+   "note": "תהילים, סידור ולוח שנה עברי.",
+   "description": "תהילים, סידור ולוח שנה עברי: להתפלל יחד, מכל הלב 📖\n​מחפשים את האפליקציה שתלווה אתכם בכל רגע ביום? הכירו את אפליקציית התהילים והסידור החדשה שלכם. אחרי שתנסו אותה – לא תצטרכו שום דבר אחר.\n​מה הופך אותנו למיוחדים? הקהילה שלנו\nבאפליקציה תוכלו להרגיש את כוח הקהילה בזמן אמת. ראו כמה משתמשים מחוברים יחד אתכם, ובקריאה המשותפת תוכלו לראות בדיוק כמה אנשים קוראים את אותו הספר יחד אתכם ברגע זה ממש. כי \"ברב עם הדרת מלך\".\n​מה מחכה לכם בפנים?\n​✨ קריאת תהילים ושיתוף ניסים:\n​קריאה משותפת: הצטרפו לכלל עם ישראל בקריאת תהילים עולמית.\n​חלוקה נוחה: לפי פרקים, ימים בשבוע, ימים בחודש או חמישה ספרים.\n​קיר ניסים ותודות: פינה מיוחדת לשיתוף ניסים אישיים שקרו בזכות קריאת התהילים.",
+   "icon_url": "https://play-lh.googleusercontent.com/oeKqeSPRwR0brHgw5Z-Oyiu6klKORD8u7o7JtKIruNNue9K0AkSirk7AVF_xsiw5LR4QySqJg8HoU8CnF-4nCQ=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/GamNeQy9B1eCjmrIEWkcH0BAlg-G2CZH4VUe-Abljb1i6co6CgLRx5cJJxUyi-x4jL09sncBxEdBKWInjQ08=h720",
+    "https://play-lh.googleusercontent.com/F9Bw_TBguk5GDIEEKASRXvW67yvt66DxVm1rDABaYsnZXNo7kyFGVKfuPLCH0C42oxUkN6ub1VfGd0L0z9qtSQ=h720",
+    "https://play-lh.googleusercontent.com/-N4twh57-MS7bDzPc37XEndXCK4k6akuDxgIv25DL6tFSWkXcYEvKC_Sdepx5PgVUbL4jDFL9RI2pUf4he2A=h720",
+    "https://play-lh.googleusercontent.com/WCVo7ZChA5xVOkzEkGLEKYULT0OzG4cYPZi84TBuOfo6Ncojvd8Z7alrI-GVIn2fjrwaFFFM3f_z_BQNSnAB6w=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.neemapp.tehilim",
+   "sort": 281,
+   "play_titles": [
+    "תהילים, סידור, לוח שנה עברי"
+   ],
+   "since": 4
+  },
+  {
+   "package": "il.avimak.Tehillim",
+   "label": "תהילים אהל יוסף יצחק",
+   "category": "יהדות",
+   "note": "ספר תהילים עם חלוקה יומית.",
+   "description": "ספר התהילים אהל יוסף-יצחק השלם.\n\n• כל פרקי היום (יום, תאריך) בלחיצת כפתור.\n• סייר בכל ספר התהילים באמצעות קיצורים מוכנים מראש.\n• סייר חכם, מותאם אוטומטית לפי תאריך ו\\או תקופת השנה (לדוגמא: 3 פרקי אלול, פרק כ' מופיע בימים ללא תחנון) \n• צור רשימת פרקים מותאמת אישית (לדוגמא: פרקי התהילים של משפחתך).\n• רשימות תהילים סדורות לסגולות.\n• תהילים ליארצייט (יום השנה).\n• והרשימה עוד ארוכה...",
+   "icon_url": "https://play-lh.googleusercontent.com/JVbnSBPMWNGyYMOoi7_RIr4z6X6gQXIC7x-pdsCq87FewXDmKvTIHB5rY5dGDl4yh8mcCzSKRTkHcv6l_rzADzE=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/fosZ_h43DPLoxANRoA9PHVx_EyaVWyxrsHzk5GMRJ1umtmwfjn64EFRtrySHON_EI0WviEbrYUlK_3-1asD46PE=h720",
+    "https://play-lh.googleusercontent.com/kvfsnOHs3tiO7pRg1DciEuG5eLquVvqD7p8mLCk83CdA39t1eAMftC9M7xmOyOAqrrqXzEX7UlQYEIUUAOed=h720",
+    "https://play-lh.googleusercontent.com/Qc-wKjqk4DJYxpKLwVg4dosVU-Ir-w1hzwzK8bO5qSQZEGi2WqHN3MaZmEcldGuOhiNMttUGm-wlSKCqg7AMZw=h720",
+    "https://play-lh.googleusercontent.com/y7HWa0pyib1CxFtVBlfdnUcGs-wG-YL_b1O3xexmtCBgP9_bSPJ4bZX9K0xNLasrjh_q9IsTcEKqqp66Er9wQg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.avimak.Tehillim",
+   "sort": 282,
+   "play_titles": [
+    "תהילים אהל יוסף יצחק"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.mishnayom.mobile",
+   "label": "משניום",
+   "category": "יהדות",
+   "note": "לימוד משנה יומית.",
+   "description": "משניום הינה אפליקציה המתקדמת ביותר ללימוד משניות, בתצורה של סדר לימוד יומי, לפי תאריך או הספקים. \nוכן יצירת תוכניות לימוד לעילוי נשמת יקירכם, הכולל שיתוף תוכניות ללימוד יחד בין בני המשפחה או חברים. \n\nמשניום הינה אפליקציה חינמית לחלוטין ללא פרסומות.\nלימוד פורה ומהנה!",
+   "icon_url": "https://play-lh.googleusercontent.com/e0ZK-wKyrzyeMk-SH4CFi6kARTmCvcKWTuvzxaxjqMMTIK21w1_F3SXoC7cvbUu3QMmZDd20iDynIM9SvtOc=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/yzPD-PDHisMRSMTfvwtodnCGlSi7AuhUwKXV18fzPUZxiA0cLChAylsl3egE8gEUADFWP6uBWGcMAYwABzl2xw=h720",
+    "https://play-lh.googleusercontent.com/kTWlVTkyi_4ZTd-PI_lq4AFDP3wtMy_Z95eEYuj7HGPy8-PO8_vxv378BCayhnmgvpVL-HoBkeXh6LtR-gTcaQ=h720",
+    "https://play-lh.googleusercontent.com/f7M4i94AmMgQ9w29ZO5O861hESRSc4rv3r1RUnFqI6urf1h4IMPttx7IKsdoBtdSihiCgKT6ybtme2h2sBt7=h720",
+    "https://play-lh.googleusercontent.com/HVRf_KBw_dQ_jkX3FE-c2P_Cd96JTJH1-yXtqOVEtVcA-iBFtIU66vnQhj9GbDg9RnXX_Vh7Fo-ysuYxsDUYoQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.mishnayom.mobile",
+   "sort": 283,
+   "play_titles": [
+    "משניום"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.nocker.kehati",
+   "label": "קהתי",
+   "category": "יהדות",
+   "note": "משנה עם פירוש קהתי.",
+   "description": "📚 פירוש קהתי האהוב – עכשיו בליווי שיטת הלימוד של משנה סדורה\n★ ספריית משנה מורחבת\n• כל ששת סדרי המשנה \n • פורמט ברור ומסודר לפי שיטת משנה סדורה\n • פירושו הנודע של ר׳ פנחס קהתי\n • פירושו הקלאסי של ר׳ עובדיה מברטנורא\n • הקראה קולית מקצועית בעברית\n • תרגום מלא לאנגלית\n★ תכונות חזקות\n• פועל גם ללא חיבור לאינטרנט (למעט הקלטות קול)\n • מסך מפוצל: משנה ופירוש זה לצד זה\n • מצב לילה לקריאה נוחה\n • 6 גדלים שונים של גופן\n • אפשרות לרקע בצבע קרם\n • חיפוש טקסטואלי מלא\n • סימניות חכמות\n • שומר מיקום הקריאה באופן אוטומטי\n • לוחות לימוד: משנה יומית ופרק יומי\n • בחירת לימוד לפי אותיות נפטר (יארצייט)\n★ יכולות שמע\n• קריינות מקצועית לכל משנה עם פירוש קהתי\n • האזנה רציפה לפרקי משנה בפורמט משנה סדורה",
+   "icon_url": "https://play-lh.googleusercontent.com/p4CE-d4a4ISL26KWwFdSYlAUIbsSR4RG2DLuYqhMe4JF_v2VPAoX4iTKB6GWBG2F_wwzwtoXtVmyqhI6__xS=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/ElK6jKmu_bM3yvCWNOj_2JIiwjKxy7YBX3eUTzftFBt8u7Rapgn7bSVr0Fd5KJ0a2drpjXTaFopHGZamg0xGDd0=h720",
+    "https://play-lh.googleusercontent.com/f_4E9FLDdonpmJmVNDildJu-dGy9kuS51yBKqh_A7eDQ3J92Y_3wpwigZBp-Maqbv0Zz7-XQzmvMvPeqAQPuqA=h720",
+    "https://play-lh.googleusercontent.com/bYUBSc9k3oqeaL7Jpp_le8hD8-NRBR3PTI7lmoOJq3idzr7Upi46ce--cHAl3o4blL9bJTQ5vRoxTzJNiCXW=h720",
+    "https://play-lh.googleusercontent.com/_yGXTiKodD-x2rkvFItAtQlZz91gSvjdj-61RDoyQKUbKAbIHstWQpbIMZX3NlQLl3XT-ZoHAqleJq8_SHN_5g=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.nocker.kehati",
+   "sort": 284,
+   "play_titles": [
+    "קהתי משנה סדורה"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.talmudbavli.studycommentary",
+   "label": "תלמוד בבלי",
+   "category": "יהדות",
+   "note": "גמרא עם מפרשים.",
+   "description": "התלמוד הבבלי הוא חיבור שבו מסוכמת הגותם ההלכתית והאגדית המרכזית של האמוראים - חכמי ישראל בתקופה שלאחר חתימת המשנה, מתחילת המאה ה-3 ועד לסוף המאה ה-5, בין אלו שהתגוררו בבבל ובין המתגוררים בארץ ישראל. הגות זו נכתבה בעיקרה כפרשנות על דברי דורות קודמים של חכמים, דהיינו על המשנה ועל הברייתות, בצורה של ביאור והרחבה לששת סדרי המשנה והיהדות. (נלקח מויקיפדיה)\n\nמתאים לכל הזרמי היהדות והתנ\"ך (שבו 929 פרקים) בין אתם תלמידי רבי עקיבא, רבי נחמן או רבי מלובביץ'.\n\nאפליקציית התלמוד הבבלי חינמית לשירות הציבור הכוללת טקסט מקראי ותוכן מקראי לכל חלק.\nבלחיצה על הטקסט יופיעו מגוון פרשנויות תנ\"ך, תרגומים ועוד.\nכפתור החיפוש מאפשר לנווט  בין הסדרים.\nהתוכן זמין בעברית ובאנגלית.",
+   "icon_url": "https://play-lh.googleusercontent.com/B1aDZr_3mBn73tcSaGz2w9mb6dgw4dOSznqyyZlF2xH_r-KCCQtTUYOUyNGeZW6V6n7M37rBuYW9MXpKma11P6o=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/d39LKkRDvQBqXL-K79Nzj8_k5rgWhuww3ics-vNG5U5HmHWdsAMahX7coY1jEa2Ub8aYwQPTaE1o_pc7UH3ybQ=h720",
+    "https://play-lh.googleusercontent.com/rUgZz4R7zsMw7yb71aVR3gjuJuXYzGsZCOnhEzl7HBXsYrMhqJU0kGTI1h1FnVwMiHufpAkKxkBhX2hhZhQjQA=h720",
+    "https://play-lh.googleusercontent.com/TTC1cp_V4isoCi5BAfQ2t70eqk_v-CO6icd_JPRu04PoRmBnk1O322BqSNQsyYOioQQaA-3LeBBEWyzNozDEbg=h720",
+    "https://play-lh.googleusercontent.com/MTAyeQfA86F4JY3ViX1BaiR8plS1-xl5Bn0J0dCcg7Yzk32YGnRzbP_hKTEkUZaKXYVfdT1-k3vHvKq-EZjx-VY=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.talmudbavli.studycommentary",
+   "sort": 285,
+   "play_titles": [
+    "תלמוד בבלי: גמרא ולימודי יהדות"
+   ],
+   "since": 4
+  },
+  {
+   "package": "heb.apps.shulhanaruh",
+   "label": "שולחן ערוך השלם",
+   "category": "יהדות",
+   "note": "שולחן ערוך עם נושאי כלים.",
+   "description": "ספר שולחן ערוך השלם מאת ר' יוסף קארו על ארבעת חלקיו:\nאורח חיים - על ההלכות היומיומיות - השכמת הבוקר, ציצית ותפילין, תפילה, שבת, חגים וכדומה.\nיורה דעה - על הלכות שחיטה, איסור והיתר, דיני כשרות, דיני נידה, דיני ריבית, דיני נדרים, מצוות התלויות בארץ שניתן לקיימם אף בזמן הגלות, זרעים, דיני אבלות ועוד.\nאבן העזר - עוסק בדיני המשפחה (נישואין וגירושין), ועל הלכות אישות. חלק זה נקרא כך על פי הפסוק בבראשית ב,י\"ח \"אעשה לו עזר כנגדו\".\nחושן משפט - על הלכות דיינים, ממונות, דיני בית דין, הדין האזרחי והפלילי.\n\nכולל לימוד יומי בספר עם תזכורת ללימוד.",
+   "icon_url": "https://play-lh.googleusercontent.com/I3jWLiRXJXtzvegtUysNBnlccNloYPY2gw88t7RDfYGjEFcBr0H5R_Hxz2CUyj04IRrD9oaxhiC8eVE2jOGqPA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/q3JalBEzng8LeLX984tNnBNwXCRDEd0V208bDokQDqqz9Kn7NTQVwrr6YveGDDXvSXrIcfEkBzpY-9tVx3JmZQ=h720",
+    "https://play-lh.googleusercontent.com/LwugP1D1EVsXGEIQtfgAtfmk8oVPrMngTVNkMCqwXinaNP6mW_Ya1da-pMhu8pO_bPDmmJlgaW7JmM0tJEzLbg=h720",
+    "https://play-lh.googleusercontent.com/JXZvXLC0_JUomvoF9SCRDZxgzlH8Pl3ws4tlarNYbuCS0Bar3Bsc7WNU3WGhz3s89aJHA6AW9q1EThZLzAB3=h720",
+    "https://play-lh.googleusercontent.com/w9occcz_L8UtlHJZJT0AiamKtFQAwWyS8peN6KPQCmEOAnjxwzFJkwgXmKT7rlA7SU3KaVsU0cXmvHYthmMzEg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=heb.apps.shulhanaruh",
+   "sort": 286,
+   "play_titles": [
+    "שולחן ערוך השלם"
+   ],
+   "since": 4
+  },
+  {
+   "package": "il.yahadut.yalkutyosef",
+   "label": "ילקוט יוסף",
+   "category": "יהדות",
+   "note": "קיצור שולחן ערוך — ילקוט יוסף.",
+   "description": "קיצור שולחן ערוך - ילקוט יוסף\nקיצור שולחן ערוך מאת הרב יצחק יוסף שליט\"א עפ\"י פסקי הראשון לציון הגאון הרב עובדיה יוסף שליט\"א\nמעכשיו לא מבזבזים את הזמן בתור בבנק או באוטובוס והופכים כל שעה אבודה לשעת עבודה - עבודת השם!\n\nעכשיו האפליקציה כוללת גם חיפוש מילה בתוך סימן (פרק)!\n\nכל הזכויות על התוכן שייכות למו\"ר הרב יצחק יוסף שליט\"א",
+   "icon_url": "https://play-lh.googleusercontent.com/hJS4EgdfcWfysmfORRMw_7QXjuJ7L94oU_6je77WdzMKIWsht6yKgxxhDQzwS0PuX1aopsudHpGzVpAnx03OUw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/Eg3vLGrT67ZDtSYWQyp8iuhpgGu5aKgVhzNuurfAzcyC2Ei0mKbr8GS1LqJOHZnImVqUWbTc_Z7baUFwx58VSQ=h720",
+    "https://play-lh.googleusercontent.com/bvVruoufUFMA2AsHI7720nWHG49rvVxxPHa9_Mv9r8vVfW-MBky6e6g74G3Hdgl5A8wpeD5Kud2giSxyOyLQ=h720",
+    "https://play-lh.googleusercontent.com/GXboW_Ngle2CUI4l0pKnkDtootBLF8e-lIuPV1B_pFmu5VHOKFMEPJRZePz137gjyzDRHqYHKzRsgomW5J_ttw=h720",
+    "https://play-lh.googleusercontent.com/2WdQeF1UNoH3VJnDCPfyBQs5e5CmhQbGiUhb312Be5OqvDIQbnmJO2a_02lKd2NHhwprBQx43IV0m9pcdbgBFAE=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=il.yahadut.yalkutyosef",
+   "sort": 287,
+   "play_titles": [
+    "ילקוט יוסף - קיצור שולחן ערוך"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.eladcohen.halachayomit",
+   "label": "הלכה יומית",
+   "category": "יהדות",
+   "note": "הלכה אחת ליום.",
+   "description": "הלכה יומית עפ\"י פסיקת רבני יהדות מרוקו כדוגמת הרב שלום משאש, הרב יוסף משאש, הרב רפאל ברוך טולדאנו ועוד.\n\n** כולל התראה אוטומטית על הלכה יומית חדשה **\n\nחדש! חיפוש טקסט במאגר ההלכות",
+   "icon_url": "https://play-lh.googleusercontent.com/AzyfP3KJ2f8DtK1tkuYKZ64XyvWEhCD78GuU8rmtvDh5fa4d6VsFrZGhiyeHkmW_42Ej5WHKvwHcJtpBvnJh=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/d-UtNVIT3vVUYHva5-MGm3sNPr1KAWYnhQ_aC9GN-wR2jWcmzuNvbEVyIy990jLztw-Ixr6adQDHBa_tpJzrvA=h720",
+    "https://play-lh.googleusercontent.com/Tz2rkM8pORQ5KKahMIhcWC5fuIw0Vb1YiSb8TGhYY1Qs-Mw9P2hb64Z7gOkVn3Yg-GATGpZa0oZk-3031N47Mw=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.eladcohen.halachayomit",
+   "sort": 288,
+   "play_titles": [
+    "הלכה יומית - דרכי אבותינו"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.two_mikra_one_targum",
+   "label": "שניים מקרא",
+   "category": "יהדות",
+   "note": "שניים מקרא ואחד תרגום לפרשת השבוע.",
+   "description": "אפליקציה נוחה להשלמת שניים מקרא ואחד תרגום במהלך השבוע\n\nהאפליקציה תציג לכם בצורה ברורה ונוחה לקריאה את הפסוקים ואת התרגום. בנוסף תוכלו לבחור בין תרגום אונקולוס לרש\"י וגם את אופן הקריאה המועדף עליכם: פסוק-פסוק או מחולק לעליות.\n\nבמקום לסחוב חומש ממקום למקום, האפליקציה תציג לכם את פרשת השבוע, מחולקת לפי עליות, בכתב גדול ונעים, כדי שתוכלו להשלים את התורה עד שמחת תורה בלי בעיות.\n\nהאפליקציה מתאימה גם לטאבלטים, לשימוש במטוס במצב טיסה, לשימוש בזמן התפילה כשהחזן איטי ובא לכם להשלים עוד קצת מהשניים מקרא - או אם אין לכם סידור ואתם מחפשים את הקריאה של יום שני וחמישי.",
+   "icon_url": "https://play-lh.googleusercontent.com/10wNOHj_-FVyYbkwcIX5xoQXbdl7bnz-oOu7hcB1r-AgV2IVSlWAf36_jnqkTxiO-DkWW8XwfiAvJ7tJylqj=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/NiNFXuxU-Uy4tL2Hnm1wYaVORFyU2aHHZiJZplb8l70NOwWyTH-5UrUvXTIv3giFWFUTJFyn-eOlp5fP5UOoa4k=h720",
+    "https://play-lh.googleusercontent.com/Wb1gcTbsJjGCZ8ZvGa2hKycMfywRp6bxt6oxdiodoN-7ZMBZt2gGjUFe55vzT4cwYLTc-Onmngsj_4jZIGh7=h720",
+    "https://play-lh.googleusercontent.com/mWrJOp7-Pf0DiC8wLs6b6mPHTW-t9o44hmcx-DfZAsJe9vdDAqVGB1cl3gjnzQfnnI-4tuqNNPT-GeZ4X4Y3wQ=h720",
+    "https://play-lh.googleusercontent.com/zKkxyehZV2_8v-G7vD-xvpiLGg-VTv_o9uDTX5HAyeG8GvzpddxXuGuqDKySst9Px9W9YA9y1VeWMwbUw0RZ3A=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.two_mikra_one_targum",
+   "sort": 289,
+   "play_titles": [
+    "שניים מקרא ואחד תרגום"
+   ],
+   "since": 4
+  },
+  {
+   "package": "oyw.tnc",
+   "label": "ובלכתך בדרך",
+   "category": "יהדות",
+   "note": "ספרי יסוד ולימוד תורה.",
+   "description": "ובלכתך בדרך מגיע לאנדרואיד\nבאנדרואיד האפליקציה המקורית מחולקת למספר חלקים, \nהנוכחית מכילה:תנ\"ך, משנה, גמרא ומדרשים\n\n(ניתן לשנות שמות קדושים באמצעות \"ביטול ניקוד בעברית הפוכה\" ראה בעזרה)\nOnYourWay Full version (90MB) direct link:\nhttp://mobile.tora.ws/android.html\n\nניתן להוריד ישירות מאן את האפליקציה ונוספות:\nhttps://drive.google.com/drive/u/0/folders/1TYYR-4F-k8Q2BZFT1tb8zaGs9QUFUC7r\n\nשימו לב, אופצית החיפוש דורשת חיבור לאינטרנט\nהאפליקציה לא מתוחזקת ולא עוברת עדכונים מתוקנים רק דברים שגורמים כישלון כללי באפליקציה!\nמחבר הספר פניני הלכה מבקש לעדכן כי הטקסט לא מעודכן ויש להשתמש באפליקציה הרלוונטית או הספר!\nאם נתקלתם בתקלה מיסרו את דגם המכשיר, גרסת אנדרואיד ותיאור מפורט ל:roy.myapp@gmail.com",
+   "icon_url": "https://play-lh.googleusercontent.com/Rh5QPLk4eUmPIiqi6eL9t_ynRzoLXJDkzYgzZicmNi7W2d6pTHErsjQ6oj1o_WTiSc8c_sQlVRfedAyjmrdA=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/pcW0bBwuwpKVAZQSiys09hbPl6RCX-pY5roxUQxk5zkzwp0z2AIJKnXjzpxMkjdiTbBAzXVLf0L8hqiM9IE8664=h720",
+    "https://play-lh.googleusercontent.com/MddXIT20CjL1eXaLha7MZthb20l7WlodWv2aV_WPimnx-b7Kji7wJQxogp3gIQCiUpHQcHqsBqjaGtBhLiKp1Q=h720",
+    "https://play-lh.googleusercontent.com/xWEJZqBBPFNaW_2x-4SVwl1gFHp6UH9FbVVqXToGo5omHd189k_cAySTj-TZ9SjNtCLY2bV6euQNwXfziVxm=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=oyw.tnc",
+   "sort": 290,
+   "play_titles": [
+    "ובלכתך בדרך ספרי יסוד"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.torahanytime.betaapp",
+   "label": "TorahAnytime",
+   "category": "יהדות",
+   "note": "אלפי שיעורי תורה (בעיקר באנגלית).",
+   "description": "With over 130,000 combined downloads on both mobile platforms, the TorahAnytime App is one of the most widely used Torah learning Apps in the World. Use our beautifully designed app which contains loads of desirable features. This TAT 3.0 App is a must to download! Many more new features are to be rolled out in the coming weeks and months.\n\nInstant access to top-quality video and audio Torah classes by the world's greatest Torah scholars. This well-designed, powerful app was created to provide you with the most convenient, easily accessible, and fun learning experience.",
+   "icon_url": "https://play-lh.googleusercontent.com/8DXGsfauLAItZlEpgBgguKbZtKKC5bEGlhEoVH-CCLlMwGWpbJxB34PxefawZz7aukDbsX8ugSe3HEsudr2EMvk=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/Aw7mnN2QTS5De5V7P9J8EgNAxoR7tSSB1FMn3Jp5hd5qjq4_4so9h2LPjxrmpl6SNPMslRCQyz2ZQsDcfCol=h720",
+    "https://play-lh.googleusercontent.com/Yvp4YRdDRxyfWF5-G1IJl0L1LXXGSR7hWCP1AG9z1jhz7SBs8B33jKu06-q4e830qb3tMh1S7Zg_shp1lWdZ3w=h720",
+    "https://play-lh.googleusercontent.com/4KFHi8k6sNGHmUrCxO8YFG6JRObUDgOIuhW1oR7bi8iTDky-U3qn0WhL4HEQqqj73CopujCBJtAxkThcT5N3=h720",
+    "https://play-lh.googleusercontent.com/HXt1CsJGpVqsYe1tvfJm8ilwRBWUxbwL3nfG7hPnX6fBT8b6NbNst8rXOkGj6VndITNYHZXOvpwTQj5xNcA7dA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.torahanytime.betaapp",
+   "sort": 291,
+   "play_titles": [
+    "TorahAnytime"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.lomdaat.apps.music",
+   "label": "ג'וזיק",
+   "category": "מדיה",
+   "note": "מוזיקה יהודית מבית לומדעת.",
+   "description": "JUSIC – מוזיקה יהודית. אישית. מרגשת.\n\nJUSIC היא אפליקציית מוזיקה חדשנית המוקדשת לעולם התוכן היהודי והדתי, ומביאה חוויית שימוש איכותית, מותאמת אישית, וידידותית לכל הגילאים.  \nהאפליקציה מרכזת את כל מה שצריך במקום אחד: מוזיקה יהודית מקורית, קליפים, שיעורי תורה, וסטוריז של אמנים – והכול מותאם לקהל שומר תורה ומצוות, ללא תכנים זרים או מסיחים.\n\nמה תמצאו ב-JUSIC?\n\n🎵 מוזיקה לפי מצב רוח וסגנון  \nבא לכם משהו רגוע? שמח? חסידי? נוסטלגי? עם מנוע הפלייליסטים האישי שלנו תוכלו לבחור את מצב הרוח, הסגנון המועדף עליכם, האמנים האהובים – ולקבל פלייליסט מותאם אישית בדיוק לפי הטעם שלכם.\n\n👥 סטוריז של אמנים בזמן אמת",
+   "icon_url": "https://play-lh.googleusercontent.com/4LFmYGMfpAYkfGMHkcStRQkTQa9NaWDDCKekL7E90sz37cdXRIliG3oIoMyDlKDHHBGuKwkxxZYymgZoAana=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/-uWYHCv77lTJQOqraqZ6TwQgZ9xWhMANfLElSScDjEKH2k3ITebDZ8Sj4pkzRySUneKLdq5E0_L1ELIA6gxfIg=h720",
+    "https://play-lh.googleusercontent.com/1L49twXXD_NBDQHWXaCypbXjeb_KxnHlXFCh2Vs0RAifAqcrSV1bTIxWnDN9pcTIgd8bCnslJPMeKuywj3QTh8o=h720",
+    "https://play-lh.googleusercontent.com/CW_XLM9HdY5pN_kxsotZ4xhTKQneZ9rQUi9eWZhYaSkPwWyJ3Le7Y6zIK8telRTFD9V9UKWA0oVGUuxHNcfz=h720",
+    "https://play-lh.googleusercontent.com/EAgur3ZO7RPWR6OZV1rGNDTKj2Rmrjj3H7pZIGTK4m1DxjD2aI_bpuXhnJGR7KbaxqnmnR2xSr3kUYy8h4mXYg=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.lomdaat.apps.music",
+   "sort": 292,
+   "play_titles": [
+    "Jusic - ג'וזיק"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.google.android.apps.classroom",
+   "label": "Google Classroom",
+   "category": "עבודה ולימודים",
+   "note": "כיתה דיגיטלית — משימות ושיעורים.",
+   "description": "אפליקציית Classroom מאפשרת לתלמידים ולאנשי/נשות הוראה להתחבר בקלות – בתוך מוסדות הלימודים וגם מחוץ להם. Classroom חוסכת זמן ונייר, ומאפשרת ליצור כיתות, להקצות מטלות, לתקשר ולשמור על הסדר בקלות. ‫",
+   "icon_url": "https://play-lh.googleusercontent.com/PNYNq4kPt-oJMEJb91DUYgsjMl9Ubx5KHP5c1UglZJd8FQWv0xvRL3mZdTvicuhaF0yQm00lV7RN0eAxUbkvQw=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/DniWqYqRBYtCXkzyLDybFOLrykrja2_z09Er3o2uoDKZRKGL_mCD5SRQVHPNQt3_TTgritocMnq2XRZQyV67SA=h720",
+    "https://play-lh.googleusercontent.com/l0bc-yYG7alIRZI9Q0OZDn0FLNhwtO5KAIM1QoOIFmqomJKQBEMEyBPKL_Acfon-YcVyNXjHayXlqDW28H6y=h720",
+    "https://play-lh.googleusercontent.com/gtvmrxoc1BSqCv58r5K-DjzKKJKOcl_mc_LhTj5L-hrPRe6YYq8QPm4pI9hsgdw8c4RVFz0HID5nkYtVOXK0=h720",
+    "https://play-lh.googleusercontent.com/tqIU1IDOcOtUATdZ-LZQoPqAgXbggopi-p56Rmq2mfgKcuZgsT6zGjiRdCWvSMOXqAiIHljfdyv4xCystvE5=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.google.android.apps.classroom",
+   "sort": 293,
+   "play_titles": [
+    "Google Classroom"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.moodle.moodlemobile",
+   "label": "Moodle",
+   "category": "עבודה ולימודים",
+   "note": "אתר הקורסים של המוסד הלימודי.",
+   "description": "Access your Moodle Learning Management System courses anytime, anywhere, on the go and even offline.\n\nWith the app you can:\n• Browse course content, even offline\n• Participate in courses, take quizzes, and submit assignments\n• Receive instant notifications\n• Message and connect with other participants\n• View your grades and activity",
+   "icon_url": "https://play-lh.googleusercontent.com/w7ypn_LOfAHxzGHmYgJfVt-uuokHIYRLkbjZrvib5BRvNUk4yg8OhZUhgYdnKNIA2dGLMqCwQjFjE-YD76QXew=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/WBDmfdg3w7A8wiv8oYsjY5GNY97bxIQiOXGVN5NwR3kfpVPiJb_3qpwhveROtfmh2bnQ5BTEYqDO3Xc9b5p9Fg=h720",
+    "https://play-lh.googleusercontent.com/eif3MOhTbBiyJrmGNuvO3kFwZdV6M72vVwCq7b3o4dl9ozJP21qloBlJqGoDs-WLw9kpOqbdsrGTlvVb0t6t=h720",
+    "https://play-lh.googleusercontent.com/6TZlCb0U-WHgT4woqZcKAu8SCkhhoTm1i9JVHvYyQoj1pByRcHuLJHVY1JtelfIl8UyDfqhZZSSbYDYWAw2y=h720",
+    "https://play-lh.googleusercontent.com/dD2kPdHDm513SuyzZu60IcM8BGz3Bx_vm8dmDtZ46wud5qgD93-ObWo99kG_5MjlIdn5cgmzQdRrGS3wVU1kcQ=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.moodle.moodlemobile",
+   "sort": 294,
+   "play_titles": [
+    "Moodle"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.microblink.photomath",
+   "label": "Photomath",
+   "category": "עבודה ולימודים",
+   "note": "פתרון תרגילי מתמטיקה צעד אחר צעד.",
+   "description": "Photomath is known worldwide for helping millions of learners to learn, practice, and understand math – one step at a time. \n\nScan any math problem with the Photomath app to get step-by-step explanations with accurate solutions and a variety of teacher-approved methods. Math is about the process, so Photomath breaks your problem into bite-sized steps to help you understand the “what” and “why” along with the “how.” Whether you’re learning basic arithmetic or advanced geometry, we’ll tackle it together, step by step. \n\nWhy Photomath?",
+   "icon_url": "https://play-lh.googleusercontent.com/SdtwWRFWpe98RgGwOM1dsBEoNYUd9H6KZKFs8WpWFb6YZvDM3xY3kiUK0BcV-ZzPjjLp_HuFagj1lbm2fsnmcMY=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/qYMV1ZRpjIQ7RCHX6-94ZuFZsNYMzwpG_HIN5NppKxlNyeBXPAq_rGMLMGDX_ugui2Co_t5VdEMJbHzii80u3Q=h720",
+    "https://play-lh.googleusercontent.com/qF8ZIQu3ac97pYb8OHCvOanpATeARs3M9BjGvJMbsT6kPdPVaeijGZqjWIvRoDQbKJNsg0gVfKplxPGYZeL1w4Y=h720",
+    "https://play-lh.googleusercontent.com/xhrcaNHxViO9pxAQNrpZlbNYN0z-5V_eLff_6kIzaLP1KurJlqj-xLDglgtwlJ8f57Rk9laZ_J8-sY1Owahx=h720",
+    "https://play-lh.googleusercontent.com/XNKaMUj20sg5Wr3CDZecty7vg5ArWorffJTZBWqYodr52T4lJS6W4dcdCH5gYtshutb8W5TSmxPr2Z8GxrB7=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.microblink.photomath",
+   "sort": 295,
+   "play_titles": [
+    "Photomath"
+   ],
+   "since": 4
+  },
+  {
+   "package": "org.geogebra.android.calculator.suite",
+   "label": "GeoGebra",
+   "category": "עבודה ולימודים",
+   "note": "מחשבון גרפי, גאומטריה ותלת ממד.",
+   "description": "Graph functions and equations, roots, and extrema. Find derivatives and integrals. Build tables. Construct and analyze polygons, circles, conics, and other loci.  Create dynamic geometric constructions. Save and share your results. Millions of people around the world use GeoGebra to explore and learn math and science. Come join us!\n\n* Plot functions, implicit equations, polar and parametric curves \n* Find derivatives and integrals.\n* Experience transformations with sliders\n* Find special points of functions: roots, min, max, intersections\n* Construct and analyze many types of regressions. \n* Create geometric constructions\n* Measure lengths, perimeters, and areas",
+   "icon_url": "https://play-lh.googleusercontent.com/4t7gA_OjypYytPFasTf_npykgPOBnjegJLLK0SeR0EBQWbv6FdXoNXBW7vN91_P7tMWTp6Xp4uFXLKL1AZVtmg=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/JfOv-Ly00Mb2CfmyiEERO1KUT2wR9m_7FU2MaexjOB1ejQhxzkNWPFk9RC5si--pNdn_lmoAo7bMY2zPQRJ8kQ=h720",
+    "https://play-lh.googleusercontent.com/flyUo6fC9YIm5KfUjAULI7AcwOcgizhOWJhBBJPWOFD0SiiV64RK7KyaT2faCehBgRF9vpsWxi867BTlB7M1AA=h720",
+    "https://play-lh.googleusercontent.com/WkGJzaJ_hOVbo2dOLrzLW5x2TCldqdk9f7007Rx8ojkvZrTNPRyXSbe5TMbhv0X2Q6fKeLnlD81IHa3EOkulKY4=h720",
+    "https://play-lh.googleusercontent.com/GnjVzgoIxAmRCRcwPOSFscblKOHcg2DLOPoGuTu1i2FlSxvbloZHRhAlRloy3DNzTQZIST_IcJXuEj7GPBJjFA=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=org.geogebra.android.calculator.suite",
+   "sort": 296,
+   "play_titles": [
+    "GeoGebra Calculator Suite"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.desmos.calculator",
+   "label": "Desmos",
+   "category": "עבודה ולימודים",
+   "note": "מחשבון גרפי.",
+   "description": "At Desmos, we imagine a world of universal math literacy and envision a world where math is accessible and enjoyable for all students. We believe the key is learning by doing.\n\nTo achieve this vision, we’ve started by building the next generation of the graphing calculator. Using our powerful and blazingly-fast math engine, the calculator can instantly plot any equation, from lines and parabolas up through derivatives and Fourier series. Sliders make it a breeze to demonstrate function transformations. It's intuitive, beautiful math. And best of all: it's completely free. \n\nFeatures:",
+   "icon_url": "https://play-lh.googleusercontent.com/0XIdUexS8PBUJCrxOzrsNus5vRC1I72JmeKUivvUvJBqJo1P3MmK7QXRA6cPNUSoBlXoDNWNxUkEjEMLdhgc4Y8=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/-CKWyIQWraUegW8Zz718pUaDllHbtgfduwSa1O7MbsXrOpvDFYYQmGRHulk9GInOYqJ_Rwj3zV5YiAygJvad6g=h720",
+    "https://play-lh.googleusercontent.com/aUhxb0CLlMYqPxoD0vcH0y9uI-9dfWk6ho0psu-igDmOlVjHheQCuRvtR7WClAy6NloqP2b6PwGo4L0mMRqXYg=h720",
+    "https://play-lh.googleusercontent.com/DjBN4GJe7S7oAKaevsMbtE3X6Gqi9KPmmrR_SsB--N4BgthEqqkWB-8W9PQ2zM_oXPtWkmI3OaA9RGUf0oB9=h720",
+    "https://play-lh.googleusercontent.com/apbh6LVqIFGmzB4Ze8SKDEu9NHVTIhAzBUjSO9cYtlTD-OlKIPiZlqKEMxBW5fSRACnQsR7rz2OfYzIRtKJB=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.desmos.calculator",
+   "sort": 297,
+   "play_titles": [
+    "Desmos Graphing Calculator"
+   ],
+   "since": 4
+  },
+  {
+   "package": "com.qnomy.myvisit.app",
+   "label": "myVisit",
+   "category": "ממשלה ושירותים",
+   "note": "זימון תורים למשרדי ממשלה ולשירותים.",
+   "description": "myVisit helps you plan and execute your next visit to any service provider on our partner's list\n\nHow does myVisit help you plan your visit? \n•\tFind a service provider by category, e.g. banks, doctors, government offices, telecom stores, etc.\n•\tFind a service location nearest to you, or with the shortest waiting time\n•\tSchedule an appointment at the location, to ensure minimal waiting time\n\nHow does myVisit help you during the visit?\n•\tTake a number for service, even before you arrive\n•\tAnnounce your arrival, without having to wait for a greeter\n•\tFollow the line progress on your phone",
+   "icon_url": "https://play-lh.googleusercontent.com/TCHn0Rhjjv3BKR3mfprJ2NVnswWS5DBWEHw1bLZOmlfBvux1G2tAFeGU4KMoiZoin4YUsh0nr3PM-30HCDot=s192",
+   "screenshots": [
+    "https://play-lh.googleusercontent.com/wvqa3xEbNS33kVvNky4rwX1JVmh06gqjoFOAssTUG2wxDpIppUnKK0Bds6cTuoLkvnBO54t4M-MsOtoFRZf0=h720",
+    "https://play-lh.googleusercontent.com/vSQHHfcU-Q9wqz_odFDIin4o9HfaCZiEb9jiAAI4eOwd00bi_ykBaKA19AOWf7NyZ0kjRO_rjwC2ZK5kw5GQBQ=h720",
+    "https://play-lh.googleusercontent.com/-U9x-k7cCvPRauzjOFHqOZ7mBntzXj8pEwECTxR4ksfDv3Hh_Lu_1mWAXFIAJ7rjHT4Iv2XWsVQ9x8qM1WF07w=h720",
+    "https://play-lh.googleusercontent.com/BqPQ5YT91_6SXyluinVPw9538aVgffsumtejdSQB_7P2RVpLioExytlH2n2hMxDawcRKAbP89u0G6G44X-l_=h720"
+   ],
+   "play_url": "https://play.google.com/store/apps/details?id=com.qnomy.myvisit.app",
+   "sort": 298,
+   "play_titles": [
+    "myVisit - Instant Appointment"
+   ],
+   "since": 4
   }
- ]
+ ],
+ "moves_v4": {
+  "com.microsoft.office.word": [
+   "עבודה ולימודים",
+   "משרד ומסמכים"
+  ],
+  "com.microsoft.office.excel": [
+   "עבודה ולימודים",
+   "משרד ומסמכים"
+  ],
+  "com.google.android.apps.docs.editors.docs": [
+   "עבודה ולימודים",
+   "משרד ומסמכים"
+  ],
+  "com.google.android.apps.docs.editors.sheets": [
+   "עבודה ולימודים",
+   "משרד ומסמכים"
+  ],
+  "com.adobe.scan.android": [
+   "כלים",
+   "משרד ומסמכים"
+  ],
+  "com.adobe.reader": [
+   "כלים",
+   "משרד ומסמכים"
+  ],
+  "com.google.android.keep": [
+   "כלים",
+   "פתקים ומשימות"
+  ]
+ }
 }

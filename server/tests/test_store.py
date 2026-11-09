@@ -113,3 +113,47 @@ def test_store_media_is_never_served_unfiltered_when_the_engine_is_down(env, mon
     with pytest.raises(ApiError) as e:
         svc.store_media(app_id, "icon")
     assert e.value.status == 503
+
+
+def test_upgrade_to_v4_adds_only_new_apps_and_moves_office_apps(env):
+    """v4: עוד אפליקציות כשרות וחלופות (כמה וורד, כמה פתקים), וקטגוריות חדשות — בלי להחזיר מה שהמנהל מחק
+    ובלי לדרוס קטגוריה שהמנהל שינה."""
+    svc, client = env
+    h = admin_headers(client)
+    seed = store_seed()
+    new = [a["package"] for a in seed["apps"] if a.get("since") == 4]
+    assert len(new) >= 60 and {"משרד ומסמכים", "פתקים ומשימות", "ביטוח ופנסיה"} <= set(seed["categories"])
+    office = [a for a in seed["apps"] if a["category"] == "משרד ומסמכים"]
+    notes = [a for a in seed["apps"] if a["category"] == "פתקים ומשימות"]
+    assert len(office) >= 8 and len(notes) >= 6
+    with svc.db() as c:                     # שרת ב-v3: בלי האפליקציות החדשות, וורד עוד ב"עבודה ולימודים"
+        c.execute(f"DELETE FROM managed_apps WHERE package IN ({','.join('?' * len(new))})", new)
+        c.execute("UPDATE managed_apps SET category = 'עבודה ולימודים' WHERE package = 'com.microsoft.office.word'")
+        c.execute("UPDATE managed_apps SET category = 'הכלים שלי' WHERE package = 'com.google.android.keep'")
+        c.execute("DELETE FROM managed_apps WHERE package = 'com.waze'")          # המנהל מחק
+        c.execute("UPDATE meta SET value = '3' WHERE key = 'store_seed_version'")
+    svc.seed_store()
+    apps = {a["package"]: a for a in client.get("/v1/admin/apps", headers=h).json()["apps"]}
+    assert all(p in apps for p in new)
+    assert apps["cn.wps.moffice_eng"]["category"] == "משרד ומסמכים"
+    assert apps["com.microsoft.office.word"]["category"] == "משרד ומסמכים"          # עבר
+    assert apps["com.google.android.keep"]["category"] == "הכלים שלי"                # המנהל שינה — נשאר
+    assert "com.waze" not in apps                                                     # נמחק — לא חוזר
+    assert S.category_for_genre("לשיפור הפרודוקטיביות") == "משרד ומסמכים"
+
+
+def test_seed_upgrade_reaches_play_managed_phones(env):
+    """זריעה חדשה (הפעלה של גרסת שרת חדשה) — טלפון עם Play מנוהל מקבל מדיניות עם האפליקציות החדשות."""
+    from test_app_requests import _active_play_managed_phone
+    svc, client = env
+    dh, _ = _active_play_managed_phone(client)
+    new = [a["package"] for a in store_seed()["apps"] if a.get("since") == 4]
+    with svc.db() as c:
+        c.execute(f"DELETE FROM managed_apps WHERE package IN ({','.join('?' * len(new))})", new)
+        c.execute("UPDATE meta SET value = '3' WHERE key = 'store_seed_version'")
+    svc.bump_catalog()
+    before = client.get("/v1/device", headers=dh).json()["device_policy"]
+    assert "cn.wps.moffice_eng" not in before["allowlist"]["apps"]
+    svc.seed_store()
+    after = client.get("/v1/device", headers=dh).json()["device_policy"]
+    assert after["version"] > before["version"] and "cn.wps.moffice_eng" in after["allowlist"]["apps"]

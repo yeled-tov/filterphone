@@ -77,7 +77,7 @@ KOSHER_PROVIDERS = {"netfree": "נטפרי", "rimon": "רימון / אתרוג",
 MAX_KOSHER_CERTS = 20
 
 # ---- החנות
-STORE_SEED_VERSION = 3
+STORE_SEED_VERSION = 4
 STORE_MEDIA_TTL_S = 30 * 86400          # תמונות חנות מסוננות נשמרות חודש (כתובת חדשה = קובץ חדש)
 STORE_MEDIA_MAX_BYTES = 3_000_000
 AVATAR_MAX_BYTES = 6_000_000            # התמונה שהלקוח בחר (לפני הקטנה)
@@ -322,13 +322,15 @@ class ApiError(Exception):
 
 _APP_REQ = re.compile(r"בקשת (?:התקנת )?אפליקציה(?: חדשה לחנות| מ-Google Play)?:\s*([^\n]+)")
 _PKG_IN = re.compile(r"\(([A-Za-z][\w]*(?:\.[\w]+)+)\)\s*$")
-_GENRE_CATEGORY = ((r"מפות|ניווט|תחבורה|רכב|נסיעות|maps|travel|auto", "תחבורה"),
+_GENRE_CATEGORY = ((r"ביטוח|insurance", "ביטוח ופנסיה"),
+                   (r"מפות|ניווט|תחבורה|רכב|נסיעות|maps|travel|auto", "תחבורה"),
                    (r"פיננס|כספים|finance", "בנקים ותשלומים"),
                    (r"בריאות|רפואה|כושר|health|medical", "בריאות"),
                    (r"תקשורת|communication", "תקשורת"),
                    (r"קניות|אוכל|שתייה|shopping|food", "קניות ומשלוחים"),
                    (r"חדשות|מגזינים|news", "חדשות ופורומים"),
-                   (r"חינוך|עסקים|פרודוקטיב|ספרים|education|business|productivity|books", "עבודה ולימודים"),
+                   (r"פרודוקטיב|productivity", "משרד ומסמכים"),
+                   (r"חינוך|עסקים|ספרים|education|business|books", "עבודה ולימודים"),
                    (r"מוזיקה|וידאו|צילום|אודיו|music|video|photo|audio", "מדיה"))
 
 
@@ -2154,7 +2156,8 @@ class Services:
 
     def seed_store(self) -> None:
         """מזריע את החנות לפי גרסאות (store_seed_version ב-meta), כל גרסה פעם אחת:
-        1 — FilterTube; 2 — קטלוג אפליקציות בסיסיות מאומתות מ-Google Play (store_seed.json).
+        1 — FilterTube; 2 — קטלוג אפליקציות בסיסיות מאומתות מ-Google Play (store_seed.json);
+        4 — הרחבה: עוד אפליקציות כשרות וחלופות (since=4), וקטגוריות חדשות (משרד ומסמכים, פתקים ומשימות, ביטוח).
         מה שהמנהל ערך או מחק אחרי הזריעה — לא נדרס (מעדכנים רק שדות שעוד שווים לערך המקורי)."""
         with self.db() as c, db.transaction(c):
             row = c.execute("SELECT value FROM meta WHERE key = 'store_seed_version'").fetchone()
@@ -2168,9 +2171,13 @@ class Services:
                 self._seed_store_v2(c)
             if have < 3:
                 self._seed_store_v3(c)
+            if have < 4:
+                self._seed_store_v4(c)
             c.execute("INSERT INTO meta (key, value) VALUES ('store_seed_version', ?)"
                       " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(STORE_SEED_VERSION),))
         log.info("store seeded up to version %d", STORE_SEED_VERSION)
+        # אפליקציות חדשות בחנות — הטלפונים עם Play מנוהל / "רק מאושרות" מקבלים את הרשימה המעודכנת
+        self.bump_catalog()
 
     @staticmethod
     def _seed_store_v1(c: sqlite3.Connection) -> None:
@@ -2240,6 +2247,26 @@ class Services:
         c.execute(
             "DELETE FROM managed_apps WHERE package = ? AND play_url = '' AND (apk_url IS NULL OR apk_url = '')"
             " AND label = 'FilterTube — הגרסה המלאה'", (FT_STORE,))
+
+    @staticmethod
+    def _seed_store_v4(c: sqlite3.Connection) -> None:
+        """הרחבת החנות: רק האפליקציות שנוספו בגרסה 4 (since=4) — כך אפליקציה שהמנהל מחק אחרי זריעה קודמת לא
+        חוזרת. וקטגוריות חדשות: וורד / אקסל / PDF → "משרד ומסמכים", Keep → "פתקים ומשימות" — רק אם המנהל לא
+        שינה את הקטגוריה."""
+        seed = store_seed()
+        t = db.now()
+        for a in seed["apps"]:
+            if a.get("since") != 4 or c.execute("SELECT 1 FROM managed_apps WHERE package = ?",
+                                                (a["package"],)).fetchone():
+                continue
+            c.execute(
+                "INSERT INTO managed_apps (package, label, category, note, description, icon_url, screenshots,"
+                " play_url, sort, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (a["package"], a["label"], a["category"], a["note"], a["description"], a["icon_url"],
+                 json.dumps(a["screenshots"]), a["play_url"], a["sort"], t, t))
+        for pkg, (old, new) in seed.get("moves_v4", {}).items():
+            c.execute("UPDATE managed_apps SET category = ?, updated_at = ? WHERE package = ? AND category = ?",
+                      (new, t, pkg, old))
 
     # ------------------------------------------------------------ תמונות החנות — דרך מסנן התמונות
 
