@@ -1207,7 +1207,9 @@ class GuardService : AccessibilityService() {
             var chats: AccessibilityNodeInfo? = null
             var channelsTop = -1                       // רק ערוצים: איפה מתחיל אזור הערוצים
             var statusSeen = false
-            var scroller: AccessibilityNodeInfo? = null    // הרשימה הנגללת (סטטוסים+ערוצים) — כדי לגלול חזרה למעלה
+            var scroller: AccessibilityNodeInfo? = null    // הרשימה האנכית (סטטוסים+ערוצים) — כדי לגלול חזרה למעלה
+            var scrollerArea = 0L
+            var listTop = -1                                // ראש אזור התוכן (לכיסוי, אם אין רשימה אנכית)
             val b = android.graphics.Rect()
             var visited = 0
             while (queue.isNotEmpty() && visited < MAX_NODES) {
@@ -1230,7 +1232,13 @@ class GuardService : AccessibilityService() {
                     if (channelsTop < 0 && WaScreens.isChannelsHeader(text)) { n.getBoundsInScreen(b); channelsTop = b.top }
                     if (!statusSeen && WaScreens.isStatusHeader(text)) statusSeen = true
                     // הרשימה הנגללת הגדולה (לא פס קטן): כדי לגלול חזרה למעלה אם גללו לתוך הערוצים
-                    if (scroller == null && n.isScrollable) { n.getBoundsInScreen(b); if (b.height() > 400) scroller = n }
+                    if (n.isScrollable) {
+                        // לא ה-ViewPager של הטאבים (גלילה "אחורה" בו מחליפה טאב) — רק הרשימה האנכית הגדולה
+                        n.getBoundsInScreen(b)
+                        if (listTop < 0) listTop = b.top
+                        val area = b.width().toLong() * b.height()
+                        if (isVerticalScroller(n) && area > scrollerArea) { scroller = n; scrollerArea = area }
+                    }
                 }
                 for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
             }
@@ -1253,8 +1261,22 @@ class GuardService : AccessibilityService() {
                 }
                 // גללו לתוך רשימת הערוצים (הסטטוסים נשארו למעלה): לא מעיפים לצ'אטים — גוללים חזרה למעלה
                 // לסטטוסים. ברגע שכותרת "ערוצים" או הסטטוסים חוזרות לתצוגה — הכיסוי/ההסתרה משתלטים.
-                channelMask.hide()
-                if (scroller?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD) == true) return true
+                if (scroller?.let { scrollUp(it) } == true) {
+                    channelMask.hide()
+                    return true                         // ממשיך בכל אירוע גלילה עד שהסטטוסים / "ערוצים" חוזרים
+                }
+                // לא נמצאה רשימה אנכית: לא מעיפים לטאב אחר — מכסים את אזור התוכן (הנגיעה עוברת דרך הכיסוי,
+                // אפשר לגלול למעלה בעצמך) עד שהסטטוסים חוזרים
+                val dm = resources.displayMetrics
+                val top = if (listTop >= 0) listTop else (dm.heightPixels * 0.15).toInt()
+                val navTop = chats?.let { c -> c.getBoundsInScreen(b); b.top }?.takeIf { it > top } ?: dm.heightPixels
+                channelMask.show(listOf(WaAvatars.Box(0, top, dm.widthPixels, navTop, round = false)))
+                val now2 = SystemClock.elapsedRealtime()
+                if (now2 - lastToastAt > 3_000) {
+                    lastToastAt = now2
+                    Toast.makeText(this, R.string.guard_wa_channels_scroll_up, Toast.LENGTH_SHORT).show()
+                }
+                return true
             }
             val clicked = chats?.let { clickSelfOrParent(it) } ?: false
             if (block(pkg, if (clicked) NO_GLOBAL_ACTION else GLOBAL_ACTION_BACK,
@@ -1382,9 +1404,9 @@ class GuardService : AccessibilityService() {
                 val n = queue.removeFirst()
                 seen += n
                 visited++
-                if (n.isScrollable && n.isVisibleToUser) {
+                if (n.isVisibleToUser && isVerticalScroller(n)) {
                     n.getBoundsInScreen(b)
-                    if (b.height() > 400 && n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) return
+                    if (b.height() > 400 && scrollUp(n)) return
                 }
                 for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
             }
@@ -1458,6 +1480,24 @@ class GuardService : AccessibilityService() {
 
     private fun maskWanted(pkg: String?, policy: GuardPolicy.Policy): Boolean =
         policy.waProfile?.let { it.mask && pkg != null && pkg in it.packages } == true
+
+    private val scrollUpId = AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.id
+    private val scrollDownId = AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.id
+    private val horizontalIds = setOf(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id,
+        AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id)
+
+    /** רשימה נגללת אנכית (לא ה-ViewPager של הטאבים ולא קרוסלה אופקית — WaScreens.isVerticalList). */
+    private fun isVerticalScroller(n: AccessibilityNodeInfo): Boolean {
+        if (!n.isScrollable) return false
+        val ids = n.actionList.map { it.id }.toSet()
+        val up = scrollUpId in ids || scrollDownId in ids
+        return WaScreens.isVerticalList(n.className?.toString(), up, horizontalOnly = !up && ids.any { it in horizontalIds })
+    }
+
+    /** גלילה למעלה: "גלילה למעלה" (אנכית בלבד) אם הרכיב תומך, אחרת "אחורה" (רק על רשימה אנכית). */
+    private fun scrollUp(n: AccessibilityNodeInfo): Boolean =
+        if (n.actionList.any { it.id == scrollUpId }) n.performAction(scrollUpId)
+        else n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
 
     /** הרכיב הוא הטאב הנבחר "עדכונים"/"סטטוס" (על עצמו או על כיתוב שבתוכו) — כמו ב-guardWaUpdates. */
     private fun isUpdatesTabNode(n: AccessibilityNodeInfo): Boolean {

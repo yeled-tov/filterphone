@@ -44,4 +44,19 @@ class WaScreensTest {
         assertTrue(WaScreens.isStatusHeader("Status"))
         assertFalse(WaScreens.isStatusHeader("ערוצים"))
     }
+
+    @Test
+    fun scrollUpTargetsTheVerticalListNotTheTabPager() {
+        // ה-ViewPager של הטאבים: "אחורה" בו מחליף טאב (לצ'אטים/לשיחות) — לעולם לא הוא
+        assertFalse(WaScreens.isVerticalList("androidx.viewpager2.widget.ViewPager2", supportsScrollUp = false))
+        assertFalse(WaScreens.isVerticalList("androidx.viewpager.widget.ViewPager", supportsScrollUp = true))
+        assertFalse(WaScreens.isVerticalList("android.widget.HorizontalScrollView", supportsScrollUp = false))
+        // הרשימה של הסטטוסים/הערוצים
+        assertTrue(WaScreens.isVerticalList("androidx.recyclerview.widget.RecyclerView", supportsScrollUp = false))
+        assertTrue(WaScreens.isVerticalList("android.widget.ListView", supportsScrollUp = false))
+        assertTrue(WaScreens.isVerticalList("android.view.View", supportsScrollUp = true))   // מצהיר "גלילה למעלה"
+        // קרוסלת הסטטוסים האופקית (RecyclerView שמצהיר רק ימינה/שמאלה) — לא
+        assertFalse(WaScreens.isVerticalList("androidx.recyclerview.widget.RecyclerView", false, horizontalOnly = true))
+        assertFalse(WaScreens.isVerticalList(null, supportsScrollUp = false))
+    }
 }

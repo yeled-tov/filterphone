@@ -26,6 +26,22 @@ object WaScreens {
     /** כותרת אזור הסטטוסים. טהור. */
     fun isStatusHeader(text: String?): Boolean = isLabel(text, STATUS_HEADER)
 
+    /**
+     * רשימה נגללת *אנכית* (הסטטוסים/הערוצים) — ולא ה-ViewPager שמחזיק את הטאבים: גלילה "אחורה" בו מחליפה
+     * טאב (לצ'אטים / לשיחות) במקום לגלול למעלה. [supportsScrollUp] — הרכיב מצהיר על "גלילה למעלה" (אנכית
+     * בלבד). טהור.
+     */
+    fun isVerticalList(className: String?, supportsScrollUp: Boolean, horizontalOnly: Boolean = false): Boolean {
+        val c = className.orEmpty()
+        if (PAGERS.any { c.contains(it, ignoreCase = true) }) return false
+        if (supportsScrollUp) return true
+        if (horizontalOnly) return false                  // מצהיר רק ימינה/שמאלה — קרוסלה אופקית
+        return VERTICAL.any { c.endsWith(it) }
+    }
+
+    private val PAGERS = listOf("ViewPager", "HorizontalScrollView", "TabLayout", "HorizontalGridView", "Carousel")
+    private val VERTICAL = listOf("RecyclerView", "ListView", "ScrollView", "GridView")
+
     /** הטאב "צ'אטים" (לשם מחזירים). לא "שיחות" — בעברית זה טאב השיחות הקוליות. */
     private val CHATS = listOf("צאטים", "chats")
 
