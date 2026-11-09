@@ -29,15 +29,15 @@ const { State } = require('./lib/state');
 const fp = require('./lib/fp');
 const ai = require('./lib/ai');
 const { israelNow, isOpen } = require('./lib/hours');
-const { replyDelayMs, waitMsFrom, waitText, combineBurst, typingMs, parseHashReply, waNumber, isVoice, mediaKind } =
-  require('./lib/logic');
+const { replyDelayMs, waitMsFrom, waitText, combineBurst, typingMs, parseHashReply, waNumber, isVoice, mediaKind,
+  unlistedDelayMs, wantsInstallGuide, isPersonChat } = require('./lib/logic');
 const labels = require('./lib/labels');
 const know = require('./lib/knowledge');
 const aimark = require('./lib/aimark');
 const acts = require('./lib/actions');
 const pcode = require('./lib/parentcode');
 
-const VERSION = '2.7.0';
+const VERSION = '2.8.0';
 const API = (process.env.FP_API || 'http://127.0.0.1:8090').replace(/\/$/, '');
 const TOKEN = process.env.FP_WA_BOT_TOKEN || process.env.FP_BOT_TOKEN || '';
 const DATA = process.env.FP_WABOT_DATA || path.join(__dirname, 'data');
@@ -46,6 +46,8 @@ const OUTBOX_EVERY_MS = 5000;
 const ENGAGED_MS = 15 * 60e3;          // הבוט ענה ללקוח בזמן הזה ואתה לא התערבת — ההודעה הבאה נענית מיד
 const LABEL_EVERY_MS = 60e3;
 const CATCHUP_EVERY_MS = 20e3;
+const UNLISTED_EVERY_MS = 3 * 60e3;   // סריקת שיחות שלא ברשימה ולא נענו (אחרי הפעלה מחדש / הודעה שפוספסה)
+const UNLISTED_LOOKBACK_MS = 3 * 3600e3;   // הודעה ישנה מזה — לא עונים עליה בדיעבד
 const READY_TIMEOUT_MS = 2 * 60e3;   // "מחובר" בוואטסאפ אבל לא סיים לטעון — אחרי זה מאתחלים (בלי סריקה)
 const CALL_TIMEOUT_MS = 20e3;        // קריאה לדף של וואטסאפ ווב שלא חוזרת — לא תוקעת את הבוט
 const KNOWLEDGE_EVERY_MS = 5 * 60e3; // רענון מה שהבוט למד (שינויים מהדשבורד)
@@ -99,7 +101,7 @@ const pending = new Map();    // תשובות שמחכות (5 שניות כשא�
 const bursts = new Map();     // הודעות של לקוח שעוד לא נענו (chatId → {parts, gen,...}) — הודעה חדשה בזמן
                               // שהבוט עוד כותב מבטלת את התשובה הקודמת, והתשובה החדשה עונה על הכול
 const stats = { replies: 0, handoffs: 0, app_forwarded: 0, app_replies: 0, ai_errors: 0, learned: 0, asked: 0, voice: 0,
-  images: 0, media_errors: 0 };
+  images: 0, media_errors: 0, unlisted: 0 };
 // הודעות קוליות: מתומללות ב-AI שבדשבורד, והבוט עונה בכתב. ההיסטוריה שומרת את התמלול עם 🎤.
 const VOICE_MARK = '🎤 ';
 const VOICE_UNHEARD = '🎤 (הודעה קולית — התמלול לא הצליח)';
@@ -381,6 +383,69 @@ async function catchUp() {
     console.warn('catch-up:', e?.message || e);
   } finally {
     setTimeout(catchUp, CATCHUP_EVERY_MS);
+  }
+}
+
+/**
+ * מותר לבוט לענות במקומך בשיחה שלא ברשימה? — רק כשהופעל בדשבורד, הבוט פעיל, שיחה פרטית עם אדם (לא קבוצה /
+ * ערוץ), לא איש קשר שמור (אלא אם ביקשת גם אותם), ולא עסק רשמי (בנק / משלוחים — הודעות אוטומטיות).
+ */
+async function fallbackAllowed(chatId, getContact) {
+  if (!cfg?.enabled || cfg.answer_unlisted === false || !state.data.botActive) return false;
+  if (!isPersonChat(chatId) || chatId === adminChat() || chatId === me) return false;
+  try {
+    const ct = await getContact();
+    if (ct?.isMe || ct?.isEnterprise) return false;
+    if (ct?.isMyContact && !cfg.include_contacts) return false;
+  } catch { return false; }
+  return true;
+}
+
+/** תשובה במקומך בשיחה שלא ברשימה — מתוזמנת לפי השעות ולפי מתי כתבת בה בעצמך (lib/logic.js). */
+function scheduleFallback(msg, chatId, phone, text, sentAt = Date.now()) {
+  const open = inHours();
+  const c = state.chat(chatId);
+  const delay = unlistedDelayMs({ inHours: open, minutes: cfg?.unlisted_minutes, ownerAt: c.ownerAt || 0,
+    recentMs: (cfg?.handoff_minutes || 60) * 60e3 });
+  const wait = Math.max(1500, sentAt + delay - Date.now());
+  schedule(msg, chatId, phone, text, open, wait, { fallback: true, since: sentAt });
+}
+
+/**
+ * שיחות שלא ברשימה, שהלקוח מחכה בהן ולא ענית (מהשעות האחרונות) — גם אחרי הפעלה מחדש של הבוט, כשהתזמון
+ * שבזיכרון אבד, או הודעה שפוספסה בזמן ניתוק.
+ */
+async function catchUpUnlisted() {
+  try {
+    if (client && status.state === 'ready' && cfg?.enabled && cfg.answer_unlisted !== false && state.data.botActive) {
+      const now = Date.now();
+      for (const chat of await withTimeout(client.getChats(), 60e3, 'getChats')) {
+        const chatId = chat?.id?._serialized;
+        if (!chatId || chat.isGroup || chat.archived || !isPersonChat(chatId) || chatId === adminChat() || chatId === me) continue;
+        if (pending.has(chatId) || inbox.has(chatId)) continue;
+        const last = chat.lastMessage;
+        const known = state.data.chats[chatId];
+        if (!labels.needsCatchUp(last, { now, answered: known?.answered || '', windowMs: UNLISTED_LOOKBACK_MS })) continue;
+        if (known && (known.ownerAt || 0) > (last.timestamp || 0) * 1000) continue;     // ענית אחרי ההודעה
+        if (botLabel && await inBotList(chatId)) continue;                               // של הבוט — catchUp מטפל
+        if (!botLabel && known && (known.handedOff || !state.paused(chatId))) continue;  // בלי רשימה — מטופל רגיל
+        if (!await fallbackAllowed(chatId, () => chat.getContact())) continue;
+        const c = state.chat(chatId);
+        const kind = mediaKind(last);
+        const text = kind ? await mediaText(last, kind, String(last.body || '').trim(), true) : last.body.trim();
+        if (c.lastIn !== last.id._serialized) {
+          state.remember(chatId, 'user', text);
+          c.lastIn = last.id._serialized;
+        }
+        if (!c.phone) c.phone = await realPhone(last);
+        c.known = true;
+        scheduleFallback(last, chatId, c.phone, text, (last.timestamp || 0) * 1000);
+      }
+    }
+  } catch (e) {
+    console.warn('catch-up (unlisted):', e?.message || e);
+  } finally {
+    setTimeout(catchUpUnlisted, UNLISTED_EVERY_MS);
   }
 }
 
@@ -841,6 +906,8 @@ async function onAdmin(msg, body, selfChat, learnable = true) {
     const c = state.chat(chatId);
     c.known = true;
     c.botAt = 0;                                                     // התערבת — הבוט זז הצידה
+    c.ownerAt = Date.now();                                          // (תשובה במקומך מחכה עכשיו שעה, לא דקה)
+    c.unlisted = false;
     state.remember(chatId, 'assistant', body);
     state.closeAsks(chatId);                                         // ענית לו בעצמך
     if (learnable) noteOwnerReply(chatId, c, unvoice(body));         // מצב לימוד
@@ -1109,11 +1176,14 @@ async function customerRoute(msg, chatId, c) {
     c.known = true;
     if (inList) c.customer = true;                                    // לקוח — לומדים מהתשובות שלך אליו
     state.save();
-    return state.data.botActive && inList ? 'bot' : 'quiet';          // עצרת לכולם / שיחה שלך
+    if (state.data.botActive && inList) return 'bot';
+    // לא ברשימה (שיחה שלך / לקוח ותיק): אם לא תענה — הבוט עונה במקומך אחרי זמן (בדשבורד)
+    return await fallbackAllowed(chatId, () => msg.getContact()) ? 'fallback' : 'quiet';
   }
   c.customer = true;                                                  // בלי רשימה — הבוט עונה לכולם
   if (!state.data.botActive || c.handedOff) return 'notify';
-  return state.paused(chatId) ? 'quiet' : 'bot';                      // אתה בשיחה
+  if (!state.paused(chatId)) return 'bot';
+  return await fallbackAllowed(chatId, () => msg.getContact()) ? 'fallback' : 'quiet';   // אתה בשיחה
 }
 
 async function onCustomer(msg, text, media = null) {
@@ -1122,7 +1192,7 @@ async function onCustomer(msg, text, media = null) {
   if (!c.phone) c.phone = await realPhone(msg);
   const phone = c.phone;
   const route = cfg?.enabled ? await customerRoute(msg, chatId, c) : 'off';
-  if (media) text = await mediaText(msg, media, text, route === 'bot');
+  if (media) text = await mediaText(msg, media, text, route === 'bot' || route === 'fallback');
   // לומדים רק משאלות בטקסט / בקול (תמונה היא מקרה פרטי — לא שאלה שחוזרת)
   const learnable = !media || (media === 'voice' && heardVoice(text));
   // קוד הורים שהבוט ביקש — מבוצע כאן, לא נשמר בהיסטוריה ולא נשלח ל-AI
@@ -1136,6 +1206,7 @@ async function onCustomer(msg, text, media = null) {
     await toAdmin(`💬 *הודעה מ-${phone}*${c.handedOff ? ' (ממתין לנציג)' : ' (הבוט עצור)'}\n💭 ${text}\n🔗 https://wa.me/${phone}`);
     return;
   }
+  if (route === 'fallback') { scheduleFallback(msg, chatId, phone, text); return; }
   if (route !== 'bot') return;
   // ההמשך (התראה אליך, "קראת?", תזמון התשובה) — לא מעכב את ההודעה הבאה של הלקוח בתור
   notifyAndSchedule(msg, chatId, phone, text).catch((e) => console.error('message:', e.message));
@@ -1160,8 +1231,11 @@ async function notifyAndSchedule(msg, chatId, phone, text) {
  * עונים מיד. הלקוח שלח עוד הודעה בזמן שהבוט עוד חושב / "מקליד"? התשובה הקודמת לא נשלחת, והחדשה
  * עונה על כל ההודעות יחד — כך הבוט לא עונה על חצי שאלה וגם לא שולח שתי תשובות כפולות.
  */
-function schedule(msg, chatId, phone, text, open, delay) {
+function schedule(msg, chatId, phone, text, open, delay, { fallback = false, since = 0 } = {}) {
   const b = bursts.get(chatId) || { parts: [], gen: 0 };
+  // תשובה במקומך (שיחה שלא ברשימה) — עד שהבוט עונה או שאתה כותב; "since" — ההודעה הראשונה שלא נענתה
+  if (!b.parts.length) { b.fallback = fallback; b.since = since; }
+  else if (!fallback) b.fallback = false;
   // הזמן שבו עונים נקבע לפי ההודעה הראשונה שעוד לא נענתה — הודעות נוספות של הלקוח לא דוחות אותו
   const now = Date.now();
   if (!b.parts.length || !b.due) b.due = now + delay;
@@ -1178,7 +1252,7 @@ function schedule(msg, chatId, phone, text, open, delay) {
     pending.delete(chatId);
     const n = b.parts.length;
     const current = () => bursts.get(chatId) === b && b.gen === gen;
-    replyNow(b.msg, chatId, b.phone, combineBurst(b.parts), b.open, current)
+    replyNow(b.msg, chatId, b.phone, combineBurst(b.parts), b.open, current, { fallback: b.fallback, since: b.since })
       .then(() => {
         if (bursts.get(chatId) !== b || b.gen !== gen) return;   // הגיעה הודעה חדשה — התשובה הבאה עונה על הכול
         b.parts.splice(0, n);
@@ -1213,8 +1287,16 @@ async function handOff(chatId) {
   return true;
 }
 
-async function replyNow(msg, chatId, phone, text, open, current = () => true) {
-  if (botLabel ? !(await inBotList(chatId)) : state.paused(chatId)) return;   // ענית בינתיים / הוצאת מהרשימה
+async function replyNow(msg, chatId, phone, text, open, current = () => true, { fallback = false, since = 0 } = {}) {
+  let tookOver = false;
+  if (fallback && !(botLabel ? await inBotList(chatId) : !state.paused(chatId))) {
+    // שיחה שלא ברשימה: ענית בינתיים? הבוט לא נכנס. לא ענית — הבוט עונה ונכנס לשיחה (לרשימה)
+    const c = state.chat(chatId);
+    if ((c.ownerAt || 0) > since || !cfg?.enabled || cfg.answer_unlisted === false || !state.data.botActive) return;
+    if (botLabel) { if (!(await setBotList(chatId, true))) return; } else state.resume(chatId);
+    c.unlisted = true;
+    tookOver = true;
+  } else if (botLabel ? !(await inBotList(chatId)) : state.paused(chatId)) return;   // ענית בינתיים / הוצאת מהרשימה
   state.chat(chatId).answered = msg.id?._serialized || '';
   if (!state.allowReply(chatId)) {                                    // הרבה מדי ברצף — מעבירים אליך
     if (botLabel || !state.chat(chatId).handedOff) {
@@ -1235,9 +1317,12 @@ async function replyNow(msg, chatId, phone, text, open, current = () => true) {
   const appKey = crm?.selected ? appThreadKey(crm.selected) : null;
   const otherChannel = appKey && state.data.chats[appKey]
     ? ai.otherChannelSection("צ'אט התמיכה שבאפליקציה", state.chat(appKey).history) : '';
+  const topic = [...history.slice(-6).map((h) => h.content), text].join('\n');
   const res = await ai.answer(cfg, { botName: cfg.bot_name, businessInfo: cfg.business_info, inHours: open,
     hoursText: cfg.hours, crm, history, text, knowledge: know.promptSection(sel), otherChannel,
-    askWhenUnsure: cfg.ask_when_unsure !== false, actions: acts.promptSection(crm) });
+    askWhenUnsure: cfg.ask_when_unsure !== false, actions: acts.promptSection(crm), guide: cfg.guide || '',
+    installGuide: cfg.install_guide && wantsInstallGuide(cfg.ai_provider, topic) ? cfg.install_guide : '',
+    unlisted: Boolean(state.chat(chatId).unlisted) });
   if (sel.relevant.length) srv.used(sel.relevant.map((q) => q.id)).catch(() => {});
   if (!current()) return;
   // פעולות במכשיר (חסימה / פתיחה זמנית) — מבוצעות לפני השליחה, והלקוח מקבל אישור אמיתי עם השעה
@@ -1262,6 +1347,11 @@ async function replyNow(msg, chatId, phone, text, open, current = () => true) {
     state.chat(chatId).botAt = Date.now();
     state.save();
     stats.replies += 1;
+    if (tookOver) {
+      stats.unlisted += 1;
+      const back = botLabel ? `השיחה נכנסה לרשימה "${botLabel.name}" — כתיבה שלך מוציאה אותה` : 'כתיבה שלך בשיחה עוצרת את הבוט';
+      toAdmin(`🤖 *עניתי במקומך* · ${phone}\n💭 ${text.slice(0, 300)}\n🔗 https://wa.me/${phone}\n_${back}_`).catch(() => {});
+    }
   }
   for (const t of res.tags) {
     if (t.kind === 'HUMAN') {
@@ -1296,4 +1386,5 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
   setInterval(loadConfig, CONFIG_EVERY_MS);
   setTimeout(pollOutbox, OUTBOX_EVERY_MS);
   setTimeout(catchUp, CATCHUP_EVERY_MS);
+  setTimeout(catchUpUnlisted, UNLISTED_EVERY_MS);
 })();

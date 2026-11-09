@@ -17,14 +17,17 @@ import urllib.request
 
 import segno
 
-from . import db
+from . import botguide, db
 from .service import ApiError, Services
 
 PROVIDERS = ("gemini", "groq", "none")
 _SECRET = ("ai_key",)
 _FIELDS = ("enabled", "ai_provider", "ai_key", "ai_model", "business_info", "hours", "friday_until",
            "handoff_minutes", "wait_seconds", "bot_name", "label_name", "auto_new", "include_contacts",
-           "mark_ai", "ai_tag", "learn_from_replies", "ask_when_unsure")
+           "mark_ai", "ai_tag", "learn_from_replies", "ask_when_unsure", "answer_unlisted", "unlisted_minutes",
+           "product_guide")
+_BOOLS = ("enabled", "auto_new", "include_contacts", "mark_ai", "learn_from_replies", "ask_when_unsure",
+          "answer_unlisted", "product_guide")
 STATUS_STALE_S = 120            # בלי דיווח מהבוט יותר מזה — "השירות לא רץ"
 
 # מה שהבוט הישן ידע (מחירים, כתובת, שעות) — נקודת התחלה; עורכים בדשבורד
@@ -63,6 +66,13 @@ DEFAULTS: dict = {
     "learn_from_replies": True,
     # הבוט לא יודע (חסר מידע) → אומר ללקוח שיבדוק, ושואל אותך בצ'אט עם עצמך; התשובה שלך נשלחת ונלמדת
     "ask_when_unsure": True,
+    # שיחה שלא ברשימה "בוט" (למשל ענית ללקוח פעם, והוא כתב שוב) ולא ענית לה: בשעות הפעילות — הבוט עונה אחרי
+    # unlisted_minutes; מחוץ לשעות — מיד (אלא אם כתבת בה בעצמך ממש לאחרונה). קבוצות ואנשי קשר שמורים — לא
+    # (אנשי קשר — רק עם include_contacts).
+    "answer_unlisted": True,
+    "unlisted_minutes": 45,
+    # הידע המובנה (botguide.py): המוצר, הרמות, הקישורים ומדריך ההתקנה לפי יצרן — נכנס לכל תשובה
+    "product_guide": True,
 }
 KNOWLEDGE_MAX = 1000                    # כמה פריטי ידע לשמור לכל היותר (הישנים ביותר נמחקים)
 KNOWLEDGE_SOURCES = ("reply", "ask", "teach", "dashboard")
@@ -100,7 +110,7 @@ class WaBot:
             if k not in changes or changes[k] is None:
                 continue
             v = changes[k]
-            if k in ("enabled", "auto_new", "include_contacts", "mark_ai", "learn_from_replies", "ask_when_unsure"):
+            if k in _BOOLS:
                 v = bool(v)
             elif k == "ai_provider":
                 if v not in PROVIDERS:
@@ -144,6 +154,13 @@ class WaBot:
                     raise ApiError(400, "זמן המתנה לא תקין") from None
                 if not 0 <= v <= 30 * 60:
                     raise ApiError(400, "זמן המתנה: 0–1800 שניות")
+            elif k == "unlisted_minutes":
+                try:
+                    v = int(v)
+                except (TypeError, ValueError):
+                    raise ApiError(400, "דקות לא תקינות") from None
+                if not 5 <= v <= 24 * 60:
+                    raise ApiError(400, "מענה למי שלא ברשימה: 5–1440 דקות")
             elif k == "bot_name":
                 v = str(v).strip()[:30]
             elif k == "ai_tag":
@@ -169,6 +186,10 @@ class WaBot:
         from .support import SupportDesk
         s = self.settings()
         s["admin_number"] = SupportDesk(self.svc).wa_config().admin_number
+        on = s.get("product_guide", True)
+        s["guide"] = botguide.product_text() if on else ""
+        s["install_guide"] = botguide.install_text() if on else ""
+        s["links"] = {"site": botguide.SITE_URL, "install": botguide.INSTALL_URL, "download": botguide.DOWNLOAD_URL}
         return s
 
     # ------------------------------------------------------------ מצב (מהבוט)

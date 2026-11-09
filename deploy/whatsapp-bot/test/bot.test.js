@@ -552,3 +552,42 @@ test('escalate with the id of something blocked → the request carries the chan
   assert.deepEqual(parseEscalate('להשהות את הסינון לשבוע', crm), { open: [], note: 'להשהות את הסינון לשבוע' });
   assert.deepEqual(parseEscalate('youtube|לפתוח', crm), { open: [], note: 'youtube|לפתוח' });
 });
+
+test('unlisted chats: owner gets the configured time in hours, a minute outside hours unless mid-conversation', () => {
+  const { unlistedDelayMs, UNLISTED_OFF_HOURS_MS } = require('../lib/logic');
+  const now = 10_000_000;
+  assert.equal(unlistedDelayMs({ inHours: true, minutes: 45, now }), 45 * 60e3);
+  assert.equal(unlistedDelayMs({ inHours: true, minutes: 'x', now }), 45 * 60e3);        // לא תקין → ברירת מחדל
+  assert.equal(unlistedDelayMs({ inHours: false, minutes: 30, now }), UNLISTED_OFF_HOURS_MS);
+  // מחוץ לשעות, אבל כתבת לו לפני 10 דקות — אתה באמצע שיחה: מחכים כמו בשעות הפעילות
+  assert.equal(unlistedDelayMs({ inHours: false, minutes: 30, ownerAt: now - 10 * 60e3, now }), 30 * 60e3);
+  assert.equal(unlistedDelayMs({ inHours: false, minutes: 30, ownerAt: now - 3 * 3600e3, now }), UNLISTED_OFF_HOURS_MS);
+});
+
+test('install guide goes into the prompt: always on Gemini, on Groq only when the chat is about installing', () => {
+  const { wantsInstallGuide, isPersonChat } = require('../lib/logic');
+  assert.equal(wantsInstallGuide('gemini', 'כמה עולה?'), true);
+  assert.equal(wantsInstallGuide('groq', 'כמה עולה?'), false);
+  assert.equal(wantsInstallGuide('groq', 'יש לי גלקסי A54, איך מתקינים?'), true);
+  assert.equal(wantsInstallGuide('groq', '📷 מסך Play Protect'), true);
+  assert.equal(isPersonChat('972501234567@c.us'), true);
+  assert.equal(isPersonChat('123456@lid'), true);
+  assert.equal(isPersonChat('1203630@g.us'), false);
+  assert.equal(isPersonChat('status@broadcast'), false);
+  assert.equal(isPersonChat('12036@newsletter'), false);
+});
+
+test('the prompt carries the product guide, the install guide and the unlisted-chat note only when given', () => {
+  const base = { botName: 'פילטר', businessInfo: 'מחיר: 100', inHours: true, hoursText: '' };
+  const plain = ai.systemPrompt(base);
+  assert.doesNotMatch(plain, /מידע על המוצר/);
+  assert.doesNotMatch(plain, /בעל העסק לא הספיק לענות/);
+  const full = ai.systemPrompt({ ...base, guide: '=== מידע על המוצר (קבוע) ===\nאנדרואיד בלבד', installGuide: 'שלב 1 — הורדה',
+    unlisted: true });
+  assert.match(full, /אנדרואיד בלבד/);
+  assert.match(full, /"מידע העסק" ומה שלמדת מבעל העסק גוברים/);
+  assert.match(full, /שלב 1 — הורדה/);
+  assert.match(full, /בעל העסק לא הספיק לענות/);
+  // מידע העסק (מחירים) לפני המדריך — ונשאר במקומו
+  assert.ok(full.indexOf('מחיר: 100') < full.indexOf('אנדרואיד בלבד'));
+});

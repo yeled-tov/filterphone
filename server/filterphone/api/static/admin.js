@@ -2850,6 +2850,7 @@ function wabotStatus(v) {
       ["תשובות של הבוט", num(stats.replies)], ["הועברו אליך", num(stats.handoffs)],
       ["למד מהתשובות שלך", num(stats.learned)], ["שאל אותך (לא ידע לענות)", num(stats.asked)],
       ["פניות מהאפליקציה שהגיעו אליך", num(stats.app_forwarded)], ["ענית ללקוחות באפליקציה", num(stats.app_replies)],
+      stats.unlisted ? ["ענה במקומך (שיחות שלא ברשימה)", num(stats.unlisted)] : null,
       stats.voice ? ["הודעות קוליות שתומללו", num(stats.voice)] : null,
       stats.ai_errors ? ["שגיאות AI", num(stats.ai_errors)] : null,
       ["הודעות הבוט אליך", v.notify_to ? `למספר ${v.notify_to}` : "לצ'אט עם עצמך"],
@@ -2988,6 +2989,9 @@ async function viewWabot() {
   const autoNew = el("input", { type: "checkbox", checked: v.auto_new !== false, "aria-label": "לקוח חדש נכנס לרשימה" });
   const contacts = el("input", { type: "checkbox", checked: Boolean(v.include_contacts), "aria-label": "גם אנשי קשר שמורים" });
   const handoff = el("input", { type: "number", min: 1, max: 1440, value: v.handoff_minutes || 60, class: "ltr" });
+  const unlisted = el("input", { type: "checkbox", checked: v.answer_unlisted !== false, "aria-label": "עונה גם למי שלא ברשימה" });
+  const unlistedMin = el("input", { type: "number", min: 5, max: 1440, value: v.unlisted_minutes || 45, class: "ltr" });
+  const guide = el("input", { type: "checkbox", checked: v.product_guide !== false, "aria-label": "מדריך התקנה ומידע מוצר מובנה" });
   const waitMin = el("input", { type: "number", min: 0, max: 30, step: 0.5, class: "ltr",
     value: v.wait_seconds === undefined || v.wait_seconds === null ? 2 : v.wait_seconds / 60 });
   const hours = el("input", { class: "ltr", value: v.hours || "", placeholder: "13:00-15:00, 20:00-22:30" });
@@ -3001,6 +3005,7 @@ async function viewWabot() {
       enabled: enabled.checked, ai_provider: provider.value, ai_key: key.value, ai_model: model.value,
       bot_name: botName.value, label_name: labelName.value, auto_new: autoNew.checked, include_contacts: contacts.checked,
       mark_ai: markAi.checked, ai_tag: aiTag.value, learn_from_replies: learn.checked, ask_when_unsure: askMe.checked,
+      answer_unlisted: unlisted.checked, unlisted_minutes: Number(unlistedMin.value || 45), product_guide: guide.checked,
       handoff_minutes: Number(handoff.value), wait_seconds: Math.round(Number(waitMin.value || 0) * 60), hours: hours.value, friday_until: friday.value, business_info: info.value } }),
     "נשמר — הבוט יקלוט תוך כ-15 שניות");
     render();
@@ -3060,10 +3065,16 @@ async function viewWabot() {
         el("label", {}, "בלי רשימה (וואטסאפ רגיל): כמה דקות הבוט שותק אחרי שכתבת", handoff)),
       toggleRow(autoNew, "לקוח חדש נכנס לרשימה אוטומטית", "\"חדש\" = מעולם לא כתבת לו. שיחות קיימות שלך — הבוט לא נוגע."),
       toggleRow(contacts, "גם אנשי קשר שמורים בטלפון", "כבוי (מומלץ): משפחה וחברים ששמורים אצלך לא יקבלו תשובות מהבוט."),
+      toggleRow(unlisted, "עונה גם למי שלא ברשימה — כשלא ענית",
+        "שיחה שלא ברשימה (למשל לקוח שכבר דיברת איתו) ולא ענית לה: בשעות הפעילות — הבוט עונה אחרי מספר הדקות שלמטה; מחוץ לשעות — מיד (אם לא כתבת בשיחה בעצמך בשעה האחרונה). ענית בינתיים? הבוט לא נכנס. קבוצות ואנשי קשר שמורים — לא (אלא אם הדלקת למעלה). אחרי שהבוט ענה — השיחה נכנסת לרשימה, ותשובה שלך מוציאה אותה."),
+      el("div", { class: "grid two" },
+        el("label", {}, "בשעות הפעילות: אחרי כמה דקות בלי תשובה ממך", unlistedMin)),
       el("p", { class: "muted small" }, "אם הפעלת בוואטסאפ ביזנס עוזר AI מובנה (הודעות שמסומנות AI) — כבה אותו, כדי שלא יענו שניים."),
       el("div", { class: "row end" }, el("button", { class: "primary", onclick: save }, "שמירה"))),
     card("מה הבוט יודע", "כל מה שכתוב כאן — הבוט משתמש בו בתשובות: מחירים, מסלולים, כתובת, שאלות נפוצות. שורה שמתחילה ב\"כתובת:\" — הבוט שולח גם קישור לוויז ולמפות.",
       info,
+      toggleRow(guide, "מידע מוצר ומדריך התקנה מובנים",
+        "בנוסף למה שכתבת: כל הפיצ'רים והרמות, שהאפליקציה רק לאנדרואיד (ולאייפון — הפתרונות שכתבת כאן), קישור לאתר ולהורדה, ומדריך התקנה מלא לפי יצרן (סמסונג / שיאומי / אחרים — Play Protect, חסימה אוטומטית, ניהול מכשיר, חשבונות, צילומי מסך). הבוט שואל קודם איזה טלפון, מלווה צעד-צעד עד שזה עובד, ואחרי 3 ניסיונות שלא הצליחו — מעביר אליך."),
       el("div", { class: "grid two" },
         el("label", {}, "שעות פעילות (א'–ה')", hours),
         el("label", {}, "שישי עד (שבת — סגור)", friday),

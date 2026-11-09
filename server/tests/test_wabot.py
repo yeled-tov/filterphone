@@ -201,3 +201,24 @@ def test_wait_for_owner_in_business_hours_is_configurable(env):
     assert client.get("/v1/bot/config", headers=auth(BOT)).json()["wait_seconds"] == 60
     for bad in (-1, 99999):
         assert client.put("/v1/admin/wabot", headers=h, json={"wait_seconds": bad}).status_code == 400
+
+
+def test_unlisted_answers_and_product_guide_reach_the_bot(env):
+    """מענה למי שלא ברשימה (ברירת מחדל: פעיל, 45 דקות) + מדריך המוצר וההתקנה המובנה, עם קישורים."""
+    _, client = env
+    set_bot(client)
+    h = admin_headers(client)
+    view = client.get("/v1/admin/wabot", headers=h).json()
+    assert view["answer_unlisted"] is True and view["unlisted_minutes"] == 45 and view["product_guide"] is True
+    cfg = client.get("/v1/bot/config", headers=auth(BOT)).json()
+    assert "אנדרואיד" in cfg["guide"] and "אייפון" in cfg["guide"]
+    assert cfg["links"]["download"] in cfg["guide"] and cfg["links"]["site"] in cfg["guide"]
+    for must in ("Play Protect", "חסימה אוטומטית", "שיאומי", "חשבון", "צילום מסך", "3 ניסיונות"):
+        assert must in cfg["install_guide"], must
+    assert client.put("/v1/admin/wabot", headers=h,
+                      json={"answer_unlisted": False, "unlisted_minutes": 30, "product_guide": False}).status_code == 200
+    cfg = client.get("/v1/bot/config", headers=auth(BOT)).json()
+    assert cfg["answer_unlisted"] is False and cfg["unlisted_minutes"] == 30
+    assert cfg["guide"] == "" and cfg["install_guide"] == ""
+    for bad in (0, 4, 2000, "x"):
+        assert client.put("/v1/admin/wabot", headers=h, json={"unlisted_minutes": bad}).status_code in (400, 422)

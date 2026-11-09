@@ -20,6 +20,38 @@ function waitMsFrom(cfg) {
   return Number.isFinite(s) && s >= 0 ? s * 1000 : DEFAULT_WAIT_MS;
 }
 
+/**
+ * שיחה שלא ברשימת הבוט ולא ענית לה — מתי הבוט עונה במקומך:
+ *   • בשעות הפעילות — אחרי [minutes] (ברירת מחדל 45 דקות; בדשבורד: unlisted_minutes).
+ *   • מחוץ לשעות — אחרי דקה (שתספיק אם אתה בדיוק עונה), אלא אם כתבת בשיחה הזו בעצמך בזמן האחרון
+ *     ([ownerAt] בתוך [recentMs]) — אז אתה באמצע שיחה איתו, ומחכים כמו בשעות הפעילות.
+ */
+function unlistedDelayMs({ inHours, minutes, ownerAt = 0, now = Date.now(), recentMs = 60 * 60e3 }) {
+  const m = Number(minutes);
+  const full = (Number.isFinite(m) && m > 0 ? m : DEFAULT_UNLISTED_MIN) * 60e3;
+  if (inHours || (ownerAt && now - ownerAt < recentMs)) return full;
+  return UNLISTED_OFF_HOURS_MS;
+}
+
+const DEFAULT_UNLISTED_MIN = 45;
+const UNLISTED_OFF_HOURS_MS = 60e3;
+
+/**
+ * לצרף את מדריך ההתקנה המלא לפרומפט? ב-Gemini — תמיד (חלון ענק, זול). ב-Groq (מכסת מילים לדקה בתוכנית
+ * החינמית) — רק כשהשיחה נוגעת בהתקנה / תקלה / צילום מסך.
+ */
+function wantsInstallGuide(provider, text) {
+  if (provider !== 'groq') return true;
+  return INSTALL_TOPIC.test(String(text || ''));
+}
+
+const INSTALL_TOPIC = new RegExp([
+  'התקנ', 'להתקין', 'מתקין', 'הורד', 'להוריד', 'הורדה', 'apk', 'play ?protect', 'פליי פרוטקט', 'חסימה אוטומטית',
+  'auto ?blocker', 'אפשרויות מפתחים', 'מפתחים', 'ניפוי', 'debug', 'חשבון', 'account', 'שגיאה', 'error', 'לא מצליח',
+  'לא עובד', 'נתקע', 'קוד התאמה', 'סמסונג', 'גלקסי', 'galaxy', 'samsung', 'שיאומי', 'שאומי', 'xiaomi', 'רדמי',
+  'redmi', 'פוקו', 'poco', 'אנדרואיד', 'android', 'אייפון', 'iphone', 'דגם', 'מכשיר', '📷',
+].join('|'), 'i');
+
 /** "בעוד 2 דקות" / "בעוד 30 שניות" — להודעה אליך. */
 function waitText(ms) {
   const s = Math.round(ms / 1000);
@@ -73,5 +105,10 @@ function waNumber(raw) {
   return d;
 }
 
+/** שיחה פרטית עם אדם (לא קבוצה / ערוץ / רשימת תפוצה / סטטוס). */
+function isPersonChat(chatId) {
+  return /@(c\.us|lid)$/.test(String(chatId || ''));
+}
+
 module.exports = { replyDelayMs, waitMsFrom, waitText, DEFAULT_WAIT_MS, combineBurst, typingMs, parseHashReply, waNumber,
-  isVoice, mediaKind };
+  isVoice, mediaKind, unlistedDelayMs, wantsInstallGuide, isPersonChat, UNLISTED_OFF_HOURS_MS };

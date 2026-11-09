@@ -590,6 +590,9 @@ class WaBotIn(BaseModel):
     ai_tag: str | None = Field(default=None, max_length=60)
     learn_from_replies: bool | None = None
     ask_when_unsure: bool | None = None
+    answer_unlisted: bool | None = None
+    unlisted_minutes: int | None = None
+    product_guide: bool | None = None
     clear_key: bool = False
 
 
