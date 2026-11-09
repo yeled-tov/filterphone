@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=540, height=960">
+<title>FilterPhone Promo</title>
+<!-- בעיבוד (render.js) הגופן נטען מקבצים מקומיים (fonts.css); בדפדפן רגיל — מ-Google Fonts -->
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;900&display=swap">
+<style>
+  :root { --blue: #2f7bff; --blue2: #58a6ff; --ok: #22c55e; --navy: #050d1f; --silver: #cfd8e6; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 540px; height: 960px; overflow: hidden; background: var(--navy); }
+  body { font-family: Heebo, Arial, sans-serif; color: #fff; position: relative; }
+  #bg { position: absolute; inset: 0;
+    background: radial-gradient(60% 40% at 50% 38%, rgba(47,123,255,.35), transparent 70%),
+                radial-gradient(80% 50% at 50% 110%, rgba(88,166,255,.25), transparent 70%),
+                linear-gradient(180deg, #040a18 0%, #0a1d44 55%, #050d1f 100%); }
+  #glow { position: absolute; left: 50%; top: 40%; width: 700px; height: 700px; margin: -350px 0 0 -350px;
+    border-radius: 50%; background: radial-gradient(circle, rgba(47,123,255,.22), transparent 60%); }
+  .layer { position: absolute; inset: 0; }
+  .center { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .hook { font-size: 46px; font-weight: 900; line-height: 1.15; letter-spacing: -.5px; }
+  .hook .b { color: var(--blue2); }
+  .cap { position: absolute; top: 70px; left: 0; right: 0; text-align: center; font-size: 34px; font-weight: 900; }
+  .cap small { display: block; font-size: 20px; font-weight: 400; color: #c9d6ee; margin-top: 6px; }
+  .bottom { position: absolute; bottom: 92px; left: 30px; right: 30px; text-align: center; font-size: 27px; font-weight: 700; line-height: 1.3; }
+  .bottom .b { color: var(--blue2); }
+  .bad { color: #ff7a7a; }
+
+  /* --- הטלפון --- */
+  #phone { position: absolute; left: 50%; top: 190px; width: 268px; height: 548px; margin-left: -134px;
+    border-radius: 40px; padding: 12px; background: linear-gradient(145deg, #e9eef6, #8d99ad 40%, #4a5568 60%, #c9d2e0);
+    box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 60px rgba(47,123,255,.35); }
+  #screen { position: relative; width: 100%; height: 100%; border-radius: 30px; overflow: hidden; background: #0d1426; }
+  #screen .notch { position: absolute; top: 10px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #000; z-index: 5; }
+  .scr { position: absolute; inset: 0; }
+
+  /* מסך אפליקציות */
+  #apps { padding: 46px 16px 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px 10px; align-content: start;
+    background: linear-gradient(180deg, #13306b, #0d1a3a); }
+  .app { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .ic { position: relative; width: 46px; height: 46px; border-radius: 13px; display: flex; align-items: center; justify-content: center;
+    font-size: 21px; font-weight: 900; color: #fff; box-shadow: 0 3px 8px rgba(0,0,0,.3); }
+  .app span { font-size: 10.5px; color: #dfe7f5; white-space: nowrap; }
+  .lock { position: absolute; inset: 0; border-radius: 13px; background: rgba(40,44,52,.82); display: flex; align-items: center; justify-content: center; }
+  .lock i { position: relative; width: 18px; height: 14px; border-radius: 3px; background: #ff6b6b; margin-top: 8px; }
+  .lock i::before { content: ""; position: absolute; left: 3px; top: -10px; width: 12px; height: 12px; border: 3px solid #ff6b6b; border-bottom: 0; border-radius: 8px 8px 0 0; box-sizing: border-box; }
+  #bigx { position: absolute; left: 50%; top: 50%; width: 150px; height: 150px; margin: -75px 0 0 -75px; }
+  #bigx::before, #bigx::after { content: ""; position: absolute; left: 65px; top: -10px; width: 20px; height: 170px; border-radius: 10px; background: #ff4d4d;
+    box-shadow: 0 0 25px rgba(255,77,77,.6); }
+  #bigx::before { transform: rotate(45deg); } #bigx::after { transform: rotate(-45deg); }
+
+  /* מסך דפדפן מסונן */
+  #web { background: #f4f6fb; }
+  .bar { position: absolute; top: 34px; left: 12px; right: 12px; height: 34px; border-radius: 17px; background: #fff;
+    box-shadow: 0 1px 4px rgba(0,0,0,.15); display: flex; align-items: center; justify-content: space-between; padding: 0 12px; direction: ltr; }
+  .bar b { font-size: 12px; color: #334; font-weight: 700; }
+  .bar em { font-style: normal; font-size: 11px; font-weight: 900; color: #fff; background: var(--ok); border-radius: 10px; padding: 2px 8px; direction: rtl; }
+  .grid { position: absolute; top: 84px; left: 12px; right: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile { position: relative; height: 128px; border-radius: 12px; overflow: hidden; background: #dde3ee; }
+  .tile .badge { position: absolute; top: 7px; left: 7px; width: 26px; height: 26px; border-radius: 50%; background: var(--ok);
+    display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 900; color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.25); }
+  .tile .veil { position: absolute; inset: 0; background: repeating-linear-gradient(135deg, #8a94a6 0 10px, #7d879a 10px 20px);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #fff; font-weight: 900; font-size: 14px; }
+  .shield { width: 34px; height: 40px; background: var(--blue); clip-path: polygon(50% 0, 100% 15%, 100% 55%, 50% 100%, 0 55%, 0 15%);
+    display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  /* איורים מופשטים (בלי אנשים): נוף, מוצר, בניין, כתבה, ספר */
+  .land { background: linear-gradient(180deg, #8ec5ff, #d8ecff); }
+  .land .sun { position: absolute; top: 18px; right: 22px; width: 26px; height: 26px; border-radius: 50%; background: #ffd34d; }
+  .land .m1 { position: absolute; bottom: 0; left: -10px; width: 0; height: 0; border-left: 60px solid transparent; border-right: 60px solid transparent; border-bottom: 80px solid #3b7d4f; }
+  .land .m2 { position: absolute; bottom: 0; right: -20px; width: 0; height: 0; border-left: 70px solid transparent; border-right: 70px solid transparent; border-bottom: 64px solid #2f6a43; }
+  .prod { background: linear-gradient(160deg, #fff3e0, #ffe0b2); }
+  .prod .box { position: absolute; left: 50%; top: 50%; width: 66px; height: 56px; margin: -24px 0 0 -33px; background: #c7843d; border-radius: 4px; }
+  .prod .box::before { content: ""; position: absolute; left: -6px; right: -6px; top: -14px; height: 16px; background: #dc9a52; border-radius: 3px; }
+  .prod .box::after { content: ""; position: absolute; left: 28px; top: -14px; width: 10px; height: 70px; background: #f1d6a8; }
+  .bld { background: linear-gradient(180deg, #c3d6f5, #eef3fb); }
+  .bld .b1 { position: absolute; bottom: 0; left: 18px; width: 46px; height: 92px; background: #5a6f93; }
+  .bld .b2 { position: absolute; bottom: 0; right: 16px; width: 58px; height: 70px; background: #7387a8; }
+  .bld .b1::after, .bld .b2::after { content: ""; position: absolute; inset: 10px 8px; background: repeating-linear-gradient(180deg, #ffe08a 0 6px, transparent 6px 14px); opacity: .8; }
+  .art { background: #fff; padding: 14px 12px; }
+  .art i { display: block; height: 8px; border-radius: 4px; background: #c9d1df; margin-bottom: 9px; }
+  .art i:first-child { height: 12px; background: #2f4a7a; width: 80%; }
+  .book { background: linear-gradient(160deg, #e8f0ff, #cfdcf7); }
+  .book .bk { position: absolute; left: 50%; top: 50%; width: 80px; height: 60px; margin: -30px 0 0 -40px; }
+  .book .bk::before, .book .bk::after { content: ""; position: absolute; top: 0; width: 40px; height: 60px; background: #fff; border: 3px solid #2f5fb0; }
+  .book .bk::before { left: 0; border-radius: 6px 0 0 6px; } .book .bk::after { right: 0; border-radius: 0 6px 6px 0; }
+  .unk { background: linear-gradient(160deg, #b9c2d3, #9aa5ba); }
+  #scan { position: absolute; left: 0; right: 0; height: 70px; pointer-events: none;
+    background: linear-gradient(180deg, transparent, rgba(47,123,255,.0) 20%, rgba(47,123,255,.45) 85%, rgba(140,190,255,.95) 100%); }
+  #scan::after { content: "AI"; position: absolute; bottom: -12px; left: 10px; font-size: 12px; font-weight: 900; color: #fff; background: var(--blue); padding: 1px 7px; border-radius: 8px; }
+
+  /* פיצ'רים */
+  #feats { position: absolute; top: 210px; left: 34px; right: 34px; display: flex; flex-direction: column; gap: 16px; }
+  .chip { display: flex; align-items: center; gap: 14px; background: rgba(255,255,255,.08); border: 1px solid rgba(140,190,255,.35);
+    border-radius: 18px; padding: 16px 18px; font-size: 23px; font-weight: 700; backdrop-filter: blur(4px); }
+  .chip .dot { flex: 0 0 34px; height: 34px; border-radius: 50%; background: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 19px; font-weight: 900; }
+  .chip small { display: block; font-size: 15px; font-weight: 400; color: #b9c8e6; }
+
+  /* סיום */
+  #logo { width: 270px; height: 270px; object-fit: contain; filter: drop-shadow(0 10px 40px rgba(47,123,255,.55)); }
+  .brand { font-size: 52px; font-weight: 900; letter-spacing: .5px; direction: ltr; margin-top: 6px; }
+  .brand span { color: var(--blue2); }
+  .slogan { font-size: 34px; font-weight: 900; margin-top: 10px; }
+  .sub { font-size: 21px; color: #c9d6ee; margin-top: 8px; }
+  .cta { margin-top: 30px; background: linear-gradient(180deg, #3d8bff, #1f5fe0); border-radius: 22px; padding: 16px 30px; font-size: 25px; font-weight: 900;
+    box-shadow: 0 10px 30px rgba(47,123,255,.5); }
+  .cta b { direction: ltr; display: inline-block; }
+  .fine { margin-top: 16px; font-size: 17px; color: #9fb2d6; }
+</style>
+</head>
+<body>
+<div id="bg"></div><div id="glow"></div>
+
+<!-- 1. פתיחה -->
+<div id="s1" class="layer center">
+  <div class="hook"><div id="h1">רוצים טלפון כשר</div><div id="h2" class="b">בלי לוותר על הטלפון?</div></div>
+</div>
+
+<!-- 2+3. כותרות מעל הטלפון -->
+<div id="cap2" class="cap">סינון רגיל?<small>חוסם הכול — עד שהטלפון נהיה "טיפש"</small></div>
+<div id="cap3" class="cap">FilterPhone<small>מסננים — לא חוסמים</small></div>
+
+<div id="phone"><div id="screen"><div class="notch"></div>
+  <div id="apps" class="scr"></div>
+  <div id="bigx"></div>
+  <div id="web" class="scr">
+    <div class="bar"><b>news.example</b><em>מסונן ✓</em></div>
+    <div class="grid">
+      <div class="tile land"><div class="sun"></div><div class="m1"></div><div class="m2"></div></div>
+      <div class="tile art"><i></i><i></i><i></i><i></i><i style="width:60%"></i></div>
+      <div class="tile prod"><div class="box"></div></div>
+      <div class="tile bld"><div class="b1"></div><div class="b2"></div></div>
+      <div class="tile unk"></div>
+      <div class="tile book"><div class="bk"></div></div>
+    </div>
+    <div id="scan"></div>
+  </div>
+</div></div>
+
+<div id="b2" class="bottom"><span class="bad">✗</span> אין אפליקציות, אין חנות, אין עבודה</div>
+<div id="b3a" class="bottom">כל תמונה נבדקת ב-<span class="b">AI</span> בזמן אמת</div>
+<div id="b3b" class="bottom">מה שראוי — עובר.<br><span class="b">מה שלא — לא נכנס.</span></div>
+
+<!-- 4. פיצ'רים -->
+<div id="cap4" class="cap">הטלפון נשאר חכם<small>התוכן נשאר נקי</small></div>
+<div id="feats">
+  <div class="chip"><div class="dot">1</div><div>סינון תמונות חכם<small>3 רמות — מחמיר, בינוני, בסיסי</small></div></div>
+  <div class="chip"><div class="dot">2</div><div>וואטסאפ מסונן<small>סטטוסים, ערוצים, תמונות פרופיל</small></div></div>
+  <div class="chip"><div class="dot">3</div><div>חנות אפליקציות כשרה<small>וורד, בנקים, מפות, סידורים ועוד</small></div></div>
+  <div class="chip"><div class="dot">4</div><div>בלי איפוס ובלי מחיקת חשבונות<small>התקנה מהטלפון עצמו</small></div></div>
+  <div class="chip"><div class="dot">5</div><div>אי אפשר להסיר בלי אישור<small>ניהול מכשיר מלא + קוד הורים</small></div></div>
+</div>
+
+<!-- 5. סיום -->
+<div id="s5" class="layer center">
+  <img id="logo" src="../../brand/filterphone-logo-transparent.png" alt="">
+  <div class="brand">Filter<span>Phone</span></div>
+  <div class="slogan">מסננים — לא חוסמים.</div>
+  <div class="sub">הטלפון נשאר חכם. התוכן נשאר נקי.</div>
+  <div class="cta">להורדה: <b>filterphone.com</b></div>
+  <div class="fine">לאנדרואיד · סינון תמונות חכם · ניהול מרחוק</div>
+</div>
+
+<script>
+const APPS = [["וואטסאפ","#25d366","W"],["כרום","#4285f4","C"],["בנק","#0a5bd8","₪"],["מפות","#34a853","M"],
+  ["חנות","#01875f","▶"],["מצלמה","#5f6b7a","◉"],["סידור","#7b4bd6","ס"],["יומן","#e8711a","31"],
+  ["וורד","#185abd","W"],["אקסל","#107c41","X"],["מוביט","#ff6a00","M"],["קופ\"ח","#0096d6","+"],
+  ["מחשבון","#444c5c","="],["פתקים","#f6b400","✎"],["תורה","#8b5a2b","א"],["דואר","#d93025","@"]];
+const apps = document.getElementById("apps");
+apps.innerHTML = APPS.map(([n, c, g]) => `<div class="app"><div class="ic" style="background:${c}">${g}<div class="lock"><i></i></div></div><span>${n}</span></div>`).join("");
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const ease = (x) => 1 - Math.pow(1 - x, 3);
+/** נראות: נכנס בין a ל-b, יוצא בין c ל-d. */
+const vis = (t, a, b, c, d) => ease(seg(t, a, b)) * (1 - ease(seg(t, c, d)));
+function show(el, o, dy = 0, sc = 1) {
+  el.style.opacity = o;
+  el.style.transform = `translateY(${dy}px) scale(${sc})`;
+  el.style.visibility = o > 0.001 ? "visible" : "hidden";
+}
+const TOTAL = 24;
+window.TOTAL = TOTAL;
+window.render = function (t) {
+  // 1. פתיחה
+  show($("h1"), vis(t, 0.2, 0.9, 2.9, 3.3), 30 * (1 - ease(seg(t, 0.2, 0.9))));
+  show($("h2"), vis(t, 0.9, 1.6, 2.9, 3.3), 30 * (1 - ease(seg(t, 0.9, 1.6))));
+  // הטלפון: 3.2 → 15
+  const ph = vis(t, 3.2, 3.9, 14.6, 15.2);
+  show($("phone"), ph, 60 * (1 - ease(seg(t, 3.2, 3.9))), 0.92 + 0.08 * ease(seg(t, 3.2, 3.9)));
+  // 2. סינון רגיל — האפליקציות ננעלות אחת אחרי השנייה
+  show($("cap2"), vis(t, 3.4, 4.0, 7.9, 8.3), -20 * (1 - ease(seg(t, 3.4, 4.0))));
+  const appsVis = 1 - seg(t, 8.0, 8.5);
+  $("apps").style.opacity = appsVis;
+  document.querySelectorAll("#apps .lock").forEach((l, i) => { l.style.opacity = ease(seg(t, 4.4 + i * 0.12, 4.7 + i * 0.12)); });
+  show($("bigx"), vis(t, 6.6, 6.9, 8.0, 8.4), 0, 0.6 + 0.4 * ease(seg(t, 6.6, 6.9)));
+  show($("b2"), vis(t, 6.2, 6.7, 7.9, 8.3), 20 * (1 - ease(seg(t, 6.2, 6.7))));
+  // 3. FilterPhone — דפדפן, סריקת AI, תמונה אחת מסוננת
+  $("web").style.opacity = seg(t, 8.1, 8.6);
+  show($("cap3"), vis(t, 8.4, 9.0, 14.5, 15.0), -20 * (1 - ease(seg(t, 8.4, 9.0))));
+  const sp = seg(t, 9.4, 12.2);
+  const scan = $("scan");
+  scan.style.top = (40 + sp * 470) + "px";
+  scan.style.opacity = t > 9.3 && t < 12.4 ? 1 : 0;
+  document.querySelectorAll("#web .tile").forEach((tile, i) => {
+    const row = Math.floor(i / 2);
+    const at = 9.4 + (row + 0.75) * (2.8 / 3.3);
+    let badge = tile.querySelector(".badge, .veil");
+    if (!badge) {
+      badge = document.createElement("div");
+      if (i === 4) { badge.className = "veil"; badge.innerHTML = '<div class="shield">✓</div>סונן'; }
+      else { badge.className = "badge"; badge.textContent = "✓"; }
+      tile.appendChild(badge);
+    }
+    const p = ease(seg(t, at, at + 0.35));
+    badge.style.opacity = p;
+    badge.style.transform = i === 4 ? "none" : `scale(${0.5 + 0.5 * p})`;
+  });
+  show($("b3a"), vis(t, 9.2, 9.7, 12.1, 12.5), 20 * (1 - ease(seg(t, 9.2, 9.7))));
+  show($("b3b"), vis(t, 12.4, 12.9, 14.5, 15.0), 20 * (1 - ease(seg(t, 12.4, 12.9))));
+  // 4. פיצ'רים
+  show($("cap4"), vis(t, 15.0, 15.6, 19.6, 20.1), -20 * (1 - ease(seg(t, 15.0, 15.6))));
+  document.querySelectorAll("#feats .chip").forEach((c, i) => {
+    const a = 15.5 + i * 0.55;
+    const o = vis(t, a, a + 0.45, 19.6, 20.1);
+    c.style.opacity = o;
+    c.style.transform = `translateX(${-60 * (1 - ease(seg(t, a, a + 0.45)))}px)`;
+  });
+  // 5. סיום
+  show($("s5"), ease(seg(t, 20.1, 20.8)), 0, 0.94 + 0.06 * ease(seg(t, 20.1, 20.8)));
+  $("glow").style.transform = `scale(${1 + 0.06 * Math.sin(t * 1.6)})`;
+};
+window.render(new URLSearchParams(location.search).has("t") ? Number(new URLSearchParams(location.search).get("t")) : 21.5);
+</script>
+</body>
+</html>
