@@ -422,7 +422,7 @@ async function catchUpUnlisted() {
       for (const chat of await withTimeout(client.getChats(), 60e3, 'getChats')) {
         const chatId = chat?.id?._serialized;
         if (!chatId || chat.isGroup || chat.archived || !isPersonChat(chatId) || chatId === adminChat() || chatId === me) continue;
-        if (pending.has(chatId) || inbox.has(chatId)) continue;
+        if (pending.has(chatId) || inbox.has(chatId) || bursts.has(chatId)) continue;   // כבר מטופלת עכשיו
         const last = chat.lastMessage;
         const known = state.data.chats[chatId];
         if (!labels.needsCatchUp(last, { now, answered: known?.answered || '', windowMs: UNLISTED_LOOKBACK_MS })) continue;
