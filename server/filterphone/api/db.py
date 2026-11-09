@@ -367,8 +367,14 @@ ALTER TABLE requests ADD COLUMN notified_at INTEGER;
 ALTER TABLE requests ADD COLUMN outcome TEXT NOT NULL DEFAULT '';
 """
 
+_V21 = """
+-- בקשת אפליקציה (מחנות FilterPhone / מ-Google Play המנוהל): איזו אפליקציה — כדי שאישור יוסיף אותה לחנות.
+ALTER TABLE requests ADD COLUMN app_package TEXT NOT NULL DEFAULT '';
+ALTER TABLE requests ADD COLUMN app_title TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16,
-                         _V17, _V18, _V19, _V20]
+                         _V17, _V18, _V19, _V20, _V21]
 VERSION = len(MIGRATIONS)
 
 

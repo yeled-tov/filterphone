@@ -293,3 +293,21 @@ class PlayCatalog:
         pkgs = [p for p in pkgs if _PKG.match(p)][:limit]
         info = self.apps.lookup(pkgs, budget_s=12.0)
         return [{"package": p, **info[p]} for p in pkgs if info.get(p)]
+
+
+def _norm_title(t: str) -> str:
+    return re.sub(r"[^\w]+", " ", (t or "").lower()).strip()
+
+
+def play_match(results: list[dict], title: str) -> str:
+    """שם החבילה בתוצאות חיפוש ב-Play שהשם שלה תואם לשם שהלקוח ביקש (זהה, או אחד מתחיל בשני) — כדי
+    שאישור בקשה "WhatsApp Business" לא יוסיף בטעות אפליקציה אחרת. לא נמצא — "". טהור."""
+    want = _norm_title(title)
+    if not want:
+        return ""
+    for r in results:
+        got = _norm_title(str(r.get("title") or ""))
+        if got and (got == want or got.startswith(want + " ") or want.startswith(got + " ")
+                    or got.startswith(want) and len(want) >= 4):
+            return str(r.get("package") or "")
+    return ""

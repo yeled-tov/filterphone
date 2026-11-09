@@ -320,6 +320,41 @@ class ApiError(Exception):
         self.extra = extra or {}       # שדות נוספים בתשובה (למשל need=parent_code — הממשק מבקש את הקוד)
 
 
+_APP_REQ = re.compile(r"בקשת (?:התקנת )?אפליקציה(?: חדשה לחנות| מ-Google Play)?:\s*([^\n]+)")
+_PKG_IN = re.compile(r"\(([A-Za-z][\w]*(?:\.[\w]+)+)\)\s*$")
+_GENRE_CATEGORY = ((r"מפות|ניווט|תחבורה|רכב|נסיעות|maps|travel|auto", "תחבורה"),
+                   (r"פיננס|כספים|finance", "בנקים ותשלומים"),
+                   (r"בריאות|רפואה|כושר|health|medical", "בריאות"),
+                   (r"תקשורת|communication", "תקשורת"),
+                   (r"קניות|אוכל|שתייה|shopping|food", "קניות ומשלוחים"),
+                   (r"חדשות|מגזינים|news", "חדשות ופורומים"),
+                   (r"חינוך|עסקים|פרודוקטיב|ספרים|education|business|productivity|books", "עבודה ולימודים"),
+                   (r"מוזיקה|וידאו|צילום|אודיו|music|video|photo|audio", "מדיה"))
+
+
+def parse_app_request(note: str) -> tuple[str, str]:
+    """(שם חבילה, שם האפליקציה) מתוך בקשת אפליקציה שנשלחה כטקסט — מהחנות ("בקשת התקנת אפליקציה: X (pkg)"),
+    מ-Google Play המנוהל ("בקשת אפליקציה מ-Google Play: X"), או "בקשת אפליקציה חדשה לחנות: X".
+    ('', '') — לא בקשת אפליקציה. טהור."""
+    m = _APP_REQ.search(note or "")
+    if not m:
+        return "", ""
+    line = m.group(1).strip()
+    pm = _PKG_IN.search(line)
+    pkg = (clean_package(pm.group(1)) or "") if pm else ""
+    title = (line[:pm.start()] if pm else line).strip()
+    return pkg, title[:120]
+
+
+def category_for_genre(genre: str | None) -> str:
+    """הקטגוריה (טאב בחנות) לפי הז'אנר ב-Google Play. לא מוכר — "כלים". טהור."""
+    g = (genre or "").lower()
+    for pattern, cat in _GENRE_CATEGORY:
+        if re.search(pattern, g):
+            return cat
+    return "כלים"
+
+
 def change_outcome(before, after, old_level, new_level, approved: bool, note: str = "") -> str:
     """מה הוחלט על בקשת שינוי — במילים, ללקוח: מה נפתח, מה נחסם, הרמה."""
     if not approved:
@@ -458,10 +493,28 @@ class Services:
         c.execute("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'policy_revision'")
         return int(c.execute("SELECT value FROM meta WHERE key = 'policy_revision'").fetchone()[0])
 
+    def _checksum(self, row: sqlite3.Row) -> str:
+        comp = self.compiled(row)
+        return policy_checksum(row["level"], comp, self._allowlist(comp))
+
+    def bump_catalog(self) -> int:
+        """אחרי שינוי בחנות (מחוץ לטרנזקציה של השינוי — כדי שהרשימה המאושרת כבר תראה אותו)."""
+        with self.db() as c, db.transaction(c):
+            return self.bump_catalog_devices(c)
+
+    def bump_catalog_devices(self, c: sqlite3.Connection) -> int:
+        """החנות השתנתה (נוספה / עודכנה / הוסרה אפליקציה): גרסה חדשה לכל מכשיר שהרשימה המאושרת נאכפת אצלו
+        (Play מנוהל / רק מאושרות) — כדי שהטלפון יקבל אותה בסנכרון הבא. מחזיר כמה מכשירים קיבלו גרסה חדשה."""
+        n = 0
+        for r in c.execute("SELECT id, policy_version FROM devices WHERE status = 'active'").fetchall():
+            if self.bump_policy(c, r["id"]) != r["policy_version"]:
+                n += 1
+        return n
+
     def bump_policy(self, c: sqlite3.Connection, device_id: int) -> int:
         """בתוך טרנזקציה, אחרי שינוי: אם מה שהטלפון צריך לאכוף השתנה — גרסה חדשה. מחזיר את הגרסה."""
         row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
-        checksum = policy_checksum(row["level"], self.compiled(row))
+        checksum = self._checksum(row)
         if checksum == row["policy_checksum"]:
             return row["policy_version"]
         version = row["policy_version"] + (1 if row["policy_checksum"] else 0)
@@ -477,7 +530,7 @@ class Services:
             for r in rows:
                 c.execute("UPDATE devices SET policy_checksum = ?, policy_updated_at = COALESCE(policy_updated_at, ?)"
                           " WHERE id = ? AND policy_checksum = ''",
-                          (policy_checksum(r["level"], self.compiled(r)), db.now(), r["id"]))
+                          (self._checksum(r), db.now(), r["id"]))
         return len(rows)
 
     def refresh_stale_policies(self) -> int:
@@ -487,7 +540,7 @@ class Services:
         with self.db() as c, db.transaction(c):
             rows = c.execute("SELECT id, level, policy, policy_checksum FROM devices WHERE policy_checksum != ''")
             for r in rows.fetchall():
-                if policy_checksum(r["level"], self.compiled(r)) != r["policy_checksum"]:
+                if self._checksum(r) != r["policy_checksum"]:
                     self.bump_policy(c, r["id"])
                     bumped += 1
         if bumped:
@@ -1378,28 +1431,38 @@ class Services:
         return {**self.vpn_config(row["vpn_ip"], row["preshared_key"]), "ca": self.ca_info()}
 
     def device_request_change(self, row: sqlite3.Row, level: int | None, options: list[str] | None,
-                              note: str) -> dict:
-        """לקוח פעיל מבקש שינוי (רמה / חסימות). רק המנהל מבצע — כאן רק נרשמת בקשה."""
+                              note: str, app: dict | None = None) -> dict:
+        """לקוח פעיל מבקש שינוי (רמה / חסימות) או אפליקציה. רק המנהל מבצע — כאן רק נרשמת בקשה.
+        [app] — {package, title}: בקשת אפליקציה (מהחנות / מ-Play המנוהל). בלי — מנסים לקרוא מהטקסט
+        (גרסאות קודמות של האפליקציה). אישור בקשת אפליקציה מוסיף אותה לחנות (approve_request)."""
         if row["status"] != "active":
             raise ApiError(403, "אפשר לבקש שינוי רק במכשיר פעיל")
         if level is not None and level not in (1, 2, 3):
             raise ApiError(400, "רמה לא חוקית")
         opts = sorted({o for o in (options or []) if o in CATALOG})
         note = security.clean_text(note, 1500, multiline=True)
-        if level is None and options is None and not note:
+        app = app if isinstance(app, dict) else {}
+        app_pkg = clean_package(str(app.get("package") or "")) or ""
+        app_title = security.clean_text(str(app.get("title") or ""), 120)
+        if not app_pkg and not app_title:
+            app_pkg, app_title = parse_app_request(note)
+        if level is None and options is None and not note and not app_pkg and not app_title:
             raise ApiError(400, "הבקשה ריקה")
         with self.db() as c, db.transaction(c):
-            old = c.execute("SELECT id FROM requests WHERE device_id = ? AND kind = 'change' AND status = 'pending'",
-                            (row["id"],)).fetchone()
+            # בקשת אפליקציה — בקשה נפרדת לכל אפליקציה (לא נבלעת בבקשת שינוי אחרת); אותה אפליקציה שוב —
+            # מעדכנים. בקשת שינוי רגילה — מעדכנת את הבקשה הרגילה הפתוחה.
+            old = c.execute("SELECT id FROM requests WHERE device_id = ? AND kind = 'change' AND status = 'pending'"
+                            " AND app_package = ? AND app_title = ?", (row["id"], app_pkg, app_title)).fetchone()
             if old is not None:     # בקשה פתוחה — מעדכנים אותה במקום לפתוח עוד אחת
                 c.execute("UPDATE requests SET level = ?, options = ?, note = ?, created_at = ? WHERE id = ?",
                           (level, json.dumps(opts), note, db.now(), old["id"]))
                 request_id = old["id"]
             else:
                 request_id = c.execute(
-                    "INSERT INTO requests (kind, device_id, customer_id, level, options, note, created_at)"
-                    " VALUES ('change',?,?,?,?,?,?)",
-                    (row["id"], row["customer_id"], level, json.dumps(opts), note, db.now())).lastrowid
+                    "INSERT INTO requests (kind, device_id, customer_id, level, options, note, created_at,"
+                    " app_package, app_title) VALUES ('change',?,?,?,?,?,?,?,?)",
+                    (row["id"], row["customer_id"], level, json.dumps(opts), note, db.now(),
+                     app_pkg, app_title)).lastrowid
             self.audit(f"device:{row['id']}", "request_change", f"request:{request_id}", note[:100], c)
         return {"request_id": request_id, "status": "pending"}
 
@@ -1463,6 +1526,15 @@ class Services:
             out.append(d)
         return out
 
+    def request_app(self, request_id: int) -> dict | None:
+        """האפליקציה של בקשה ממתינה ({package, title}), או None — לא בקשת אפליקציה."""
+        with self.db() as c:
+            r = c.execute("SELECT app_package, app_title FROM requests WHERE id = ? AND status = 'pending'",
+                          (request_id,)).fetchone()
+        if r is None or not (r["app_package"] or r["app_title"]):
+            return None
+        return {"package": r["app_package"], "title": r["app_title"]}
+
     def approve_request(self, request_id: int, admin: str, decision: dict) -> dict:
         """אישור: בהצטרפות — פתיחת החיבור (כתובת VPN, רמה, חסימות); בשינוי — עדכון המכשיר.
 
@@ -1506,10 +1578,23 @@ class Services:
                 c.execute("UPDATE devices SET level = ?, policy = ? WHERE id = ?",
                           (level, settings.dump(), dev["id"]))
             admin_note = security.clean_text(decision.get("admin_note") or "", 500)
+            app_line = ""
+            if (req["app_package"] or req["app_title"]) and decision.get("add_app") is not False:
+                # בקשת אפליקציה: האישור מוסיף אותה לחנות (וכך גם ל"מאושרות" — Play המנוהל פותח את ההתקנה)
+                pkg = clean_package(str(decision.get("app_package") or req["app_package"] or "")) or ""
+                if not pkg:
+                    raise ApiError(400, f"חסר שם החבילה של '{req['app_title'] or 'האפליקציה'}' — הזינו אותו "
+                                        "(למשל com.example.app), או אשרו בלי להוסיף לחנות")
+                label = self._add_store_app(c, admin, pkg, decision.get("app_info") or {}, req["app_title"])
+                app_line = (f"✅ {label} אושרה ונוספה לחנות FilterPhone — אפשר להתקין אותה עכשיו "
+                            "(מהחנות באפליקציה, או מ-Google Play).")
             outcome = ""
             if req["kind"] == "change":
                 # מה השתנה בפועל — ללקוח (באפליקציה, ובוואטסאפ אם הבקשה הגיעה מהבוט)
                 outcome = change_outcome(before, settings, dev["level"], level, True, admin_note)
+                if app_line:
+                    rest = [x for x in outcome.split("\n") if x and x != "✅ הבקשה שלך אושרה."]
+                    outcome = "\n".join([app_line, *rest])
                 self._tell_device(c, dev["id"], outcome)
             c.execute("UPDATE requests SET status = 'approved', resolved_at = ?, admin_note = ?, outcome = ?"
                       " WHERE id = ?", (t, admin_note, outcome, request_id))
@@ -1523,6 +1608,8 @@ class Services:
             if req["kind"] == "join":
                 # אם WireGuard נכשל — הכול מתבטל, והבקשה נשארת ממתינה
                 self.wg.add_peer(new["public_key"], new["preshared_key"], new["vpn_ip"])
+        if app_line:
+            self.bump_catalog()                         # האפליקציה בחנות — הטלפונים מקבלים את הרשימה המאושרת
         self.push_device(new)
         log.info("request %s approved by %s (device %s, level %s)", request_id, admin, new["id"], level)
         return {"device_id": new["id"], "status": new["status"], "vpn_ip": new["vpn_ip"]}
@@ -2413,7 +2500,31 @@ class Services:
                 c.execute(f"UPDATE managed_apps SET {', '.join(f'{k} = ?' for k in fields)}, updated_at = ? "
                           "WHERE id = ?", (*fields.values(), t, app_id))
                 self.audit(admin, "app_update", f"app:{app_id}", pkg, c)
+        self.bump_catalog()                             # הטלפונים מקבלים את הרשימה המאושרת החדשה
         return {"id": app_id, "package": pkg}
+
+    def _add_store_app(self, c: sqlite3.Connection, admin: str, pkg: str, info: dict, title: str = "") -> str:
+        """מוסיף אפליקציה לחנות (בתוך טרנזקציה) — מפרטי Google Play אם יש; כבר בחנות — מוודא שהיא פעילה.
+        אחרי ה-commit צריך bump_catalog() — הרשימה המאושרת נקראת בחיבור נפרד. מחזיר את השם שלה בחנות."""
+        row = c.execute("SELECT id, label, enabled FROM managed_apps WHERE package = ?", (pkg,)).fetchone()
+        if row is not None:
+            if not row["enabled"]:
+                c.execute("UPDATE managed_apps SET enabled = 1, updated_at = ? WHERE id = ?", (db.now(), row["id"]))
+                self.audit(admin, "app_update", f"app:{row['id']}", f"{pkg} enabled (request)", c)
+            return row["label"]
+        shots = [u for u in (info.get("screenshots") or []) if isinstance(u, str) and u.startswith("https://")][:8]
+        icon = info.get("icon") if isinstance(info.get("icon"), str) and info["icon"].startswith("https://") else ""
+        label = security.clean_text(info.get("title") or title, 60) or pkg
+        t = db.now()
+        app_id = c.execute(
+            "INSERT INTO managed_apps (package, label, category, note, description, icon_url, screenshots, play_url,"
+            " enabled, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,1,?,?)",
+            (pkg, label, category_for_genre(info.get("genre")),
+             security.clean_text(info.get("summary") or "", 200, multiline=True),
+             security.clean_text(info.get("description") or "", 2000, multiline=True), icon, json.dumps(shots),
+             f"https://play.google.com/store/apps/details?id={pkg}", t, t)).lastrowid
+        self.audit(admin, "app_add", f"app:{app_id}", f"{pkg} (request)", c)
+        return label
 
     APK_KEEP = 2                        # כמה גרסאות לשמור לכל אפליקציה (הנוכחית + הקודמת)
 
@@ -2456,6 +2567,7 @@ class Services:
                           " updated_at = ? WHERE id = ?",
                           (url, sha256, info.version_code, security.clean_text(info.version_name, 40), t, app_id))
                 self.audit(admin, "app_upload", f"app:{app_id}", f"{pkg} {info.version_code}", c)
+        self.bump_catalog()
         log.info("apk uploaded: %s %s (%s)", pkg, info.version_code, sha256[:12])
         return {"id": app_id, "package": pkg, "label": info.label, "version_code": info.version_code,
                 "version_name": info.version_name, "sha256": sha256, "url": url}
@@ -2467,6 +2579,7 @@ class Services:
                 raise ApiError(404, "אפליקציה לא נמצאה")
             c.execute("DELETE FROM managed_apps WHERE id = ?", (app_id,))
             self.audit(admin, "app_delete", f"app:{app_id}", row["package"], c)
+        self.bump_catalog()
 
     def delete_device(self, device_id: int, admin: str = "admin") -> None:
         with self.db() as c, db.transaction(c):

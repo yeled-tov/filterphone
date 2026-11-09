@@ -1311,10 +1311,14 @@ def compile_settings(level: int, s: DeviceSettings) -> Compiled:
     )
 
 
-def policy_checksum(level: int, comp: Compiled) -> str:
-    """טביעה של מה שהטלפון צריך לאכוף (ושל הרמה) — לזיהוי שינוי ולאימות בטלפון."""
-    material = json.dumps({"level": level, "device": comp.device_json()}, sort_keys=True,
-                          separators=(",", ":"), ensure_ascii=False)
+def policy_checksum(level: int, comp: Compiled, allowlist: dict | None = None) -> str:
+    """טביעה של מה שהטלפון צריך לאכוף (ושל הרמה) — לזיהוי שינוי ולאימות בטלפון.
+    [allowlist] — האפליקציות המאושרות (החנות), רק כשהן נאכפות (Play מנוהל / רק מאושרות): אחרת הוספת
+    אפליקציה לחנות לא הייתה יוצרת גרסה חדשה, והטלפון לא היה מקבל אותה (Play המשיך לחסום)."""
+    d: dict = {"level": level, "device": comp.device_json()}
+    if allowlist and (allowlist.get("enabled") or "titles" in allowlist):
+        d["allowlist"] = allowlist
+    material = json.dumps(d, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(material.encode()).hexdigest()[:32]
 
 

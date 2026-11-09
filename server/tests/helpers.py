@@ -45,6 +45,12 @@ def make_env(tmp_path):
     db.init(cfg.db_path)
     svc = Services(cfg, FakeWG(), fakeredis.FakeRedis(decode_responses=True))
     svc.set_admin("admin", "correct horse battery")
+    # כל מגבילי הקצב (ברמת המודול) מתאפסים לכל סביבה — אחרת הרשמות מצטברות בין בדיקות (5 לשעה)
+    from filterphone.api import app as app_module
+    from filterphone.api.security import RateLimiter
+    for v in vars(app_module).values():
+        if isinstance(v, RateLimiter):
+            v._hits.clear()
     enroll_limiter._hits.clear()
     login_limiter._hits.clear()
     return svc

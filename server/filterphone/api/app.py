@@ -47,7 +47,7 @@ from . import db, gpu, notify, observe, perms, security
 from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog, resolve_keywords
 from .fetch import FetchError, fetch_image
-from .playinfo import PlayCatalog, PlayError, PlayInfo
+from .playinfo import PlayCatalog, PlayError, PlayInfo, play_match
 from .security import RateLimiter
 from .service import KOSHER_PROVIDERS, LEVEL_NAMES, ApiError, Services, store_seed
 from .support import SupportDesk
@@ -464,10 +464,16 @@ class RegisterIn(BaseModel):
     device_uid: str = Field(default="", max_length=64)
 
 
+class AppRequestIn(BaseModel):
+    package: str = Field(default="", max_length=200)
+    title: str = Field(default="", max_length=200)
+
+
 class ChangeIn(BaseModel):
     level: int | None = None
     options: list[str] | None = Field(default=None, max_length=100)
     note: str = Field(default="", max_length=3000)
+    app: AppRequestIn | None = None                 # בקשת אפליקציה (מהחנות / מ-Play המנוהל)
 
 
 class AppInfo(BaseModel):
@@ -747,6 +753,8 @@ class Decision(BaseModel):
     payment: str | None = None
     paid_until: int | None = None
     admin_note: str = Field(default="", max_length=1000)
+    app_package: str | None = Field(default=None, max_length=200)   # בקשת אפליקציה: שם החבילה (אם חסר)
+    add_app: bool | None = None                                     # False — לאשר בלי להוסיף לחנות
 
 
 class RejectIn(BaseModel):
@@ -878,7 +886,8 @@ def _routes(app: FastAPI) -> None:
     @app.post("/v1/device/requests", status_code=201)
     def device_request(body: ChangeIn, svc: SvcDep, row: DeviceRow):
         _limit(device_limiter, f"req:{row['id']}")
-        return svc.device_request_change(row, body.level, body.options, body.note)
+        return svc.device_request_change(row, body.level, body.options, body.note,
+                                         body.app.model_dump() if body.app else None)
 
     @app.post("/v1/device/web/report")
     def device_web_report(body: WebReportIn, request: Request, row: DeviceRow):
@@ -1295,9 +1304,27 @@ def _routes(app: FastAPI) -> None:
         return svc.resolve_swap(swap_id, body.approve, admin["username"], body.as_additional)
 
     @app.post("/v1/admin/requests/{request_id}/approve")
-    def approve(request_id: int, body: Decision, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):
+    def approve(request_id: int, body: Decision, request: Request, svc: SvcDep, admin: AdminRow,
+                parent_code: ParentCode = None):
         svc.require_parent_code_for_request(request_id, parent_code, admin["username"])
-        return svc.approve_request(request_id, admin["username"], body.model_dump(exclude_unset=True))
+        decision = body.model_dump(exclude_unset=True)
+        req = svc.request_app(request_id)
+        if req and decision.get("add_app") is not False:
+            # בקשת אפליקציה: שם החבילה (מהבקשה / מהמנהל / חיפוש ב-Play לפי השם) ופרטים מ-Play להוספה לחנות
+            pkg, title = decision.get("app_package") or req["package"], req["title"]
+            catalog = request.app.state.playcatalog
+            if not pkg and title:
+                try:
+                    pkg = play_match(catalog.search(title), title)
+                except PlayError:
+                    pkg = ""
+            if pkg:
+                decision["app_package"] = pkg
+                try:
+                    decision["app_info"] = catalog.app(pkg) or {}
+                except PlayError:
+                    decision["app_info"] = {}
+        return svc.approve_request(request_id, admin["username"], decision)
 
     @app.post("/v1/admin/requests/{request_id}/reject", status_code=204)
     def reject(request_id: int, body: RejectIn, svc: SvcDep, admin: AdminRow):

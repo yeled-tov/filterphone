@@ -706,6 +706,11 @@ function requestCard(r) {
   const payment = el("select", {}, Object.entries(PAYMENT).map(([k, [, t]]) => el("option", { value: k, selected: (r.payment || "unpaid") === k }, t)));
   const until = el("input", { type: "date", value: toDateInput(r.paid_until) });
   const note = el("input", { placeholder: "הערה פנימית / סיבת דחייה (לא חובה)" });
+  // בקשת אפליקציה (מהחנות / מ-Google Play המנוהל): האישור מוסיף אותה לחנות — ואז אפשר להתקין
+  const isApp = !!(r.app_package || r.app_title);
+  const appPkg = el("input", { class: "ltr", value: r.app_package || "",
+    placeholder: "com.example.app — ריק: נחפש ב-Google Play לפי השם" });
+  const appAdd = el("input", { type: "checkbox", checked: true });
 
   const approve = async () => {
     if (payment.value === "unpaid") {
@@ -715,7 +720,9 @@ function requestCard(r) {
     await attempt(() => api(`/v1/admin/requests/${r.id}/approve`, { method: "POST", body: {
       level, options: [...selected], custom_hosts: lines(custom.value), payment: payment.value,
       paid_until: fromDateInput(until.value), admin_note: note.value,
-    } }), r.kind !== "join" ? "השינוי אושר והוחל"
+      ...(isApp ? { add_app: appAdd.checked, ...(appPkg.value.trim() ? { app_package: appPkg.value.trim() } : {}) } : {}),
+    } }), isApp && appAdd.checked ? "אושר — האפליקציה נוספה לחנות, והלקוח יכול להתקין אותה"
+      : r.kind !== "join" ? "השינוי אושר והוחל"
       : r.platform === "windows" ? "אושר — החיבור נפתח. המחשב יתחבר ויפעיל את החסימה בתוך דקה."
       : "אושר — החיבור נפתח. הטלפון יתחבר בתוך דקה.");
     render();
@@ -750,6 +757,15 @@ function requestCard(r) {
   ]);
 
   const parts = [head, info];
+  if (isApp) {
+    parts.push(el("div", { class: "note" },
+      el("b", {}, `בקשת אפליקציה: ${r.app_title || r.app_package}`),
+      r.app_package ? el("div", { class: "ltr small" }, r.app_package) : null,
+      pending ? el("div", { class: "stack tight" },
+        el("label", {}, "שם החבילה (Google Play)", appPkg),
+        el("label", { class: "row gap" }, appAdd, "להוסיף לחנות FilterPhone באישור (ואז Play המנוהל מאפשר להתקין)"))
+        : null));
+  }
   if (r.note) parts.push(el("div", { class: "stack tight" }, el("b", { class: "small" }, "מה עוד הלקוח ביקש:"), el("div", { class: "note" }, r.note)));
   if (pending) {
     parts.push(el("div", { class: "sep" }),
@@ -765,7 +781,8 @@ function requestCard(r) {
         el("label", {}, "הערה", note)),
       el("div", { class: "row end gap" },
         el("button", { class: "danger", onclick: reject }, "דחייה"),
-        el("button", { class: "ok", onclick: approve }, r.kind === "join" ? "אישור ופתיחת החיבור" : "אישור השינוי")));
+        el("button", { class: "ok", onclick: approve }, r.kind === "join" ? "אישור ופתיחת החיבור"
+          : isApp ? "אישור והוספה לחנות" : "אישור השינוי")));
   } else if (r.device_id) {
     parts.push(el("div", { class: "row end" }, el("a", { href: r.platform === "windows" ? `#/computers/${r.device_id}`
       : `#/devices/${r.device_id}` }, r.platform === "windows" ? "לדף המחשב ›" : "לדף המכשיר ›")));
