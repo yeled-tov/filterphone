@@ -34,7 +34,7 @@ from . import aichat, inline, rewrite, serp, textscan
 from .blockpage import ASSIST_PATH, REVIEW_PATH, block_page, checking_page, review_sent_page
 from .bodies import bounded_content
 from .client import EngineClient, EngineUnavailable
-from .hosts import HostPolicy, hello_fingerprint, is_api_host, is_chromium_hello, load_lists
+from .hosts import HostPolicy, hello_fingerprint, is_api_host, is_chromium_hello, load_sections
 from .policy import DevicePolicy, PolicyTable
 from .web import (
     ASSIST_KEY,
@@ -148,8 +148,9 @@ def _short_path(req: http.Request) -> str:
 class FilterPhone:
     def __init__(self) -> None:
         self.cfg = get_settings()
-        passthrough, inspect = load_lists(self.cfg.passthrough_file)
-        self.hosts = HostPolicy(passthrough, inspect, self.cfg.passthrough_learn_days * 86400)
+        lists = load_sections(self.cfg.passthrough_file)
+        self.hosts = HostPolicy(lists["passthrough"], lists["inspect"], self.cfg.passthrough_learn_days * 86400,
+                                strict=lists["strict"])
         self.engine = EngineClient(self.cfg.engine_socket, self.cfg.engine_pool_size,
                                    self.cfg.engine_timeout_s)
         self.redis = aioredis.from_url(self.cfg.redis_url, decode_responses=True,
@@ -243,10 +244,10 @@ class FilterPhone:
             learned, expired = {}, []
             for field, exp in (await self.redis.hgetall(PASSTHROUGH_KEY)).items():
                 ip, _, host = field.partition("|")
-                if float(exp) > now:
+                if float(exp) > now and not self.hosts.is_strict(host):
                     learned[(ip, host)] = float(exp)
                 else:
-                    expired.append(field)
+                    expired.append(field)       # פג תוקף, או שרת שנכנס ל-[strict] (נלמד לפני כן) — נמחק
             self.hosts.replace_learned(learned)
             if expired:
                 await self.redis.hdel(PASSTHROUGH_KEY, *expired)

@@ -10,6 +10,10 @@
      במכשיר במצב "תמונות באפליקציות: חסום" (ברירת המחדל ברמות 1–2) לא לומדים עליהם —
      עדיף שהאפליקציה לא תציג תמונות מאשר שתציג בלי סינון. באותו מצב גם שרת ששמו
      מעיד על תמונות (img., images-, ‎-pic-, media, thumbs...) לא נלמד.
+  4. "אף פעם לא לעקוף" (פרק [strict]): שרתי התמונות של אפליקציות הקניות (אליאקספרס, שיין, טמו).
+     האפליקציות האלה לא סומכות על תעודת הסינון — לכן אי אפשר לבדוק בהן תמונה-תמונה, ועקיפה הייתה
+     מציגה את כל התמונות בלי סינון. כאן לא לומדים ולא עוקפים בשום מצב (גם "תמונות באפליקציות: מותר"):
+     בתוך האפליקציה התמונות לא נטענות; באתר בכרום (שסומך עלינו) — הכול מסונן כרגיל, תמונה-תמונה.
 
 כרום לא נהנה ממה שנלמד: הלמידה היא לכל המכשיר (הפרוקסי רואה רק כתובת ושם שרת, לא איזו אפליקציה),
 ולכן אפליקציה שלא סומכת על התעודה (אפליקציית גוגל, אליאקספרס...) הייתה "פותחת" שרת תמונות או אתר
@@ -103,9 +107,9 @@ def _compile(patterns: list[str]) -> re.Pattern | None:
     return re.compile(rf"^(?:{'|'.join(_glob(p) for p in patterns)})$")
 
 
-def load_lists(path: str | Path) -> tuple[list[str], list[str]]:
-    """מחזיר (passthrough, inspect) מתוך קובץ עם פרקים [passthrough] ו-[inspect]."""
-    sections: dict[str, list[str]] = {"passthrough": [], "inspect": []}
+def load_sections(path: str | Path) -> dict[str, list[str]]:
+    """כל הפרקים בקובץ: [passthrough], [inspect], [strict] (ועוד, אם יתווספו)."""
+    sections: dict[str, list[str]] = {"passthrough": [], "inspect": [], "strict": []}
     current = "passthrough"
     for raw in Path(path).read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].strip()
@@ -116,13 +120,21 @@ def load_lists(path: str | Path) -> tuple[list[str], list[str]]:
             sections.setdefault(current, [])
             continue
         sections[current].append(line)
-    return sections["passthrough"], sections["inspect"]
+    return sections
+
+
+def load_lists(path: str | Path) -> tuple[list[str], list[str]]:
+    """מחזיר (passthrough, inspect) מתוך קובץ עם פרקים [passthrough] ו-[inspect]."""
+    s = load_sections(path)
+    return s["passthrough"], s["inspect"]
 
 
 class HostPolicy:
-    def __init__(self, passthrough: list[str], inspect: list[str], learn_ttl_s: float):
+    def __init__(self, passthrough: list[str], inspect: list[str], learn_ttl_s: float,
+                 strict: list[str] | tuple[str, ...] = ()):
         self._static = _compile(passthrough)
         self._inspect = _compile(inspect)
+        self._strict = _compile(list(strict))
         self._ttl = learn_ttl_s
         self._learned: dict[tuple[str, str], float] = {}     # (ip, host) → תפוגה
 
@@ -130,7 +142,11 @@ class HostPolicy:
         return bool(self._static and self._static.match(host))
 
     def is_inspect_only(self, host: str) -> bool:
-        return bool(self._inspect and self._inspect.match(host))
+        return bool(self._inspect and self._inspect.match(host)) or self.is_strict(host)
+
+    def is_strict(self, host: str) -> bool:
+        """[strict]: לא עוקפים אף פעם — שרתי תמונות של אפליקציות שלא סומכות עלינו (קניות)."""
+        return bool(self._strict and self._strict.match(host))
 
     @staticmethod
     def looks_like_image_host(host: str) -> bool:
@@ -152,6 +168,8 @@ class HostPolicy:
         if not host:
             return True                     # בלי SNI אין לנו איך להנפיק תעודה מתאימה
         host = host.lower().rstrip(".")
+        if self.is_strict(host):
+            return False                    # גם אם נלמד בעבר (לפני שנכנס ל-[strict])
         # [inspect] גובר על [passthrough]: שרת תמונות שרשום במפורש ב-[inspect] נבדק תמיד, גם אם הוא
         # נתפס ע"י glob רחב ב-[passthrough] (למשל streetviewpixels-pa.googleapis.com מול *.googleapis.com).
         if self.is_static(host) and not self.is_inspect_only(host):
@@ -176,6 +194,8 @@ class HostPolicy:
         strict_images: המכשיר במצב "תמונות באפליקציות: חסום" — שרתי תמונות לא נלמדים.
         """
         host = host.lower().rstrip(".")
+        if self.is_strict(host):
+            return False
         if strict_images and (self.is_inspect_only(host) or self.looks_like_image_host(host)):
             return False
         self._learned[(client_ip, host)] = expires_at or (time.time() + self._ttl)

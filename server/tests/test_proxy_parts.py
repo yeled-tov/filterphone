@@ -203,3 +203,21 @@ def test_aichat_extracts_prompt_text_from_json_or_raw():
     assert "hello BADWORD there" in text and "user" in text
     assert aichat.prompt_text(b"not json BADWORD") == "not json BADWORD"
     assert aichat.prompt_text(b"") == "" and aichat.prompt_text(None) == ""
+
+
+def test_shopping_app_image_hosts_are_never_passed_through():
+    """[strict]: אפליקציות הקניות לא סומכות על התעודה — אף פעם לא עוקפים את שרתי התמונות שלהן (גם במצב
+    "תמונות באפליקציות: מותר", וגם אם נלמד בעבר). באפליקציה התמונות לא נטענות; בכרום — מסונן."""
+    from filterphone.proxy.hosts import load_sections
+    s = load_sections(PACKAGE_DIR / "proxy" / "passthrough.txt")
+    hp = HostPolicy(s["passthrough"], s["inspect"], 3600, strict=s["strict"])
+    ip = "10.8.0.9"
+    for host in ("ae-pic-a1.aliexpress-media.com", "ae01.alicdn.com", "at.alicdn.com", "img.ltwebstatic.com",
+                 "img.kwcdn.com"):
+        assert hp.is_strict(host) and hp.is_content_host(host), host
+        assert hp.learn(ip, host, strict_images=False) is False, host          # מצב "מותר" — עדיין לא נלמד
+        hp.replace_learned({(ip, host): 9e12})                                  # נלמד לפני השינוי
+        assert hp.should_passthrough(ip, host) is False, host
+    # שרתי ה-API של האפליקציה ממשיכים להילמד (כדי שהאפליקציה תעבוד) — רק התמונות לא
+    assert hp.learn(ip, "acs.aliexpress.com", strict_images=False) is True
+    assert hp.should_passthrough(ip, "acs.aliexpress.com")

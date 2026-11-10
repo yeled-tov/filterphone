@@ -136,18 +136,25 @@ async def test_hosts_learned_from_an_app_stay_filtered_in_chrome(fp):
     fp.policies.set(IP, DevicePolicy(level=1, app_images="allow"))
     ctx = SimpleNamespace(client=SimpleNamespace(peername=(IP, 1)))
     err = "The client does not trust the proxy's certificate"
-    for sni in ("ae-pic-a1.aliexpress-media.com", "encrypted-tbn0.gstatic.com", "www.google.com", "api.bank.example"):
+    for sni in ("scontent.cdninstagram.com", "encrypted-tbn0.gstatic.com", "www.google.com", "api.bank.example",
+                "ae-pic-a1.aliexpress-media.com"):
         fp.tls_failed_client(SimpleNamespace(conn=SimpleNamespace(sni=sni, error=err), context=ctx))
 
     def hello(sni, kind):
         return SimpleNamespace(context=ctx, client_hello=SimpleNamespace(sni=sni, **kind), ignore_connection=False)
 
-    for sni in ("ae-pic-a1.aliexpress-media.com", "encrypted-tbn0.gstatic.com", "www.google.com"):
+    for sni in ("scontent.cdninstagram.com", "encrypted-tbn0.gstatic.com", "www.google.com"):
         chrome, app = hello(sni, CHROME_HELLO), hello(sni, OKHTTP_HELLO)
         fp.tls_clienthello(chrome)
         fp.tls_clienthello(app)
         assert chrome.ignore_connection is False, sni          # כרום — נבדק
         assert app.ignore_connection is True, sni              # האפליקציה — ממשיכה לעבוד
+    # אפליקציות קניות ([strict]): שרת התמונות לא נלמד בשום מצב — גם האפליקציה לא עוקפת (תמונות לא נטענות
+    # במקום להופיע בלי סינון); כרום — נבדק כרגיל
+    for kind in (CHROME_HELLO, OKHTTP_HELLO):
+        h = hello("ae-pic-a1.aliexpress-media.com", kind)
+        fp.tls_clienthello(h)
+        assert h.ignore_connection is False
     api = hello("api.bank.example", CHROME_HELLO)               # שרת API שנלמד — לא תוכן, עובר כרגיל
     fp.tls_clienthello(api)
     assert api.ignore_connection is True
