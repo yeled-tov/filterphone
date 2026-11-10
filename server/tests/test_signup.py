@@ -47,7 +47,7 @@ def test_catalog_is_public_and_consistent(env):
 def test_every_option_enforces_something():
     for o in OPTIONS:
         assert (o.hosts or o.apps or o.screens or o.paths or o.images or o.video
-                or o.ui_rules or o.inapp_browser), o.id
+                or o.ui_rules or o.inapp_browser or o.wa_screens), o.id
         assert o.title and o.category
 
 

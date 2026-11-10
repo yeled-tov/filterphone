@@ -35,3 +35,20 @@ def test_ui_rules_registry_is_well_formed():
             assert r.get("id"), key
             assert r.get("action") in ("back", "home", "cover", "scroll_up"), r
             assert r.get("activities") or r.get("view_ids") or r.get("descriptions") or r.get("texts"), r
+
+
+def test_whatsapp_groups_option_reaches_the_phone_with_chat_signals():
+    """קבוצות בוואטסאפ: "groups" ב-wa_screens + סימני זיהוי השיחה (WaChats) — נאכף בנגישות."""
+    from filterphone.api.catalog import WA_CHAT_SIGNALS
+    comp = compile_settings(1, DeviceSettings(options=["whatsapp_groups"]))
+    dj = comp.device_json()
+    assert "groups" in dj["wa_screens"] and comp.needs_accessibility
+    assert dj["wa_chat"] == WA_CHAT_SIGNALS and "name_in_group" in dj["wa_chat"]["group_ids"]
+    # ערוצים / טאב העדכונים — גם הם מקבלים את הסימנים (יציאה מערוץ שנפתח מקישור)
+    assert "wa_chat" in compile_settings(1, DeviceSettings(options=["whatsapp_channels"])).device_json()
+    assert "wa_chat" in compile_settings(1, DeviceSettings(options=["whatsapp_updates"])).device_json()
+    # סטטוסים בלבד / בלי וואטסאפ — המדיניות לא משתנה
+    assert "wa_chat" not in compile_settings(1, DeviceSettings(options=["whatsapp_status"])).device_json()
+    assert "wa_chat" not in compile_settings(1, DeviceSettings(options=[])).device_json()
+    for k, v in WA_CHAT_SIGNALS.items():
+        assert v and all(isinstance(x, str) and 0 < len(x) <= 60 for x in v), k

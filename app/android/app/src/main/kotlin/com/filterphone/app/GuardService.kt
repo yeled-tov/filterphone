@@ -49,6 +49,7 @@ class GuardService : AccessibilityService() {
     private var lastAliveMark = 0L
     private var lastWaWindow: String? = null        // המסך האחרון של וואטסאפ (Activity) — לשכבת ההחרגה
     private var lastWaTabScanAt = 0L
+    private var lastWaChatScanAt = 0L
     private var settingsOpen = false                // ההגדרות בחזית — בודקים גם שינויי תוכן (דפים שנטענים לאט)
     private var lastSettingsScanAt = 0L
     private var launcherMenuPkg = ""                // מסך הבית שבו נלחץ ארוך הסמל שלנו
@@ -583,6 +584,7 @@ class GuardService : AccessibilityService() {
         policy.waProfile?.packages?.contains(pkg) == true ||
             (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES) ||
             (policy.blocksWaChannels && pkg in WaScreens.PACKAGES) ||
+            ((policy.blocksWaChannelInside || policy.blocksWaGroups) && pkg in WaScreens.PACKAGES) ||
             (pkg == PlayLock.PLAY && PlayLock.active(SystemClock.elapsedRealtime()) != null) ||
             (pkg == PlayLock.PLAY && policy.playManaged && PlayLock.PLAY !in policy.apps)
 
@@ -1166,6 +1168,7 @@ class GuardService : AccessibilityService() {
         if (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES && guardWaUpdates(pkg, fromContent = false)) return
         if (policy.blocksWaChannels && pkg in WaScreens.PACKAGES &&
             guardWaUpdates(pkg, fromContent = false, channelsOnly = true)) return
+        if (pkg in WaScreens.PACKAGES && guardWaChat(pkg, fromContent = false, policy)) return
         val wa = policy.waProfile ?: return
         val detector = WaProfileDetector(wa)
         if (!detector.watches(pkg)) return
@@ -1180,6 +1183,7 @@ class GuardService : AccessibilityService() {
         if (policy.blocksWaUpdates && pkg in WaScreens.PACKAGES && guardWaUpdates(pkg, fromContent = true)) return
         if (policy.blocksWaChannels && pkg in WaScreens.PACKAGES &&
             guardWaUpdates(pkg, fromContent = true, channelsOnly = true)) return
+        if (pkg in WaScreens.PACKAGES && guardWaChat(pkg, fromContent = true, policy)) return
         val wa = policy.waProfile ?: return
         val detector = WaProfileDetector(wa)
         if (!detector.watches(pkg) || detector.excluded(lastWaWindow)) return
@@ -1282,6 +1286,62 @@ class GuardService : AccessibilityService() {
             if (block(pkg, if (clicked) NO_GLOBAL_ACTION else GLOBAL_ACTION_BACK,
                     if (channelsOnly) R.string.guard_wa_channels_blocked else R.string.guard_wa_updates_blocked,
                     minGapMs = 700)) {
+                ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
+            }
+            return true
+        } catch (e: Exception) {
+            return false
+        } finally {
+            seen.forEach { recycle(it) }
+            queue.forEach { recycle(it) }
+        }
+    }
+
+    /**
+     * בתוך שיחה בוואטסאפ: ערוץ (כשהערוצים / טאב העדכונים חסומים) או קבוצה (כשהקבוצות חסומות) → אחורה.
+     * הזיהוי לפי תוכן המסך (WaChats) — גם ערוץ שנפתח מקישור, וגם כשוואטסאפ פותח ערוץ באותו מסך כמו צ'אט.
+     * נקראים רק מזהי רכיבים, וטקסט קצר בכותרת השיחה ובפס הטאבים — לא הודעות. true = טופל.
+     */
+    private fun guardWaChat(pkg: String, fromContent: Boolean, policy: GuardPolicy.Policy): Boolean {
+        val channels = policy.blocksWaChannelInside
+        val groups = policy.blocksWaGroups
+        if (!channels && !groups) return false
+        val now = SystemClock.elapsedRealtime()
+        if (fromContent && now - lastWaChatScanAt < SCAN_EVERY_MS) return false
+        lastWaChatScanAt = now
+        val root = runCatching { rootInActiveWindow }.getOrNull() ?: return false
+        val seen = ArrayList<AccessibilityNodeInfo>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        try {
+            if (root.packageName?.toString() !in WaScreens.PACKAGES) return false
+            val h = resources.displayMetrics.heightPixels
+            val headerBottom = (h * WaChats.HEADER_FRACTION).toInt()
+            val tabsTop = (h * WaChats.TABS_FRACTION).toInt()
+            val nodes = ArrayList<WaChats.Node>()
+            val b = android.graphics.Rect()
+            queue.add(root)
+            var visited = 0
+            while (queue.isNotEmpty() && visited < MAX_NODES) {
+                val n = queue.removeFirst()
+                seen += n
+                visited++
+                n.getBoundsInScreen(b)
+                // טקסט — רק בכותרת ובפס הטאבים, וקצר; בשאר המסך (ההודעות) — רק מזהה הרכיב
+                val readText = (b.bottom in 1..headerBottom || b.top >= tabsTop)
+                val limit = if (b.bottom in 1..headerBottom) MAX_HEADER_TEXT else MAX_TEXT_SCAN
+                val text = if (readText) n.text?.toString()?.take(limit) else null
+                val desc = if (readText) n.contentDescription?.toString()?.take(limit) else null
+                nodes += WaChats.Node(n.viewIdResourceName, text, desc, b.top, b.bottom,
+                    editable = n.isEditable || n.className?.toString() == "android.widget.EditText")
+                for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it) }
+            }
+            val kind = WaChats.classify(nodes, h, policy.waChat)
+            val message = when {
+                kind == WaChats.Kind.CHANNEL && channels -> R.string.guard_wa_channels_blocked
+                kind == WaChats.Kind.GROUP && groups -> R.string.guard_wa_groups_blocked
+                else -> return false
+            }
+            if (block(pkg, GLOBAL_ACTION_BACK, message, minGapMs = 700)) {
                 ProtectionState.inc(this, ProtectionState.SCREENS_BLOCKED)
             }
             return true
@@ -2095,6 +2155,7 @@ class GuardService : AccessibilityService() {
         /** ל-block(): כבר טיפלנו בעצמנו (למשל לחצנו על טאב) — רק ההודעה, בלי פעולה גלובלית. */
         private const val NO_GLOBAL_ACTION = 0
         private const val MAX_NODES = 300
+        private const val MAX_HEADER_TEXT = 200    // כותרת שיחה בוואטסאפ: שם + שורת משנה (רשימת משתתפים בקבוצה)
         private const val MAX_TEXT_SCAN = 48       // כלל-רכיב עם texts קורא טקסט רק עד אורך כזה (כיתוב/כפתור, לא הודעה)
         private const val MAX_MASK_NODES = 600
         private const val MASK_EVERY_MS = 50L          // עדכון הכיסוי — לכל היותר 20 בשנייה

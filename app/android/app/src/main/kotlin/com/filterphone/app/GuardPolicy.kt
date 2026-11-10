@@ -106,6 +106,8 @@ object GuardPolicy {
         val uiRules: List<UiRules.Rule> = emptyList(),
         /** אפליקציות שבהן חוסמים את הדפדפן הפנימי (WebView) — Waze, Moovit וכו' (InAppBrowser). */
         val inAppBrowserPkgs: Set<String> = emptySet(),
+        /** סימני הזיהוי של סוג השיחה בוואטסאפ — ערוץ / קבוצה / פרטי (WaChats). מהשרת, או ברירת המחדל. */
+        val waChat: WaChats.Signals = WaChats.DEFAULT,
     ) {
         val isEmpty get() = apps.isEmpty() && screens.isEmpty() && waProfile == null && waScreens.isEmpty() &&
             !allowlistOnly && !blockRootPrompt && !playManaged && uiRules.isEmpty()
@@ -113,6 +115,10 @@ object GuardPolicy {
         val blocksWaUpdates get() = "updates" in waScreens
         /** רק הערוצים (הסטטוסים נשארים): כיסוי לבן על אזור הערוצים, ויציאה אם גוללים לתוכו. */
         val blocksWaChannels get() = "channels" in waScreens && !blocksWaUpdates
+        /** בתוך ערוץ (גם שנפתח מקישור / באותו מסך של צ'אט) — יציאה. חל כשהערוצים או טאב העדכונים חסומים. */
+        val blocksWaChannelInside get() = blocksWaUpdates || "channels" in waScreens
+        /** קבוצות (וקהילות) חסומות — רק צ'אטים פרטיים. */
+        val blocksWaGroups get() = "groups" in waScreens
     }
 
     enum class Block { APP, SCREEN }
@@ -236,6 +242,7 @@ object GuardPolicy {
             inAppBrowserPkgs = o.optJSONArray("inapp_browser")
                 ?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }.toSet() }
                 ?: emptySet(),
+            waChat = WaChats.parse(o.optJSONObject("wa_chat")),
         )
     }
 

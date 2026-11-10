@@ -147,8 +147,9 @@ OPTIONS: tuple[Option, ...] = (
            screens=tuple((p, ("status.playback", "StatusPlayback", "statusplayback")) for p in WA),
            wa_screens=("status",), popular=True, needs_guard=True),
     Option("whatsapp_channels", "messaging", "ערוצים בוואטסאפ",
-           "הערוצים בוואטסאפ (Channels) נחסמים — אי אפשר לפתוח ערוץ או את מדריך הערוצים. נאכף בטלפון "
-           "עצמו (מגן FilterPhone). הצ'אטים, הקבוצות והשיחות ממשיכים כרגיל.",
+           "הערוצים בוואטסאפ (Channels) נחסמים — אי אפשר לפתוח ערוץ או את מדריך הערוצים. גם ערוץ שנפתח "
+           "מקישור: המגן מזהה שזה ערוץ (לפי המסך) ויוצא ממנו. נאכף בטלפון עצמו (מגן FilterPhone). הצ'אטים, "
+           "הקבוצות והשיחות ממשיכים כרגיל.",
            screens=tuple((p, ("newsletter", "Newsletter")) for p in WA),
            wa_screens=("channels",), needs_guard=True),
     Option("whatsapp_updates", "messaging", "טאב העדכונים בוואטסאפ (סטטוסים + ערוצים)",
@@ -157,6 +158,12 @@ OPTIONS: tuple[Option, ...] = (
            screens=tuple((p, ("status.playback", "StatusPlayback", "statusplayback", "newsletter", "Newsletter"))
                          for p in WA),
            wa_screens=("updates", "status", "channels"), popular=True, needs_guard=True),
+    Option("whatsapp_groups", "messaging", "קבוצות בוואטסאפ",
+           "רק צ'אטים פרטיים: כשנכנסים לקבוצה (או לקבוצה בתוך קהילה) המגן מזהה שזו קבוצה ומחזיר מיד אחורה. "
+           "צ'אטים עם אנשים, שיחות קוליות ושיחות וידאו ממשיכים כרגיל. נאכף בטלפון עצמו (מגן FilterPhone).",
+           wa_screens=("groups",), needs_guard=True,
+           warn="הודעות מקבוצות עדיין מגיעות כהתראה בטלפון (בלי אפשרות להיכנס לקבוצה). כדי שלא יגיעו בכלל — "
+                "להשתיק או לצאת מהקבוצות בוואטסאפ."),
     Option("whatsapp_ai", "messaging", "בינה מלאכותית בוואטסאפ (Meta AI)",
            "הכפתור של Meta AI בוואטסאפ מכוסה, ואי אפשר להיכנס למסך הבינה המלאכותית — ברגע שנפתח, מגן "
            "FilterPhone מחזיר אחורה. הצ'אטים, השיחות והקבוצות ממשיכים כרגיל. נאכף בטלפון עצמו.",
@@ -578,6 +585,19 @@ UI_RULES: dict[str, list[dict]] = {
          "action": "back", "message": "הבינה המלאכותית חסומה על ידי FilterPhone"},
     ],
 }
+
+# זיהוי סוג השיחה בוואטסאפ (WaChats בטלפון): ערוץ / קבוצה / פרטי — לפי מזהי רכיבים וכותרת השיחה.
+# נשלח רק כשערוצים / טאב העדכונים / קבוצות חסומים. כשוואטסאפ משנה מזהה או נוסח — מעדכנים כאן, בלי גרסה.
+WA_CHAT_SIGNALS: dict[str, list[str]] = {
+    "channel_ids": ["newsletter"],
+    "follower_words": ["עוקבים", "עוקבות", "followers", "follower"],
+    "channel_exact": ["ערוץ", "channel", "עקוב", "follow"],
+    "group_ids": ["name_in_group"],
+    "group_texts": ["מידע על הקבוצה", "למידע על הקבוצה", "group info", "פרטי הקבוצה"],
+    "you_words": ["את/ה", "אתה", "את", "you"],
+    "conversation_ids": ["conversation_contact", "conversation_title", "conversation_header", ":id/entry"],
+}
+WA_CHAT_SCREENS = ("channels", "updates", "groups")
 
 # מנהל מכשיר (Device Owner) — מה נאכף כשהאפליקציה מוגדרת כמנהלת המכשיר. רק יכולות רשמיות
 # של DevicePolicyManager. במכשיר שאינו Device Owner — אין לזה השפעה (ומוצג ככזה בממשק).
@@ -1204,7 +1224,7 @@ class Compiled:
     def needs_accessibility(self) -> bool:
         """מסכים, הגנות, כללי ממשק וחסימת מילים — רק בנגישות. חסימת אפליקציות — גם מנהל מכשיר (הסתרה)."""
         return bool(self.screens or self.protections or self.keywords.get("enabled") or self.ui_rules
-                    or self.inapp_browser)
+                    or self.inapp_browser or self.wa_screens)
 
     def _protections_json(self) -> dict:
         """ההגדרות של כל הגנה בטלפון. "כיסוי לבן" (wa_profile_mask) = mask בתוך wa_profile_photo."""
@@ -1231,6 +1251,8 @@ class Compiled:
             # רק כשיש כללים — מדיניות בלי כללים נשארת זהה בבייט (בלי גרסה חדשה לכל המכשירים)
             **({"ui_rules": list(self.ui_rules)} if self.ui_rules else {}),
             **({"inapp_browser": list(self.inapp_browser)} if self.inapp_browser else {}),
+            # זיהוי ערוץ / קבוצה בוואטסאפ — רק כשחוסמים אותם (אחרת המדיניות נשארת זהה בבייט)
+            **({"wa_chat": WA_CHAT_SIGNALS} if set(self.wa_screens) & set(WA_CHAT_SCREENS) else {}),
             **({"block_root_prompt": True} if "block_root_prompt" in self.protections else {}),
             # רק כשיש — כדי שמדיניות בלי פתיחה זמנית תישאר זהה (בלי גרסה חדשה לכל המכשירים)
             **({"temp_allow": list(self.temp_allow)} if self.temp_allow else {}),
