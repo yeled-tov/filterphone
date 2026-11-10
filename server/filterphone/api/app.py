@@ -45,7 +45,7 @@ from ..proxy import serp
 from ..settings import get_settings
 from . import db, gpu, notify, observe, perms, security
 from .bot import BotDesk
-from .catalog import DEFAULT_OPTIONS, admin_catalog, public_catalog, resolve_keywords
+from .catalog import DEFAULT_OPTIONS, admin_catalog, clean_package, public_catalog, resolve_keywords
 from .fetch import FetchError, fetch_image
 from .playinfo import PlayCatalog, PlayError, PlayInfo, play_match
 from .security import RateLimiter
@@ -758,6 +758,12 @@ class Decision(BaseModel):
     admin_note: str = Field(default="", max_length=1000)
     app_package: str | None = Field(default=None, max_length=200)   # בקשת אפליקציה: שם החבילה (אם חסר)
     add_app: bool | None = None                                     # False — לאשר בלי להוסיף לחנות
+    app_scope: str | None = Field(default=None, pattern="^(device|store)$")   # device — רק ללקוח הזה
+
+
+class DeviceAppIn(BaseModel):
+    package: str = Field(min_length=3, max_length=200)
+    title: str = Field(default="", max_length=120)
 
 
 class RejectIn(BaseModel):
@@ -1467,7 +1473,7 @@ def _routes(app: FastAPI) -> None:
             results = request.app.state.playcatalog.search(q)
         except PlayError as e:
             raise ApiError(502, "Google Play לא ענה כרגע — נסו שוב") from e
-        in_store = {a["package"] for a in svc.managed_apps()}
+        in_store = {a["package"] for a in svc.managed_apps(public_only=True)}
         return {"results": [{**r, "in_store": r["package"] in in_store} for r in results]}
 
     @app.get("/v1/admin/play/app/{package}")
@@ -1538,6 +1544,36 @@ def _routes(app: FastAPI) -> None:
         n = svc.clear_passthrough(d["vpn_ip"])
         svc.audit(admin["username"], "reset_apps", f"device:{device_id}", str(n))
         return {"cleared": n}
+
+    # --- "מותאם אישית": אפליקציה שאושרה רק למכשיר הזה (בטאב משלה בחנות שבטלפון) ---
+
+    @app.get("/v1/admin/devices/{device_id}/apps")
+    def device_apps(device_id: int, svc: SvcDep, _: AdminRow):
+        return {"apps": [{"package": a["package"], "label": a["label"], "icon_url": a["icon_url"],
+                          "added_by": a["added_by"], "granted_at": a["granted_at"]}
+                         for a in svc.private_apps(device_id)]}
+
+    @app.post("/v1/admin/devices/{device_id}/apps", status_code=201)
+    def device_app_grant(device_id: int, body: DeviceAppIn, request: Request, svc: SvcDep, admin: AdminRow):
+        catalog = request.app.state.playcatalog
+        pkg = clean_package(body.package.strip()) or ""
+        if not pkg and body.package.strip():
+            # שם במקום שם חבילה — מחפשים ב-Google Play (רק התאמה ברורה)
+            try:
+                pkg = play_match(catalog.search(body.package.strip()), body.package.strip())
+            except PlayError:
+                pkg = ""
+            if not pkg:
+                raise ApiError(400, "לא נמצאה ב-Google Play — הזינו את שם החבילה (למשל com.example.app)")
+        try:
+            info = catalog.app(pkg) or {}
+        except PlayError:
+            info = {}
+        return svc.grant_device_app(admin["username"], device_id, pkg, info, body.title)
+
+    @app.delete("/v1/admin/devices/{device_id}/apps/{package}", status_code=204)
+    def device_app_revoke(device_id: int, package: str, svc: SvcDep, admin: AdminRow):
+        svc.revoke_device_app(admin["username"], device_id, package)
 
     @app.post("/v1/admin/devices/{device_id}/temp-open")
     def admin_temp_open(device_id: int, body: TempOpenIn, svc: SvcDep, admin: AdminRow, parent_code: ParentCode = None):

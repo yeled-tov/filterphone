@@ -373,8 +373,22 @@ ALTER TABLE requests ADD COLUMN app_package TEXT NOT NULL DEFAULT '';
 ALTER TABLE requests ADD COLUMN app_title TEXT NOT NULL DEFAULT '';
 """
 
+# גרסה 22 — אפליקציות "מותאמות אישית": אפליקציה שאושרה רק ללקוח מסוים (כמו אתר שנפתח רק לו).
+# private=1 — לא בחנות הכללית; מופיעה רק למכשירים שב-managed_app_devices, בטאב "מותאם אישית".
+_V22 = """
+ALTER TABLE managed_apps ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE managed_app_devices (
+    app_id     INTEGER NOT NULL REFERENCES managed_apps(id) ON DELETE CASCADE,
+    device_id  INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    added_by   TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (app_id, device_id)
+);
+CREATE INDEX managed_app_devices_device ON managed_app_devices(device_id);
+"""
+
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16,
-                         _V17, _V18, _V19, _V20, _V21]
+                         _V17, _V18, _V19, _V20, _V21, _V22]
 VERSION = len(MIGRATIONS)
 
 

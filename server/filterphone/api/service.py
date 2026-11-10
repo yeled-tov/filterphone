@@ -78,6 +78,8 @@ MAX_KOSHER_CERTS = 20
 
 # ---- החנות
 STORE_SEED_VERSION = 4
+# הטאב בחנות שבטלפון לאפליקציות שאושרו רק ללקוח הזה (managed_apps.private + managed_app_devices)
+PRIVATE_CATEGORY = "מותאם אישית"
 STORE_MEDIA_TTL_S = 30 * 86400          # תמונות חנות מסוננות נשמרות חודש (כתובת חדשה = קובץ חדש)
 STORE_MEDIA_MAX_BYTES = 3_000_000
 AVATAR_MAX_BYTES = 6_000_000            # התמונה שהלקוח בחר (לפני הקטנה)
@@ -497,7 +499,7 @@ class Services:
 
     def _checksum(self, row: sqlite3.Row) -> str:
         comp = self.compiled(row)
-        return policy_checksum(row["level"], comp, self._allowlist(comp))
+        return policy_checksum(row["level"], comp, self._allowlist(comp, row["id"]))
 
     def bump_catalog(self) -> int:
         """אחרי שינוי בחנות (מחוץ לטרנזקציה של השינוי — כדי שהרשימה המאושרת כבר תראה אותו)."""
@@ -666,22 +668,26 @@ class Services:
     def device_policy(self, row: sqlite3.Row) -> dict:
         """המדיניות לטלפון, עם גרסה וטביעה (הטלפון מאשר את הגרסה שהחיל)."""
         comp = self.compiled(row)
-        return {**comp.device_json(), "allowlist": self._allowlist(comp), "version": row["policy_version"],
+        return {**comp.device_json(), "allowlist": self._allowlist(comp, row["id"]), "version": row["policy_version"],
                 "updated_at": row["policy_updated_at"], "checksum": row["policy_checksum"],
                 "revision": row["policy_revision"]}
 
     def _approved_packages(self) -> list[str]:
         """האפליקציות המאושרות למצב "רשימה לבנה": הקטלוג + Chrome (דפדפן הסינון). החיוניות (מסך בית,
         חייגן, הגדרות, מקלדת, FilterPhone) מוגנות בטלפון עצמו ולא נחסמות גם בלעדיהן."""
-        pkgs = {a["package"] for a in self.managed_apps(enabled_only=True)}
+        pkgs = {a["package"] for a in self.managed_apps(enabled_only=True, public_only=True)}
         pkgs.add("com.android.chrome")
         # אפליקציית המנהל — מותקנת רק במכשיר המנהל ודורשת כניסת מנהל; כאן רק כדי שלא תוסתר שם
         pkgs.add(CRM_PACKAGE)
         return sorted(pkgs)
 
-    def _allowlist(self, comp: Compiled) -> dict:
+    def _allowlist(self, comp: Compiled, device_id: int | None = None) -> dict:
         # מסלול (ניווט בלבד / בלי אינטרנט) — הרשימה שלו; אחרת הקטלוג + Chrome
         apps = list(comp.allowlist_apps) if comp.allowlist_apps is not None else self._approved_packages()
+        if device_id is not None:
+            # אפליקציות שאושרו רק ללקוח הזה ("מותאם אישית") — מאושרות אצלו גם במסלול מצמצם (המנהל אישר במפורש)
+            # (בסוף, ורק מה שחסר — כך למכשיר בלי מותאמות אישית הרשימה והטביעה לא משתנות)
+            apps = apps + [p for p in dict.fromkeys(a["package"] for a in self.private_apps(device_id)) if p not in apps]
         out = {"enabled": bool(comp.dpc.get("approved_apps_only", False)), "apps": apps}
         if "play_managed" in comp.protections:
             out["titles"] = self._approved_titles(set(apps))      # לזיהוי עמוד של אפליקציה מאושרת ב-Play
@@ -1275,12 +1281,12 @@ class Services:
             "today": {"blocked": today.get("block", 0), "painted": today.get("replace", 0),
                       "sites": today.get("site", 0)},
             "blocks": summary(settings),
-            "device_policy": {**comp.device_json(), "allowlist": self._allowlist(comp),
+            "device_policy": {**comp.device_json(), "allowlist": self._allowlist(comp, row["id"]),
                               "version": row["policy_version"], "updated_at": row["policy_updated_at"],
                               "checksum": row["policy_checksum"], "revision": row["policy_revision"]},
             "apps_report_needed": not row["apps_at"] or db.now() - row["apps_at"] > 86400,
-            "managed_apps": self.device_managed_apps(settings.track),
-            "store_categories": store_seed()["categories"],     # סדר הטאבים בחנות
+            "managed_apps": self.device_managed_apps(settings.track, row["id"]),
+            "store_categories": [PRIVATE_CATEGORY, *store_seed()["categories"]],     # סדר הטאבים בחנות
             "heartbeat_interval_s": self.cfg.heartbeat_interval_s,
         })
         return out
@@ -1360,7 +1366,7 @@ class Services:
             out["windows"] = self.windows_controls(fresh, want_key=raw.get("want_removal_key") is True)
         elif fresh["status"] == "active":
             # קטלוג מאושר (לפי מסלול הסינון); required יותקנו אוטומטית במנהל מכשיר
-            out["managed_apps"] = self.device_managed_apps(DeviceSettings.load(fresh["policy"]).track)
+            out["managed_apps"] = self.device_managed_apps(DeviceSettings.load(fresh["policy"]).track, fresh["id"])
             self.clear_account_passthrough(fresh["vpn_ip"])
         return out
 
@@ -1581,15 +1587,26 @@ class Services:
                           (level, settings.dump(), dev["id"]))
             admin_note = security.clean_text(decision.get("admin_note") or "", 500)
             app_line = ""
+            granted = False                             # אושרה רק לו ("מותאם אישית") — גרסה חדשה רק לו
             if (req["app_package"] or req["app_title"]) and decision.get("add_app") is not False:
                 # בקשת אפליקציה: האישור מוסיף אותה לחנות (וכך גם ל"מאושרות" — Play המנוהל פותח את ההתקנה)
                 pkg = clean_package(str(decision.get("app_package") or req["app_package"] or "")) or ""
                 if not pkg:
                     raise ApiError(400, f"חסר שם החבילה של '{req['app_title'] or 'האפליקציה'}' — הזינו אותו "
                                         "(למשל com.example.app), או אשרו בלי להוסיף לחנות")
-                label = self._add_store_app(c, admin, pkg, decision.get("app_info") or {}, req["app_title"])
-                app_line = (f"✅ {label} אושרה ונוספה לחנות FilterPhone — אפשר להתקין אותה עכשיו "
-                            "(מהחנות באפליקציה, או מ-Google Play).")
+                if decision.get("app_scope") == "device":
+                    # רק ללקוח הזה — "מותאם אישית" (כמו אתר שנפתח רק לו)
+                    label, public = self._grant_device_app(c, admin, dev["id"], pkg, decision.get("app_info") or {},
+                                                           req["app_title"])
+                    granted = not public
+                    app_line = (f"✅ {label} אושרה ונוספה לחנות FilterPhone — אפשר להתקין אותה עכשיו "
+                                "(מהחנות באפליקציה, או מ-Google Play).") if public else (
+                        f"✅ {label} אושרה עבורך — היא בחנות FilterPhone בטאב 'מותאם אישית', ואפשר להתקין "
+                        "אותה עכשיו (מהחנות באפליקציה, או מ-Google Play).")
+                else:
+                    label = self._add_store_app(c, admin, pkg, decision.get("app_info") or {}, req["app_title"])
+                    app_line = (f"✅ {label} אושרה ונוספה לחנות FilterPhone — אפשר להתקין אותה עכשיו "
+                                "(מהחנות באפליקציה, או מ-Google Play).")
             outcome = ""
             if req["kind"] == "change":
                 # מה השתנה בפועל — ללקוח (באפליקציה, ובוואטסאפ אם הבקשה הגיעה מהבוט)
@@ -1610,7 +1627,9 @@ class Services:
             if req["kind"] == "join":
                 # אם WireGuard נכשל — הכול מתבטל, והבקשה נשארת ממתינה
                 self.wg.add_peer(new["public_key"], new["preshared_key"], new["vpn_ip"])
-        if app_line:
+        if granted:
+            self.bump_device(new["id"])                 # רק המכשיר הזה מקבל את הרשימה המאושרת החדשה
+        elif app_line:
             self.bump_catalog()                         # האפליקציה בחנות — הטלפונים מקבלים את הרשימה המאושרת
         self.push_device(new)
         log.info("request %s approved by %s (device %s, level %s)", request_id, admin, new["id"], level)
@@ -1920,6 +1939,8 @@ class Services:
                       "by": r["pause_by"]} if r["pause_until"] else None,
             "unmanage_requested": bool(r["unmanage_at"]),
             "temp_opens": self.temp_opens(r),
+            "private_apps": [{"package": a["package"], "label": a["label"], "added_by": a["added_by"],
+                              "granted_at": a["granted_at"]} for a in self.private_apps(device_id)],
             "removal_ready": bool(r["removal_key"]),
         })
         return out
@@ -2447,24 +2468,42 @@ class Services:
 
     _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
-    def managed_apps(self, enabled_only: bool = False) -> list[dict]:
+    def managed_apps(self, enabled_only: bool = False, public_only: bool = False) -> list[dict]:
+        """הקטלוג. [public_only] — בלי ה"מותאמות אישית" (שאושרו רק ללקוחות מסוימים). לכל אפליקציה גם
+        device_count — לכמה מכשירים אושרה אישית (לתצוגה בדשבורד)."""
         with self.db() as c:
-            q = "SELECT * FROM managed_apps"
-            if enabled_only:
-                q += " WHERE enabled = 1"
-            q += " ORDER BY sort, label, package"
+            q = ("SELECT m.*, (SELECT COUNT(*) FROM managed_app_devices d WHERE d.app_id = m.id) AS device_count"
+                 " FROM managed_apps m")
+            where = [w for w, on in (("m.enabled = 1", enabled_only), ("m.private = 0", public_only)) if on]
+            if where:
+                q += " WHERE " + " AND ".join(where)
+            q += " ORDER BY m.sort, m.label, m.package"
             return [dict(r) for r in c.execute(q).fetchall()]
 
-    def device_managed_apps(self, track: str = "") -> list[dict]:
+    def private_apps(self, device_id: int) -> list[dict]:
+        """האפליקציות שאושרו רק למכשיר הזה (פעילות) — "מותאם אישית"."""
+        with self.db() as c:
+            return [dict(r) for r in c.execute(
+                "SELECT m.*, d.added_by, d.created_at AS granted_at FROM managed_apps m"
+                " JOIN managed_app_devices d ON d.app_id = m.id"
+                " WHERE d.device_id = ? AND m.private = 1 AND m.enabled = 1 ORDER BY m.label, m.package",
+                (device_id,)).fetchall()]
+
+    def device_managed_apps(self, track: str = "", device_id: int | None = None) -> list[dict]:
         """מה שהטלפון מקבל: רק אפליקציות מאושרות, עם שדות ההתקנה (בלי נתוני ניהול פנימיים).
-        מסלול סינון מצמצם: "ניווט בלבד" — רק אפליקציות הדרכים; "בלי אינטרנט" — כלום; "בלי וואטסאפ"."""
+        מסלול סינון מצמצם: "ניווט בלבד" — רק אפליקציות הדרכים; "בלי אינטרנט" — כלום; "בלי וואטסאפ".
+        [device_id] — גם האפליקציות שאושרו רק לו, בטאב "מותאם אישית" (המנהל אישר במפורש — גם במסלול מצמצם)."""
         out = []
-        for a in self.managed_apps(enabled_only=True):
-            if not store_allowed(track, a["package"]):
+        apps = [(a, False) for a in self.managed_apps(enabled_only=True, public_only=True)]
+        if device_id is not None:
+            apps += [(a, True) for a in self.private_apps(device_id)]
+        for a, private in apps:
+            if not private and not store_allowed(track, a["package"]):
                 continue
             # התמונות דרך השרת — אחרי מסנן התמונות (store_media), לא ישירות מהמקור
             shots = _json_list(a["screenshots"])
-            entry = {"package": a["package"], "label": a["label"], "category": a["category"],
+            entry = {"package": a["package"], "label": a["label"],
+                     "category": PRIVATE_CATEGORY if private else a["category"],
                      "note": a["note"], "description": a["description"],
                      "icon_url": self._media_url(a["id"], "icon", a["updated_at"]) if a["icon_url"] else "",
                      "screenshots": [self._media_url(a["id"], f"s{i}", a["updated_at"]) for i in range(len(shots))],
@@ -2511,13 +2550,21 @@ class Services:
         t = db.now()
         with self.db() as c, db.transaction(c):
             if app_id is None:
-                if c.execute("SELECT 1 FROM managed_apps WHERE package = ?", (pkg,)).fetchone():
+                ex = c.execute("SELECT id, private FROM managed_apps WHERE package = ?", (pkg,)).fetchone()
+                if ex is not None and ex["private"]:
+                    # הייתה "מותאמת אישית" ללקוחות מסוימים — עכשיו בחנות לכולם (הלקוחות שקיבלו — ממשיכים לראות)
+                    c.execute(f"UPDATE managed_apps SET {', '.join(f'{k} = ?' for k in fields)}, private = 0,"
+                              " updated_at = ? WHERE id = ?", (*fields.values(), t, ex["id"]))
+                    self.audit(admin, "app_public", f"app:{ex['id']}", pkg, c)
+                    app_id = ex["id"]
+                elif ex is not None:
                     raise ApiError(409, "האפליקציה כבר בקטלוג")
-                cols = ", ".join(fields) + ", created_at, updated_at"
-                cur = c.execute(f"INSERT INTO managed_apps ({cols}) VALUES ({', '.join('?' * (len(fields) + 2))})",
-                                (*fields.values(), t, t))
-                app_id = cur.lastrowid
-                self.audit(admin, "app_add", f"app:{app_id}", pkg, c)
+                if app_id is None:
+                    cols = ", ".join(fields) + ", created_at, updated_at"
+                    cur = c.execute(f"INSERT INTO managed_apps ({cols}) VALUES ({', '.join('?' * (len(fields) + 2))})",
+                                    (*fields.values(), t, t))
+                    app_id = cur.lastrowid
+                    self.audit(admin, "app_add", f"app:{app_id}", pkg, c)
             else:
                 if c.execute("SELECT 1 FROM managed_apps WHERE id = ?", (app_id,)).fetchone() is None:
                     raise ApiError(404, "אפליקציה לא נמצאה")
@@ -2533,11 +2580,12 @@ class Services:
     def _add_store_app(self, c: sqlite3.Connection, admin: str, pkg: str, info: dict, title: str = "") -> str:
         """מוסיף אפליקציה לחנות (בתוך טרנזקציה) — מפרטי Google Play אם יש; כבר בחנות — מוודא שהיא פעילה.
         אחרי ה-commit צריך bump_catalog() — הרשימה המאושרת נקראת בחיבור נפרד. מחזיר את השם שלה בחנות."""
-        row = c.execute("SELECT id, label, enabled FROM managed_apps WHERE package = ?", (pkg,)).fetchone()
+        row = c.execute("SELECT id, label, enabled, private FROM managed_apps WHERE package = ?", (pkg,)).fetchone()
         if row is not None:
-            if not row["enabled"]:
-                c.execute("UPDATE managed_apps SET enabled = 1, updated_at = ? WHERE id = ?", (db.now(), row["id"]))
-                self.audit(admin, "app_update", f"app:{row['id']}", f"{pkg} enabled (request)", c)
+            if not row["enabled"] or row["private"]:
+                c.execute("UPDATE managed_apps SET enabled = 1, private = 0, updated_at = ? WHERE id = ?",
+                          (db.now(), row["id"]))
+                self.audit(admin, "app_update", f"app:{row['id']}", f"{pkg} enabled / public (request)", c)
             return row["label"]
         shots = [u for u in (info.get("screenshots") or []) if isinstance(u, str) and u.startswith("https://")][:8]
         icon = info.get("icon") if isinstance(info.get("icon"), str) and info["icon"].startswith("https://") else ""
@@ -2552,6 +2600,70 @@ class Services:
              f"https://play.google.com/store/apps/details?id={pkg}", t, t)).lastrowid
         self.audit(admin, "app_add", f"app:{app_id}", f"{pkg} (request)", c)
         return label
+
+    # ------------------------------------------------------------ "מותאם אישית" — אפליקציה ללקוח אחד
+
+    def _grant_device_app(self, c: sqlite3.Connection, admin: str, device_id: int, pkg: str, info: dict,
+                          title: str = "") -> tuple[str, bool]:
+        """מאשר אפליקציה רק למכשיר הזה (בתוך טרנזקציה). כבר בחנות הכללית — אין מה להוסיף (public=True).
+        אחרי ה-commit צריך bump_device() — הרשימה המאושרת נקראת בחיבור נפרד. מחזיר (שם, האם בחנות הכללית)."""
+        row = c.execute("SELECT id, label, enabled, private FROM managed_apps WHERE package = ?", (pkg,)).fetchone()
+        t = db.now()
+        if row is not None and not row["private"]:
+            if not row["enabled"]:
+                c.execute("UPDATE managed_apps SET enabled = 1, updated_at = ? WHERE id = ?", (t, row["id"]))
+            return row["label"], True
+        if row is None:
+            shots = [u for u in (info.get("screenshots") or []) if isinstance(u, str) and u.startswith("https://")][:8]
+            icon = info.get("icon") if isinstance(info.get("icon"), str) and info["icon"].startswith("https://") else ""
+            label = security.clean_text(info.get("title") or title, 60) or pkg
+            app_id = c.execute(
+                "INSERT INTO managed_apps (package, label, category, note, description, icon_url, screenshots,"
+                " play_url, enabled, private, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,1,1,?,?)",
+                (pkg, label, category_for_genre(info.get("genre")),
+                 security.clean_text(info.get("summary") or "", 200, multiline=True),
+                 security.clean_text(info.get("description") or "", 2000, multiline=True), icon, json.dumps(shots),
+                 f"https://play.google.com/store/apps/details?id={pkg}", t, t)).lastrowid
+        else:
+            app_id, label = row["id"], row["label"]
+            if not row["enabled"]:
+                c.execute("UPDATE managed_apps SET enabled = 1, updated_at = ? WHERE id = ?", (t, app_id))
+        c.execute("INSERT OR IGNORE INTO managed_app_devices (app_id, device_id, added_by, created_at)"
+                  " VALUES (?,?,?,?)", (app_id, device_id, admin, t))
+        self.audit(admin, "app_grant", f"device:{device_id}", pkg, c)
+        return label, False
+
+    def bump_device(self, device_id: int) -> int:
+        """גרסת מדיניות חדשה למכשיר אחד (אחרי שינוי שנקרא בחיבור נפרד — למשל אפליקציה מותאמת אישית)."""
+        with self.db() as c, db.transaction(c):
+            return self.bump_policy(c, device_id)
+
+    def grant_device_app(self, admin: str, device_id: int, package: str, info: dict | None = None,
+                         title: str = "") -> dict:
+        pkg = clean_package(package or "")
+        if not pkg:
+            raise ApiError(400, "שם חבילה לא תקין (למשל com.example.app)")
+        with self.db() as c, db.transaction(c):
+            if c.execute("SELECT 1 FROM devices WHERE id = ?", (device_id,)).fetchone() is None:
+                raise ApiError(404, "מכשיר לא נמצא")
+            label, public = self._grant_device_app(c, admin, device_id, pkg, info or {}, title)
+        if not public:
+            self.bump_device(device_id)
+        return {"package": pkg, "label": label, "public": public}
+
+    def revoke_device_app(self, admin: str, device_id: int, package: str) -> None:
+        pkg = clean_package(package or "") or ""
+        with self.db() as c, db.transaction(c):
+            row = c.execute("SELECT m.id FROM managed_apps m JOIN managed_app_devices d ON d.app_id = m.id"
+                            " WHERE m.package = ? AND d.device_id = ?", (pkg, device_id)).fetchone()
+            if row is None:
+                raise ApiError(404, "האפליקציה לא מאושרת אישית למכשיר הזה")
+            c.execute("DELETE FROM managed_app_devices WHERE app_id = ? AND device_id = ?", (row["id"], device_id))
+            # מותאמת אישית שאף מכשיר כבר לא מחזיק — יוצאת מהקטלוג (בחנות הכללית — נשארת)
+            c.execute("DELETE FROM managed_apps WHERE id = ? AND private = 1 AND NOT EXISTS"
+                      " (SELECT 1 FROM managed_app_devices WHERE app_id = ?)", (row["id"], row["id"]))
+            self.audit(admin, "app_revoke", f"device:{device_id}", pkg, c)
+        self.bump_device(device_id)
 
     APK_KEEP = 2                        # כמה גרסאות לשמור לכל אפליקציה (הנוכחית + הקודמת)
 

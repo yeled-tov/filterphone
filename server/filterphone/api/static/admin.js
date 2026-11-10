@@ -711,6 +711,10 @@ function requestCard(r) {
   const appPkg = el("input", { class: "ltr", value: r.app_package || "",
     placeholder: "com.example.app — ריק: נחפש ב-Google Play לפי השם" });
   const appAdd = el("input", { type: "checkbox", checked: true });
+  // למי לאשר: רק ללקוח הזה ("מותאם אישית" — כמו אתר שנפתח רק לו) או לכל החנות
+  const appScope = el("select", { "aria-label": "למי לאשר את האפליקציה" },
+    [["device", "רק ללקוח הזה — בטאב 'מותאם אישית' בחנות שלו"], ["store", "לכל החנות — כל הלקוחות יראו אותה"]]
+      .map(([v, t]) => el("option", { value: v }, t)));
 
   const approve = async () => {
     if (payment.value === "unpaid") {
@@ -720,8 +724,11 @@ function requestCard(r) {
     await attempt(() => api(`/v1/admin/requests/${r.id}/approve`, { method: "POST", body: {
       level, options: [...selected], custom_hosts: lines(custom.value), payment: payment.value,
       paid_until: fromDateInput(until.value), admin_note: note.value,
-      ...(isApp ? { add_app: appAdd.checked, ...(appPkg.value.trim() ? { app_package: appPkg.value.trim() } : {}) } : {}),
-    } }), isApp && appAdd.checked ? "אושר — האפליקציה נוספה לחנות, והלקוח יכול להתקין אותה"
+      ...(isApp ? { add_app: appAdd.checked, app_scope: appScope.value,
+        ...(appPkg.value.trim() ? { app_package: appPkg.value.trim() } : {}) } : {}),
+    } }), isApp && appAdd.checked ? (appScope.value === "device"
+      ? "אושר — האפליקציה נוספה רק ללקוח הזה (טאב 'מותאם אישית'), והוא יכול להתקין אותה"
+      : "אושר — האפליקציה נוספה לחנות, והלקוח יכול להתקין אותה")
       : r.kind !== "join" ? "השינוי אושר והוחל"
       : r.platform === "windows" ? "אושר — החיבור נפתח. המחשב יתחבר ויפעיל את החסימה בתוך דקה."
       : "אושר — החיבור נפתח. הטלפון יתחבר בתוך דקה.");
@@ -763,7 +770,8 @@ function requestCard(r) {
       r.app_package ? el("div", { class: "ltr small" }, r.app_package) : null,
       pending ? el("div", { class: "stack tight" },
         el("label", {}, "שם החבילה (Google Play)", appPkg),
-        el("label", { class: "row gap" }, appAdd, "להוסיף לחנות FilterPhone באישור (ואז Play המנוהל מאפשר להתקין)"))
+        el("label", { class: "row gap" }, appAdd, "להוסיף לחנות FilterPhone באישור (ואז Play המנוהל מאפשר להתקין)"),
+        el("label", {}, "למי", appScope))
         : null));
   }
   if (r.note) parts.push(el("div", { class: "stack tight" }, el("b", { class: "small" }, "מה עוד הלקוח ביקש:"), el("div", { class: "note" }, r.note)));
@@ -782,7 +790,7 @@ function requestCard(r) {
       el("div", { class: "row end gap" },
         el("button", { class: "danger", onclick: reject }, "דחייה"),
         el("button", { class: "ok", onclick: approve }, r.kind === "join" ? "אישור ופתיחת החיבור"
-          : isApp ? "אישור והוספה לחנות" : "אישור השינוי")));
+          : isApp ? "אישור האפליקציה" : "אישור השינוי")));
   } else if (r.device_id) {
     parts.push(el("div", { class: "row end" }, el("a", { href: r.platform === "windows" ? `#/computers/${r.device_id}`
       : `#/devices/${r.device_id}` }, r.platform === "windows" ? "לדף המחשב ›" : "לדף המכשיר ›")));
@@ -980,6 +988,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
   const bypassCardEl = vpnBypassCard(d, patch);
   const maintenanceCardEl = maintenanceCard(d);
   const tempCardEl = tempOpenCard(d, id);
+  const customAppsCardEl = customAppsCard(d, id);
 
   // --- סטטיסטיקה ואירועים
   const statsCard = card("7 הימים האחרונים", null, statsBars(d.history));
@@ -1012,7 +1021,7 @@ async function viewDevice(id, query = new URLSearchParams()) {
   const tabs = [
     ["overview", "סקירה", [complianceCardEl, el("div", { class: "grid two" }, customerCard, logCard), maintenanceCardEl, tempCardEl]],
     ["blocks", "חסימות", [trackCardEl, webCardEl, levelCard, policyCard, customCard, keywordCardEl, safeBrowserCardEl]],
-    ["apps", "אפליקציות", [appsCard, appImagesCard, bypassCardEl, learnedCard, crmDeviceCard(d, id)]],
+    ["apps", "אפליקציות", [customAppsCardEl, appsCard, appImagesCard, bypassCardEl, learnedCard, crmDeviceCard(d, id)]],
     ["dpc", "מנהל מכשיר", [dpcCardEl]],
     ["activity", "פעילות", [el("div", { class: "grid two" }, statsCard, historyCard || card("היסטוריית בקשות", null, empty("אין בקשות."))), eventsCard]],
   ];
@@ -1637,6 +1646,34 @@ function capabilityChips(c) {
     items.map(([k, t]) => chip(t, c[k] ? "ok" : "")));
 }
 
+/**
+ * "מותאם אישית": אפליקציות שאושרו רק לטלפון הזה (כמו אתר שנפתח רק ללקוח) — בחנות שלו בטאב משלהן, ובמאושרות
+ * שלו בלבד (Play המנוהל מאפשר לו להתקין). לא מופיעות בחנות הכללית ולא אצל לקוחות אחרים.
+ */
+function customAppsCard(d, id) {
+  const list = d.private_apps || [];
+  const input = el("input", { class: "ltr grow", placeholder: "com.example.app — או שם האפליקציה כמו ב-Google Play" });
+  const add = async () => {
+    const v = input.value.trim();
+    if (!v) return;
+    const r = await attempt(() => api(`/v1/admin/devices/${id}/apps`, { method: "POST", body: { package: v } }));
+    toast(r.public ? `${r.label} כבר בחנות לכל הלקוחות — אין צורך להוסיף`
+      : `${r.label} אושרה רק ללקוח הזה — מופיעה אצלו בטאב "מותאם אישית"`);
+    render();
+  };
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+  return card("אפליקציות מותאמות אישית", "אפליקציה שמאשרים רק ללקוח הזה: מופיעה אצלו בחנות בטאב 'מותאם אישית', ו-Play המנוהל מאפשר לו להתקין אותה. לקוחות אחרים לא רואים אותה.",
+    list.length ? el("div", { class: "dpc-list" }, list.map((a) => el("div", { class: "app-row" },
+      el("div", { class: "grow" }, el("b", {}, a.label || a.package),
+        el("small", { class: "ltr" }, a.package), el("small", {}, `אושרה ${ago(a.granted_at)}${a.added_by ? ` · ${a.added_by}` : ""}`)),
+      el("button", { class: "ghost small", onclick: async () => {
+        if (!await confirmDialog(`להסיר את ${a.label || a.package}?`, "היא תצא מהחנות שלו ומהמאושרות (אם כבר מותקנת — לא נמחקת).", "הסרה", true)) return;
+        await attempt(() => api(`/v1/admin/devices/${id}/apps/${encodeURIComponent(a.package)}`, { method: "DELETE" }), "הוסרה");
+        render();
+      } }, "הסרה")))) : empty("אין אפליקציות מותאמות אישית ללקוח הזה."),
+    el("div", { class: "row gap" }, input, el("button", { class: "primary small", onclick: add }, "אישור ללקוח הזה")));
+}
+
 /** פתיחות זמניות (מהבוט או מכאן): מה פתוח ועד מתי, סגירה מוקדמת, ופתיחה מהירה של חנות Play / נקודה חמה. */
 function tempOpenCard(d, id) {
   const list = d.temp_opens || [];
@@ -1814,6 +1851,7 @@ async function viewApps() {
           : a.play_url ? "התקנה ועדכונים דרך Google Play" : "בלי קובץ — בקשה / התקנה ידנית",
           `עודכן ${date(a.updated_at)}`].filter(Boolean).join(" · "))),
       direct ? chip("APK אצלנו", "ok") : a.play_url ? chip("Google Play", "ok") : chip("ידני"),
+      a.private ? chip(`מותאם אישית · ${a.device_count || 0} לקוחות`, "violet") : null,
       sw("enabled", "מוצגת", "מופיעה בחנות בטלפונים"),
       direct ? sw("required", "חובה", "מותקנת אוטומטית בכל טלפון מנוהל") : null,
       el("button", { class: "ghost small", onclick: async () => {
