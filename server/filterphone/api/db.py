@@ -387,8 +387,17 @@ CREATE TABLE managed_app_devices (
 CREATE INDEX managed_app_devices_device ON managed_app_devices(device_id);
 """
 
+# גרסה 23 — "מקור APK": קישור (למשל מהאתר) שממנו השרת מוריד את הגרסה האחרונה של אפליקציה שמתארחת אצלנו
+# (FilterTube), בודק אותה ומגיש בחנות — הטלפונים מתקינים / מתעדכנים בלי שהמנהל יעלה קובץ ידנית.
+_V23 = """
+ALTER TABLE managed_apps ADD COLUMN apk_source TEXT NOT NULL DEFAULT '';
+ALTER TABLE managed_apps ADD COLUMN apk_source_etag TEXT NOT NULL DEFAULT '';
+ALTER TABLE managed_apps ADD COLUMN apk_source_checked INTEGER;
+ALTER TABLE managed_apps ADD COLUMN apk_source_error TEXT NOT NULL DEFAULT '';
+"""
+
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16,
-                         _V17, _V18, _V19, _V20, _V21, _V22]
+                         _V17, _V18, _V19, _V20, _V21, _V22, _V23]
 VERSION = len(MIGRATIONS)
 
 

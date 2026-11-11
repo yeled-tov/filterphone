@@ -157,3 +157,71 @@ def test_seed_upgrade_reaches_play_managed_phones(env):
     svc.seed_store()
     after = client.get("/v1/device", headers=dh).json()["device_policy"]
     assert after["version"] > before["version"] and "cn.wps.moffice_eng" in after["allowlist"]["apps"]
+
+
+def _source_download(data: bytes, etag: str = '"v1"'):
+    """מחליף את ההורדה מהמקור: כותב את [data] ומחזיר 200 (או 304 כשה-ETag לא השתנה)."""
+    import hashlib
+
+    def dl(url, sent_etag, dest):
+        if sent_etag and sent_etag == etag:
+            return 304, etag, ""
+        dest.write_bytes(data)
+        return 200, etag, hashlib.sha256(data).hexdigest()
+    return dl
+
+
+def test_filtertube_gets_its_apk_from_the_site_so_phones_can_install_and_update(env):
+    """FilterTube: במקום "בקשה מהמנהל" (בלי קובץ) — מקור APK מהאתר. השרת מוריד, בודק שזו אותה חבילה
+    ומגיש בחנות (url + sha256 + גרסה); גרסה חדשה במקור → עדכון בטלפונים."""
+    from pathlib import Path
+
+    from filterphone.api.service import FT_APK_SOURCE, FT_FULL
+    svc, client = env
+    h = admin_headers(client)
+    apps = {a["package"]: a for a in client.get("/v1/admin/apps", headers=h).json()["apps"]}
+    ft = apps[FT_FULL]
+    assert ft["apk_source"] == FT_APK_SOURCE                    # זריעה v5
+    mini = (Path(__file__).parent / "fixtures" / "mini.apk").read_bytes()     # org.example.kosher.notes 4207
+    # הקובץ במקור הוא חבילה אחרת — לא נשמר
+    svc._download_apk = _source_download(mini)
+    r = client.post(f"/v1/admin/apps/{ft['id']}/sync", headers=h).json()
+    assert r["status"] == "error" and "לא תואמת" in r["error"]
+    # אפליקציה עם מקור שהחבילה בו תואמת: נשמרת ומוגשת
+    client.post("/v1/admin/apps", headers=h, json={"package": "org.example.kosher.notes", "label": "פתקים",
+                                                    "apk_source": "https://example.com/notes.apk"})
+    notes = next(a for a in client.get("/v1/admin/apps", headers=h).json()["apps"]
+                 if a["package"] == "org.example.kosher.notes")
+    assert notes["apk_source"] == "https://example.com/notes.apk" and not notes["apk_url"]
+    r = client.post(f"/v1/admin/apps/{notes['id']}/sync", headers=h).json()
+    assert r["status"] == "updated" and r["version_code"] == 4207
+    notes = next(a for a in client.get("/v1/admin/apps", headers=h).json()["apps"] if a["id"] == notes["id"])
+    assert notes["apk_url"].endswith("/v1/apps/org.example.kosher.notes-4207.apk") and notes["version_code"] == 4207
+    assert notes["apk_source_etag"] == '"v1"' and notes["apk_source_error"] == ""
+    # אותו ETag — לא מורידים שוב
+    assert client.post(f"/v1/admin/apps/{notes['id']}/sync", headers=h).json()["status"] == "unchanged"
+    # עריכה בדשבורד (שולחת את כל השדות) לא מוחקת את המקור
+    body = {k: notes[k] for k in ("package", "label", "category", "note", "description", "icon_url", "play_url",
+                                  "apk_url", "apk_sha256", "version_code", "apk_source")}
+    assert client.patch(f"/v1/admin/apps/{notes['id']}", headers=h, json={**body, "label": "פתקים 2"}).status_code == 200
+    again = next(a for a in client.get("/v1/admin/apps", headers=h).json()["apps"] if a["id"] == notes["id"])
+    assert again["apk_source"] == "https://example.com/notes.apk" and again["label"] == "פתקים 2"
+    bad = client.patch(f"/v1/admin/apps/{notes['id']}", headers=h, json={**body, "apk_source": "http://x.com/a.apk"})
+    assert bad.status_code == 400
+
+
+def test_apk_sources_are_checked_only_when_due(env):
+    from pathlib import Path
+    svc, client = env
+    h = admin_headers(client)
+    mini = (Path(__file__).parent / "fixtures" / "mini.apk").read_bytes()
+    calls = []
+    dl = _source_download(mini)
+    svc._download_apk = lambda url, etag, dest: (calls.append(url), dl(url, etag, dest))[1]
+    client.post("/v1/admin/apps", headers=h, json={"package": "org.example.kosher.notes", "label": "פתקים",
+                                                    "apk_source": "https://example.com/notes.apk"})
+    with svc.db() as c:                          # FilterTube — שלא יוריד בבדיקה הזו
+        c.execute("UPDATE managed_apps SET apk_source = '' WHERE package = 'com.filtertube.app'")
+    svc.sync_apk_sources()
+    svc.sync_apk_sources()                       # עוד לא הגיע הזמן — לא בודקים שוב
+    assert calls == ["https://example.com/notes.apk"]

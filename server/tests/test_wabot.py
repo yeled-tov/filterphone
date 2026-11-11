@@ -213,6 +213,9 @@ def test_unlisted_answers_and_product_guide_reach_the_bot(env):
     cfg = client.get("/v1/bot/config", headers=auth(BOT)).json()
     assert "אנדרואיד" in cfg["guide"] and "אייפון" in cfg["guide"]
     assert cfg["links"]["download"] in cfg["guide"] and cfg["links"]["site"] in cfg["guide"]
+    # FilterTube — קישור משלה (לא של FilterPhone) כשמבקשים את היוטיוב
+    assert cfg["links"]["filtertube_download"] in cfg["guide"] and "FilterTube" in cfg["guide"]
+    assert cfg["links"]["filtertube_download"] != cfg["links"]["download"]
     for must in ("Play Protect", "חסימה אוטומטית", "שיאומי", "חשבון", "צילום מסך", "3 ניסיונות"):
         assert must in cfg["install_guide"], must
     assert client.put("/v1/admin/wabot", headers=h,

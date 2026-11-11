@@ -142,6 +142,18 @@ async def _keep_in_sync(svc: Services) -> None:
                 log.error("adguard sync failed: %s", e)
 
 
+async def _apk_sources(svc: Services) -> None:
+    """מקורות APK (FilterTube מהאתר): בודקים גרסה חדשה דקה אחרי העלייה, ואז כל 10 דקות את מה שהגיע זמנו
+    (כל אפליקציה — פעם ב-6 שעות). בחוט נפרד — הורדה איטית לא מעכבת את הסנכרון."""
+    await asyncio.sleep(60)
+    while True:
+        try:
+            await asyncio.to_thread(svc.sync_apk_sources)
+        except Exception as e:
+            log.error("apk sources sync failed: %s", e)
+        await asyncio.sleep(600)
+
+
 async def _web_worker(desk: WebDesk) -> None:
     """רמות הגלישה: הבוט בודק אתרים מהתור, בקשות "שליחה לבדיקה" נקלטות, ורשימת האתרים למבוגרים
     מתעדכנת פעם ביום. כל תקלה — נרשמת, והלולאה ממשיכה."""
@@ -185,10 +197,12 @@ def _refresh_list(desk: WebDesk) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(_keep_in_sync(app.state.svc))
+    apk_task = asyncio.create_task(_apk_sources(app.state.svc))
     web_task = asyncio.create_task(_web_worker(app.state.web)) if app.state.web_worker else None
     yield
     if web_task is not None:
         web_task.cancel()
+    apk_task.cancel()
     task.cancel()
     app.state.svc.dirty.set()           # מעיר את החוט שמחכה, כדי שהכיבוי לא יתעכב
     app.state.svc.pool.close()
@@ -439,6 +453,7 @@ class ManagedAppIn(BaseModel):
     required: bool = False
     enabled: bool = True
     sort: int = 0
+    apk_source: str | None = Field(default=None, max_length=500)   # קישור להורדה — השרת מושך גרסה אחרונה
 
 
 class TransferIn(BaseModel):
@@ -1531,6 +1546,11 @@ def _routes(app: FastAPI) -> None:
     @app.patch("/v1/admin/apps/{app_id}")
     def update_app(app_id: int, body: ManagedAppIn, svc: SvcDep, admin: AdminRow):
         return svc.save_managed_app(admin["username"], body.model_dump(), app_id)
+
+    @app.post("/v1/admin/apps/{app_id}/sync")
+    def sync_app_source(app_id: int, svc: SvcDep, admin: AdminRow, force: bool = False):
+        """בדיקה עכשיו מול מקור ה-APK (בלי לחכות לבדיקה האוטומטית)."""
+        return svc.sync_apk_source(app_id, admin["username"], force=force)
 
     @app.delete("/v1/admin/apps/{app_id}", status_code=204)
     def delete_app(app_id: int, svc: SvcDep, admin: AdminRow):

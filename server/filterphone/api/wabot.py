@@ -189,7 +189,8 @@ class WaBot:
         on = s.get("product_guide", True)
         s["guide"] = botguide.product_text() if on else ""
         s["install_guide"] = botguide.install_text() if on else ""
-        s["links"] = {"site": botguide.SITE_URL, "install": botguide.INSTALL_URL, "download": botguide.DOWNLOAD_URL}
+        s["links"] = {"site": botguide.SITE_URL, "install": botguide.INSTALL_URL, "download": botguide.DOWNLOAD_URL,
+                      "filtertube": botguide.FILTERTUBE_URL, "filtertube_download": botguide.FILTERTUBE_DOWNLOAD_URL}
         return s
 
     # ------------------------------------------------------------ מצב (מהבוט)

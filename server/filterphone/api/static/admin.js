@@ -1849,7 +1849,10 @@ async function viewApps() {
       el("div", { class: "grow" }, el("b", {}, a.label || a.package), el("small", { class: "ltr" }, a.package),
         el("small", {}, [a.category, direct ? `גרסה ${a.version_name || a.version_code} · התקנה ישירה`
           : a.play_url ? "התקנה ועדכונים דרך Google Play" : "בלי קובץ — בקשה / התקנה ידנית",
-          `עודכן ${date(a.updated_at)}`].filter(Boolean).join(" · "))),
+          `עודכן ${date(a.updated_at)}`].filter(Boolean).join(" · ")),
+        a.apk_source ? el("small", { class: a.apk_source_error ? "error" : "muted" },
+          a.apk_source_error ? `מקור APK: ${a.apk_source_error}`
+            : `מקור APK: עדכון אוטומטי מהקישור${a.apk_source_checked ? ` · נבדק ${ago(a.apk_source_checked)}` : " · עוד לא נבדק"}`) : null),
       direct ? chip("APK אצלנו", "ok") : a.play_url ? chip("Google Play", "ok") : chip("ידני"),
       a.private ? chip(`מותאם אישית · ${a.device_count || 0} לקוחות`, "violet") : null,
       sw("enabled", "מוצגת", "מופיעה בחנות בטלפונים"),
@@ -1864,6 +1867,24 @@ async function viewApps() {
         const shots = el("textarea", { rows: 4, class: "ltr",
           value: (() => { try { return JSON.parse(a.screenshots || "[]").join("\n"); } catch { return ""; } })(),
           placeholder: "כתובת צילום מסך בכל שורה (https)" });
+        // מקור APK: קישור להורדה (למשל מהאתר) — השרת מוריד את הגרסה האחרונה, והטלפונים מתקינים / מתעדכנים
+        const source = el("input", { class: "ltr", value: a.apk_source || "", placeholder: "https://.../app.apk" });
+        const syncNow = el("button", { type: "button", class: "ghost small", onclick: async () => {
+          syncNow.disabled = true;
+          try {
+            if ((source.value.trim() || "") !== (a.apk_source || "")) {
+              toast("קודם שומרים את הקישור — ואז בודקים", true);
+              return;
+            }
+            const r = await api(`/v1/admin/apps/${a.id}/sync`, { method: "POST" });
+            toast(r.status === "updated" ? `עודכן לגרסה ${r.version_name || r.version_code} — הטלפונים יקבלו עדכון`
+              : r.status === "unchanged" ? "אין גרסה חדשה במקור" : r.error || "שגיאה", r.status === "error");
+          } catch (e) {
+            toast(e.message, true);
+          } finally {
+            syncNow.disabled = false;
+          }
+        } }, "בדיקת עדכון עכשיו");
         // משיכה מ-Google Play: אייקון, צילומי מסך ותיאור עדכניים (השם והקטגוריה נשארים, אם כבר מולאו)
         const pull = el("button", { type: "button", class: "ghost small", onclick: async () => {
           pull.disabled = true;
@@ -1887,10 +1908,13 @@ async function viewApps() {
           el("label", {}, "שם", l), el("label", {}, "קטגוריה", c), el("label", {}, "תיאור קצר (רשימה)", n),
           el("label", {}, "תיאור מלא (עמוד האפליקציה)", desc), el("label", {}, "אייקון (URL)", icon),
           el("label", {}, "קישור Google Play", play),
+          el("label", {}, "מקור APK — קישור להורדה (השרת מוריד את הגרסה האחרונה ובודק עדכון כל 6 שעות; הטלפונים מתקינים ומתעדכנים מהחנות, גם כשההתקנות חסומות)", source),
+          a.apk_source ? el("div", { class: "row gap" }, syncNow) : null,
           el("label", {}, "צילומי מסך (URL בכל שורה, עד 8)", shots)), "שמירה")) return;
         const screenshots = lines(shots.value).filter((u) => u.startsWith("https://")).slice(0, 8);
         await save(a, { label: l.value, category: c.value, note: n.value, description: desc.value,
-          icon_url: icon.value.trim(), play_url: play.value.trim(), screenshots }, "נשמר");
+          icon_url: icon.value.trim(), play_url: play.value.trim(), screenshots, apk_source: source.value.trim() },
+          "נשמר");
       } }, "עריכה"),
       el("button", { class: "danger small", onclick: async () => {
         if (!await confirmDialog(`להסיר את ${a.label || a.package} מהחנות?`, "הטלפונים לא יציעו אותה יותר. אפליקציה שכבר הותקנה נשארת.", "הסרה", true)) return;

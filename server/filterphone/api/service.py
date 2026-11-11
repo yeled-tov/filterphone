@@ -26,6 +26,8 @@ import secrets
 import sqlite3
 import threading
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -77,7 +79,11 @@ KOSHER_PROVIDERS = {"netfree": "נטפרי", "rimon": "רימון / אתרוג",
 MAX_KOSHER_CERTS = 20
 
 # ---- החנות
-STORE_SEED_VERSION = 4
+STORE_SEED_VERSION = 5
+# FilterTube: קישור ההורדה שבאתר — השרת מושך ממנו את הגרסה האחרונה (מקור APK) ומגיש אותה בחנות
+FT_APK_SOURCE = "https://filter-tube-52d8e.web.app/download/FilterTube.apk"
+APK_SOURCE_EVERY_S = 6 * 3600           # כל כמה זמן בודקים אם יש גרסה חדשה במקור
+APK_SOURCE_MAX = 300 * 1024 * 1024
 # הטאב בחנות שבטלפון לאפליקציות שאושרו רק ללקוח הזה (managed_apps.private + managed_app_devices)
 PRIVATE_CATEGORY = "מותאם אישית"
 STORE_MEDIA_TTL_S = 30 * 86400          # תמונות חנות מסוננות נשמרות חודש (כתובת חדשה = קובץ חדש)
@@ -2194,6 +2200,8 @@ class Services:
                 self._seed_store_v3(c)
             if have < 4:
                 self._seed_store_v4(c)
+            if have < 5:
+                self._seed_store_v5(c)
             c.execute("INSERT INTO meta (key, value) VALUES ('store_seed_version', ?)"
                       " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(STORE_SEED_VERSION),))
         log.info("store seeded up to version %d", STORE_SEED_VERSION)
@@ -2288,6 +2296,96 @@ class Services:
         for pkg, (old, new) in seed.get("moves_v4", {}).items():
             c.execute("UPDATE managed_apps SET category = ?, updated_at = ? WHERE package = ? AND category = ?",
                       (new, t, pkg, old))
+
+    @staticmethod
+    def _seed_store_v5(c: sqlite3.Connection) -> None:
+        """FilterTube: מקור ה-APK = קישור ההורדה שבאתר. בלי זה החנות הציגה "בקשה מהמנהל" (אין קובץ) —
+        עכשיו השרת מוריד את הגרסה האחרונה, והטלפונים מתקינים ומתעדכנים (גם כשההתקנות חסומות — מנהל מכשיר).
+        רק אם המנהל לא הגדיר מקור משלו."""
+        c.execute("UPDATE managed_apps SET apk_source = ?, updated_at = ? WHERE package = ? AND apk_source = ''",
+                  (FT_APK_SOURCE, db.now(), FT_FULL))
+
+    # ------------------------------------------------------------ מקור APK — גרסה אחרונה מקישור
+
+    def _download_apk(self, url: str, etag: str, dest: Path) -> tuple[int, str, str]:
+        """מוריד את הקובץ מהמקור ל-[dest]. מחזיר (סטטוס HTTP, ETag, SHA-256). 304 — לא השתנה מאז [etag].
+        נפרד — כדי שבדיקות יחליפו אותו."""
+        headers = {"User-Agent": "FilterPhone-Store/1.0", "Accept": "application/vnd.android.package-archive,*/*"}
+        if etag:
+            headers["If-None-Match"] = etag
+        req = urllib.request.Request(url, headers=headers)
+        digest, total = hashlib.sha256(), 0
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r, open(dest, "wb") as f:
+                while chunk := r.read(1 << 20):
+                    total += len(chunk)
+                    if total > APK_SOURCE_MAX:
+                        raise ApiError(413, "הקובץ במקור גדול מדי")
+                    digest.update(chunk)
+                    f.write(chunk)
+                return r.status, r.headers.get("ETag", ""), digest.hexdigest()
+        except urllib.error.HTTPError as e:
+            if e.code == 304:
+                return 304, etag, ""
+            raise ApiError(502, f"המקור החזיר שגיאה {e.code}") from e
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            raise ApiError(502, f"אין חיבור למקור: {type(e).__name__}") from e
+
+    def sync_apk_source(self, app_id: int, admin: str = "auto", force: bool = False) -> dict:
+        """בודק את מקור ה-APK של אפליקציה: גרסה חדשה (versionCode גבוה יותר, אותה חבילה) — נשמרת אצלנו
+        ומוגשת בחנות (store_apk), והטלפונים רואים "עדכון". [force] — מוריד גם אם ה-ETag לא השתנה."""
+        with self.db() as c:
+            row = c.execute("SELECT id, package, apk_source, apk_source_etag, version_code, apk_url"
+                            " FROM managed_apps WHERE id = ?", (app_id,)).fetchone()
+        if row is None:
+            raise ApiError(404, "אפליקציה לא נמצאה")
+        url = row["apk_source"]
+        if not url.startswith("https://"):
+            raise ApiError(400, "לאפליקציה אין מקור APK (קישור https)")
+        d = self.apps_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = d / f".source-{os.getpid()}-{time.time_ns()}"
+        result: dict = {"id": app_id, "package": row["package"], "status": "unchanged"}
+        error = ""
+        etag = row["apk_source_etag"]
+        try:
+            status, new_etag, sha = self._download_apk(url, "" if force or not row["apk_url"] else etag, tmp)
+            if status != 304:
+                try:
+                    info = read_apk(str(tmp))
+                except ApkError as e:
+                    raise ApiError(400, f"הקובץ במקור אינו APK תקין: {e}") from e
+                if clean_package(info.package) != row["package"]:
+                    raise ApiError(400, f"החבילה בקובץ ({info.package}) לא תואמת לאפליקציה ({row['package']})")
+                etag = new_etag
+                if row["apk_url"] and row["version_code"] and info.version_code <= row["version_code"] and not force:
+                    result.update(version_code=row["version_code"])
+                else:
+                    up = self.store_apk(admin, tmp, sha)
+                    result.update(status="updated", version_code=up["version_code"],
+                                  version_name=up["version_name"])
+        except ApiError as e:
+            error = e.message
+            result.update(status="error", error=error)
+        finally:
+            tmp.unlink(missing_ok=True)
+        with self.db() as c, db.transaction(c):
+            c.execute("UPDATE managed_apps SET apk_source_etag = ?, apk_source_checked = ?, apk_source_error = ?"
+                      " WHERE id = ?", (etag, db.now(), error[:200], app_id))
+        if result["status"] == "updated":
+            log.info("apk source: %s → %s", row["package"], result.get("version_code"))
+        elif error:
+            log.warning("apk source %s: %s", row["package"], error)
+        return result
+
+    def sync_apk_sources(self, due_only: bool = True) -> list[dict]:
+        """כל האפליקציות עם מקור APK (שהגיע זמנן — פעם ב-APK_SOURCE_EVERY_S)."""
+        with self.db() as c:
+            rows = c.execute("SELECT id, apk_source_checked FROM managed_apps WHERE apk_source LIKE 'https://%'"
+                             ).fetchall()
+        now = db.now()
+        return [self.sync_apk_source(r["id"]) for r in rows
+                if not due_only or not r["apk_source_checked"] or now - r["apk_source_checked"] >= APK_SOURCE_EVERY_S]
 
     # ------------------------------------------------------------ תמונות החנות — דרך מסנן התמונות
 
@@ -2574,6 +2672,14 @@ class Services:
                 c.execute(f"UPDATE managed_apps SET {', '.join(f'{k} = ?' for k in fields)}, updated_at = ? "
                           "WHERE id = ?", (*fields.values(), t, app_id))
                 self.audit(admin, "app_update", f"app:{app_id}", pkg, c)
+            if data.get("apk_source") is not None:
+                # מקור APK (קישור להורדה): השרת מושך ממנו את הגרסה האחרונה. ריק = בלי מקור
+                src = str(data["apk_source"]).strip()
+                if src and not re.fullmatch(r"https://[^\s]{4,490}", src):
+                    raise ApiError(400, "מקור APK: קישור https מלא (למשל https://example.com/app.apk)")
+                c.execute("UPDATE managed_apps SET apk_source = ?, apk_source_etag = CASE WHEN apk_source = ? THEN"
+                          " apk_source_etag ELSE '' END, apk_source_checked = CASE WHEN apk_source = ? THEN"
+                          " apk_source_checked ELSE NULL END WHERE id = ?", (src, src, src, app_id))
         self.bump_catalog()                             # הטלפונים מקבלים את הרשימה המאושרת החדשה
         return {"id": app_id, "package": pkg}
 
