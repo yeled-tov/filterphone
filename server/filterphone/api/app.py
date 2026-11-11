@@ -23,6 +23,7 @@ import asyncio
 import base64
 import binascii
 import hashlib
+import html
 import json
 import logging
 import os
@@ -36,7 +37,14 @@ import redis
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -47,6 +55,7 @@ from . import db, gpu, notify, observe, perms, security
 from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, clean_package, public_catalog, resolve_keywords
 from .fetch import FetchError, fetch_image
+from .payments import Payments, shekels
 from .playinfo import PlayCatalog, PlayError, PlayInfo, play_match
 from .security import RateLimiter
 from .service import KOSHER_PROVIDERS, LEVEL_NAMES, ApiError, Services, store_seed
@@ -140,6 +149,21 @@ async def _keep_in_sync(svc: Services) -> None:
                 await asyncio.to_thread(svc.sync_adguard, not dirty)
             except Exception as e:
                 log.error("adguard sync failed: %s", e)
+
+
+def _pay_page(title: str, text: str, extra: str = "") -> str:
+    """דף קטן ללקוח (קישור התשלום): RTL, נקי, בלי תלויות."""
+    t, x = html.escape(title), html.escape(text)
+    return (f'<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width,initial-scale=1"><title>{t}</title><style>'
+            'body{font-family:system-ui,Arial,sans-serif;background:#f4f6fb;color:#1b2333;margin:0;display:flex;'
+            'min-height:100vh;align-items:center;justify-content:center;padding:16px}'
+            '.c{background:#fff;border-radius:16px;padding:28px 24px;max-width:420px;width:100%;text-align:center;'
+            'box-shadow:0 6px 24px rgba(0,0,0,.08)}h1{font-size:22px;margin:0 0 10px}p{color:#4a5568}'
+            'form{display:inline-block;margin:8px}button{font-size:17px;border:0;border-radius:12px;padding:12px 22px;'
+            'color:#fff;cursor:pointer}.ok{background:#16a34a}.bad{background:#dc2626}</style></head>'
+            f'<body><div class="c"><h1>{t}</h1><p>{x}</p>{extra}<p style="font-size:13px">FilterPhone</p>'
+            '</div></body></html>')
 
 
 async def _apk_sources(svc: Services) -> None:
@@ -774,6 +798,35 @@ class Decision(BaseModel):
     app_package: str | None = Field(default=None, max_length=200)   # בקשת אפליקציה: שם החבילה (אם חסר)
     add_app: bool | None = None                                     # False — לאשר בלי להוסיף לחנות
     app_scope: str | None = Field(default=None, pattern="^(device|store)$")   # device — רק ללקוח הזה
+
+
+class PaymentSettingsIn(BaseModel):
+    enabled: bool | None = None
+    provider: str | None = Field(default=None, max_length=30)
+    business_name: str | None = Field(default=None, max_length=60)
+    credentials: dict[str, str] | None = None
+
+
+class PlanIn(BaseModel):
+    code: str = Field(min_length=2, max_length=30)
+    title: str = Field(min_length=1, max_length=80)
+    amount: int                                     # באגורות
+    interval: str = Field(default="once", max_length=10)
+    months: int | None = None
+    enabled: bool = True
+
+
+class PaymentIn(BaseModel):
+    customer_id: int | None = None
+    device_id: int | None = None
+    phone: str = Field(default="", max_length=30)
+    plan_code: str = Field(default="", max_length=30)
+    amount: int | None = None                       # באגורות — תשלום חופשי (בלי מסלול)
+    description: str = Field(default="", max_length=120)
+
+
+class MarkPaidIn(BaseModel):
+    note: str = Field(default="", max_length=60)
 
 
 class DeviceAppIn(BaseModel):
@@ -1564,6 +1617,87 @@ def _routes(app: FastAPI) -> None:
         n = svc.clear_passthrough(d["vpn_ip"])
         svc.audit(admin["username"], "reset_apps", f"device:{device_id}", str(n))
         return {"cleared": n}
+
+    # --- תשלומים (payments.py): הגדרות הסליקה — רק לבעלים; מחירון וקישורי תשלום — אזור "payments" ---
+
+    @app.get("/v1/admin/payment-settings")
+    def payment_settings(svc: SvcDep, _: AdminRow):
+        return Payments(svc).admin_view()
+
+    @app.put("/v1/admin/payment-settings")
+    def payment_settings_save(body: PaymentSettingsIn, svc: SvcDep, admin: AdminRow):
+        return Payments(svc).save_settings(admin["username"], body.model_dump())
+
+    @app.get("/v1/admin/plans")
+    def plans(svc: SvcDep, _: AdminRow):
+        return {"plans": Payments(svc).plans()}
+
+    @app.post("/v1/admin/plans", status_code=201)
+    def plan_add(body: PlanIn, svc: SvcDep, admin: AdminRow):
+        return Payments(svc).save_plan(admin["username"], body.model_dump())
+
+    @app.put("/v1/admin/plans/{plan_id}")
+    def plan_edit(plan_id: int, body: PlanIn, svc: SvcDep, admin: AdminRow):
+        return Payments(svc).save_plan(admin["username"], body.model_dump(), plan_id)
+
+    @app.get("/v1/admin/payments")
+    def payments_list(svc: SvcDep, _: AdminRow, customer_id: int | None = None, status: str = ""):
+        p = Payments(svc)
+        return {"payments": p.list_payments(customer_id, status), "ready": p.admin_view()["ready"]}
+
+    @app.post("/v1/admin/payments", status_code=201)
+    def payment_create(body: PaymentIn, svc: SvcDep, admin: AdminRow):
+        return Payments(svc).create_payment(admin["username"], **body.model_dump())
+
+    @app.post("/v1/admin/payments/{payment_id}/cancel")
+    def payment_cancel(payment_id: int, svc: SvcDep, admin: AdminRow):
+        return Payments(svc).cancel(admin["username"], payment_id)
+
+    @app.post("/v1/admin/payments/{payment_id}/mark-paid")
+    def payment_mark_paid(payment_id: int, body: MarkPaidIn, svc: SvcDep, admin: AdminRow):
+        return Payments(svc).mark_paid(admin["username"], payment_id, body.note)
+
+    @app.post("/v1/payments/webhook/{provider}")
+    async def payment_webhook(provider: str, request: Request, svc: SvcDep):
+        """ההודעה מספק הסליקה אחרי תשלום (בלי התחברות — מאומתת בחתימה של הספק)."""
+        body = await request.body()
+        if len(body) > 64_000:
+            raise ApiError(413, "גדול מדי")
+        return await asyncio.to_thread(Payments(svc).handle_webhook, provider, dict(request.headers), body)
+
+    @app.get("/v1/pay/{token}", response_class=HTMLResponse)
+    def pay_link(token: str, svc: SvcDep):
+        """הקישור הקצר שנשלח ללקוח: מעביר לדף התשלום של הספק (או מסביר שכבר שולם / בוטל)."""
+        try:
+            p = Payments(svc).resolve(token)
+        except ApiError:
+            return HTMLResponse(_pay_page("הקישור לא נמצא", "בדקו שהקישור הועתק במלואו, או פנו אלינו."), 404)
+        if p["status"] == "paid":
+            return HTMLResponse(_pay_page("התשלום כבר התקבל ✓", f"{p['description']} — תודה!"))
+        if p["status"] != "pending" or not p["pay_url"]:
+            return HTMLResponse(_pay_page("הקישור לא בתוקף", "התשלום בוטל או שפג תוקפו — פנו אלינו לקישור חדש."))
+        return RedirectResponse(p["pay_url"], status_code=302)
+
+    @app.get("/v1/pay/{token}/test", response_class=HTMLResponse)
+    def pay_test_page(token: str, svc: SvcDep):
+        """מצב בדיקה בלבד: דף "תשלום" מדומה — בלי כסף אמיתי."""
+        pay = Payments(svc)
+        if pay.settings().get("provider") != "test":
+            raise ApiError(404, "לא במצב בדיקה")
+        p = pay.resolve(token)
+        form = ('<form method="post"><input type="hidden" name="ok" value="1"><button class="ok">תשלום הצליח</button>'
+                '</form><form method="post"><input type="hidden" name="ok" value="0"><button class="bad">'
+                'תשלום נכשל</button></form>') if p["status"] == "pending" else f"<p>מצב: {p['status']}</p>"
+        return HTMLResponse(_pay_page("מצב בדיקה — בלי כסף אמיתי",
+                                      f"{p['description']} · {shekels(p['amount'])} ₪", form))
+
+    @app.post("/v1/pay/{token}/test", response_class=HTMLResponse)
+    async def pay_test_submit(token: str, request: Request, svc: SvcDep):
+        form = (await request.body()).decode("utf-8", "replace")
+        ok = "ok=1" in form
+        await asyncio.to_thread(Payments(svc).simulate, token, ok)
+        return HTMLResponse(_pay_page("התשלום התקבל ✓ (בדיקה)" if ok else "התשלום נכשל (בדיקה)",
+                                      "אפשר לסגור את הדף ולחזור לדשבורד."))
 
     # --- "מותאם אישית": אפליקציה שאושרה רק למכשיר הזה (בטאב משלה בחנות שבטלפון) ---
 

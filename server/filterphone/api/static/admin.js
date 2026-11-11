@@ -31,7 +31,7 @@ const can = (area, write = false) => {
 const ROUTE_AREA = {
   requests: "requests", support: "support", wabot: "wabot", devices: "devices", computers: "devices",
   customers: "customers", profiles: "profiles", web: "web", apps: "apps", events: "devices", test: "test",
-  codes: "codes", audit: "audit", system: "system",
+  codes: "codes", audit: "audit", system: "system", payments: "payments",
 };
 function applyPerms() {
   document.querySelectorAll("#nav a, #bottom-nav a").forEach((a) => { a.hidden = !can(ROUTE_AREA[a.dataset.route]); });
@@ -529,6 +529,7 @@ const ROUTES = {
   profiles: ["פרופילים מוכנים", viewProfiles],
   web: ["אתרים ורמות גלישה", viewWeb],
   apps: ["חנות אפליקציות", viewApps],
+  payments: ["תשלומים", viewPayments],
   events: ["חסימות אחרונות", viewEvents],
   test: ["בדיקת תמונה", viewTest],
   codes: ["קודי הפעלה", viewCodes],
@@ -1084,6 +1085,131 @@ function permsSummary(areas, p) {
   return [edit ? `עריכה: ${edit}` : null, view ? `צפייה: ${view}` : null].filter(Boolean).join(" · ");
 }
 
+// ---------------------------------------------------------------- תשלומים
+
+const PAY_STATUS = { pending: ["warn", "ממתין"], paid: ["ok", "שולם"], failed: ["bad", "נכשל"],
+  cancelled: ["", "בוטל"], refunded: ["violet", "הוחזר"] };
+const PAY_INTERVAL = { once: "חד-פעמי", month: "חודשי", year: "שנתי" };
+const nis = (agorot) => `${(agorot / 100).toLocaleString("he-IL", { maximumFractionDigits: 2 })} ₪`;
+
+/**
+ * תשלומים: חיבור הסליקה (בעלים), מחירון, קישור תשלום ללקוח ורשימת התשלומים. עד שיש ספק אמיתי (EZcount /
+ * Grow) — "מצב בדיקה" מריץ את כל המסלול בלי כסף: קישור → דף תשלום → אישור → "שולם עד" מתעדכן והלקוח מקבל הודעה.
+ */
+async function viewPayments(arg, query) {
+  const [list, plansRes, settings] = await Promise.all([
+    api("/v1/admin/payments"), api("/v1/admin/plans"),
+    isOwner() ? api("/v1/admin/payment-settings") : Promise.resolve(null)]);
+  const plans = plansRes.plans;
+  const parts = [];
+
+  if (settings) {
+    const enabled = el("input", { type: "checkbox", checked: settings.enabled, "aria-label": "הסליקה פעילה" });
+    const provider = el("select", {}, Object.entries(settings.providers).map(([v, t]) =>
+      el("option", { value: v, selected: settings.provider === v }, t)));
+    const biz = el("input", { value: settings.business_name || "", maxlength: 60 });
+    const inputs = {};
+    const fields = settings.fields.map((f) => {
+      inputs[f.key] = el("input", { class: "ltr", type: f.secret ? "password" : "text", autocomplete: "off",
+        value: f.value || "", placeholder: f.secret && f.set ? "שמור — השאירו ריק בלי שינוי" : "" });
+      return el("label", {}, f.label, inputs[f.key]);
+    });
+    const save = async () => {
+      const credentials = Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i.value]));
+      await attempt(() => api("/v1/admin/payment-settings", { method: "PUT", body: {
+        enabled: enabled.checked, provider: provider.value, business_name: biz.value, credentials } }), "נשמר");
+      render();
+    };
+    parts.push(card("חיבור הסליקה",
+      "כשהעוסק נפתח ויש חשבון אצל ספק סליקה (EZcount / Grow) — מחברים כאן את המפתחות והתשלומים עוברים דרכו. עד אז: 'מצב בדיקה' — אותו מסלול בדיוק, בלי כסף אמיתי.",
+      el("div", { class: "opt" }, el("label", { class: "switch" }, enabled, el("span")),
+        el("div", { class: "txt" }, el("div", { class: "title" }, "הסליקה פעילה"),
+          el("div", { class: "muted small" }, settings.ready ? "פעיל — אפשר ליצור קישורי תשלום" : "כבוי — קישורי תשלום לא נוצרים"))),
+      el("div", { class: "grid two" }, el("label", {}, "ספק", provider), el("label", {}, "שם העסק (בהודעות ללקוח)", biz), ...fields),
+      settings.webhook_url ? el("p", { class: "small" }, "כתובת ה-Webhook (להגדרה אצל הספק): ",
+        el("code", { class: "ltr" }, settings.webhook_url)) : null,
+      el("div", { class: "row end" }, el("button", { class: "primary", onclick: save }, "שמירה"))));
+  }
+
+  // --- מחירון
+  const editPlan = async (p) => {
+    const title = el("input", { value: p?.title || "", maxlength: 80, placeholder: "מנוי חודשי" });
+    const code = el("input", { class: "ltr", value: p?.code || "", maxlength: 30, placeholder: "monthly" });
+    const amount = el("input", { type: "number", min: 1, step: "0.01", class: "ltr", value: p ? p.amount / 100 : "" });
+    const interval = el("select", {}, Object.entries(PAY_INTERVAL).map(([v, t]) => el("option", { value: v, selected: (p?.interval || "once") === v }, t)));
+    const months = el("input", { type: "number", min: 0, max: 120, class: "ltr", value: p?.months ?? "" ,
+      placeholder: "אוטומטי: חודשי 1, שנתי 12, חד-פעמי 0" });
+    const on = el("input", { type: "checkbox", checked: p ? p.enabled : true });
+    if (!await dialog(p ? "עריכת מסלול" : "מסלול חדש", el("div", { class: "stack" },
+      el("label", {}, "שם (מה הלקוח רואה)", title), el("label", {}, "קוד (באנגלית)", code),
+      el("label", {}, "מחיר (₪)", amount), el("label", {}, "סוג", interval),
+      el("label", {}, "מאריך את 'בתוקף עד' בכמה חודשים", months),
+      el("label", { class: "row gap" }, on, "פעיל")), "שמירה")) return;
+    const body = { title: title.value, code: code.value.trim(), amount: Math.round(Number(amount.value) * 100),
+      interval: interval.value, months: months.value === "" ? null : Number(months.value), enabled: on.checked };
+    await attempt(() => api(p ? `/v1/admin/plans/${p.id}` : "/v1/admin/plans", { method: p ? "PUT" : "POST", body }), "נשמר");
+    render();
+  };
+  parts.push(card("מחירון", "המסלולים שאפשר לגבות. תשלום על מסלול חודשי / שנתי מאריך לבד את 'שולם עד' של הלקוח.",
+    plans.length ? el("div", { class: "dpc-list" }, plans.map((p) => el("div", { class: "app-row" },
+      el("div", { class: "grow" }, el("b", {}, p.title), el("small", {}, `${nis(p.amount)} · ${PAY_INTERVAL[p.interval]}${p.months ? ` · מאריך ${p.months === 1 ? "חודש" : `${p.months} חודשים`}` : ""}`),
+        el("small", { class: "ltr muted" }, p.code)),
+      p.enabled ? chip("פעיל", "ok") : chip("כבוי"),
+      el("button", { class: "ghost small", onclick: () => editPlan(p) }, "עריכה")))) : empty("עוד אין מסלולים."),
+    el("div", { class: "row end" }, el("button", { class: "ghost", onclick: () => editPlan(null) }, "מסלול חדש"))));
+
+  // --- קישור תשלום חדש
+  const phone = el("input", { class: "ltr", placeholder: "טלפון הלקוח, למשל 0501234567", value: query.get("phone") || "" });
+  const plan = el("select", {}, [el("option", { value: "" }, "סכום חופשי (חד-פעמי)"),
+    ...plans.filter((p) => p.enabled).map((p) => el("option", { value: p.code }, `${p.title} — ${nis(p.amount)}`))]);
+  const amount = el("input", { type: "number", min: 1, step: "0.01", class: "ltr", placeholder: "סכום ב-₪" });
+  const desc = el("input", { maxlength: 120, placeholder: "על מה משלמים (למשל: התקנת סינון)" });
+  const free = el("div", { class: "grid two" }, el("label", {}, "סכום", amount), el("label", {}, "תיאור", desc));
+  plan.addEventListener("change", () => { free.hidden = Boolean(plan.value); });
+  const result = el("div", { class: "stack" });
+  const create = async () => {
+    const body = { phone: phone.value.trim(), ...(query.get("customer") ? { customer_id: Number(query.get("customer")) } : {}),
+      ...(plan.value ? { plan_code: plan.value } : { amount: Math.round(Number(amount.value) * 100), description: desc.value }) };
+    const r = await attempt(() => api("/v1/admin/payments", { method: "POST", body }));
+    const wa = `https://wa.me/${(r.phone || "").replace(/\D/g, "").replace(/^0/, "972")}?text=${encodeURIComponent(r.wa_text)}`;
+    result.replaceChildren(el("div", { class: "note" },
+      el("b", {}, `קישור לתשלום: ${r.customer_name || r.phone} · ${nis(r.amount)}`),
+      el("div", { class: "ltr small" }, r.link),
+      el("div", { class: "row gap wrap" },
+        el("button", { class: "ghost small", onclick: () => navigator.clipboard?.writeText(r.wa_text).then(() => toast("ההודעה הועתקה")) }, "העתקת ההודעה"),
+        el("a", { class: "button primary small", href: wa, target: "_blank", rel: "noopener" }, "שליחה בוואטסאפ"))));
+  };
+  parts.push(card("קישור תשלום ללקוח", "יוצרים קישור, שולחים ללקוח בוואטסאפ — וכשהוא משלם, התשלום מסומן לבד, 'שולם עד' מתעדכן והלקוח מקבל הודעה באפליקציה (עם הקבלה, כשהספק מחובר).",
+    list.ready ? null : el("p", { class: "error small" }, "הסליקה עוד לא מחוברת — קודם 'חיבור הסליקה' למעלה (אפשר במצב בדיקה)."),
+    el("div", { class: "grid two" }, el("label", {}, "לקוח", phone), el("label", {}, "מה לגבות", plan)), free,
+    el("div", { class: "row end" }, el("button", { class: "primary", onclick: create, disabled: !list.ready }, "יצירת קישור")),
+    result));
+
+  // --- תשלומים אחרונים
+  const rows = list.payments.map((p) => el("tr", {},
+    el("td", { class: "nowrap" }, dateTime(p.created_at)),
+    el("td", {}, p.customer_name || "—", el("div", { class: "ltr small muted" }, p.phone || "")),
+    el("td", {}, p.description), el("td", { class: "nowrap" }, nis(p.amount)),
+    el("td", {}, chip((PAY_STATUS[p.status] || ["", p.status])[1], (PAY_STATUS[p.status] || [""])[0]),
+      p.receipt_number ? el("div", { class: "small muted" }, p.receipt_url ? el("a", { href: p.receipt_url, target: "_blank" }, `קבלה ${p.receipt_number}`) : p.receipt_number) : null),
+    el("td", { class: "nowrap" }, p.status === "pending" || p.status === "failed" ? [
+      el("button", { class: "ghost small", onclick: () => navigator.clipboard?.writeText(p.link).then(() => toast("הקישור הועתק")) }, "קישור"),
+      el("button", { class: "ghost small", onclick: async () => {
+        const note = el("input", { maxlength: 60, placeholder: "מזומן / העברה / ביט" });
+        if (!await dialog("שולם בדרך אחרת?", el("label", {}, "איך שולם", note), "סימון כשולם")) return;
+        await attempt(() => api(`/v1/admin/payments/${p.id}/mark-paid`, { method: "POST", body: { note: note.value } }), "סומן כשולם");
+        render();
+      } }, "שולם"),
+      p.status === "pending" ? el("button", { class: "ghost small", onclick: async () => {
+        await attempt(() => api(`/v1/admin/payments/${p.id}/cancel`, { method: "POST" }), "בוטל");
+        render();
+      } }, "ביטול") : null] : null)));
+  parts.push(card("תשלומים אחרונים", null, rows.length ? el("div", { class: "table-wrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, ["תאריך", "לקוח", "על מה", "סכום", "מצב", ""].map((t) => el("th", {}, t)))),
+    el("tbody", {}, rows))) : empty("עוד אין תשלומים.")));
+  return parts;
+}
+
 async function viewTeam() {
   const t = await api("/v1/admin/team");
   me = t.me;
@@ -1404,6 +1530,7 @@ function customerCardOf(d) {
     ["קוד הורים", parentCodeControl(c)],
     c.notes ? ["הערות", c.notes] : null,
   ]), el("div", { class: "row" }, el("button", { class: "ghost small", onclick: () => editCustomer(c).then((ok) => ok && render()) }, "עריכת פרטי לקוח"),
+    can("payments", true) ? el("a", { class: "button ghost small", href: `#/payments?customer=${c.id}&phone=${encodeURIComponent(c.phone || "")}` }, "קישור תשלום") : null,
     el("a", { href: `#/devices?customer=${c.id}` }, "כל המכשירים של הלקוח ›")))
     : el("p", { class: "muted" }, d.label ? `הופעל בקוד: ${d.label}` : "מכשיר שהופעל בקוד, בלי פרטי לקוח."));
 }

@@ -17,6 +17,7 @@ AREAS: dict[str, str] = {
     "web": "אתרים ורמות גלישה (כולל בקשות לבדיקת אתר)",
     "apps": "חנות האפליקציות",
     "wabot": "בוט הוואטסאפ והגדרות וואטסאפ",
+    "payments": "תשלומים — מחירון וקישורי תשלום (הגדרות הסליקה והמפתחות — רק לבעלים)",
     "codes": "קודי הפעלה והקמה ב-QR",
     "test": "בדיקת תמונה",
     "audit": "יומן פעולות",
@@ -32,7 +33,7 @@ _AREA_OF = {
     "customers": "customers", "profiles": "profiles", "web": "web", "apps": "apps", "play": "apps",
     "wabot": "wabot", "whatsapp": "wabot", "codes": "codes", "provisioning": "codes", "test-image": "test",
     "audit": "audit", "system": "system", "branding": "system", "gpu": "system", "kosher-certs": "system",
-    "adguard": "system",
+    "adguard": "system", "payments": "payments", "plans": "payments",
 }
 
 PRESETS: dict[str, dict[str, str]] = {

@@ -396,8 +396,55 @@ ALTER TABLE managed_apps ADD COLUMN apk_source_checked INTEGER;
 ALTER TABLE managed_apps ADD COLUMN apk_source_error TEXT NOT NULL DEFAULT '';
 """
 
+# גרסה 24 — תשלומים (payments.py): מחירון, קישורי תשלום ויומן ההודעות מספק הסליקה. סכומים באגורות.
+_V24 = """
+CREATE TABLE plans (
+    id         INTEGER PRIMARY KEY,
+    code       TEXT NOT NULL UNIQUE,            -- monthly / yearly / install ...
+    title      TEXT NOT NULL,
+    amount     INTEGER NOT NULL,                -- באגורות
+    interval   TEXT NOT NULL DEFAULT 'once' CHECK (interval IN ('once', 'month', 'year')),
+    months     INTEGER NOT NULL DEFAULT 0,      -- בכמה חודשים תשלום מאריך את "בתוקף עד"
+    enabled    INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE TABLE payments (
+    id             INTEGER PRIMARY KEY,
+    customer_id    INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+    device_id      INTEGER REFERENCES devices(id) ON DELETE SET NULL,
+    plan_code      TEXT NOT NULL DEFAULT '',
+    description    TEXT NOT NULL DEFAULT '',
+    amount         INTEGER NOT NULL,            -- באגורות
+    currency       TEXT NOT NULL DEFAULT 'ILS',
+    status         TEXT NOT NULL DEFAULT 'pending'
+                   CHECK (status IN ('pending', 'paid', 'failed', 'cancelled', 'refunded')),
+    provider       TEXT NOT NULL DEFAULT '',
+    provider_ref   TEXT NOT NULL DEFAULT '',    -- מזהה העסקה / הדף אצל הספק
+    pay_url        TEXT NOT NULL DEFAULT '',    -- דף התשלום אצל הספק
+    receipt_url    TEXT NOT NULL DEFAULT '',
+    receipt_number TEXT NOT NULL DEFAULT '',
+    token          TEXT NOT NULL UNIQUE,        -- בקישור ללקוח (/v1/pay/<token>) — לא מספר רץ
+    created_by     TEXT NOT NULL DEFAULT '',
+    created_at     INTEGER NOT NULL,
+    paid_at        INTEGER,
+    updated_at     INTEGER NOT NULL
+);
+CREATE INDEX payments_customer ON payments(customer_id);
+CREATE INDEX payments_ref ON payments(provider, provider_ref);
+CREATE TABLE payment_events (
+    id         INTEGER PRIMARY KEY,
+    provider   TEXT NOT NULL,
+    event_id   TEXT NOT NULL,
+    kind       TEXT NOT NULL DEFAULT '',
+    raw        TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    UNIQUE (provider, event_id)
+);
+"""
+
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16,
-                         _V17, _V18, _V19, _V20, _V21, _V22, _V23]
+                         _V17, _V18, _V19, _V20, _V21, _V22, _V23, _V24]
 VERSION = len(MIGRATIONS)
 
 
