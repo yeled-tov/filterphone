@@ -67,4 +67,32 @@ class WaProfileDetectorTest {
         // תבניות שלא נשלחו — ברירת המחדל
         assertEquals(GuardPolicy.WaDetector.DEFAULT.activities, custom.activities)
     }
+
+    @Test
+    fun contactInfoPageIsAllowedAndOnlyTheHeaderPhotoIsCovered() {
+        // לוחצים על השם בראש השיחה: תמונה גדולה בראש עמוד עם רשימה (מדיה, קטלוג) — לא יוצאים, מכסים
+        val page = Node("com.whatsapp:id/scroll_view", "android.widget.ScrollView", null, 0.8f, scrollable = true)
+        val header = img("com.whatsapp:id/profile_picture", 0.45f)
+        assertEquals(WaProfileDetector.Verdict(null, infoPhoto = true), d.inspect(sequenceOf(header, page)))
+        assertEquals(WaProfileDetector.Verdict(null, infoPhoto = true), d.inspect(sequenceOf(page, header)))
+        // לפי שם החלון — גם בלי רשימה בסריקה
+        assertTrue(d.isInfoWindow("com.whatsapp.chatinfo.ContactInfoActivity"))
+        assertTrue(d.isInfoWindow("com.whatsapp.group.GroupChatInfoActivity"))
+        assertFalse(d.isInfoWindow("com.whatsapp.profile.ViewProfilePhoto"))
+        assertNull(d.matchNodes(sequenceOf(header), info = true))
+        // תמונה שממלאת את כל המסך — צפייה, גם שם
+        assertEquals("view_id:profile_picture", d.matchNodes(sequenceOf(img("com.whatsapp:id/profile_picture", 0.9f), page)))
+        // צפייה רגילה (בלי עמוד מסביב) — יוצאים כמו קודם
+        assertEquals("view_id:profile_picture", d.matchNodes(sequenceOf(header)))
+    }
+
+    @Test
+    fun infoWindowsComeFromTheServer() {
+        val custom = GuardPolicy.parseStrict(
+            """{"protections":{"wa_profile_photo":{"info_windows":["newinfoscreen"],"info_min_area":0.8}}}"""
+        ).waProfile!!
+        assertEquals(listOf("newinfoscreen"), custom.infoWindows)
+        assertEquals(0.8f, custom.infoMinArea)
+        assertEquals(GuardPolicy.WaDetector.DEFAULT_INFO_WINDOWS, GuardPolicy.WaDetector.DEFAULT.infoWindows)
+    }
 }

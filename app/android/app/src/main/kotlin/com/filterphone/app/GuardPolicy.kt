@@ -55,8 +55,15 @@ object GuardPolicy {
         val excludeWindows: List<String> = listOf("mediaview", "gallery", "camera", "status"),
         val mask: Boolean = false,                        // "כיסוי לבן" (אופציה נפרדת בשרת) — AvatarMask
         val maskIds: List<String> = WaAvatars.DEFAULT_IDS,
+        /** מסכי פרטי איש קשר / קבוצה / עסק — נכנסים כרגיל, רק התמונה מכוסה (WaProfileDetector.isInfoWindow). */
+        val infoWindows: List<String> = DEFAULT_INFO_WINDOWS,
+        /** במסך פרטים — רק תמונה שממלאת לפחות חלק כזה מהמסך נחשבת צפייה (יציאה). */
+        val infoMinArea: Float = 0.7f,
     ) {
         companion object {
+            // לפני DEFAULT: ברירת מחדל של פרמטר — חייבת להיות מאותחלת כש-DEFAULT נבנה
+            val DEFAULT_INFO_WINDOWS = listOf("contactinfo", "chatinfo", "groupinfo", "businessprofile", "bizprofile",
+                "profileinfo")
             val DEFAULT = WaDetector(
                 packages = setOf("com.whatsapp", "com.whatsapp.w4b"),
                 activities = listOf("viewprofilephoto", "profilephoto", "profilepicture", "quickcontact", "photo.viewprofile"),
@@ -298,6 +305,8 @@ object GuardPolicy {
             excludeWindows = list("exclude_windows", d.excludeWindows),
             mask = o.optBoolean("mask", d.mask),
             maskIds = list("mask_ids", d.maskIds),
+            infoWindows = list("info_windows", d.infoWindows),
+            infoMinArea = o.optDouble("info_min_area", d.infoMinArea.toDouble()).toFloat().coerceIn(0.4f, 1f),
         )
     }
 

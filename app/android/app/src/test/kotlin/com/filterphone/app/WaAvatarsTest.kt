@@ -19,9 +19,9 @@ class WaAvatarsTest {
         }
         val still = WaAvatars.masks(rows.asSequence(), cfg, screen, 40, 6, scrolling = false, stripMaxPx = 200)
         assertEquals(6, still.size)
-        assertTrue(still.all { it.round })
-        assertEquals(WaAvatars.Box(924, 314, 1068, 458), still[0])
-        // בגלילה: פס אחד לכל גובה הרשימה בעמודה של התמונות (לא מציץ בין עדכון לעדכון)
+        assertTrue(still.all { it.round && it.follow && it.clip == list })   // זזים עם הרשימה, חתוכים לגבולותיה
+        assertEquals(WaAvatars.Box(924, 314, 1068, 458, clip = list, follow = true), still[0])
+        // "זריקה" מהירה: פס אחד לכל גובה הרשימה בעמודה של התמונות
         val scrolling = WaAvatars.masks(rows.asSequence(), cfg, screen, 40, 6, scrolling = true, stripMaxPx = 200)
         assertEquals(1, scrolling.size)
         assertFalse(scrolling[0].round)
@@ -53,5 +53,51 @@ class WaAvatarsTest {
             WaAvatars.Node("com.whatsapp:id/banner", "android.widget.ImageView", null, WaAvatars.Box(0, 0, 900, 200)),
             WaAvatars.Node("com.whatsapp:id/text", "android.widget.TextView", null, box(0, 0, 100))), 40)
         assertEquals(setOf("new_avatar_id"), ids)
+    }
+
+    @Test
+    fun avatarCutAtTheListEdgeIsStillCoveredAsAFullCircleClippedToTheList() {
+        // רק 40 פיקסלים תחתונים של התמונה גלויים בראש הרשימה (השאר מתחת לכותרת) — פעם לא כוסה בכלל (לא ריבועי)
+        val cut = WaAvatars.Node("com.whatsapp:id/contact_photo", "android.widget.ImageView", null,
+            WaAvatars.Box(930, 300, 1062, 340), list)
+        assertEquals(WaAvatars.Box(930, 208, 1062, 340), WaAvatars.fullBox(cut, 200))
+        val out = WaAvatars.masks(sequenceOf(cut), cfg, screen, 40, 6, scrolling = false, stripMaxPx = 200)
+        assertEquals(listOf(WaAvatars.Box(924, 202, 1068, 346, clip = list, follow = true)), out)
+        // בתחתית הרשימה (נכנסת מלמטה)
+        val bottom = cut.copy(box = WaAvatars.Box(930, 2150, 1062, 2200))
+        assertEquals(WaAvatars.Box(930, 2150, 1062, 2282), WaAvatars.fullBox(bottom, 200))
+        // תמונה רחבה בתוך רשימה (תצוגת קישור) לא "מושלמת" לריבוע ענק
+        val wide = cut.copy(box = WaAvatars.Box(100, 300, 1000, 500))
+        assertFalse(WaAvatars.isAvatar(wide, cfg, screen, 40, 200))
+    }
+
+    @Test
+    fun infoScreenCoversTheBigHeaderPhotoEvenWhenItShrinksOnScroll() {
+        val info = WaAvatars.Config(maxFraction = 0.7f, bannerMinWidth = 540)
+        val header = WaAvatars.Node("com.whatsapp:id/profile_picture_image", "android.widget.ImageView", null,
+            WaAvatars.Box(0, 0, 1080, 1080))
+        val out = WaAvatars.masks(sequenceOf(header), info, screen, 40, 0, scrolling = false, stripMaxPx = 200)
+        assertEquals(listOf(WaAvatars.Box(0, 0, 1080, 1080, round = false)), out)        // גדולה — מלבן
+        // בגלילה התמונה מתכווצת לפס רחב — עדיין מכוסה
+        val shrunk = header.copy(box = WaAvatars.Box(0, 0, 1080, 320))
+        assertTrue(WaAvatars.isAvatar(shrunk, info, screen, 40, 200))
+        assertFalse(WaAvatars.isAvatar(shrunk, cfg, screen, 40, 200))                  // לא במסך פרטים
+        // תמונה רחבה בלי מזהה / תיאור של פרופיל (קטלוג, מדיה) — לא נוגעים
+        assertFalse(WaAvatars.isAvatar(header.copy(viewId = "com.whatsapp:id/catalog_image", box = shrunk.box),
+            info, screen, 40, 200))
+    }
+
+    @Test
+    fun scrollSpeedComesFromTheSameRowsBetweenTwoMeasurements() {
+        fun row(key: Int, top: Int) = WaAvatars.Node("com.whatsapp:id/contact_photo", "android.widget.ImageView", null,
+            box(930, top, 132), list, key)
+        val before = listOf(row(1, 500), row(2, 680), row(3, 860))
+        // הרשימה עלתה 90 פיקסלים; שורה 1 יצאה ונכנסה שורה חדשה (4) — לא משנה
+        val after = listOf(row(2, 590), row(3, 770), row(4, 950))
+        assertEquals(0 to -90, WaAvatars.shift(before, after))
+        assertEquals(null, WaAvatars.shift(before, listOf(row(9, 500))))             // אין שורה משותפת
+        // שורה שנחתכה בקצה הרשימה לא נחשבת (המיקום שלה הוא רק החלק הגלוי)
+        val clipped = listOf(row(2, 590), row(3, 770).copy(box = WaAvatars.Box(930, 2150, 1062, 2200)))
+        assertEquals(0 to -90, WaAvatars.shift(before, clipped))
     }
 }

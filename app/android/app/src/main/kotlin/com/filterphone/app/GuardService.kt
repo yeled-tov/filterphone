@@ -14,6 +14,7 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import java.util.ArrayDeque
+import kotlin.math.abs
 import java.util.concurrent.Executors
 
 /**
@@ -144,8 +145,17 @@ class GuardService : AccessibilityService() {
         }
     }
     private val avatarMask by lazy { AvatarMask(this) }   // תמונות פרופיל בוואטסאפ — לבן במקומן (WaAvatars)
-    private var maskScrollUntil = 0L                // רשימה בוואטסאפ בגלילה — עד אז פסים במקום עיגולים
     private var lastMaskAt = 0L
+    private var maskFullAt = 0L                     // הסריקה המלאה האחרונה (כל המסך) של הכיסוי
+    private val maskHotIds = LinkedHashSet<String>() // מזהי התמונות שנמצאו בסריקה המלאה — למדידה מהירה בגלילה
+    private val maskLists = ArrayList<AccessibilityNodeInfo>()  // הרשימות הנגללות (לגבולות — refresh, בלי סריקה)
+    private var maskPrev: List<WaAvatars.Node> = emptyList()    // המדידה הקודמת — למהירות הגלילה
+    private var maskPrevAt = 0L
+    private var maskVx = 0f                         // מהירות הגלילה (פיקסלים למילישנייה)
+    private var maskVy = 0f
+    private var maskPollUntil = 0L                  // מדידה רציפה (~30 בשנייה) עד אז — בזמן גלילה
+    private var maskPolling = false
+    private var waInfoScreen = false                // מסך פרטי איש קשר / קבוצה: נכנסים, רק התמונה מכוסה
     private var maskOnUpdatesTab = false            // טאב "עדכונים"/"סטטוס" פתוח — לא מכסים שם תמונות פרופיל
     private val waImageIds = LinkedHashSet<String>()  // לכיול מרחוק: מזהי רכיבי תמונה ריבועיים שנראו
     private var waImageIdsSavedAt = 0L
@@ -299,6 +309,8 @@ class GuardService : AccessibilityService() {
                 // מסך חדש בוואטסאפ: עכשיו, ושוב כשהתוכן נטען
                 scheduleMask(0)
                 main.postDelayed(maskUpdate, 350)
+            } else if (avatarMask.isShown && pkg in WaScreens.PACKAGES) {
+                hideAvatarMask()                          // יצאו ממסך הפרטים (בלי "כיסוי לבן" כללי)
             }
             if (scanKeywords) checkFocusedInput(pkg)
         } else if (contentEvents) {
@@ -1172,10 +1184,30 @@ class GuardService : AccessibilityService() {
         val wa = policy.waProfile ?: return
         val detector = WaProfileDetector(wa)
         if (!detector.watches(pkg)) return
-        if (cls != null) lastWaWindow = cls
+        if (cls != null) {
+            lastWaWindow = cls
+            // מסך חדש של וואטסאפ (לא תפריט / חלונית מעליו) — האם זה מסך פרטים
+            if (cls.startsWith("com.whatsapp")) waInfoScreen = detector.isInfoWindow(cls)
+        }
         if (detector.excluded(lastWaWindow)) return
-        val rule = detector.matchWindow(pkg, cls) ?: scan(detector)
-        if (rule != null) blockProfilePhoto(pkg, rule, cls)
+        val rule = detector.matchWindow(pkg, cls)
+        if (rule != null) {
+            blockProfilePhoto(pkg, rule, cls)
+            return
+        }
+        inspectProfile(pkg, detector)
+    }
+
+    /** שכבות 2–3: צפייה בתמונה → יציאה; תמונה גדולה בעמוד פרטים → נשארים, והכיסוי מכסה אותה. */
+    private fun inspectProfile(pkg: String, detector: WaProfileDetector) {
+        val verdict = scan(detector, waInfoScreen) ?: return
+        val rule = verdict.rule
+        if (rule != null) {
+            blockProfilePhoto(pkg, rule, null)
+        } else if (verdict.infoPhoto && !waInfoScreen) {
+            waInfoScreen = true
+            scheduleMask(0)
+        }
     }
 
     private fun onContent(pkg: String, policy: GuardPolicy.Policy) {
@@ -1190,7 +1222,7 @@ class GuardService : AccessibilityService() {
         val now = SystemClock.elapsedRealtime()
         if (now - lastScanAt < SCAN_EVERY_MS) return       // עד ~4 סריקות בשנייה, גם בגלילה מהירה
         lastScanAt = now
-        scan(detector)?.let { blockProfilePhoto(pkg, it, null) }
+        inspectProfile(pkg, detector)
     }
 
     /**
@@ -1538,8 +1570,9 @@ class GuardService : AccessibilityService() {
 
     // ------------------------------------------------------------ תמונות פרופיל בוואטסאפ: לבן במקומן
 
+    /** "כיסוי לבן" דלוק — או מסך פרטי איש קשר (שם התמונה הגדולה מכוסה תמיד, במקום לצאת מהמסך). */
     private fun maskWanted(pkg: String?, policy: GuardPolicy.Policy): Boolean =
-        policy.waProfile?.let { it.mask && pkg != null && pkg in it.packages } == true
+        policy.waProfile?.let { (it.mask || waInfoScreen) && pkg != null && pkg in it.packages } == true
 
     private val scrollUpId = AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.id
     private val scrollDownId = AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.id
@@ -1572,57 +1605,175 @@ class GuardService : AccessibilityService() {
     }
 
     private val maskUpdate = Runnable { safely("avatar-mask") { updateAvatarMask() } }
+    private val maskPoll = Runnable { safely("avatar-poll") { pollAvatarMask() } }
 
     private fun scheduleMask(delayMs: Long) {
         main.removeCallbacks(maskUpdate)
         if (delayMs <= 0) main.post(maskUpdate) else main.postDelayed(maskUpdate, delayMs)
     }
 
-    /** שינוי תוכן / גלילה בוואטסאפ: עדכון מיד (לכל היותר פעם ב-MASK_EVERY_MS); בגלילה — פסים, ובסופה עיגולים. */
+    /**
+     * גלילה בוואטסאפ: מדידה רציפה (~30 בשנייה) של מיקום התמונות עד שהגלילה נרגעת — הכיסוי זז עם התמונה.
+     * שינוי תוכן אחר: עדכון מיד (לכל היותר פעם ב-MASK_EVERY_MS).
+     */
     private fun onMaskEvent(scrolled: Boolean) {
         val now = SystemClock.elapsedRealtime()
         if (scrolled) {
-            maskScrollUntil = now + MASK_SCROLL_HOLD_MS
-            main.postDelayed(maskUpdate, MASK_SCROLL_HOLD_MS + 60)    // הגלילה נעצרה — חזרה לעיגולים
+            maskPollUntil = maxOf(maskPollUntil, now + MASK_SCROLL_HOLD_MS)
+            if (!maskPolling) {
+                maskPolling = true
+                main.removeCallbacks(maskPoll)
+                main.post(maskPoll)
+            }
+            return
         }
+        if (maskPolling) return                 // המדידה הרציפה כבר מעדכנת
         scheduleMask(if (now - lastMaskAt >= MASK_EVERY_MS) 0 else MASK_EVERY_MS)
     }
 
-    private fun updateAvatarMask() {
-        lastMaskAt = SystemClock.elapsedRealtime()
+    private fun pollAvatarMask() {
+        val now = SystemClock.elapsedRealtime()
+        if (now > maskPollUntil) {
+            // הגלילה נרגעה — מדידה מלאה אחרונה (רשימות / תמונות חדשות) ועצירה במקום
+            maskPolling = false
+            updateAvatarMask(full = true, still = true)
+            resetMaskMotion()
+            return
+        }
+        updateAvatarMask(full = false)
+        if (maskVx != 0f || maskVy != 0f) maskPollUntil = maxOf(maskPollUntil, now + MASK_MOVE_HOLD_MS)  // עדיין זז
+        main.postDelayed(maskPoll, MASK_POLL_MS)
+    }
+
+    private fun resetMaskMotion() {
+        maskPrev = emptyList()
+        maskVx = 0f
+        maskVy = 0f
+    }
+
+    private fun hideAvatarMask() {
+        avatarMask.hide()
+        resetMaskMotion()
+    }
+
+    /**
+     * [full] — סריקה של כל המסך (תמונות לפי מזהה ותיאור, הרשימות, טאב הסטטוסים). אחרת — מדידה מהירה: רק
+     * הרכיבים עם המזהים שנמצאו בסריקה המלאה (findAccessibilityNodeInfosByViewId) + הגבולות של הרשימות
+     * (refresh) — כמה קריאות בודדות במקום מאות, כדי לעקוב אחרי הגלילה בזמן אמת.
+     */
+    private fun updateAvatarMask(full: Boolean = true, still: Boolean = false) {
+        val now = SystemClock.elapsedRealtime()
+        lastMaskAt = now
         val wa = GuardPolicy.get(this).waProfile
-        if (wa == null || !wa.mask || AdminState.isPaused(this)) {
-            avatarMask.hide()
+        if (wa == null || !(wa.mask || waInfoScreen) || AdminState.isPaused(this)) {
+            hideAvatarMask()
             return
         }
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return     // רגעי — משאירים כמו שהיה
         if (root.packageName?.toString() !in wa.packages) {
             recycle(root)
-            avatarMask.hide()
+            hideAvatarMask()
             return
         }
-        val nodes = collectMaskNodes(root)
+        val fullScan = full || maskHotIds.isEmpty() || now - maskFullAt >= MASK_FULL_EVERY_MS
+        val fast = if (fullScan) null else fastMaskNodes(root)
+        val nodes = if (fast != null) fast.also { recycle(root) } else collectMaskNodes(root)   // collect ממחזר לבד
         if (maskOnUpdatesTab) {
             // מסך הסטטוסים: הסטטוסים מותרים (אחרת כל הטאב חסום) — לא מכסים כאן תמונות פרופיל, כי הכיסוי
             // מכסה כמעט את כל הסטטוס. תוכן הסטטוס עצמו מסונן ברשת (מסנן התמונות) כשפותחים אותו.
-            avatarMask.hide()
+            hideAvatarMask()
             return
         }
         val dm = resources.displayMetrics
         val d = dm.density
         val screen = (dm.widthPixels.toLong() * dm.heightPixels).coerceAtLeast(1)
         val minPx = (18 * d).toInt()
-        val scrolling = SystemClock.elapsedRealtime() < maskScrollUntil
-        avatarMask.show(WaAvatars.masks(nodes.asSequence(), WaAvatars.Config(wa.maskIds, wa.descriptions, wa.minArea),
-            screen, minPx, pad = (3 * d).toInt(), scrolling = scrolling, stripMaxPx = (72 * d).toInt()))
-        noteWaImageIds(nodes, minPx)
+        val maxPx = (72 * d).toInt()
+        val cfg = WaAvatars.Config(wa.maskIds, wa.descriptions,
+            maxFraction = if (waInfoScreen) wa.infoMinArea else wa.minArea,
+            bannerMinWidth = if (waInfoScreen) dm.widthPixels / 2 else 0)
+        val avatars = nodes.filter { WaAvatars.isAvatar(it, cfg, screen, minPx, maxPx) }
+        trackMaskMotion(avatars, now)
+        if (fullScan) {
+            maskFullAt = now
+            maskHotIds.clear()
+            avatars.mapNotNullTo(maskHotIds) { it.viewId }
+        }
+        // ניבוי תנועה רק בזמן המדידה הרציפה (גלילה): אחרת אין מדידה הבאה שתתקן, והכיסוי היה "נתקע" מוזז
+        val moving = maskPolling && !still
+        val vx = if (moving) maskVx else 0f
+        val vy = if (moving) maskVy else 0f
+        val fling = maxOf(abs(vx), abs(vy)) > MASK_STRIP_SPEED_DP * d
+        avatarMask.show(WaAvatars.masks(avatars.asSequence(), cfg, screen, minPx, pad = (3 * d).toInt(),
+            scrolling = fling, stripMaxPx = maxPx), vx, vy, SystemClock.uptimeMillis())
+        if (fullScan) noteWaImageIds(nodes, minPx)
     }
 
-    /** כל הרכיבים הגלויים בחלון (עד MAX_MASK_NODES) עם המיקום, וגבולות הרשימה הנגללת שהם בתוכה. בלי טקסט. */
+    /** מהירות הגלילה מתוך שתי מדידות רצופות (אותם רכיבים, WaAvatars.shift) — מוחלקת מעט. */
+    private fun trackMaskMotion(avatars: List<WaAvatars.Node>, now: Long) {
+        val moving = avatars.filter { it.list != null && it.key != 0 }
+        val dt = now - maskPrevAt
+        val shift = if (dt in 1..MASK_MOTION_MAX_GAP_MS) WaAvatars.shift(maskPrev, moving) else null
+        if (shift == null) {
+            maskVx *= 0.5f
+            maskVy *= 0.5f
+        } else {
+            val (dx, dy) = shift
+            // 0 — אולי פשוט לא צויר פריים חדש בין שתי המדידות: מאטים, לא עוצרים בבת אחת
+            maskVx = if (dx == 0) maskVx * 0.3f else 0.35f * maskVx + 0.65f * dx.toFloat() / dt
+            maskVy = if (dy == 0) maskVy * 0.3f else 0.35f * maskVy + 0.65f * dy.toFloat() / dt
+        }
+        if (abs(maskVx) < 0.02f) maskVx = 0f
+        if (abs(maskVy) < 0.02f) maskVy = 0f
+        maskPrev = moving
+        maskPrevAt = now
+    }
+
+    /** מדידה מהירה (ראו updateAvatarMask). null — צריך סריקה מלאה (רשימה נעלמה / שום דבר לא נמצא). לא ממחזר את [root]. */
+    private fun fastMaskNodes(root: AccessibilityNodeInfo): List<WaAvatars.Node>? {
+        val lists = ArrayList<WaAvatars.Box>(maskLists.size)
+        val r = Rect()
+        for (l in maskLists) {
+            if (!runCatching { l.refresh() }.getOrDefault(false)) return null       // הרשימה כבר לא במסך
+            l.getBoundsInScreen(r)
+            lists += WaAvatars.Box(r.left, r.top, r.right, r.bottom, round = false)
+        }
+        val out = ArrayList<WaAvatars.Node>()
+        for (id in maskHotIds) {
+            val found = runCatching { root.findAccessibilityNodeInfosByViewId(id) }.getOrNull() ?: continue
+            for (n in found) {
+                if (n.isVisibleToUser) {
+                    n.getBoundsInScreen(r)
+                    val box = WaAvatars.Box(r.left, r.top, r.right, r.bottom)
+                    val cls = n.className?.toString()
+                    val isImage = cls != null && (cls.endsWith("ImageView") || cls.endsWith("ImageButton"))
+                    out += WaAvatars.Node(n.viewIdResourceName, cls,
+                        if (isImage) n.contentDescription?.toString() else null, box, listAround(lists, box),
+                        key = n.hashCode())
+                }
+                recycle(n)
+            }
+        }
+        return out.ifEmpty { null }
+    }
+
+    /** הרשימה הקטנה ביותר שמכילה את מרכז התמונה. */
+    private fun listAround(lists: List<WaAvatars.Box>, b: WaAvatars.Box): WaAvatars.Box? {
+        val cx = (b.left + b.right) / 2
+        val cy = (b.top + b.bottom) / 2
+        return lists.filter { cx in it.left..it.right && cy in it.top..it.bottom }
+            .minByOrNull { it.width.toLong() * it.height }
+    }
+
+    /**
+     * כל הרכיבים הגלויים בחלון (עד MAX_MASK_NODES) עם המיקום, וגבולות הרשימה הנגללת שהם בתוכה. בלי טקסט.
+     * הרשימות עצמן נשמרות (maskLists) למדידה המהירה.
+     */
     private fun collectMaskNodes(root: AccessibilityNodeInfo): List<WaAvatars.Node> {
         val out = ArrayList<WaAvatars.Node>()
         val queue = ArrayDeque<Pair<AccessibilityNodeInfo, WaAvatars.Box?>>()
         val seen = ArrayList<AccessibilityNodeInfo>()
+        val lists = ArrayList<AccessibilityNodeInfo>()
         queue.add(root to null)
         val r = Rect()
         var visited = 0
@@ -1630,23 +1781,30 @@ class GuardService : AccessibilityService() {
         try {
             while (queue.isNotEmpty() && visited < MAX_MASK_NODES) {
                 val (n, list) = queue.removeFirst()
-                seen += n
                 visited++
                 if (n.isSelected && !maskOnUpdatesTab && isUpdatesTabNode(n)) maskOnUpdatesTab = true
-                if (!n.isVisibleToUser) continue
+                if (!n.isVisibleToUser) {
+                    seen += n
+                    continue
+                }
                 n.getBoundsInScreen(r)
                 val box = WaAvatars.Box(r.left, r.top, r.right, r.bottom)
                 val cls = n.className?.toString()
                 val isImage = cls != null && (cls.endsWith("ImageView") || cls.endsWith("ImageButton"))
                 out += WaAvatars.Node(n.viewIdResourceName, cls, if (isImage) n.contentDescription?.toString() else null,
-                    box, list)
-                val inner = if (n.isScrollable && box.width > 0 && box.height > 0) box else list
+                    box, list, key = n.hashCode())
+                val scrolls = n.isScrollable && box.width > 0 && box.height > 0
+                if (scrolls && lists.size < MAX_MASK_LISTS) lists += n else seen += n
+                val inner = if (scrolls) box.copy(round = false) else list
                 for (i in 0 until n.childCount) runCatching { n.getChild(i) }.getOrNull()?.let { queue.add(it to inner) }
             }
         } finally {
             seen.forEach { recycle(it) }
             queue.forEach { recycle(it.first) }
         }
+        maskLists.forEach { recycle(it) }
+        maskLists.clear()
+        maskLists += lists
         return out
     }
 
@@ -1663,7 +1821,7 @@ class GuardService : AccessibilityService() {
     }
 
     /** שכבות 2–3: מעבר מוגבל על עץ הרכיבים של החלון הפעיל (עד MAX_NODES), בלי לקרוא טקסט. */
-    private fun scan(detector: WaProfileDetector): String? {
+    private fun scan(detector: WaProfileDetector, info: Boolean): WaProfileDetector.Verdict? {
         val root = runCatching { rootInActiveWindow }.getOrNull() ?: return null
         if (!detector.watches(root.packageName?.toString())) {
             recycle(root)
@@ -1691,12 +1849,13 @@ class GuardService : AccessibilityService() {
                     className = cls,
                     description = if (isImage) n.contentDescription?.toString() else null,   // רק ברכיבי תמונה
                     areaFraction = area,
+                    scrollable = n.isScrollable,
                 ))
                 for (i in 0 until n.childCount) n.getChild(i)?.let { queue.add(it) }
             }
         }
         return try {
-            detector.matchNodes(nodes)
+            detector.inspect(nodes, info)
         } catch (e: Exception) {
             null
         } finally {
@@ -2158,8 +2317,14 @@ class GuardService : AccessibilityService() {
         private const val MAX_HEADER_TEXT = 200    // כותרת שיחה בוואטסאפ: שם + שורת משנה (רשימת משתתפים בקבוצה)
         private const val MAX_TEXT_SCAN = 48       // כלל-רכיב עם texts קורא טקסט רק עד אורך כזה (כיתוב/כפתור, לא הודעה)
         private const val MAX_MASK_NODES = 600
-        private const val MASK_EVERY_MS = 50L          // עדכון הכיסוי — לכל היותר 20 בשנייה
-        private const val MASK_SCROLL_HOLD_MS = 650L   // אחרי אירוע הגלילה האחרון — עוד כמה זמן פסים
+        private const val MAX_MASK_LISTS = 4
+        private const val MASK_EVERY_MS = 50L          // עדכון הכיסוי (שינוי תוכן) — לכל היותר 20 בשנייה
+        private const val MASK_POLL_MS = 33L           // בזמן גלילה: מדידה מהירה ~30 בשנייה
+        private const val MASK_SCROLL_HOLD_MS = 300L   // אחרי אירוע הגלילה האחרון — עוד כמה זמן מודדים
+        private const val MASK_MOVE_HOLD_MS = 200L     // התמונות עדיין זזות (זריקה) — ממשיכים למדוד
+        private const val MASK_FULL_EVERY_MS = 400L    // גם בגלילה ארוכה — סריקה מלאה מדי פעם (תמונות חדשות)
+        private const val MASK_MOTION_MAX_GAP_MS = 150L // מדידות רחוקות מזה — לא מחשבים מהן מהירות
+        private const val MASK_STRIP_SPEED_DP = 2.5f   // מעל המהירות הזו (dp למילישנייה) — פס במקום עיגולים
         /** כמה זמן תקף הקישור שנקרא מהשיחה, וכמה לדגום לכל היותר (כדי לא לקרוא את העץ בכל אירוע). */
         private const val WA_CHAT_FRESH_MS = 60_000L
         private const val WA_CHAT_SNAP_MS = 400L
