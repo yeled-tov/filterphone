@@ -10,7 +10,7 @@
   - ההרשאות שההגנה צריכה — ושאין הרשאות פרטיות (הודעות, אנשי קשר, מיקום, מיקרופון...);
   - הרכיבים: VPN, השירות הקדמי (specialUse), המגן (נגישות), מנהל המכשיר, הקמת Device Owner,
     המשימה התקופתית ותוצאת העדכון — כל אחד עם ההרשאה שמגינה עליו;
-  - שכל רכיב שחשוף לאפליקציות אחרות (exported) מוגן בהרשאה, חוץ מהמסך הראשי, מקבל האתחול והסייר המוגן (דפדפן).
+  - שכל רכיב שחשוף לאפליקציות אחרות (exported) מוגן בהרשאה, חוץ מהמסך הראשי, מקבל האתחול והסייר המוגן (דפדפן + הסמל שלו).
 נכשל (exit 1) אם משהו לא תקין — בנייה כזו לא מתפרסמת.
 
 FilterPhone.json: לכל קובץ — השם בדף ההורדה, versionCode, המעבדים, הגודל ו-SHA-256. השרת מציע
@@ -73,7 +73,9 @@ REQUIRED_COMPONENTS: dict[tuple[str, str], dict[str, str]] = {
 # רכיבים שמותר להם להיות חשופים בלי הרשאה (מסנן פעולות בקוד)
 # BrowserActivity — הסייר המוגן: דפדפן מקבל קישורי http/https מכל אפליקציה (כמו Chrome). הוא עצמו
 # אוכף את מצב הסייר (מלא / אתרים חיוניים / כבוי) וכל התעבורה שלו עוברת בסינון.
-EXPORTED_WITHOUT_PERMISSION = {f"{PACKAGE}.MainActivity", f"{PACKAGE}.BootReceiver", f"{PACKAGE}.BrowserActivity"}
+# SafeBrowserLauncher — הסמל של הסייר במסך הבית (activity-alias של BrowserActivity, MAIN/LAUNCHER).
+EXPORTED_WITHOUT_PERMISSION = {f"{PACKAGE}.MainActivity", f"{PACKAGE}.BootReceiver", f"{PACKAGE}.BrowserActivity",
+                               f"{PACKAGE}.SafeBrowserLauncher"}
 
 # "A: http://schemas.android.com/apk/res/android:name(0x01010003)="..." (Raw: "...")"
 _ATTR = re.compile(r'^\s*A: (?:\S*:)?([A-Za-z]+)\(0x[0-9a-f]+\)=(.*)$')

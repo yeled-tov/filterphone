@@ -17,6 +17,8 @@ class FilterPhoneApp : Application() {
         // חייב לרוץ מוקדם: במצב "VPN תמיד מופעל" המערכת מפעילה את השירות בלי פתיחת האפליקציה
         TunnelManager.init(this)
         ProtectionService.createChannel(this)
+        // הסמל של הסייר המוגן במסך הבית — רק כשהסייר פעיל בטלפון
+        Recovery.runAsync(this) { BrowserGate.syncLauncher(this) }
         // המשימה התקופתית (דיווח + בדיקת VPN) — מתוזמנת פעם אחת ונשמרת גם אחרי אתחול
         if (TunnelManager.wantsConnection() || GuardPolicy.credentials(this) != null) Recovery.scheduleDaily(this)
         // מגן FilterPhone (נגישות) — אם יש הרשאה, חוזר מיד כשמכבים אותו

@@ -4,5 +4,8 @@
     <color name="browser_accent">#FF0B78BD</color>
     <color name="browser_field">#FFEEF3F7</color>
     <color name="browser_notice_bg">#FFFFF4D6</color>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="browser_tile">#FFE2F1FA</color>
+    <color name="browser_card">#FFF4F7FA</color>
+    <color name="browser_text">#FF0D2238</color>
+    <color name="browser_text_sub">#FF4A5F75</color>
 </resources>

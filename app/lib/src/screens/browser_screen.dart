@@ -1,8 +1,8 @@
 part of 'app_shell.dart';
 
-/// לשונית "סייר מוגן": חיפוש למעלה, האתרים החיוניים (ממשלה, בנקים, אשראי, קופות חולים) וקביעה
-/// כדפדפן ברירת המחדל. הדפדפן עצמו (BrowserActivity באנדרואיד) עובר את כל הסינון — כמו Chrome.
-/// בטלפון בלי גלישה: רק האתרים החיוניים (אם המנהל הפעיל), או הסבר שהסייר כבוי.
+/// לשונית "סייר מוגן": פתיחת הסייר (חלון משלו עם דף בית, אתרים מוצמדים, כרטיסיות והיסטוריה — וסמל משלו
+/// במסך הבית), חיפוש מהיר וקביעה כדפדפן ברירת המחדל. הסייר עצמו (BrowserActivity באנדרואיד) עובר את כל הסינון,
+/// ונעול כש-FilterPhone לא מגן על הטלפון. בטלפון בלי גלישה: רק האתרים המאושרים, או הסבר שהסייר כבוי.
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key, required this.controller, this.visible = true, this.onOpenTab});
   final AppController controller;
@@ -17,13 +17,6 @@ class BrowserScreen extends StatefulWidget {
 
 class _BrowserScreenState extends State<BrowserScreen> {
   static const _profileTab = 3;
-  static const _groupIcons = {
-    'ממשלה ושירותים': Icons.account_balance_rounded,
-    'בנקים': Icons.savings_rounded,
-    'כרטיסי אשראי': Icons.credit_card_rounded,
-    'קופות חולים ובריאות': Icons.local_hospital_rounded,
-  };
-
   final _search = TextEditingController();
   SafeBrowserInfo? _info;
   int _seenResume = -1;
@@ -80,8 +73,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     if (t.isEmpty) return;
     final info = _info;
     if (info == null) return;
-    // אתרים חיוניים בלבד: חיפוש = סינון הרשימה; כתובת (gov.il, ...) — נפתחת, והסייר בודק שהיא מותרת
-    if (!info.full && !t.contains('.')) return;
+    // באתרים מאושרים בלבד החיפוש מחפש בתוכם (הסייר עצמו מגביל) — כתובת נפתחת, והסייר בודק שהיא מותרת
     FocusScope.of(context).unfocus();
     unawaited(_open(query: t));
   }
@@ -124,25 +116,25 @@ class _BrowserScreenState extends State<BrowserScreen> {
   Widget _body(BuildContext context, SafeBrowserInfo info) {
     final theme = Theme.of(context);
     final q = _filter.trim();
-    final sites = q.isEmpty ? info.sites : info.sites.where((s) => s.title.contains(q) || s.url.contains(q)).toList();
-    final groups = <String, List<SafeSite>>{};
-    for (final s in sites) {
-      groups.putIfAbsent(s.group, () => []).add(s);
-    }
+    final matches = q.length < 2
+        ? const <SafeSite>[]
+        : info.sites.where((s) => s.title.contains(q) || s.url.contains(q)).take(5).toList();
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
         children: [
+          _openCard(context, info),
+          const SizedBox(height: 14),
           TextField(
             controller: _search,
-            textInputAction: info.full ? TextInputAction.search : TextInputAction.go,
+            textInputAction: TextInputAction.search,
             keyboardType: TextInputType.url,
             onChanged: (v) => setState(() => _filter = v),
             onSubmitted: _submit,
             decoration: InputDecoration(
               prefixIcon: const Icon(Icons.search_rounded),
-              hintText: info.full ? 'חיפוש או כתובת אתר' : 'חיפוש באתרים החיוניים',
+              hintText: info.full ? 'חיפוש או כתובת אתר' : 'מה מחפשים? למשל: חידוש תו נכה',
               suffixIcon: _filter.isEmpty
                   ? null
                   : IconButton(
@@ -155,46 +147,77 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     ),
             ),
           ),
+          for (final s in matches)
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: CircleAvatar(
+                radius: 18,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Text(s.title.isEmpty ? '•' : s.title.characters.first,
+                    style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w800)),
+              ),
+              title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+              subtitle: Text(s.group, maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () => _open(url: s.url),
+            ),
+          if (q.isNotEmpty)
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+              leading: const Icon(Icons.travel_explore_rounded),
+              title: Text(info.full ? 'חיפוש: $q' : 'חיפוש באתרים המאושרים: $q',
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              onTap: () => _submit(q),
+            ),
           const SizedBox(height: 12),
           if (!info.full)
             _note(context, Icons.info_outline_rounded,
-                'בטלפון הזה פתוחים רק האתרים החיוניים שברשימה — בלי חיפוש באינטרנט.'),
+                'בטלפון הזה פתוחים רק אתרים מאושרים (ממשלה, בנקים, אשראי, קופות חולים) — והחיפוש מחפש בתוכם.'),
           if (!info.isDefault) _defaultCard(context) else
             _note(context, Icons.check_circle_rounded, 'הסייר המוגן הוא דפדפן ברירת המחדל — קישורים מאפליקציות נפתחים בו.',
                 color: StatusColors.ok(context)),
-          if (info.full && q.isNotEmpty)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.travel_explore_rounded),
-                title: Text('חיפוש: $q', maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: const Icon(Icons.chevron_left_rounded),
-                onTap: () => _submit(q),
-              ),
-            ),
-          for (final entry in groups.entries) ...[
-            const SizedBox(height: 14),
-            Row(children: [
-              Icon(_groupIcons[entry.key] ?? Icons.public_rounded, size: 20, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(entry.key, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-            ]),
-            const SizedBox(height: 8),
-            GridView.count(
-              crossAxisCount: 3,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 1.05,
-              children: [for (final s in entry.value) _SiteTile(site: s, onTap: () => _open(url: s.url))],
-            ),
-          ],
-          if (sites.isEmpty && q.isNotEmpty && !info.full)
-            Padding(
-              padding: const EdgeInsets.only(top: 24),
-              child: Text('לא נמצא אתר כזה ברשימה', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
-            ),
         ],
+      ),
+    );
+  }
+
+  /// הסייר עצמו (דף הבית, האתרים המוצמדים, כרטיסיות, היסטוריה) — חלון משלו, עם סמל משלו במסך הבית.
+  Widget _openCard(BuildContext context, SafeBrowserInfo info) {
+    final theme = Theme.of(context);
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => _open(),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          child: Row(children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF36B0F2), Color(0xFF0A5A97)],
+                ),
+              ),
+              child: const Icon(Icons.public_rounded, color: Colors.white, size: 30),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('פתיחת הסייר המוגן', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(
+                    info.full
+                        ? 'גלישה מסוננת: האתרים שלך, כרטיסיות והיסטוריה. יש לו סמל משלו במסך הבית.'
+                        : 'האתרים המאושרים, חיפוש בתוכם, כרטיסיות והיסטוריה. יש לו סמל משלו במסך הבית.',
+                    style: theme.textTheme.bodySmall),
+              ]),
+            ),
+            const Icon(Icons.chevron_left_rounded),
+          ]),
+        ),
       ),
     );
   }
@@ -241,46 +264,6 @@ class _BrowserScreenState extends State<BrowserScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SiteTile extends StatelessWidget {
-  const _SiteTile({required this.site, required this.onTap});
-  final SafeSite site;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final letter = site.title.isEmpty ? '•' : site.title.characters.first;
-    return Material(
-      color: theme.colorScheme.surfaceContainerHigh,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: theme.colorScheme.primaryContainer,
-                child: Text(letter,
-                    style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w800, fontSize: 18)),
-              ),
-              const SizedBox(height: 8),
-              Text(site.title,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700)),
-            ],
-          ),
         ),
       ),
     );

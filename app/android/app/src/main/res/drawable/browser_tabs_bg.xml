@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- כפתור הכרטיסיות (כמו בכרום): ריבוע מעוגל עם מספר הכרטיסיות -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <stroke android:width="2dp" android:color="@color/browser_text_sub" />
+    <corners android:radius="5dp" />
+</shape>

@@ -56,13 +56,16 @@
             </intent-filter>
         </activity>
 
-        <!-- הסייר המוגן: דפדפן שעובר את כל הסינון. אפשר לקבוע אותו כדפדפן ברירת המחדל (קישורי http/https) -->
+        <!-- הסייר המוגן: חלק מ-FilterPhone (אותה התקנה — בלי FilterPhone אין סייר), עם סמל ושם משלו באחרונים
+             (task נפרד, לא מוסתר). נעול כשההגנה לא פעילה (BrowserGate). אפשר לקבוע אותו כדפדפן ברירת המחדל. -->
         <activity
             android:name=".BrowserActivity"
             android:exported="true"
-            android:excludeFromRecents="true"
+            android:excludeFromRecents="false"
             android:launchMode="singleTask"
             android:taskAffinity="com.filterphone.app.browser"
+            android:icon="@mipmap/ic_browser"
+            android:roundIcon="@mipmap/ic_browser"
             android:label="@string/browser_label"
             android:theme="@style/BrowserTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|density|uiMode"
@@ -75,6 +78,21 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
+
+        <!-- הסמל של הסייר במסך הבית. כבוי עד ש-FilterPhone מופעל והסייר פעיל בטלפון (BrowserGate.syncLauncher). -->
+        <activity-alias
+            android:name=".SafeBrowserLauncher"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_browser"
+            android:roundIcon="@mipmap/ic_browser"
+            android:label="@string/browser_label"
+            android:targetActivity=".BrowserActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- הדפדפן הפנימי של וואטסאפ: "העתקת הקישור" → נפתח ב-Chrome (מסך שקוף לרגע; רק המגן מפעיל) -->
         <activity

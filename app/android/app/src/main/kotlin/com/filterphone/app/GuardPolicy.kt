@@ -165,6 +165,7 @@ object GuardPolicy {
         cached = policy
         ProtectionState.mark(context, ProtectionState.POLICY_SYNC)
         runCatching { DeviceOwnerManager.apply(context, policy) }.onFailure { Log.w(TAG, "device owner apply failed", it) }
+        BrowserGate.syncLauncher(context)                 // הסייר הופעל / כובה בשרת — הסמל שלו במסך הבית
         GuardService.onPolicyChanged()
         // פתיחה זמנית: בסוף הזמן חוסמים שוב — גם בלי רשת ובלי לחכות לשרת
         Recovery.scheduleTempExpiry(context, nextTempExpiry(policy))

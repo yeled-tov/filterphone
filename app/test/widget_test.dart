@@ -1592,7 +1592,8 @@ void main() {
       c.dispose();
     });
 
-    testWidgets('safe browser tab: sites, web search and the default-browser button', (tester) async {
+    testWidgets('safe browser tab: opens the browser, quick site search, web search and the default-browser button',
+        (tester) async {
       await tallScreen(tester);
       final native = FakeNative()
         ..caInstalled = true
@@ -1601,11 +1602,17 @@ void main() {
       await c.start();
       await tester.pumpWidget(rtl(BrowserScreen(controller: c)));
       await tester.pump();
-      expect(find.text('ממשלה ושירותים'), findsOneWidget);
-      expect(find.text('בנקים'), findsOneWidget);
+      // הסייר עצמו (דף בית, מוצמדים, כרטיסיות) נפתח בחלון משלו
+      await tester.tap(find.text('פתיחת הסייר המוגן'));
+      await tester.pump();
+      expect(native.browserOpens, ['q:null']);
+      expect(find.text('ממשלה ושירותים'), findsNothing);                  // בלי רשימת הקטגוריות בלשונית
+      // חיפוש מהיר: אתר מהרשימה מוצע תוך כדי הקלדה
+      await tester.enterText(find.byType(TextField), 'ביטוח');
+      await tester.pump();
       await tester.tap(find.text('ביטוח לאומי'));
       await tester.pump();
-      expect(native.browserOpens, ['https://www.btl.gov.il']);
+      expect(native.browserOpens.last, 'https://www.btl.gov.il');
       // חיפוש ברשת (גלישה מלאה) — מה שהוקלד עובר לסייר
       await tester.enterText(find.byType(TextField), 'זמני תפילה');
       await tester.testTextInput.receiveAction(TextInputAction.search);
@@ -1617,7 +1624,7 @@ void main() {
       c.dispose();
     });
 
-    testWidgets('safe browser tab: essential sites only filters the list, and off explains', (tester) async {
+    testWidgets('safe browser tab: approved sites only — search stays inside them, and off explains', (tester) async {
       await tallScreen(tester);
       final native = FakeNative()
         ..caInstalled = true
@@ -1630,15 +1637,16 @@ void main() {
       await c.start();
       await tester.pumpWidget(rtl(BrowserScreen(controller: c)));
       await tester.pump();
-      expect(find.textContaining('רק האתרים החיוניים'), findsOneWidget);
+      expect(find.textContaining('פתוחים רק אתרים מאושרים'), findsOneWidget);
       expect(find.text('קביעה כדפדפן ברירת מחדל'), findsNothing);       // כבר דפדפן ברירת המחדל
       await tester.enterText(find.byType(TextField), 'בנק');
       await tester.pump();
       expect(find.text('בנק לאומי'), findsOneWidget);
       expect(find.text('ביטוח לאומי'), findsNothing);
-      await tester.testTextInput.receiveAction(TextInputAction.go);
+      // חיפוש — עובר לסייר, שמחפש רק בתוך האתרים המאושרים
+      await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pump();
-      expect(native.browserOpens, isEmpty);                              // בלי חיפוש באינטרנט
+      expect(native.browserOpens, ['q:בנק']);
       native.browser = SafeBrowserInfo.off;
       await tester.pumpWidget(rtl(BrowserScreen(key: UniqueKey(), controller: c)));
       await tester.pump();

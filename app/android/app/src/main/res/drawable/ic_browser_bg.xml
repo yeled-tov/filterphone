@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- נוצר על ידי docs/brand/make_vector_icons.py — לא לערוך ביד -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="1536" android:viewportHeight="1536">
+    <path android:pathData="M0,0 H1536 V1536 H0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="1536" android:endY="1536" android:startColor="#36B0F2" android:endColor="#0A5A97"/>
+        </aapt:attr>
+    </path>
+    <path android:pathData="M0,0 H1536 V1536 H0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="radial" android:centerX="563" android:centerY="461" android:gradientRadius="921">
+                <item android:offset="0" android:color="#38FFFFFF"/>
+                <item android:offset="0.6" android:color="#00FFFFFF"/>
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

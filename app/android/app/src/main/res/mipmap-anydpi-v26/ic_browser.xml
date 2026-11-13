@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- האייקון של הסייר המוגן (גלובוס + תג המגן של FilterPhone) — סמל משלו במסך הבית ובאחרונים -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_browser_bg" />
+    <foreground android:drawable="@drawable/ic_browser_fg" />
+</adaptive-icon>

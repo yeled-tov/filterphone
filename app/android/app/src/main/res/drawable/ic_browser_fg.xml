@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- נוצר על ידי docs/brand/make_vector_icons.py — לא לערוך ביד -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="1536" android:viewportHeight="1536">
+    <group android:translateX="256" android:translateY="256">
+        <path android:pathData="M260,482 A222,222 0 1 1 704,482 A222,222 0 1 1 260,482 Z M386,482 A96,222 0 1 1 578,482 A96,222 0 1 1 386,482 Z M260,482 L704,482 M290,372 Q482,410 674,372 M290,592 Q482,554 674,592" android:strokeColor="#FFFFFFFF" android:strokeWidth="34" android:strokeLineCap="round" android:fillColor="#00000000"/>
+        <path android:pathData="M550,718 A154,154 0 1 1 858,718 A154,154 0 1 1 550,718 Z" android:fillColor="#26021A33"/>
+        <path android:pathData="M554,704 A150,150 0 1 1 854,704 A150,150 0 1 1 554,704 Z" android:fillColor="#FF0A4C86"/>
+        <group android:pivotX="512" android:pivotY="516" android:scaleX="0.31" android:scaleY="0.31" android:translateX="192" android:translateY="196">
+            <path android:pathData="M512 170 C590 214 676 236 774 240 Q806 241 806 274 L806 500 C806 672 686 796 512 862 C338 796 218 672 218 500 L218 274 Q218 241 250 240 C348 236 434 214 512 170 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="512" android:startY="170" android:endX="512" android:endY="862" android:startColor="#FFD84D" android:endColor="#F2A900"/>
+            </aapt:attr>
+            </path>
+        </group>
+        <path android:pathData="M664,708 L694,738 L748,680" android:strokeColor="#FF0A4C86" android:strokeWidth="26" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"/>
+    </group>
+</vector>

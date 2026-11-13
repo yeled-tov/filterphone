@@ -3,4 +3,8 @@
     <color name="browser_accent">#FF66B8F0</color>
     <color name="browser_field">#FF26313A</color>
     <color name="browser_notice_bg">#FF4A3D12</color>
+    <color name="browser_tile">#FF1F3A4D</color>
+    <color name="browser_card">#FF1C252C</color>
+    <color name="browser_text">#FFE6EEF5</color>
+    <color name="browser_text_sub">#FF9FB2C3</color>
 </resources>

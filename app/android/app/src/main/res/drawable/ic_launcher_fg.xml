@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- נוצר על ידי docs/brand/make_vector_icons.py — לא לערוך ביד -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="1536" android:viewportHeight="1536">
+    <group android:translateX="256" android:translateY="256">
+        <group android:pivotX="512" android:pivotY="516" android:scaleX="0.86" android:scaleY="0.86" android:translateY="0">
+            <path android:pathData="M512 170 C590 214 676 236 774 240 Q806 241 806 274 L806 500 C806 672 686 796 512 862 C338 796 218 672 218 500 L218 274 Q218 241 250 240 C348 236 434 214 512 170 Z" android:strokeWidth="26" android:strokeLineJoin="round" android:fillColor="#00000000">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="512" android:startY="170" android:endX="512" android:endY="862" android:startColor="#FFD84D" android:endColor="#F2A900"/>
+            </aapt:attr>
+            </path>
+        </group>
+        <group android:pivotX="512" android:pivotY="516" android:scaleX="0.79" android:scaleY="0.79" android:translateY="14">
+            <path android:pathData="M512 170 C590 214 676 236 774 240 Q806 241 806 274 L806 500 C806 672 686 796 512 862 C338 796 218 672 218 500 L218 274 Q218 241 250 240 C348 236 434 214 512 170 Z" android:fillColor="#1F021A33"/>
+        </group>
+        <group android:pivotX="512" android:pivotY="516" android:scaleX="0.78" android:scaleY="0.78" android:translateY="0">
+            <path android:pathData="M512 170 C590 214 676 236 774 240 Q806 241 806 274 L806 500 C806 672 686 796 512 862 C338 796 218 672 218 500 L218 274 Q218 241 250 240 C348 236 434 214 512 170 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="512" android:startY="170" android:endX="512" android:endY="862" android:startColor="#FFFFFF" android:endColor="#E4F1FB"/>
+            </aapt:attr>
+            </path>
+        </group>
+        <path android:fillType="evenOdd" android:pathData="M368.00,359.00 L414.80,359.00 L414.80,612.80 A16.20,16.20 0 0 1 398.60,629.00 L368.00,629.00 A16.20,16.20 0 0 1 351.80,612.80 L351.80,375.20 A16.20,16.20 0 0 1 368.00,359.00 Z M414.80,359.00 L470.60,359.00 A16.20,16.20 0 0 1 486.80,375.20 L486.80,402.20 A16.20,16.20 0 0 1 470.60,418.40 L414.80,418.40 L414.80,359.00 Z M414.80,467.00 L450.80,467.00 A16.20,16.20 0 0 1 467.00,483.20 L467.00,504.80 A16.20,16.20 0 0 1 450.80,521.00 L414.80,521.00 L414.80,467.00 Z M530.00,359.00 L576.80,359.00 L576.80,612.80 A16.20,16.20 0 0 1 560.60,629.00 L530.00,629.00 A16.20,16.20 0 0 1 513.80,612.80 L513.80,375.20 A16.20,16.20 0 0 1 530.00,359.00 Z M576.80,359.00 L591.20,359.00 A80.10,80.10 0 0 1 591.20,519.20 L576.80,519.20 Z M576.80,414.80 L589.40,414.80 A24.30,24.30 0 0 1 589.40,463.40 L576.80,463.40 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="512" android:startY="297" android:endX="512" android:endY="791" android:startColor="#1688D6" android:endColor="#0A4C86"/>
+        </aapt:attr>
+        </path>
+    </group>
+</vector>
