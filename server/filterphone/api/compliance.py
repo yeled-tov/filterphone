@@ -46,6 +46,11 @@ ISSUES: dict[str, tuple[str, str]] = {
     "win_no_report": (YELLOW, "המחשב עוד לא דיווח על מצב ההגנה"),
     "win_offline": (YELLOW, "המחשב לא מחובר כרגע (כבוי / בלי רשת)"),
     "win_lost": (RED, "אין שום קשר עם המחשב יותר מיומיים"),
+    # אייפון בפרופיל (WireGuard + תעודה, בלי ניהול מכשיר)
+    "ios_profile": (YELLOW, "אייפון בפרופיל בדיקה: הסינון ברשת פועל כשהחיבור פעיל, אבל בלי ניהול מכשיר — "
+                            "אפשר לכבות את החיבור או להסיר את הפרופיל, ואין חסימות בתוך אפליקציות"),
+    "ios_offline": (YELLOW, "האייפון לא מחובר לסינון כרגע — כבוי / בלי רשת, או שהחיבור כובה / הפרופיל הוסר"),
+    "ios_lost": (RED, "אין חיבור מהאייפון יותר מיומיים — ייתכן שהפרופיל הוסר והגלישה לא מסוננת"),
 }
 
 # שכבות ההגנה שהמחשב מאמת ומדווח (FilterPhone.Core.Status.Layers)
@@ -84,6 +89,8 @@ def evaluate(row, hb: dict, guard: dict, handshake: int, needs_device_block: boo
         return Compliance(INACTIVE, False, "unknown", "unknown", "unknown", "unknown", row["last_seen_at"])
     if "platform" in row.keys() and row["platform"] == "windows":
         return evaluate_windows(row, hb, handshake, now, offline_after_s, lost_after_s)
+    if "platform" in row.keys() and row["platform"] == "ios":
+        return evaluate_ios(row, handshake, now, lost_after_s)
 
     hb_at = row["heartbeat_at"] or 0
     hb_fresh = bool(hb_at and now - hb_at < offline_after_s)
@@ -249,3 +256,20 @@ def evaluate_windows(row, hb: dict, handshake: int, now: int, offline_after_s: i
     items = [_issue(c) for c in dict.fromkeys(issues)]
     state = RED if any(i["severity"] == RED for i in items) else YELLOW if items else GREEN
     return Compliance(state, online, vpn, "not_required", "not_applicable", "synced", last_contact, items)
+
+
+def evaluate_ios(row, handshake: int, now: int, lost_after_s: int) -> Compliance:
+    """אייפון בפרופיל (WireGuard + תעודת הסינון): אין אפליקציה שמדווחת, אז המקור היחיד הוא WireGuard בשרת.
+    מחובר = הסינון ברשת פועל. לא מחובר — אי אפשר לדעת אם הטלפון כבוי או שהחיבור כובה, ולכן זה לא "תקין".
+    תמיד צהוב לפחות: בלי ניהול מכשיר (Supervision) אין אכיפה בטלפון עצמו."""
+    hs_fresh = bool(handshake and now - handshake < ONLINE_WINDOW_S)
+    contacts = [t for t in (handshake, row["last_seen_at"]) if t]
+    last_contact = max(contacts) if contacts else None
+    issues = ["ios_profile"]
+    if not hs_fresh:
+        started = last_contact or row["approved_at"] or row["created_at"] or now
+        issues.append("ios_lost" if now - started >= lost_after_s else "ios_offline")
+    items = [_issue(c) for c in issues]
+    state = RED if any(i["severity"] == RED for i in items) else YELLOW
+    return Compliance(state, hs_fresh, "up" if hs_fresh else "unknown", "not_required", "not_applicable", "synced",
+                      last_contact, items)

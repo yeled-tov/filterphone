@@ -1693,7 +1693,31 @@ function yesNo(v, good = true, unknown = "לא דווח") {
   return v === undefined || v === null ? chip(unknown) : chip(v ? "כן" : "לא", v === good ? "ok" : "bad");
 }
 
+/** אייפון בפרופיל (WireGuard + תעודה): אין אפליקציה שמדווחת — רק מה שהשרת רואה, וקישור התקנה חדש. */
+function iosCard(d) {
+  const c = d.compliance;
+  const issues = el("ul", { class: "issues" }, c.issues.map((i) => el("li", { class: i.severity === "red" ? "bad" : "warn" }, i.text)));
+  const reissue = el("button", { class: "ghost small", onclick: async () => {
+    if (!await confirmDialog("קישור התקנה חדש?", "ייווצר מפתח חדש: החיבור הקיים באייפון יפסיק לעבוד עד שיתקינו את הפרופיל החדש מהקישור.", "יצירת קישור")) return;
+    const r = await attempt(() => api(`/v1/admin/devices/${d.id}/ios-profile`, { method: "POST" }));
+    await dialog("קישור התקנה לאייפון", el("div", { class: "stack" },
+      el("p", { class: "ltr mono small", style: "word-break:break-all" }, r.link),
+      el("p", { class: "muted small" }, "פותחים באייפון, בספארי. תקף לשעתיים."),
+      el("button", { type: "button", class: "ghost", onclick: () => navigator.clipboard.writeText(r.link).then(() => toast("הקישור הועתק")) }, "העתקה")), "סגירה");
+  } }, "קישור התקנה חדש");
+  return card("מצב ההגנה באייפון", "אייפון בפרופיל בדיקה: הסינון נעשה ברשת (VPN + תעודת הסינון). אין אפליקציה שמדווחת מהמכשיר.",
+    el("div", { class: "row gap" }, el("span", { class: `state-badge ${c.state}` }, COMPLIANCE[c.state]?.[1] || c.state)),
+    issues,
+    kv([
+      ["חיבור לסינון (VPN)", c.vpn === "up" ? chip("פעיל", "ok") : chip("לא מחובר כרגע", "warn")],
+      ["נראה לאחרונה", ago(d.last_handshake)],
+      ["ניהול מכשיר", chip("אין (פרופיל שניתן להסרה)", "warn")],
+    ]),
+    el("div", { class: "row" }, reissue));
+}
+
 function complianceCard(d) {
+  if (d.platform === "ios") return iosCard(d);
   const c = d.compliance;
   const hb = d.heartbeat || {};
   const g = d.guard || {};
@@ -2755,6 +2779,8 @@ async function viewCodes() {
     } }));
     await dialog("קוד ההפעלה", el("div", { class: "stack" }, el("p", { class: "code" }, r.code),
       el("p", { class: "muted small" }, "מוצג פעם אחת בלבד. שולחים ללקוח יחד עם קישור ההורדה."),
+      el("p", { class: "muted small" }, "לאייפון (בדיקה): פותחים באייפון, בספארי, את ",
+        el("span", { class: "ltr mono" }, `${location.host}/v1/ios`), " ומזינים שם את הקוד."),
       el("button", { type: "button", class: "ghost", onclick: () => navigator.clipboard.writeText(r.code).then(() => toast("הועתק")) }, "העתקה")), "סגירה");
     render();
   });
@@ -2782,7 +2808,7 @@ async function viewCodes() {
     render();
   });
   return [
-    card("קוד הפעלה חדש", "הדרך המהירה בלי טופס הרשמה: הלקוח מזין קוד באפליקציה ומתחבר מיד ברמה שבחרת.", form),
+    card("קוד הפעלה חדש", "הדרך המהירה בלי טופס הרשמה: הלקוח מזין קוד באפליקציה ומתחבר מיד ברמה שבחרת. לאייפון (בדיקה): אותו קוד מוזן בספארי, בדף /v1/ios.", form),
     card("הקמת מכשיר מנוהל ב-QR (Device Owner)", "לטלפון מאופס בלבד. FilterPhone הופכת למנהלת המכשיר: אי אפשר להסיר אותה, ה-VPN קבוע, והגדרות המנהל נאכפות ע\"י אנדרואיד.", qrForm),
     card("קודים קיימים", null, list.length ? el("div", { class: "table-wrap" }, el("table", {},
       el("thead", {}, el("tr", {}, el("th", {}, "לקוח"), el("th", {}, "מסתיים ב-"), el("th", {}, "רמה"), el("th", {}, "שימושים שנותרו"), el("th", {}, "תוקף"), el("th", {}))),

@@ -51,7 +51,7 @@ from pydantic import BaseModel, Field
 from .. import logs, metrics
 from ..proxy import serp
 from ..settings import get_settings
-from . import db, gpu, notify, observe, perms, security
+from . import db, gpu, iospages, notify, observe, perms, security
 from .bot import BotDesk
 from .catalog import DEFAULT_OPTIONS, admin_catalog, clean_package, public_catalog, resolve_keywords
 from .fetch import FetchError, fetch_image
@@ -1698,6 +1698,61 @@ def _routes(app: FastAPI) -> None:
         await asyncio.to_thread(Payments(svc).simulate, token, ok)
         return HTMLResponse(_pay_page("התשלום התקבל ✓ (בדיקה)" if ok else "התשלום נכשל (בדיקה)",
                                       "אפשר לסגור את הדף ולחזור לדשבורד."))
+
+    # --- אייפון: התקנה מהדפדפן (קוד הפעלה → פרופיל: WireGuard + תעודת הסינון). ראו docs/IOS.md ---
+
+    @app.get("/v1/ios", response_class=HTMLResponse)
+    def ios_start():
+        return HTMLResponse(iospages.start_page())
+
+    @app.post("/v1/ios", response_class=HTMLResponse)
+    async def ios_enroll(request: Request, svc: SvcDep):
+        from urllib.parse import parse_qs
+        _limit(enroll_limiter, client_ip(request))
+        form = parse_qs((await request.body()).decode("utf-8", "replace")[:2000])
+        code = (form.get("code") or [""])[0].strip()
+        name = (form.get("name") or [""])[0].strip()
+        if not 6 <= len(code) <= 32:
+            return HTMLResponse(iospages.start_page("צריך להזין קוד הפעלה.", code, name), 400)
+        try:
+            token = await asyncio.to_thread(svc.ios_enroll, code, name)
+        except ApiError as e:
+            return HTMLResponse(iospages.start_page(e.message, code, name), e.status)
+        return RedirectResponse(f"/v1/ios/p/{token}", 303)
+
+    @app.get("/v1/ios/p/{token}", response_class=HTMLResponse)
+    def ios_install(token: str, svc: SvcDep):
+        try:
+            name = svc.ios_status(token)["name"]
+        except ApiError as e:
+            return HTMLResponse(iospages.gone_page(e.message), 404)
+        return HTMLResponse(iospages.install_page(token, name), headers={"Cache-Control": "no-store"})
+
+    @app.get("/v1/ios/p/{token}/" + iospages.PROFILE_NAME)
+    def ios_profile(token: str, svc: SvcDep):
+        try:
+            data = svc.ios_profile(token)
+        except ApiError as e:
+            return HTMLResponse(iospages.gone_page(e.message), 404)
+        return Response(data, headers=iospages.profile_headers())
+
+    @app.get("/v1/ios/p/{token}/status")
+    def ios_status(token: str, request: Request, svc: SvcDep):
+        out = svc.ios_status(token)
+        # הבקשה הגיעה מכתובת ה-VPN של המכשיר = הדף נפתח באייפון עצמו, דרך המנהרה
+        return {"connected": out["connected"], "via_vpn": svc.ios_via_vpn(token, client_ip(request))}
+
+    @app.post("/v1/ios/p/{token}/ready")
+    def ios_ready(token: str, request: Request, svc: SvcDep):
+        if not svc.ios_via_vpn(token, client_ip(request)):
+            raise ApiError(403, "רק מהאייפון עצמו, דרך החיבור המסונן")
+        return svc.ios_ready(token)
+
+    @app.post("/v1/admin/devices/{device_id}/ios-profile")
+    def ios_reissue(device_id: int, svc: SvcDep, admin: AdminRow):
+        """קישור התקנה חדש לאייפון קיים (מפתח חדש; אותה כתובת ומדיניות)."""
+        out = svc.ios_reissue(device_id, admin["username"])
+        return {**out, "link": f"https://{svc.cfg.public_host}{out['path']}"}
 
     # --- "מותאם אישית": אפליקציה שאושרה רק למכשיר הזה (בטאב משלה בחנות שבטלפון) ---
 

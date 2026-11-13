@@ -443,8 +443,22 @@ CREATE TABLE payment_events (
 );
 """
 
+# אייפון: קישור חד-פעמי לפרופיל ההתקנה. באייפון (בלי אפליקציה משלנו) המפתח הפרטי של המנהרה נוצר בשרת —
+# הוא נשמר כאן רק עד שהקישור פג (שעתיים), כדי שאפשר יהיה להוריד שוב את הפרופיל בזמן ההתקנה, ואז נמחק.
+_V25 = """
+CREATE TABLE ios_profiles (
+    id          INTEGER PRIMARY KEY,
+    token_hash  TEXT NOT NULL UNIQUE,
+    device_id   INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    private_key TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER NOT NULL
+);
+CREATE INDEX ios_profiles_device ON ios_profiles(device_id);
+"""
+
 MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13, _V14, _V15, _V16,
-                         _V17, _V18, _V19, _V20, _V21, _V22, _V23, _V24]
+                         _V17, _V18, _V19, _V20, _V21, _V22, _V23, _V24, _V25]
 VERSION = len(MIGRATIONS)
 
 

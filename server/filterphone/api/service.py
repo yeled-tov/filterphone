@@ -36,7 +36,7 @@ import redis
 from .. import protocol
 from ..proxy.policy import LEVELS_KEY, POLICY_KEY, POLICY_REV_KEY
 from ..settings import Settings
-from . import compliance, db, removal, security
+from . import compliance, db, iosprofile, removal, security
 from . import perms as perms_mod
 from .adguard import AdGuard, build_rules
 from .apk import ApkError, read_apk
@@ -910,6 +910,82 @@ class Services:
             "vpn": self.vpn_config(ip, psk),
             "ca": self.ca_info(),
         }
+
+    # ------------------------------------------------------------ אייפון: פרופיל התקנה (בלי אפליקציה)
+
+    IOS_PROFILE_TTL_S = 2 * 3600
+
+    def ios_enroll(self, code: str, name: str) -> str:
+        """אייפון נרשם בקוד הפעלה רגיל, מהדפדפן: המפתח נוצר כאן (אין אפליקציה שתיצור אותו), המכשיר נרשם
+        כמו כל מכשיר (platform=ios), ומוחזר טוקן לדף ההתקנה — ממנו מורידים את הפרופיל."""
+        private, public = iosprofile.keypair()
+        out = self.enroll(code, public, security.clean_text(name, 60) or "iPhone", "ios", "profile")
+        return self._ios_ticket(out["device_id"], private)
+
+    def ios_reissue(self, device_id: int, admin: str) -> dict:
+        """פרופיל חדש לאייפון קיים (הקישור פג / הפרופיל נמחק / מפתח חדש): מפתח חדש, אותה כתובת ואותה מדיניות."""
+        with self.db() as c:
+            row = c.execute("SELECT * FROM devices WHERE id = ?", (device_id,)).fetchone()
+        if row is None:
+            raise ApiError(404, "מכשיר לא נמצא")
+        if row["platform"] != "ios":
+            raise ApiError(409, "פרופיל התקנה קיים רק לאייפון")
+        private, public = iosprofile.keypair()
+        self.rekey(row, public)
+        self.audit(admin, "ios_profile", f"device:{device_id}", "")
+        token = self._ios_ticket(device_id, private)
+        return {"token": token, "path": f"/v1/ios/p/{token}", "expires_at": db.now() + self.IOS_PROFILE_TTL_S}
+
+    def _ios_ticket(self, device_id: int, private_key: str) -> str:
+        token = security.new_token()
+        t = db.now()
+        with self.db() as c, db.transaction(c):
+            # קישור אחד למכשיר; מפתחות של קישורים שפגו נמחקים
+            c.execute("DELETE FROM ios_profiles WHERE device_id = ? OR expires_at < ?", (device_id, t))
+            c.execute("INSERT INTO ios_profiles (token_hash, device_id, private_key, created_at, expires_at)"
+                      " VALUES (?,?,?,?,?)",
+                      (security.token_hash(token), device_id, private_key, t, t + self.IOS_PROFILE_TTL_S))
+        return token
+
+    def _ios_lookup(self, token: str) -> tuple[sqlite3.Row, sqlite3.Row]:
+        with self.db() as c:
+            c.execute("DELETE FROM ios_profiles WHERE expires_at < ?", (db.now(),))
+            ticket = c.execute("SELECT * FROM ios_profiles WHERE token_hash = ?",
+                               (security.token_hash(token or ""),)).fetchone()
+            dev = c.execute("SELECT * FROM devices WHERE id = ?", (ticket["device_id"],)).fetchone() if ticket else None
+        if ticket is None or dev is None or dev["status"] != "active" or not dev["vpn_ip"]:
+            raise ApiError(404, "הקישור לא בתוקף. אפשר לבקש מהמנהל קישור חדש.")
+        return ticket, dev
+
+    def ios_profile(self, token: str) -> bytes:
+        ticket, dev = self._ios_lookup(token)
+        return iosprofile.build(device_id=dev["id"], ca_pem=self.ca_pem(),
+                                vpn=self.vpn_config(dev["vpn_ip"], dev["preshared_key"]),
+                                private_key=ticket["private_key"])
+
+    def ios_status(self, token: str) -> dict:
+        """לדף ההתקנה: האם האייפון כבר התחבר (handshake של WireGuard בשרת)."""
+        ticket, dev = self._ios_lookup(token)
+        try:
+            peer = self.wg.peers().get(dev["public_key"])
+        except WireGuardError:
+            peer = None
+        handshake = peer.latest_handshake if peer else 0
+        return {"name": dev["name"], "connected": bool(handshake and db.now() - handshake < 180),
+                "handshake_at": handshake or None, "expires_at": ticket["expires_at"]}
+
+    def ios_via_vpn(self, token: str, client_ip: str) -> bool:
+        _, dev = self._ios_lookup(token)
+        return bool(client_ip) and client_ip == dev["vpn_ip"]
+
+    def ios_ready(self, token: str) -> dict:
+        """ההתקנה הסתיימה (הדף אימת שהתעודה מהימנה): מנקים "עקיפות" שהפרוקסי למד בזמן ההתקנה — אתרים שנכשלו
+        לפני שהתעודה אושרה היו נשארים בלי סינון. מותר לקרוא שוב (לא מזיק)."""
+        _, dev = self._ios_lookup(token)
+        cleared = self.clear_passthrough(dev["vpn_ip"])
+        with self.db() as c:
+            self.log_device(c, dev["id"], "ios_ready", "האייפון סיים התקנה — הסינון פעיל")
+        return {"ok": True, "cleared": cleared}
 
     # ------------------------------------------------------------ החלפת מכשיר (ישן → חדש)
 
